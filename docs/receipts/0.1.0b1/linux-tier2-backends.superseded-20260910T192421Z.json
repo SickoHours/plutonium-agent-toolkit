@@ -1,0 +1,1114 @@
+{
+  "schema_version": 1,
+  "tier": "backends",
+  "environment": {
+    "toolkit_version": "0.1.0b1",
+    "python": "3.14.7",
+    "platform": "Linux-7.1.9-arch1-2-x86_64-with-glibc2.44",
+    "machine": "x86_64",
+    "platform_token": "linux",
+    "os": "Arch Linux (Omarchy 4.0.2)",
+    "native_windows": false,
+    "native_linux": true,
+    "compatibility_layer": null,
+    "at": "2026-09-10T10:11:57+00:00",
+    "os_release": {
+      "pretty_name": "Omarchy",
+      "id": "omarchy",
+      "id_like": "arch",
+      "version_id": "4.0.2"
+    },
+    "git_head": "1766b71c100860ec6b82f473aab11f274c996dbe",
+    "git_dirty": false,
+    "pat_home_isolated": true
+  },
+  "steps": [
+    {
+      "argv": [
+        "dev",
+        "setup",
+        "--only",
+        "gsc",
+        "oat",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 1.039,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "dev setup",
+        "request_id": "<id>",
+        "at": "2026-09-10T10:11:58+00:00",
+        "result": {
+          "destination": "<pat-home>/backends",
+          "platform": "linux",
+          "results": [
+            {
+              "id": "oat",
+              "action": "installed",
+              "files": 162
+            },
+            {
+              "id": "gsc",
+              "action": "installed",
+              "files": 1
+            }
+          ],
+          "game_touched": false
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "dev setup gsc oat",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "doctor",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.061,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "doctor",
+        "request_id": "<id>",
+        "at": "2026-09-10T10:11:58+00:00",
+        "result": {
+          "platform": {
+            "system": "Linux",
+            "release": "7.1.9-arch1-2",
+            "machine": "x86_64",
+            "python": "3.14.7",
+            "native_windows": false,
+            "compatibility_layer": null,
+            "supported": false
+          },
+          "configuration": {
+            "home": "<pat-home>",
+            "config": {
+              "backends_dir": "<pat-home>/backends",
+              "evidence_dir": "<pat-home>/evidence"
+            },
+            "ok": true
+          },
+          "backends": {
+            "ok": true,
+            "platform": "linux",
+            "backends_dir": "<pat-home>/backends",
+            "backends": [
+              {
+                "id": "oat",
+                "name": "OpenAssetTools 0.33.0",
+                "optional": false,
+                "present": true,
+                "source": "pinned",
+                "overrides": {},
+                "path": "<pat-home>/backends/oat",
+                "download_available": true
+              },
+              {
+                "id": "gsc",
+                "name": "gsc-tool 1.4.10",
+                "optional": false,
+                "present": true,
+                "source": "pinned",
+                "overrides": {},
+                "path": "<pat-home>/backends/gsc",
+                "download_available": true
+              },
+              {
+                "id": "lua",
+                "name": "CoDLuaDecompiler 2.4.2",
+                "optional": true,
+                "present": false,
+                "source": "missing",
+                "overrides": {},
+                "path": "<pat-home>/backends/lua",
+                "download_available": false
+              },
+              {
+                "id": "ffmpeg",
+                "name": "FFmpeg 9.0 (BtbN gpl builds)",
+                "optional": true,
+                "present": false,
+                "source": "missing",
+                "overrides": {},
+                "path": "<pat-home>/backends/ffmpeg",
+                "download_available": true
+              },
+              {
+                "id": "blender",
+                "name": "Blender 5.2.1",
+                "optional": true,
+                "present": false,
+                "source": "missing",
+                "overrides": {},
+                "path": "<pat-home>/backends/blender",
+                "download_available": true
+              },
+              {
+                "id": "cast",
+                "name": "Cast Blender add-on 2.00",
+                "optional": true,
+                "present": false,
+                "source": "missing",
+                "overrides": {},
+                "path": "<pat-home>/backends/cast",
+                "download_available": true
+              },
+              {
+                "id": "greyhound",
+                "name": "Greyhound 1.46.3.2",
+                "optional": true,
+                "present": false,
+                "source": "missing",
+                "overrides": {},
+                "path": "<pat-home>/backends/greyhound",
+                "download_available": false
+              },
+              {
+                "id": "husky",
+                "name": "Husky 0.8.0.0",
+                "optional": true,
+                "present": false,
+                "source": "missing",
+                "overrides": {},
+                "path": "<pat-home>/backends/husky",
+                "download_available": false
+              },
+              {
+                "id": "c2m",
+                "name": "C2Mv3 3.0.5",
+                "optional": true,
+                "present": false,
+                "source": "missing",
+                "overrides": {},
+                "path": "<pat-home>/backends/c2m",
+                "download_available": false
+              }
+            ],
+            "verification": "filesystem presence or override resolution only; execution and gameplay are separate facts"
+          },
+          "ok": true,
+          "game_control": {
+            "supported_here": false,
+            "note": "Game control and capture use the Win32 console and need a native Windows host. Development file tools run on this platform."
+          },
+          "verification": "Presence and configuration only. Execution, game control and capture are separate facts."
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "doctor after setup",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "dev",
+        "setup",
+        "--only",
+        "gsc",
+        "oat",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.092,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "dev setup",
+        "request_id": "<id>",
+        "at": "2026-09-10T10:11:58+00:00",
+        "result": {
+          "destination": "<pat-home>/backends",
+          "platform": "linux",
+          "results": [
+            {
+              "id": "oat",
+              "action": "verified",
+              "files": 162
+            },
+            {
+              "id": "gsc",
+              "action": "verified",
+              "files": 1
+            }
+          ],
+          "game_touched": false
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "dev setup rerun verifies",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "project",
+        "plan",
+        "<repo>/examples/hello-zm/project.json",
+        "--output",
+        "<work>/plan",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.059,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "project plan",
+        "request_id": "<id>",
+        "at": "2026-09-10T10:11:58+00:00",
+        "result": {
+          "job_id": "<id>",
+          "output": "<work>/plan",
+          "receipt": "<work>/plan/receipt.json",
+          "artifact_count": 1,
+          "plan": "plan.json",
+          "name": "hello_zm",
+          "backends": [
+            {
+              "id": "gsc",
+              "argv": [
+                "<pat-home>/backends/gsc/gsc-tool"
+              ],
+              "available": true
+            },
+            {
+              "id": "linker",
+              "argv": [
+                "<pat-home>/backends/oat/Linker"
+              ],
+              "available": true
+            },
+            {
+              "id": "unlinker",
+              "argv": [
+                "<pat-home>/backends/oat/Unlinker"
+              ],
+              "available": true
+            }
+          ],
+          "backends_available": true,
+          "input_files": 2,
+          "verification": "recipe and declared inputs validated and hashed; backend presence checked; nothing compiled",
+          "scripts": 1,
+          "assets": 0,
+          "loads": 0
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "project plan hello-zm",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "project",
+        "build",
+        "<repo>/examples/hello-zm/project.json",
+        "--output",
+        "<work>/build",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.267,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "project build",
+        "request_id": "<id>",
+        "at": "2026-09-10T10:11:59+00:00",
+        "result": {
+          "job_id": "<id>",
+          "output": "<work>/build",
+          "receipt": "<work>/build/receipt.json",
+          "artifact_count": 13,
+          "packages": [
+            {
+              "path": "packages/mod.ff",
+              "sha256": "0ed41cc5f5ce9faae086e3dcf4a019f67ffc2b040f0975d73b5d9d698ac87701",
+              "inventory_log": "step-02.log"
+            }
+          ],
+          "verification": "linked and read back by OpenAssetTools; gameplay untested",
+          "plan": "plan.json",
+          "rawfiles_verified": 1,
+          "mod_ff": "packages/mod.ff",
+          "install_hint": "pat game install-mod <output>/packages/mod.ff hello_zm  (keeps the name mod.ff; a renamed T6 fastfile cannot be read). Loading it in game is a separate, authorized step"
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "project build hello-zm (real gsc-tool + OAT)",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "project",
+        "verify",
+        "<work>/build/receipt.json",
+        "--inputs",
+        "--output",
+        "<work>/verify",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.061,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "project verify",
+        "request_id": "<id>",
+        "at": "2026-09-10T10:11:59+00:00",
+        "result": {
+          "job_id": "<id>",
+          "output": "<work>/verify",
+          "receipt": "<work>/verify/receipt.json",
+          "artifact_count": 0,
+          "build_receipt": "<work>/build/receipt.json",
+          "outputs": {
+            "verified": true,
+            "changed": [],
+            "missing": [],
+            "count": 13
+          },
+          "inputs": {
+            "verified": true,
+            "changed": [],
+            "missing": [],
+            "count": 4
+          },
+          "verification": "recorded hashes match; says nothing about gameplay"
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "project verify --inputs",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "ff",
+        "inspect",
+        "<work>/build/packages/mod.ff",
+        "--output",
+        "<work>/inspect",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.109,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "ff inspect",
+        "request_id": "<id>",
+        "at": "2026-09-10T10:11:59+00:00",
+        "result": {
+          "job_id": "<id>",
+          "output": "<work>/inspect",
+          "receipt": "<work>/inspect/receipt.json",
+          "artifact_count": 1,
+          "input": "<work>/build/packages/mod.ff",
+          "inventory_log": "step-01.log",
+          "listing": "Loaded zone \"mod\" (T6)\nLoaded search path \"<work>/build/packages\"\nZone 'mod' (T6)\nContent:\nrawfile, scripts/zm/hello_zm.gsc\n\nUnloaded zone \"mod\"\nUnloaded search path \"<work>/build/packages\"\nFinished with 0 warnings, 0 errors\n",
+          "listing_truncated": false,
+          "verification": "OpenAssetTools readback; not gameplay acceptance"
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "ff inspect mod.ff",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "ff",
+        "extract",
+        "<work>/build/packages/mod.ff",
+        "--types",
+        "rawfile",
+        "--output",
+        "<work>/extract",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.115,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "ff extract",
+        "request_id": "<id>",
+        "at": "2026-09-10T10:11:59+00:00",
+        "result": {
+          "job_id": "<id>",
+          "output": "<work>/extract",
+          "receipt": "<work>/extract/receipt.json",
+          "artifact_count": 3,
+          "input": "<work>/build/packages/mod.ff",
+          "inventory_log": "step-01.log",
+          "listing": "Loaded zone \"mod\" (T6)\nLoaded search path \"<work>/build/packages\"\nDumping zone mod into folder \"<work>/extract/assets\"\nDumped rawfile \"scripts/zm/hello_zm.gsc\"\nUnloaded zone \"mod\"\nUnloaded search path \"<work>/build/packages\"\nFinished with 0 warnings, 0 errors\n",
+          "listing_truncated": false,
+          "verification": "OpenAssetTools readback; not gameplay acceptance"
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "ff extract rawfiles",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "gsc",
+        "compile",
+        "<work>/bad.gsc",
+        "--output",
+        "<work>/bad-compile",
+        "--json"
+      ],
+      "exit_code": 1,
+      "elapsed_seconds": 0.115,
+      "json": {
+        "ok": false,
+        "error_code": "backend_failed",
+        "message": "Backend exited with status 1",
+        "details": {
+          "log": "step-01.log",
+          "exit_code": 1
+        },
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "gsc compile",
+        "request_id": "<id>",
+        "at": "2026-09-10T10:11:59+00:00",
+        "receipt": "<work>/bad-compile/receipt.json"
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "gsc compile broken script fails structurally",
+      "passed": true,
+      "expected": "structured failure"
+    },
+    {
+      "argv": [
+        "gsc",
+        "compile",
+        "<work>/good.gsc",
+        "--output",
+        "<work>/good-compile",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.113,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "gsc compile",
+        "request_id": "<id>",
+        "at": "2026-09-10T10:11:59+00:00",
+        "result": {
+          "job_id": "<id>",
+          "output": "<work>/good-compile",
+          "receipt": "<work>/good-compile/receipt.json",
+          "artifact_count": 3,
+          "files": [
+            "compiled/t6/good.gsc"
+          ],
+          "instance": "server",
+          "verification": "compiler exit and log checked; script behavior in game untested"
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "gsc compile minimal script",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "dev",
+        "setup",
+        "--only",
+        "ffmpeg",
+        "blender",
+        "cast",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 24.696,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "dev setup",
+        "request_id": "<id>",
+        "at": "2026-09-10T10:12:24+00:00",
+        "result": {
+          "destination": "<pat-home>/backends",
+          "platform": "linux",
+          "results": [
+            {
+              "id": "ffmpeg",
+              "action": "installed",
+              "files": 66
+            },
+            {
+              "id": "blender",
+              "action": "installed",
+              "files": 5675
+            },
+            {
+              "id": "cast",
+              "action": "installed",
+              "files": 10
+            }
+          ],
+          "game_touched": false
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "dev setup ffmpeg blender cast",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "audio",
+        "inspect",
+        "<work>/tone.wav",
+        "--output",
+        "<work>/audio-inspect",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.107,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "audio inspect",
+        "request_id": "<id>",
+        "at": "2026-09-10T10:12:24+00:00",
+        "result": {
+          "job_id": "<id>",
+          "output": "<work>/audio-inspect",
+          "receipt": "<work>/audio-inspect/receipt.json",
+          "artifact_count": 1,
+          "media": {
+            "streams": [
+              {
+                "index": 0,
+                "codec_name": "pcm_s16le",
+                "codec_long_name": "PCM signed 16-bit little-endian",
+                "codec_type": "audio",
+                "codec_tag_string": "[1][0][0][0]",
+                "codec_tag": "0x0001",
+                "sample_fmt": "s16",
+                "sample_rate": "44100",
+                "channels": 2,
+                "bits_per_sample": 16,
+                "initial_padding": 0,
+                "r_frame_rate": "0/0",
+                "avg_frame_rate": "0/0",
+                "time_base": "1/44100",
+                "duration_ts": 44100,
+                "duration": "1.000000",
+                "bit_rate": "1411200",
+                "disposition": {
+                  "default": 0,
+                  "dub": 0,
+                  "original": 0,
+                  "comment": 0,
+                  "lyrics": 0,
+                  "karaoke": 0,
+                  "forced": 0,
+                  "hearing_impaired": 0,
+                  "visual_impaired": 0,
+                  "clean_effects": 0,
+                  "attached_pic": 0,
+                  "timed_thumbnails": 0,
+                  "non_diegetic": 0,
+                  "captions": 0,
+                  "descriptions": 0,
+                  "metadata": 0,
+                  "dependent": 0,
+                  "still_image": 0,
+                  "multilayer": 0
+                }
+              }
+            ],
+            "format": {
+              "filename": "<work>/tone.wav",
+              "nb_streams": 1,
+              "nb_programs": 0,
+              "nb_stream_groups": 0,
+              "format_name": "wav",
+              "format_long_name": "WAV / WAVE (Waveform Audio)",
+              "duration": "1.000000",
+              "size": "176444",
+              "bit_rate": "1411552",
+              "probe_score": 99
+            }
+          },
+          "audio_streams": 1
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "audio inspect tone.wav",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "audio",
+        "convert",
+        "<work>/tone.wav",
+        "--format",
+        "wav",
+        "--rate",
+        "48000",
+        "--channels",
+        "1",
+        "--output",
+        "<work>/audio-convert",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.213,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "audio convert",
+        "request_id": "<id>",
+        "at": "2026-09-10T10:12:24+00:00",
+        "result": {
+          "job_id": "<id>",
+          "output": "<work>/audio-convert",
+          "receipt": "<work>/audio-convert/receipt.json",
+          "artifact_count": 4,
+          "file": "audio.wav",
+          "media": {
+            "streams": [
+              {
+                "index": 0,
+                "codec_name": "pcm_s16le",
+                "codec_long_name": "PCM signed 16-bit little-endian",
+                "codec_type": "audio",
+                "codec_tag_string": "[1][0][0][0]",
+                "codec_tag": "0x0001",
+                "sample_fmt": "s16",
+                "sample_rate": "48000",
+                "channels": 1,
+                "bits_per_sample": 16,
+                "initial_padding": 0,
+                "r_frame_rate": "0/0",
+                "avg_frame_rate": "0/0",
+                "time_base": "1/48000",
+                "duration_ts": 48000,
+                "duration": "1.000000",
+                "bit_rate": "768000",
+                "disposition": {
+                  "default": 0,
+                  "dub": 0,
+                  "original": 0,
+                  "comment": 0,
+                  "lyrics": 0,
+                  "karaoke": 0,
+                  "forced": 0,
+                  "hearing_impaired": 0,
+                  "visual_impaired": 0,
+                  "clean_effects": 0,
+                  "attached_pic": 0,
+                  "timed_thumbnails": 0,
+                  "non_diegetic": 0,
+                  "captions": 0,
+                  "descriptions": 0,
+                  "metadata": 0,
+                  "dependent": 0,
+                  "still_image": 0,
+                  "multilayer": 0
+                }
+              }
+            ],
+            "format": {
+              "filename": "<work>/audio-convert/audio.wav",
+              "nb_streams": 1,
+              "nb_programs": 0,
+              "nb_stream_groups": 0,
+              "format_name": "wav",
+              "format_long_name": "WAV / WAVE (Waveform Audio)",
+              "duration": "1.000000",
+              "size": "96078",
+              "bit_rate": "768624",
+              "probe_score": 99,
+              "tags": {
+                "encoder": "Lavf63.1.101"
+              }
+            }
+          },
+          "verification": "stream parameters verified by ffprobe; in-game playback untested"
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "audio convert tone.wav 48 kHz mono",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "model",
+        "inspect",
+        "<work>/cube.obj",
+        "--output",
+        "<work>/model-inspect",
+        "--timeout",
+        "600",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 1.216,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "model inspect",
+        "request_id": "<id>",
+        "at": "2026-09-10T10:12:25+00:00",
+        "result": {
+          "job_id": "<id>",
+          "output": "<work>/model-inspect",
+          "receipt": "<work>/model-inspect/receipt.json",
+          "artifact_count": 3,
+          "before": {
+            "blender_version": "5.2.1 LTS",
+            "objects": [
+              {
+                "name": "cube",
+                "type": "MESH",
+                "parent": null,
+                "location": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "matrix_world": [
+                  [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    7.549790126404332e-08,
+                    -1.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    1.0,
+                    7.549790126404332e-08,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                  ]
+                ],
+                "vertices": 8,
+                "polygons": 6,
+                "uv_layers": [],
+                "vertex_groups": [],
+                "materials": []
+              }
+            ],
+            "images": [],
+            "animations": [],
+            "fps": 24.0,
+            "totals": {
+              "objects": 1,
+              "meshes": 1,
+              "vertices": 8,
+              "bones": 0,
+              "missing_images": 0
+            }
+          },
+          "after": {
+            "blender_version": "5.2.1 LTS",
+            "objects": [
+              {
+                "name": "cube",
+                "type": "MESH",
+                "parent": null,
+                "location": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "matrix_world": [
+                  [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    7.549790126404332e-08,
+                    -1.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    1.0,
+                    7.549790126404332e-08,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                  ]
+                ],
+                "vertices": 8,
+                "polygons": 6,
+                "uv_layers": [],
+                "vertex_groups": [],
+                "materials": []
+              }
+            ],
+            "images": [],
+            "animations": [],
+            "fps": 24.0,
+            "totals": {
+              "objects": 1,
+              "meshes": 1,
+              "vertices": 8,
+              "bones": 0,
+              "missing_images": 0
+            }
+          },
+          "action": "inspect",
+          "verification": "Blender inspection before/after; in-game appearance and animation untested"
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "model inspect cube.obj",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "model",
+        "convert",
+        "<work>/cube.obj",
+        "--format",
+        "cast",
+        "--output",
+        "<work>/model-convert",
+        "--timeout",
+        "600",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.462,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "model convert",
+        "request_id": "<id>",
+        "at": "2026-09-10T10:12:26+00:00",
+        "result": {
+          "job_id": "<id>",
+          "output": "<work>/model-convert",
+          "receipt": "<work>/model-convert/receipt.json",
+          "artifact_count": 4,
+          "before": {
+            "blender_version": "5.2.1 LTS",
+            "objects": [
+              {
+                "name": "cube",
+                "type": "MESH",
+                "parent": null,
+                "location": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "matrix_world": [
+                  [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    7.549790126404332e-08,
+                    -1.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    1.0,
+                    7.549790126404332e-08,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                  ]
+                ],
+                "vertices": 8,
+                "polygons": 6,
+                "uv_layers": [],
+                "vertex_groups": [],
+                "materials": []
+              }
+            ],
+            "images": [],
+            "animations": [],
+            "fps": 24.0,
+            "totals": {
+              "objects": 1,
+              "meshes": 1,
+              "vertices": 8,
+              "bones": 0,
+              "missing_images": 0
+            }
+          },
+          "after": {
+            "blender_version": "5.2.1 LTS",
+            "objects": [
+              {
+                "name": "cube",
+                "type": "MESH",
+                "parent": null,
+                "location": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "matrix_world": [
+                  [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    7.549790126404332e-08,
+                    -1.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    1.0,
+                    7.549790126404332e-08,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                  ]
+                ],
+                "vertices": 8,
+                "polygons": 6,
+                "uv_layers": [],
+                "vertex_groups": [],
+                "materials": []
+              }
+            ],
+            "images": [],
+            "animations": [],
+            "fps": 24.0,
+            "totals": {
+              "objects": 1,
+              "meshes": 1,
+              "vertices": 8,
+              "bones": 0,
+              "missing_images": 0
+            }
+          },
+          "action": "convert",
+          "file": "model.cast",
+          "format_limitation": "Cast triangulates meshes and may split vertices at UV seams.",
+          "verification": "Blender inspection before/after; in-game appearance and animation untested"
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "model convert cube.obj to cast",
+      "passed": true,
+      "expected": "success"
+    }
+  ],
+  "notes": [
+    "work directory <work>",
+    {
+      "mod_ff_sha256": "0ed41cc5f5ce9faae086e3dcf4a019f67ffc2b040f0975d73b5d9d698ac87701",
+      "mod_ff_bytes": 384,
+      "rawfiles_verified": 1
+    }
+  ],
+  "passed": true,
+  "summary": {
+    "steps": 15,
+    "passed": 15,
+    "failed": []
+  }
+}

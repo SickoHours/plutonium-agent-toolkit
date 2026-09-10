@@ -11,14 +11,14 @@
     "native_windows": false,
     "native_linux": true,
     "compatibility_layer": null,
-    "at": "2026-09-10T10:11:57+00:00",
+    "at": "2026-09-10T19:23:50+00:00",
     "os_release": {
       "pretty_name": "Omarchy",
       "id": "omarchy",
       "id_like": "arch",
       "version_id": "4.0.2"
     },
-    "git_head": "1766b71c100860ec6b82f473aab11f274c996dbe",
+    "git_head": "ca0e1230081c7fba268fbb2f0e2b6a7aecc535a9",
     "git_dirty": false,
     "pat_home_isolated": true
   },
@@ -33,14 +33,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 1.039,
+      "elapsed_seconds": 0.531,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "dev setup",
         "request_id": "<id>",
-        "at": "2026-09-10T10:11:58+00:00",
+        "at": "2026-09-10T19:23:51+00:00",
         "result": {
           "destination": "<pat-home>/backends",
           "platform": "linux",
@@ -71,14 +71,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.061,
+      "elapsed_seconds": 0.057,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "doctor",
         "request_id": "<id>",
-        "at": "2026-09-10T10:11:58+00:00",
+        "at": "2026-09-10T19:23:51+00:00",
         "result": {
           "platform": {
             "system": "Linux",
@@ -87,6 +87,8 @@
             "python": "3.14.7",
             "native_windows": false,
             "compatibility_layer": null,
+            "dev_tools_supported": true,
+            "game_control_supported": false,
             "supported": false
           },
           "configuration": {
@@ -219,14 +221,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.092,
+      "elapsed_seconds": 0.097,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "dev setup",
         "request_id": "<id>",
-        "at": "2026-09-10T10:11:58+00:00",
+        "at": "2026-09-10T19:23:51+00:00",
         "result": {
           "destination": "<pat-home>/backends",
           "platform": "linux",
@@ -261,14 +263,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.059,
+      "elapsed_seconds": 0.058,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "project plan",
         "request_id": "<id>",
-        "at": "2026-09-10T10:11:58+00:00",
+        "at": "2026-09-10T19:23:51+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/plan",
@@ -323,14 +325,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.267,
+      "elapsed_seconds": 0.266,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "project build",
         "request_id": "<id>",
-        "at": "2026-09-10T10:11:59+00:00",
+        "at": "2026-09-10T19:23:51+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/build",
@@ -367,14 +369,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.061,
+      "elapsed_seconds": 0.057,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "project verify",
         "request_id": "<id>",
-        "at": "2026-09-10T10:11:59+00:00",
+        "at": "2026-09-10T19:23:52+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/verify",
@@ -412,14 +414,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.109,
+      "elapsed_seconds": 0.106,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "ff inspect",
         "request_id": "<id>",
-        "at": "2026-09-10T10:11:59+00:00",
+        "at": "2026-09-10T19:23:52+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/inspect",
@@ -450,14 +452,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.115,
+      "elapsed_seconds": 0.112,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "ff extract",
         "request_id": "<id>",
-        "at": "2026-09-10T10:11:59+00:00",
+        "at": "2026-09-10T19:23:52+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/extract",
@@ -486,7 +488,7 @@
         "--json"
       ],
       "exit_code": 1,
-      "elapsed_seconds": 0.115,
+      "elapsed_seconds": 0.106,
       "json": {
         "ok": false,
         "error_code": "backend_failed",
@@ -499,7 +501,7 @@
         "toolkit_version": "0.1.0b1",
         "command": "gsc compile",
         "request_id": "<id>",
-        "at": "2026-09-10T10:11:59+00:00",
+        "at": "2026-09-10T19:23:52+00:00",
         "receipt": "<work>/bad-compile/receipt.json"
       },
       "stdout_head": null,
@@ -518,14 +520,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.113,
+      "elapsed_seconds": 0.108,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "gsc compile",
         "request_id": "<id>",
-        "at": "2026-09-10T10:11:59+00:00",
+        "at": "2026-09-10T19:23:52+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/good-compile",
@@ -546,6 +548,42 @@
     },
     {
       "argv": [
+        "gsc",
+        "decompile",
+        "<work>/good-compile/compiled/t6/good.gsc",
+        "--output",
+        "<work>/good-decompile",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.111,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "gsc decompile",
+        "request_id": "<id>",
+        "at": "2026-09-10T19:23:52+00:00",
+        "result": {
+          "job_id": "<id>",
+          "output": "<work>/good-decompile",
+          "receipt": "<work>/good-decompile/receipt.json",
+          "artifact_count": 3,
+          "files": [
+            "decompiled/t6/good.gsc"
+          ],
+          "instance": "server",
+          "verification": "compiler exit and log checked; script behavior in game untested"
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "gsc decompile the compiled script",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
         "dev",
         "setup",
         "--only",
@@ -555,14 +593,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 24.696,
+      "elapsed_seconds": 24.12,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "dev setup",
         "request_id": "<id>",
-        "at": "2026-09-10T10:12:24+00:00",
+        "at": "2026-09-10T19:24:16+00:00",
         "result": {
           "destination": "<pat-home>/backends",
           "platform": "linux",
@@ -609,7 +647,7 @@
         "toolkit_version": "0.1.0b1",
         "command": "audio inspect",
         "request_id": "<id>",
-        "at": "2026-09-10T10:12:24+00:00",
+        "at": "2026-09-10T19:24:16+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/audio-inspect",
@@ -696,14 +734,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.213,
+      "elapsed_seconds": 0.212,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "audio convert",
         "request_id": "<id>",
-        "at": "2026-09-10T10:12:24+00:00",
+        "at": "2026-09-10T19:24:17+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/audio-convert",
@@ -790,14 +828,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 1.216,
+      "elapsed_seconds": 1.164,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "model inspect",
         "request_id": "<id>",
-        "at": "2026-09-10T10:12:25+00:00",
+        "at": "2026-09-10T19:24:18+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/model-inspect",
@@ -949,14 +987,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.462,
+      "elapsed_seconds": 0.459,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "model convert",
         "request_id": "<id>",
-        "at": "2026-09-10T10:12:26+00:00",
+        "at": "2026-09-10T19:24:18+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/model-convert",
@@ -1095,6 +1133,1719 @@
       "name": "model convert cube.obj to cast",
       "passed": true,
       "expected": "success"
+    },
+    {
+      "name": "make rigged fixture with the installed Blender",
+      "passed": true,
+      "expected": "rig.blend written"
+    },
+    {
+      "argv": [
+        "model",
+        "inspect",
+        "<work>/rig.blend",
+        "--output",
+        "<work>/rig-inspect",
+        "--timeout",
+        "600",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.412,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "model inspect",
+        "request_id": "<id>",
+        "at": "2026-09-10T19:24:19+00:00",
+        "result": {
+          "job_id": "<id>",
+          "output": "<work>/rig-inspect",
+          "receipt": "<work>/rig-inspect/receipt.json",
+          "artifact_count": 3,
+          "before": {
+            "blender_version": "5.2.1 LTS",
+            "objects": [
+              {
+                "name": "body",
+                "type": "MESH",
+                "parent": "rig",
+                "location": [
+                  0.0,
+                  0.0,
+                  1.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "matrix_world": [
+                  [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    1.0,
+                    1.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                  ]
+                ],
+                "vertices": 8,
+                "polygons": 6,
+                "uv_layers": [
+                  "UVMap"
+                ],
+                "vertex_groups": [
+                  "root"
+                ],
+                "materials": []
+              },
+              {
+                "name": "rig",
+                "type": "ARMATURE",
+                "parent": null,
+                "location": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "matrix_world": [
+                  [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                  ]
+                ],
+                "bones": [
+                  {
+                    "name": "root",
+                    "parent": null,
+                    "head": [
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "tail": [
+                      0.0,
+                      0.0,
+                      1.0
+                    ]
+                  },
+                  {
+                    "name": "tag_weapon",
+                    "parent": "root",
+                    "head": [
+                      0.0,
+                      0.0,
+                      1.0
+                    ],
+                    "tail": [
+                      0.0,
+                      0.0,
+                      2.0
+                    ]
+                  }
+                ]
+              }
+            ],
+            "images": [],
+            "animations": [
+              {
+                "name": "swing",
+                "frame_range": [
+                  1.0,
+                  10.0
+                ],
+                "curves": 3,
+                "keyframes": 6,
+                "sampled_points": 0
+              }
+            ],
+            "fps": 30.0,
+            "totals": {
+              "objects": 2,
+              "meshes": 1,
+              "vertices": 8,
+              "bones": 2,
+              "missing_images": 0
+            }
+          },
+          "after": {
+            "blender_version": "5.2.1 LTS",
+            "objects": [
+              {
+                "name": "body",
+                "type": "MESH",
+                "parent": "rig",
+                "location": [
+                  0.0,
+                  0.0,
+                  1.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "matrix_world": [
+                  [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    1.0,
+                    1.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                  ]
+                ],
+                "vertices": 8,
+                "polygons": 6,
+                "uv_layers": [
+                  "UVMap"
+                ],
+                "vertex_groups": [
+                  "root"
+                ],
+                "materials": []
+              },
+              {
+                "name": "rig",
+                "type": "ARMATURE",
+                "parent": null,
+                "location": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "matrix_world": [
+                  [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                  ]
+                ],
+                "bones": [
+                  {
+                    "name": "root",
+                    "parent": null,
+                    "head": [
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "tail": [
+                      0.0,
+                      0.0,
+                      1.0
+                    ]
+                  },
+                  {
+                    "name": "tag_weapon",
+                    "parent": "root",
+                    "head": [
+                      0.0,
+                      0.0,
+                      1.0
+                    ],
+                    "tail": [
+                      0.0,
+                      0.0,
+                      2.0
+                    ]
+                  }
+                ]
+              }
+            ],
+            "images": [],
+            "animations": [
+              {
+                "name": "swing",
+                "frame_range": [
+                  1.0,
+                  10.0
+                ],
+                "curves": 3,
+                "keyframes": 6,
+                "sampled_points": 0
+              }
+            ],
+            "fps": 30.0,
+            "totals": {
+              "objects": 2,
+              "meshes": 1,
+              "vertices": 8,
+              "bones": 2,
+              "missing_images": 0
+            }
+          },
+          "action": "inspect",
+          "verification": "Blender inspection before/after; in-game appearance and animation untested"
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "model inspect rig.blend (armature, skin, action)",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "model",
+        "rename-bones",
+        "<work>/rig.blend",
+        "--mapping",
+        "<work>/bones.json",
+        "--format",
+        "blend",
+        "--output",
+        "<work>/rig-rename",
+        "--timeout",
+        "600",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.412,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "model rename-bones",
+        "request_id": "<id>",
+        "at": "2026-09-10T19:24:19+00:00",
+        "result": {
+          "job_id": "<id>",
+          "output": "<work>/rig-rename",
+          "receipt": "<work>/rig-rename/receipt.json",
+          "artifact_count": 4,
+          "before": {
+            "blender_version": "5.2.1 LTS",
+            "objects": [
+              {
+                "name": "body",
+                "type": "MESH",
+                "parent": "rig",
+                "location": [
+                  0.0,
+                  0.0,
+                  1.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "matrix_world": [
+                  [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    1.0,
+                    1.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                  ]
+                ],
+                "vertices": 8,
+                "polygons": 6,
+                "uv_layers": [
+                  "UVMap"
+                ],
+                "vertex_groups": [
+                  "root"
+                ],
+                "materials": []
+              },
+              {
+                "name": "rig",
+                "type": "ARMATURE",
+                "parent": null,
+                "location": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "matrix_world": [
+                  [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                  ]
+                ],
+                "bones": [
+                  {
+                    "name": "root",
+                    "parent": null,
+                    "head": [
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "tail": [
+                      0.0,
+                      0.0,
+                      1.0
+                    ]
+                  },
+                  {
+                    "name": "tag_weapon",
+                    "parent": "root",
+                    "head": [
+                      0.0,
+                      0.0,
+                      1.0
+                    ],
+                    "tail": [
+                      0.0,
+                      0.0,
+                      2.0
+                    ]
+                  }
+                ]
+              }
+            ],
+            "images": [],
+            "animations": [
+              {
+                "name": "swing",
+                "frame_range": [
+                  1.0,
+                  10.0
+                ],
+                "curves": 3,
+                "keyframes": 6,
+                "sampled_points": 0
+              }
+            ],
+            "fps": 30.0,
+            "totals": {
+              "objects": 2,
+              "meshes": 1,
+              "vertices": 8,
+              "bones": 2,
+              "missing_images": 0
+            }
+          },
+          "after": {
+            "blender_version": "5.2.1 LTS",
+            "objects": [
+              {
+                "name": "body",
+                "type": "MESH",
+                "parent": "rig",
+                "location": [
+                  0.0,
+                  0.0,
+                  1.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "matrix_world": [
+                  [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    1.0,
+                    1.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                  ]
+                ],
+                "vertices": 8,
+                "polygons": 6,
+                "uv_layers": [
+                  "UVMap"
+                ],
+                "vertex_groups": [
+                  "root"
+                ],
+                "materials": []
+              },
+              {
+                "name": "rig",
+                "type": "ARMATURE",
+                "parent": null,
+                "location": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "matrix_world": [
+                  [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                  ]
+                ],
+                "bones": [
+                  {
+                    "name": "root",
+                    "parent": null,
+                    "head": [
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "tail": [
+                      0.0,
+                      0.0,
+                      1.0
+                    ]
+                  },
+                  {
+                    "name": "tag_weapon_renamed",
+                    "parent": "root",
+                    "head": [
+                      0.0,
+                      0.0,
+                      1.0
+                    ],
+                    "tail": [
+                      0.0,
+                      0.0,
+                      2.0
+                    ]
+                  }
+                ]
+              }
+            ],
+            "images": [],
+            "animations": [
+              {
+                "name": "swing",
+                "frame_range": [
+                  1.0,
+                  10.0
+                ],
+                "curves": 3,
+                "keyframes": 6,
+                "sampled_points": 0
+              }
+            ],
+            "fps": 30.0,
+            "totals": {
+              "objects": 2,
+              "meshes": 1,
+              "vertices": 8,
+              "bones": 2,
+              "missing_images": 0
+            }
+          },
+          "action": "rename-bones",
+          "file": "model.blend",
+          "verification": "Blender inspection before/after; in-game appearance and animation untested"
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "model rename-bones rig.blend",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "model",
+        "retime",
+        "<work>/rig.blend",
+        "--fps",
+        "60",
+        "--format",
+        "blend",
+        "--output",
+        "<work>/rig-retime",
+        "--timeout",
+        "600",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.459,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "model retime",
+        "request_id": "<id>",
+        "at": "2026-09-10T19:24:20+00:00",
+        "result": {
+          "job_id": "<id>",
+          "output": "<work>/rig-retime",
+          "receipt": "<work>/rig-retime/receipt.json",
+          "artifact_count": 4,
+          "before": {
+            "blender_version": "5.2.1 LTS",
+            "objects": [
+              {
+                "name": "body",
+                "type": "MESH",
+                "parent": "rig",
+                "location": [
+                  0.0,
+                  0.0,
+                  1.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "matrix_world": [
+                  [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    1.0,
+                    1.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                  ]
+                ],
+                "vertices": 8,
+                "polygons": 6,
+                "uv_layers": [
+                  "UVMap"
+                ],
+                "vertex_groups": [
+                  "root"
+                ],
+                "materials": []
+              },
+              {
+                "name": "rig",
+                "type": "ARMATURE",
+                "parent": null,
+                "location": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "matrix_world": [
+                  [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                  ]
+                ],
+                "bones": [
+                  {
+                    "name": "root",
+                    "parent": null,
+                    "head": [
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "tail": [
+                      0.0,
+                      0.0,
+                      1.0
+                    ]
+                  },
+                  {
+                    "name": "tag_weapon",
+                    "parent": "root",
+                    "head": [
+                      0.0,
+                      0.0,
+                      1.0
+                    ],
+                    "tail": [
+                      0.0,
+                      0.0,
+                      2.0
+                    ]
+                  }
+                ]
+              }
+            ],
+            "images": [],
+            "animations": [
+              {
+                "name": "swing",
+                "frame_range": [
+                  1.0,
+                  10.0
+                ],
+                "curves": 3,
+                "keyframes": 6,
+                "sampled_points": 0
+              }
+            ],
+            "fps": 30.0,
+            "totals": {
+              "objects": 2,
+              "meshes": 1,
+              "vertices": 8,
+              "bones": 2,
+              "missing_images": 0
+            }
+          },
+          "after": {
+            "blender_version": "5.2.1 LTS",
+            "objects": [
+              {
+                "name": "body",
+                "type": "MESH",
+                "parent": "rig",
+                "location": [
+                  0.0,
+                  0.0,
+                  1.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "matrix_world": [
+                  [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    1.0,
+                    1.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                  ]
+                ],
+                "vertices": 8,
+                "polygons": 6,
+                "uv_layers": [
+                  "UVMap"
+                ],
+                "vertex_groups": [
+                  "root"
+                ],
+                "materials": []
+              },
+              {
+                "name": "rig",
+                "type": "ARMATURE",
+                "parent": null,
+                "location": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "matrix_world": [
+                  [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                  ]
+                ],
+                "bones": [
+                  {
+                    "name": "root",
+                    "parent": null,
+                    "head": [
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "tail": [
+                      0.0,
+                      0.0,
+                      1.0
+                    ]
+                  },
+                  {
+                    "name": "tag_weapon",
+                    "parent": "root",
+                    "head": [
+                      0.0,
+                      0.0,
+                      1.0
+                    ],
+                    "tail": [
+                      0.0,
+                      0.0,
+                      2.0
+                    ]
+                  }
+                ]
+              }
+            ],
+            "images": [],
+            "animations": [
+              {
+                "name": "swing",
+                "frame_range": [
+                  2.0,
+                  20.0
+                ],
+                "curves": 3,
+                "keyframes": 6,
+                "sampled_points": 0
+              }
+            ],
+            "fps": 60.0,
+            "totals": {
+              "objects": 2,
+              "meshes": 1,
+              "vertices": 8,
+              "bones": 2,
+              "missing_images": 0
+            }
+          },
+          "action": "retime",
+          "file": "model.blend",
+          "verification": "Blender inspection before/after; in-game appearance and animation untested"
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "model retime rig.blend 30 to 60 fps",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "name": "retime doubled the frame range",
+      "passed": true,
+      "expected": "fps 60, swing 2..20"
+    },
+    {
+      "argv": [
+        "model",
+        "transform",
+        "<work>/rig.blend",
+        "--scale",
+        "2",
+        "--format",
+        "blend",
+        "--output",
+        "<work>/rig-transform",
+        "--timeout",
+        "600",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.411,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "model transform",
+        "request_id": "<id>",
+        "at": "2026-09-10T19:24:20+00:00",
+        "result": {
+          "job_id": "<id>",
+          "output": "<work>/rig-transform",
+          "receipt": "<work>/rig-transform/receipt.json",
+          "artifact_count": 4,
+          "before": {
+            "blender_version": "5.2.1 LTS",
+            "objects": [
+              {
+                "name": "body",
+                "type": "MESH",
+                "parent": "rig",
+                "location": [
+                  0.0,
+                  0.0,
+                  1.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "matrix_world": [
+                  [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    1.0,
+                    1.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                  ]
+                ],
+                "vertices": 8,
+                "polygons": 6,
+                "uv_layers": [
+                  "UVMap"
+                ],
+                "vertex_groups": [
+                  "root"
+                ],
+                "materials": []
+              },
+              {
+                "name": "rig",
+                "type": "ARMATURE",
+                "parent": null,
+                "location": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "matrix_world": [
+                  [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                  ]
+                ],
+                "bones": [
+                  {
+                    "name": "root",
+                    "parent": null,
+                    "head": [
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "tail": [
+                      0.0,
+                      0.0,
+                      1.0
+                    ]
+                  },
+                  {
+                    "name": "tag_weapon",
+                    "parent": "root",
+                    "head": [
+                      0.0,
+                      0.0,
+                      1.0
+                    ],
+                    "tail": [
+                      0.0,
+                      0.0,
+                      2.0
+                    ]
+                  }
+                ]
+              }
+            ],
+            "images": [],
+            "animations": [
+              {
+                "name": "swing",
+                "frame_range": [
+                  1.0,
+                  10.0
+                ],
+                "curves": 3,
+                "keyframes": 6,
+                "sampled_points": 0
+              }
+            ],
+            "fps": 30.0,
+            "totals": {
+              "objects": 2,
+              "meshes": 1,
+              "vertices": 8,
+              "bones": 2,
+              "missing_images": 0
+            }
+          },
+          "after": {
+            "blender_version": "5.2.1 LTS",
+            "objects": [
+              {
+                "name": "body",
+                "type": "MESH",
+                "parent": "rig",
+                "location": [
+                  0.0,
+                  0.0,
+                  1.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "matrix_world": [
+                  [
+                    2.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    2.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    2.0,
+                    2.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                  ]
+                ],
+                "vertices": 8,
+                "polygons": 6,
+                "uv_layers": [
+                  "UVMap"
+                ],
+                "vertex_groups": [
+                  "root"
+                ],
+                "materials": []
+              },
+              {
+                "name": "rig",
+                "type": "ARMATURE",
+                "parent": null,
+                "location": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  2.0,
+                  2.0,
+                  2.0
+                ],
+                "matrix_world": [
+                  [
+                    2.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    2.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    2.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                  ]
+                ],
+                "bones": [
+                  {
+                    "name": "root",
+                    "parent": null,
+                    "head": [
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "tail": [
+                      0.0,
+                      0.0,
+                      1.0
+                    ]
+                  },
+                  {
+                    "name": "tag_weapon",
+                    "parent": "root",
+                    "head": [
+                      0.0,
+                      0.0,
+                      1.0
+                    ],
+                    "tail": [
+                      0.0,
+                      0.0,
+                      2.0
+                    ]
+                  }
+                ]
+              }
+            ],
+            "images": [],
+            "animations": [
+              {
+                "name": "swing",
+                "frame_range": [
+                  1.0,
+                  10.0
+                ],
+                "curves": 3,
+                "keyframes": 6,
+                "sampled_points": 0
+              }
+            ],
+            "fps": 30.0,
+            "totals": {
+              "objects": 2,
+              "meshes": 1,
+              "vertices": 8,
+              "bones": 2,
+              "missing_images": 0
+            }
+          },
+          "action": "transform",
+          "file": "model.blend",
+          "verification": "Blender inspection before/after; in-game appearance and animation untested"
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "model transform rig.blend scale 2",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "model",
+        "preview",
+        "<work>/rig.blend",
+        "--output",
+        "<work>/rig-preview",
+        "--timeout",
+        "600",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.56,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "model preview",
+        "request_id": "<id>",
+        "at": "2026-09-10T19:24:21+00:00",
+        "result": {
+          "job_id": "<id>",
+          "output": "<work>/rig-preview",
+          "receipt": "<work>/rig-preview/receipt.json",
+          "artifact_count": 4,
+          "before": {
+            "blender_version": "5.2.1 LTS",
+            "objects": [
+              {
+                "name": "body",
+                "type": "MESH",
+                "parent": "rig",
+                "location": [
+                  0.0,
+                  0.0,
+                  1.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "matrix_world": [
+                  [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    1.0,
+                    1.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                  ]
+                ],
+                "vertices": 8,
+                "polygons": 6,
+                "uv_layers": [
+                  "UVMap"
+                ],
+                "vertex_groups": [
+                  "root"
+                ],
+                "materials": []
+              },
+              {
+                "name": "rig",
+                "type": "ARMATURE",
+                "parent": null,
+                "location": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "matrix_world": [
+                  [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                  ]
+                ],
+                "bones": [
+                  {
+                    "name": "root",
+                    "parent": null,
+                    "head": [
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "tail": [
+                      0.0,
+                      0.0,
+                      1.0
+                    ]
+                  },
+                  {
+                    "name": "tag_weapon",
+                    "parent": "root",
+                    "head": [
+                      0.0,
+                      0.0,
+                      1.0
+                    ],
+                    "tail": [
+                      0.0,
+                      0.0,
+                      2.0
+                    ]
+                  }
+                ]
+              }
+            ],
+            "images": [],
+            "animations": [
+              {
+                "name": "swing",
+                "frame_range": [
+                  1.0,
+                  10.0
+                ],
+                "curves": 3,
+                "keyframes": 6,
+                "sampled_points": 0
+              }
+            ],
+            "fps": 30.0,
+            "totals": {
+              "objects": 2,
+              "meshes": 1,
+              "vertices": 8,
+              "bones": 2,
+              "missing_images": 0
+            }
+          },
+          "after": {
+            "blender_version": "5.2.1 LTS",
+            "objects": [
+              {
+                "name": "body",
+                "type": "MESH",
+                "parent": "rig",
+                "location": [
+                  0.0,
+                  0.0,
+                  1.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "matrix_world": [
+                  [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    1.0,
+                    1.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                  ]
+                ],
+                "vertices": 8,
+                "polygons": 6,
+                "uv_layers": [
+                  "UVMap"
+                ],
+                "vertex_groups": [
+                  "root"
+                ],
+                "materials": []
+              },
+              {
+                "name": "Camera",
+                "type": "CAMERA",
+                "parent": null,
+                "location": [
+                  2.078460931777954,
+                  -2.598076105117798,
+                  2.732050895690918
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "matrix_world": [
+                  [
+                    0.7808687686920166,
+                    -0.2884572744369507,
+                    0.5541085600852966,
+                    2.078460931777954
+                  ],
+                  [
+                    0.6246950626373291,
+                    0.36057159304618835,
+                    -0.692635715007782,
+                    -2.598076105117798
+                  ],
+                  [
+                    -1.5684145093786128e-09,
+                    0.8870065212249756,
+                    0.46175694465637207,
+                    2.732050895690918
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                  ]
+                ]
+              },
+              {
+                "name": "rig",
+                "type": "ARMATURE",
+                "parent": null,
+                "location": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "scale": [
+                  1.0,
+                  1.0,
+                  1.0
+                ],
+                "matrix_world": [
+                  [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0
+                  ],
+                  [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                  ]
+                ],
+                "bones": [
+                  {
+                    "name": "root",
+                    "parent": null,
+                    "head": [
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "tail": [
+                      0.0,
+                      0.0,
+                      1.0
+                    ]
+                  },
+                  {
+                    "name": "tag_weapon",
+                    "parent": "root",
+                    "head": [
+                      0.0,
+                      0.0,
+                      1.0
+                    ],
+                    "tail": [
+                      0.0,
+                      0.0,
+                      2.0
+                    ]
+                  }
+                ]
+              }
+            ],
+            "images": [],
+            "animations": [
+              {
+                "name": "swing",
+                "frame_range": [
+                  1.0,
+                  10.0
+                ],
+                "curves": 3,
+                "keyframes": 6,
+                "sampled_points": 0
+              }
+            ],
+            "fps": 30.0,
+            "totals": {
+              "objects": 3,
+              "meshes": 1,
+              "vertices": 8,
+              "bones": 2,
+              "missing_images": 0
+            }
+          },
+          "action": "preview",
+          "file": "model.png",
+          "preview_context": "Temporary camera and studio lighting; geometry preview, not in-game rendering",
+          "verification": "Blender inspection before/after; in-game appearance and animation untested"
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "model preview rig.blend",
+      "passed": true,
+      "expected": "success"
     }
   ],
   "notes": [
@@ -1103,12 +2854,15 @@
       "mod_ff_sha256": "0ed41cc5f5ce9faae086e3dcf4a019f67ffc2b040f0975d73b5d9d698ac87701",
       "mod_ff_bytes": 384,
       "rawfiles_verified": 1
+    },
+    {
+      "superseded": "linux-tier2-backends.superseded-20260910T192421Z.json"
     }
   ],
   "passed": true,
   "summary": {
-    "steps": 15,
-    "passed": 15,
+    "steps": 23,
+    "passed": 23,
     "failed": []
   }
 }
