@@ -28,6 +28,9 @@ verified, installed, launched, playable, captured, accepted. Words are defined i
   red loop before theorising and ends by adding the gate that would have caught it.
 - **First time on this machine**: `docs/playbooks/first-build.md`, then the setup prompt in the
   repository root if backends are missing.
+- **`docs/SUPPORT.md` has no receipt for this host, or marks the route unverified here**:
+  `docs/playbooks/qualify-on-this-host.md`. Unverified means unmeasured; measure it and open the
+  pull request.
 
 ## Reference underneath
 

@@ -19,6 +19,13 @@ Every entry states what shipped, on which platform it was verified, and what rem
   practices that worked beside the failures. Two new glossary terms: packaged route, track record.
   `tests/test_track_record.py` keeps page, data and framing consistent. No route, evidence level
   or receipt changed.
+- **`docs/playbooks/qualify-on-this-host.md`** and a "When a route is unverified on your host"
+  section in `docs/SUPPORT.md`: a route with no receipt for the agent's OS is unmeasured, not
+  unsupported. The playbook runs `tools/qualify.py`, keeps the redaction gate, and ends in a pull
+  request that extends the matrix. `AGENTS.md`, `docs/FOR-AGENTS.md` and the skills route to it;
+  every "not run natively" row in the matrix now names that next action, and a test keeps it so.
+
+>>>>>>> 98b24a8 (docs: an unverified route is unmeasured, not unsupported; playbook to qualify it on this host)
 - **Linux backend pins.** `dev setup` now downloads and verifies gsc-tool 1.4.10, OpenAssetTools
   0.33.0, FFmpeg 9.0 (BtbN gpl linux64) and Blender 5.2.1 on Linux x64, from the same upstream
   releases as the Windows pins, under `downloads.linux` in `backends.json`. Hashes were computed

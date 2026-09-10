@@ -80,6 +80,9 @@ These are how the toolkit is built, so that you can extend it without breaking i
 - The development (file) routes run on Windows and Linux; macOS is untested and not claimed. Game
   control and capture use the Win32 console and run on native Windows only; off Windows they refuse
   with `unsupported_platform` before acting.
+- A route `docs/SUPPORT.md` marks unverified on your host is unmeasured, not unsupported. Measure
+  it: `docs/playbooks/qualify-on-this-host.md` produces the receipt and the pull request. Never
+  tell the user a route "does not work here" when the truth is that nobody has run it here yet.
 - Do not focus, minimize, kill or send keystrokes to the game as a workaround. Report the failure.
 - Do not elevate privileges, read process memory, launcher arguments or logins, or change registry
   keys beyond a documented per-user PATH entry.

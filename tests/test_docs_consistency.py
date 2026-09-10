@@ -105,6 +105,18 @@ class DocsConsistencyTests(unittest.TestCase):
                     continue
                 self.assertIn(f"{group} {action}", registered, f"{name}: `pat {group} {action}` is not a route")
 
+    def test_unverified_routes_point_agents_at_the_qualification_playbook(self):
+        # A row that says a route is unverified on some host must send the agent to measure it,
+        # not leave "not run" as a dead end; the playbook and its links must exist.
+        self.assertTrue((ROOT / "docs/playbooks/qualify-on-this-host.md").is_file())
+        support = read("docs/SUPPORT.md")
+        self.assertIn("## When a route is unverified on your host", support)
+        self.assertIn("playbooks/qualify-on-this-host.md", support)
+        for banned in ("Not run natively", "**no native run**", "**No native run**"):
+            self.assertNotIn(banned, support, f"SUPPORT.md: {banned!r} without a next action")
+        for doc in ("AGENTS.md", "docs/FOR-AGENTS.md", "skills/pat-help/SKILL.md", "skills/plutonium-agent-toolkit/SKILL.md"):
+            self.assertIn("qualify-on-this-host.md", read(doc), doc)
+
     def test_agents_and_skill_route_to_knowledge_and_playbooks(self):
         agents = read("AGENTS.md")
         self.assertIn("docs/knowledge/README.md", agents)
