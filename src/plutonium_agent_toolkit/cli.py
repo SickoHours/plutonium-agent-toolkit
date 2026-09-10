@@ -176,7 +176,7 @@ def run(argv: list[str]) -> dict:
             result["backends"] = {"ok": False, "error": exc.to_dict()}
         result["ok"] = cfg_state.get("ok", False) and result["backends"].get("ok", False)
         result["game_control"] = {
-            "supported_here": bool(info["supported"]),
+            "supported_here": bool(info["game_control_supported"]),
             "note": "Game control and capture use the Win32 console and need a native Windows host. "
                     "Development file tools run on this platform.",
         }

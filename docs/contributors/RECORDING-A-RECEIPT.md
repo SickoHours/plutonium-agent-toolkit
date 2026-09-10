@@ -3,8 +3,9 @@
 A receipt is what lets the next person believe a capability works. Keep it boring and exact.
 
 1. Run the route on a native host: Windows 11 x64, or Linux for the development routes.
-   `python tools/qualify.py --tier offline|backends --output docs/receipts` records the OS
-   identity, Python version and toolkit commit for you and writes `<platform>-tier<N>-*.json`.
+   `python tools/qualify.py --tier offline --output docs/receipts` and then
+   `python tools/qualify.py --tier backends --output docs/receipts` record the OS identity,
+   Python version and toolkit commit for you and write `<platform>-tier<N>-*.json`.
    For the game tier record the Plutonium client version, and the GPU vendor for capture.
 2. Keep the full stdout JSON and exit status of every invocation in the sequence.
 3. Sanitize: the qualification tool replaces usernames, machine names, `Users\` and `/home/`

@@ -47,6 +47,12 @@ Every entry states what shipped, on which platform it was verified, and what rem
   classifier is removed, and every user-facing document is reworded. 0.1.0b1's release notes and
   pull request #13 said "any OS" and "Windows, Linux and macOS"; that was never backed by a pin or
   a receipt.
+- `pat version`, `manifest` and `doctor` now report `platform.dev_tools_supported` (Windows and
+  Linux, not under Wine) separately from `platform.game_control_supported` (native Windows);
+  `supported` keeps meaning game control, which is what discovery's `available_here` used it for.
+- `tools/qualify.py` uses a fresh temporary toolkit home when `PAT_HOME` is unset, so the offline
+  tier's `configure` step cannot write a fake storage path into the user's real `config.json`;
+  and a Tier 3 receipt is not `passed` until the four required human observations are `true`.
 - `tools/private_scan.py` no longer matches the distribution name of the authoring machine, only
   its compositor: a native Linux receipt must name the OS it ran on, exactly as the Windows
   receipts name the Windows build. Paths, usernames and hostnames are still blocked.

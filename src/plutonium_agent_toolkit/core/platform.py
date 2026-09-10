@@ -15,7 +15,9 @@ import sys
 
 from .errors import UNSUPPORTED_PLATFORM, Failure
 
-SUPPORTED = ("Windows",)
+# Hosts the development (file) tools are supported on; game control needs native Windows.
+SUPPORTED = ("Windows", "Linux")
+GAME_CONTROL = ("Windows",)
 
 
 def system() -> str:
@@ -40,14 +42,20 @@ def is_wine() -> bool:
 
 
 def describe() -> dict:
+    native_windows = is_windows() and not is_wine()
     return {
         "system": system(),
         "release": platform.release(),
         "machine": platform.machine(),
         "python": sys.version.split()[0],
-        "native_windows": is_windows() and not is_wine(),
+        "native_windows": native_windows,
         "compatibility_layer": "wine" if is_wine() else None,
-        "supported": is_windows() and not is_wine(),
+        # Development (file) tools: Windows and Linux. macOS is untested and not claimed.
+        "dev_tools_supported": system() in SUPPORTED and not is_wine(),
+        # Game control and capture: native Windows only (Win32 console transport). `supported`
+        # keeps its historical meaning of this flag for discovery consumers.
+        "game_control_supported": native_windows,
+        "supported": native_windows,
     }
 
 

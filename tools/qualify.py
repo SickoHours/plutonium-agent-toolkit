@@ -70,6 +70,7 @@ def redactor(extra_paths=()):
     # fake storage path in config.json, and Tier 2 reads it back through doctor.
     temp = tempfile.gettempdir()
     for variant in {temp, temp.replace("\\", "/"), temp.replace("\\", "\\\\")}:
+        patterns.append((re.compile(re.escape(variant) + r"[\\/]{1,2}pat-qualify-home-[^\\/\"\r\n\t]*", re.I), "<pat-home>"))
         patterns.append((re.compile(re.escape(variant) + r"[\\/]{1,2}pat-qualify-[^\\/\"\r\n\t]*", re.I), "<work>"))
     patterns.append((USERS_PATH, "<userprofile>"))
     patterns.append((HOME_PATH, "<userprofile>"))
@@ -283,6 +284,12 @@ def redact_existing(path: Path, redact) -> bool:
 
 def finish(receipt, output: Path, name: str, redact):
     receipt["passed"] = all(s["passed"] for s in receipt["steps"])
+    observations = receipt.get("human_observations")
+    if observations is not None:
+        # Tier 3 needs the human facts the script cannot know; a receipt with any of them
+        # unanswered or false is not a pass, whatever the state files say.
+        required = ("main_menu_reached", "town_spawn_playable", "hello_zm_line_visible_after_spawn", "quit_exited_cleanly")
+        receipt["passed"] = receipt["passed"] and all(observations.get(key) is True for key in required)
     receipt["summary"] = {"steps": len(receipt["steps"]), "passed": sum(s["passed"] for s in receipt["steps"]),
                           "failed": [s["name"] for s in receipt["steps"] if not s["passed"]]}
     output.mkdir(parents=True, exist_ok=True)
@@ -518,7 +525,8 @@ def main() -> int:
     ap.add_argument("--redact-existing", type=Path, metavar="FILE",
                     help="Reapply the current redaction rules to a committed receipt in place; runs nothing, works on any platform")
     args = ap.parse_args()
-    home = Path(os.environ.get("PAT_HOME") or default_home())
+    explicit_home = os.environ.get("PAT_HOME")
+    home = Path(explicit_home) if explicit_home else default_home()
     if args.redact_existing:
         changed = redact_existing(args.redact_existing, redactor(extra_paths=[("pat-home", str(home)), ("repo", str(ROOT))]))
         print(f"{'re-redacted' if changed else 'already clean'}: {args.redact_existing}")
@@ -536,6 +544,12 @@ def main() -> int:
     if args.tier == "game" and token != "windows" and not args.allow_untested:
         print("Tier game qualifies game control, which uses the Win32 console: run it on native Windows.", file=sys.stderr)
         return 2
+    if not explicit_home and args.tier != "game":
+        # Tier 1 runs `configure` against a fake storage path and Tier 2 installs backends. Without
+        # an explicit PAT_HOME those must not touch the user's real toolkit home (maintainer
+        # finding on the first Linux pull request): use a fresh temporary home instead.
+        home = Path(tempfile.mkdtemp(prefix="pat-qualify-home-"))
+        print(f"PAT_HOME is unset; using a temporary toolkit home {home} so your real configuration is untouched.", file=sys.stderr)
     os.environ["PAT_HOME"] = str(home)
     work = Path(tempfile.mkdtemp(prefix=f"pat-qualify-{args.tier}-"))
     redact = redactor(extra_paths=[("pat-home", str(home)), ("work", str(work)), ("repo", str(ROOT))])

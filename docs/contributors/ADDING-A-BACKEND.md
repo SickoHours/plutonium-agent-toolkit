@@ -13,8 +13,10 @@
    first-run workflow needs it. `provides` lists the relative paths `doctor` checks; on Linux those
    are also the files setup marks executable, so name every binary the routes run.
 4. If the routes call it, add its name to `EXECUTABLES` in `dev/backends.py` (Windows path; the
-   `.exe` is dropped on Linux, so the Linux archive must use the same layout or its `provides` must
-   say where the binary is).
+   `.exe` is dropped on Linux). The Linux archive must place the binary at exactly that path:
+   `provides` only tells `doctor` what to check and setup what to mark executable; it does not
+   change where `executable()` looks. If upstream's layout differs, add a `linux` path to
+   `EXECUTABLES` rather than pointing `provides` elsewhere.
 5. Add the program and license to `NOTICE`.
 6. Run `tests/test_backends.py`. Then natively on each pinned platform: `pat dev setup --only <id>
    --json` and `pat doctor --json`, or the backends tier of `tools/qualify.py`. Attach the

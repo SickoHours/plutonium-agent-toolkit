@@ -71,8 +71,10 @@ terminal-capable coding agent on the machine, not a particular vendor.
 
 Paste [WINDOWS-QUALIFY-PROMPT.md](WINDOWS-QUALIFY-PROMPT.md) into your agent on the Windows PC.
 It follows [docs/WINDOWS-QUALIFICATION.md](docs/WINDOWS-QUALIFICATION.md), fixes what breaks,
-and opens a pull request with redacted receipts. On Linux, `python tools/qualify.py` runs the
-offline and backend tiers the same way and writes `linux-*` receipts; the game tier is Windows-only.
+and opens a pull request with redacted receipts. On Linux, run the two tiers separately:
+`python tools/qualify.py --tier offline --output docs/receipts` then
+`python tools/qualify.py --tier backends --output docs/receipts`; they write `linux-*` receipts.
+The game tier is Windows-only.
 
 ## Pilots
 

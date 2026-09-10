@@ -43,6 +43,12 @@ class DiscoveryTests(IsolatedHome):
         self.assertTrue(row["ok"])
         self.assertEqual(row["result"]["version"], __version__)
         self.assertIn("native_windows", row["result"]["platform"])
+        plat = row["result"]["platform"]
+        # Discovery says which half is supported here: file tools on Windows and Linux, game
+        # control on native Windows only. `supported` keeps meaning game control.
+        self.assertEqual(plat["dev_tools_supported"], plat["system"] in ("Windows", "Linux") and plat["compatibility_layer"] is None)
+        self.assertEqual(plat["game_control_supported"], plat["native_windows"])
+        self.assertEqual(plat["supported"], plat["game_control_supported"])
 
     def test_manifest_lists_every_registered_route_once(self):
         code, row = invoke(["manifest"])

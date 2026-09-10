@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -218,6 +219,41 @@ class QualifyToolUnitTests(unittest.TestCase):
         self.assertEqual(redact(raw), os.path.join("<work>", "fake-storage", "t6"))
         # Other temp paths are untouched by this rule (the home rules may still apply to them).
         self.assertIn(os.path.join("unrelated", "x"), redact(os.path.join(temp, "unrelated", "x")))
+
+    def test_tier3_receipt_fails_until_the_human_observations_are_true(self):
+        # Macroscope on the first Linux PR: all state-file steps passed, every observation None,
+        # and finish() emitted a passed receipt.
+        out = Path(self.temp.name) / "out"
+        receipt = self.q.new_receipt("game")
+        receipt["steps"].append({"name": "last-load.json", "passed": True})
+        receipt["human_observations"] = {"launcher_prompt_shown": None, "game_window_took_focus": None, "main_menu_reached": None,
+                                         "town_spawn_playable": None, "hello_zm_line_visible_after_spawn": None,
+                                         "quit_exited_cleanly": None, "plutonium_build": None, "notes": ""}
+        self.assertFalse(self.q.finish(receipt, out, "windows-tier3-game.json", lambda v: v))
+        for key in ("main_menu_reached", "town_spawn_playable", "hello_zm_line_visible_after_spawn", "quit_exited_cleanly"):
+            receipt["human_observations"][key] = True
+        receipt["notes"] = []
+        self.assertTrue(self.q.finish(receipt, out, "windows-tier3-game.json", lambda v: v))
+
+    @unittest.skipIf(os.environ.get("PAT_QUALIFY_NESTED"), "would recurse through the offline tier's unit-test step")
+    def test_offline_tier_without_pat_home_uses_a_temporary_home(self):
+        # High finding on the first Linux PR: with PAT_HOME unset the offline tier's configure step
+        # wrote the fake storage path into the user's real config.json.
+        env = {k: v for k, v in os.environ.items() if k != "PAT_HOME"}
+        with tempfile.TemporaryDirectory() as temp:
+            with unittest.mock.patch.dict(os.environ, env, clear=True):
+                proc = subprocess.run([sys.executable, str(ROOT / "tools/qualify.py"), "--tier", "offline",
+                                       "--output", str(Path(temp) / "out"), "--allow-untested-platform"],
+                                      capture_output=True, text=True, cwd=ROOT, env=env, timeout=600)
+            self.assertEqual(proc.returncode, 0, proc.stdout[-1500:] + proc.stderr[-1500:])
+            self.assertIn("temporary toolkit home", proc.stderr)
+            receipts = list((Path(temp) / "out").rglob("*-tier1-offline.json"))
+            data = json.loads(receipts[0].read_text(encoding="utf-8"))
+            self.assertTrue(data["environment"]["pat_home_isolated"])
+            self.assertNotIn("pat-qualify-home-", receipts[0].read_text(encoding="utf-8"), "temporary home path is redacted")
+            real_config = self.q.default_home() / "config.json"
+            if real_config.is_file():
+                self.assertNotIn("fake-storage", real_config.read_text(encoding="utf-8"))
 
     def test_environment_names_the_os_and_native_flags(self):
         info = self.q.environment()
