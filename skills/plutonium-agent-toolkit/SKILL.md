@@ -12,8 +12,9 @@ machine, adapt the toolkit itself. It is open source and malleable on purpose.
 Read the repository's `AGENTS.md` and `docs/FOR-AGENTS.md` for the full contract, and
 `docs/SUPPORT.md` for what each route has actually earned (`available` = native receipt on Windows or
 Linux, `implemented` = runs but no receipt, `offline` = unit-tested only, `deferred` = out of scope).
-macOS is untested and not claimed; say so if the user is on one. A route marked unverified on the
-user's host is unmeasured: run `docs/playbooks/qualify-on-this-host.md` rather than declining.
+macOS is untested and not claimed; say so if the user is on one. On Windows or Linux, a
+development route marked unverified on the user's host is unmeasured: run
+`docs/playbooks/qualify-on-this-host.md` rather than declining.
 
 ## Where things are
 

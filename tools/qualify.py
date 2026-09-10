@@ -169,6 +169,18 @@ def os_release() -> dict:
     return rows
 
 
+CI_MARKERS = ("CI", "GITHUB_ACTIONS", "GITLAB_CI", "BUILDKITE", "TF_BUILD", "CIRCLECI", "JENKINS_URL")
+
+
+def ci_runner() -> str | None:
+    """The CI variable that identifies this process as a hosted runner, or None."""
+    for name in CI_MARKERS:
+        value = os.environ.get(name, "")
+        if value and value.lower() not in ("0", "false", "no"):
+            return name
+    return None
+
+
 def compatibility_layer() -> str | None:
     """wine / wsl when this interpreter is not running on the OS it reports, else None."""
     if os.name == "nt":
@@ -325,6 +337,10 @@ def tier_offline(receipt, home: Path, work: Path):
                                                   "--output", str(work / "plan-hello"), "--json"])
     step(receipt, "output_exists refusal", PAT + ["project", "plan", str(ROOT / "examples/hello-zm/project.json"),
                                                    "--output", str(work / "plan-hello"), "--json"], expect_ok=False)
+    init = step(receipt, "project init", PAT + ["project", "init", "--name", "qualify_init", "--output", str(work / "init"), "--json"])
+    if init["passed"]:
+        step(receipt, "project plan the init recipe", PAT + ["project", "plan", str(work / "init" / "project.json"),
+                                                            "--output", str(work / "init-plan"), "--json"])
     step(receipt, "planned route refuses", PAT + ["capture", "start"], expect_ok=False)
     step(receipt, "private scan", [sys.executable, str(ROOT / "tools/private_scan.py")])
     step(receipt, "release check", [sys.executable, str(ROOT / "tools/release_check.py")])
@@ -380,6 +396,50 @@ f 5 1 4 8
 """
 
 
+MAKE_RIG = """import bpy, sys
+out = sys.argv[sys.argv.index('--') + 1]
+bpy.ops.wm.read_factory_settings(use_empty=True)
+bpy.ops.object.armature_add(enter_editmode=True)
+arm = bpy.context.object
+arm.name = 'rig'
+eb = arm.data.edit_bones
+root = eb[0]; root.name = 'root'; root.head = (0, 0, 0); root.tail = (0, 0, 1)
+child = eb.new('tag_weapon'); child.head = (0, 0, 1); child.tail = (0, 0, 2); child.parent = root
+bpy.ops.object.mode_set(mode='OBJECT')
+bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, 1))
+cube = bpy.context.object; cube.name = 'body'
+cube.parent = arm
+cube.modifiers.new('skin', 'ARMATURE').object = arm
+cube.vertex_groups.new(name='root').add(list(range(len(cube.data.vertices))), 1.0, 'REPLACE')
+arm.animation_data_create()
+arm.animation_data.action = bpy.data.actions.new('swing')
+scene = bpy.context.scene
+scene.frame_start = 1; scene.frame_end = 10; scene.render.fps = 30
+pb = arm.pose.bones['tag_weapon']
+for frame, rot in ((1, 0.0), (10, 0.5)):
+    pb.rotation_euler = (rot, 0, 0); pb.keyframe_insert('rotation_euler', frame=frame)
+bpy.ops.wm.save_as_mainfile(filepath=out)
+"""
+
+
+def make_rig(work: Path) -> Path | None:
+    """A two-bone rigged, skinned, animated .blend made by the installed Blender itself.
+
+    A .blend is the one input on which every model action is legal: glTF import adds NLA tracks
+    and root animation, which transform and retime refuse by design."""
+    script = work / "make_rig.py"
+    script.write_text(MAKE_RIG, encoding="utf-8")
+    rig = work / "rig.blend"
+    try:
+        from plutonium_agent_toolkit.dev.backends import executable
+        argv = executable("blender")
+    except Exception:  # noqa: BLE001  (backend_unavailable surfaces as a failed step below)
+        return None
+    proc = subprocess.run([*argv, "--background", "--factory-startup", "--python", str(script), "--", str(rig)],
+                          capture_output=True, text=True, timeout=600, env=child_env())
+    return rig if proc.returncode == 0 and rig.is_file() else None
+
+
 def tier_media(receipt, work: Path):
     """Optional Tier 2 extension: real FFmpeg and Blender+Cast on synthetic inputs.
 
@@ -396,6 +456,30 @@ def tier_media(receipt, work: Path):
     step(receipt, "model inspect cube.obj", PAT + ["model", "inspect", str(cube), "--output", str(work / "model-inspect"), "--timeout", "600", "--json"], timeout=900)
     step(receipt, "model convert cube.obj to cast", PAT + ["model", "convert", str(cube), "--format", "cast", "--output", str(work / "model-convert"),
                                                        "--timeout", "600", "--json"], timeout=900)
+    rig = make_rig(work)
+    receipt["steps"].append({"name": "make rigged fixture with the installed Blender", "passed": rig is not None,
+                             "expected": "rig.blend written", **({} if rig else {"stderr_head": "Blender did not write the fixture"})})
+    print(("PASS " if rig else "FAIL ") + "make rigged fixture with the installed Blender", flush=True)
+    if rig is None:
+        return
+    mapping = work / "bones.json"
+    mapping.write_text('{"tag_weapon": "tag_weapon_renamed"}\n', encoding="utf-8")
+    common = ["--timeout", "600", "--json"]
+    step(receipt, "model inspect rig.blend (armature, skin, action)", PAT + ["model", "inspect", str(rig), "--output", str(work / "rig-inspect"), *common], timeout=900)
+    step(receipt, "model rename-bones rig.blend", PAT + ["model", "rename-bones", str(rig), "--mapping", str(mapping), "--format", "blend",
+                                                        "--output", str(work / "rig-rename"), *common], timeout=900)
+    retime = step(receipt, "model retime rig.blend 30 to 60 fps", PAT + ["model", "retime", str(rig), "--fps", "60", "--format", "blend",
+                                                                        "--output", str(work / "rig-retime"), *common], timeout=900)
+    if retime["passed"]:
+        after = retime["json"]["result"]["after"]
+        frames = [a["frame_range"] for a in after.get("animations", [])]
+        ok = after.get("fps") == 60 and frames and all(r[1] == 20 for r in frames)
+        receipt["steps"].append({"name": "retime doubled the frame range", "passed": bool(ok), "expected": "fps 60, swing 2..20",
+                                 **({} if ok else {"stderr_head": f"fps {after.get('fps')}, ranges {frames}"})})
+        print(("PASS " if ok else "FAIL ") + "retime doubled the frame range", flush=True)
+    step(receipt, "model transform rig.blend scale 2", PAT + ["model", "transform", str(rig), "--scale", "2", "--format", "blend",
+                                                             "--output", str(work / "rig-transform"), *common], timeout=900)
+    step(receipt, "model preview rig.blend", PAT + ["model", "preview", str(rig), "--output", str(work / "rig-preview"), *common], timeout=900)
 
 
 def tier_backends(receipt, home: Path, work: Path, media: bool = False):
@@ -432,7 +516,10 @@ def tier_backends(receipt, home: Path, work: Path, media: bool = False):
     step(receipt, "gsc compile broken script fails structurally", PAT + ["gsc", "compile", str(bad), "--output", str(work / "bad-compile"), "--json"], expect_ok=False)
     good = work / "good.gsc"
     good.write_text("main()\n{\n    level thread noop();\n}\n\nnoop()\n{\n    wait 1;\n}\n", encoding="utf-8")
-    step(receipt, "gsc compile minimal script", PAT + ["gsc", "compile", str(good), "--output", str(work / "good-compile"), "--json"])
+    compiled = step(receipt, "gsc compile minimal script", PAT + ["gsc", "compile", str(good), "--output", str(work / "good-compile"), "--json"])
+    if compiled["passed"]:
+        produced = Path(compiled["json"]["result"]["output"]) / compiled["json"]["result"]["files"][0]
+        step(receipt, "gsc decompile the compiled script", PAT + ["gsc", "decompile", str(produced), "--output", str(work / "good-decompile"), "--json"])
     if media:
         tier_media(receipt, work)
 
@@ -560,6 +647,11 @@ def main() -> int:
         return 2
     if args.tier == "game" and token != "windows" and not args.allow_untested:
         print("Tier game qualifies game control, which uses the Win32 console: run it on native Windows.", file=sys.stderr)
+        return 2
+    runner = ci_runner()
+    if runner and not args.allow_untested:
+        # A hosted runner is not a user's machine; docs/SUPPORT.md's native level excludes it.
+        print(f"This process runs on a CI runner ({runner} is set); receipts are recorded on real hosts only.", file=sys.stderr)
         return 2
     if not explicit_home and args.tier != "game":
         # Tier 1 runs `configure` against a fake storage path and Tier 2 installs backends. Without

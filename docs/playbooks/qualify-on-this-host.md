@@ -8,23 +8,40 @@ and ends with a pull request the maintainers can merge. It is how the support ma
 ## Preconditions
 
 - The toolkit is installed and `pat version --json` returns `ok: true`.
-- The host is a real Windows or Linux machine, not Wine, WSL or a CI runner; `tools/qualify.py`
-  refuses those, and a receipt from them proves nothing.
+- The host is a real Windows or Linux machine, not Wine, WSL or a hosted CI runner;
+  `tools/qualify.py` refuses all three (Wine and WSL by detection, CI by the `CI`,
+  `GITHUB_ACTIONS` and similar variables), and a receipt from them proves nothing. macOS is
+  not a qualification host: the tool refuses `darwin`, and the matrix says macOS is untested
+  and unclaimed; on a Mac, report that and stop.
 - You have read the route's row in `docs/SUPPORT.md` and know which tier covers it: Tier 1
-  (offline: discovery, configure, plan) needs no downloads; Tier 2 (backends) downloads the
-  pinned programs, and with `--media` also FFmpeg, Blender and Cast (about 510 MB, 2 GB on disk).
+  (offline: discovery, configure, `project init` and `plan`) needs no downloads; Tier 2
+  (backends) downloads gsc-tool and OpenAssetTools and runs `gsc compile|decompile`, `ff` and
+  `project build|verify`; with `--media` it also downloads FFmpeg, Blender and Cast (about
+  510 MB, 2 GB on disk) and runs `audio inspect|convert` and every `model` action on a rigged
+  fixture Blender generates itself. The four Windows-only backends (CoDLuaDecompiler, Greyhound,
+  Husky, C2M) have no tier step: `lua decompile` needs a real LUI bytecode file the repository
+  cannot ship, and the other three are GUIs no route runs. Qualifying `lua decompile` means
+  adding a step that reads a file you supply, and saying so in the receipt notes.
+- The route is a development route. Game control and capture routes are Windows-only by
+  transport (Win32 console); on Linux they are unsupported, not unmeasured, and this playbook
+  does not apply to them.
 - Disk and network for the tier you will run, and the user's awareness that downloads happen.
   Nothing here touches the game.
 
 ## Steps
 
-1. Run Tier 1 with an isolated toolkit home so the user's configuration is untouched:
+1. Run Tier 1 with an isolated toolkit home so the user's configuration is untouched (the tool
+   also picks a temporary home by itself when `PAT_HOME` is unset):
    ```sh
    PAT_HOME=<scratch>/pat-home python tools/qualify.py --tier offline --output docs/receipts
    ```
+   ```powershell
+   $env:PAT_HOME = "<scratch>\pat-home"; python tools/qualify.py --tier offline --output docs/receipts
+   ```
    Proof: the last line is `PASSED: N/N steps` and `docs/receipts/<version>/<platform>-tier1-offline.json`
    exists with `environment.compatibility_layer: null` and `environment.git_dirty: false`.
-2. Run Tier 2, adding `--media` when the route you are qualifying is under `audio` or `model`:
+2. Run Tier 2, adding `--media` when the route you are qualifying is under `audio` or `model`
+   (same `PAT_HOME`; PowerShell keeps the `$env:PAT_HOME` from step 1):
    ```sh
    PAT_HOME=<scratch>/pat-home python tools/qualify.py --tier backends [--media] --output docs/receipts
    ```
@@ -33,11 +50,17 @@ and ends with a pull request the maintainers can merge. It is how the support ma
 3. Read the receipt yourself before anything else: no username, hostname, home path or work
    directory survives (`tools/qualify.py` redacts them; you confirm). Run
    `python tools/private_scan.py`. Proof: `"ok": true`.
-4. If a step failed, the fake backend in `tests/fakes/` lied about the real program on this
-   host. Fix the adapter under `src/plutonium_agent_toolkit/dev/`, make the fake reproduce the
-   real behaviour, add a regression test, rerun the tier. Proof: the failed receipt is kept
-   beside the passing one (the tool moves it aside as `*.superseded-*.json`), and the new
-   receipt passes.
+4. If a step failed, read its `stderr_head` and the job's step log before changing anything,
+   and sort it into one of three:
+   - a download, network, disk or `private scan` / `release check` failure: fix the environment
+     or the repository hygiene, not the adapter;
+   - the real program exited or printed something the adapter did not expect: the fake in
+     `tests/fakes/` lied about it. Fix the adapter under `src/plutonium_agent_toolkit/dev/`,
+     make the fake reproduce the real behaviour, add a regression test;
+   - the real program itself cannot run on this host: no adapter change; keep the failed
+     receipt and report it (see Stop conditions).
+   Then rerun the tier. Proof: the failed receipt is kept beside the passing one (the tool
+   moves it aside as `*.superseded-*.json`), and the new receipt passes.
 5. Update `docs/SUPPORT.md`: the route's row names this host and links the receipt; the
    Platform table gains or extends the host's row. Do not raise a route above what the receipt's
    steps actually ran. Add a line under `## [Unreleased]` in `CHANGELOG.md`.

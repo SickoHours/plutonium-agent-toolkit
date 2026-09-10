@@ -285,6 +285,18 @@ class QualifyToolUnitTests(unittest.TestCase):
                 patch.dict(os.environ, {"PAT_HOME": str(self.home)}):
             self.assertEqual(self.q.main(), 2)
 
+    def test_ci_runners_are_refused_unless_allowed(self):
+        # The playbook promises a hosted runner cannot produce a receipt; enforce it.
+        from unittest.mock import patch
+
+        argv = [str(ROOT / "tools/qualify.py"), "--tier", "offline", "--output", str(Path(self.temp.name) / "out")]
+        with patch.dict(os.environ, {"PAT_HOME": str(self.home), "GITHUB_ACTIONS": "true"}), patch.object(self.q.sys, "argv", argv):
+            self.assertEqual(self.q.main(), 2)
+        with patch.dict(os.environ, {"CI": "false"}):
+            self.assertIsNone(self.q.ci_runner())
+        with patch.dict(os.environ, {"CI": "1"}):
+            self.assertEqual(self.q.ci_runner(), "CI")
+
     def test_environment_names_the_os_and_native_flags(self):
         info = self.q.environment()
         self.assertIn(info["platform_token"], ("windows", "linux", "darwin"))
