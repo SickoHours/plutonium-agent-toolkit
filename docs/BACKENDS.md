@@ -36,7 +36,7 @@ job's new `--output`; inputs are staged inside it before the program runs.
 
 | Routes | Command line | What the toolkit checks |
 | --- | --- | --- |
-| `gsc compile`, `gsc decompile` | `gsc-tool -m <comp\|decomp> -g t6 -s pc -i <server\|client> [-w <includes>] <script>` | exit status, error lines in the log, non-empty output files |
+| `gsc compile`, `gsc decompile`, `project build` | `gsc-tool -m <comp\|decomp> -g t6 -s pc -i <server\|client> [-w <includes>] <script>` | exit status, error lines in the log, non-empty output files |
 
 ### CoDLuaDecompiler 2.4.2
 

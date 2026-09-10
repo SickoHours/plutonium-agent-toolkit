@@ -9,7 +9,7 @@ adapters in ``scripts.py``, ``fastfiles.py``, ``projects.py``, ``media.py`` and 
 from __future__ import annotations
 
 USAGE = [
-    {"routes": ["gsc compile", "gsc decompile"], "executable": "gsc", "source": "dev/scripts.py",
+    {"routes": ["gsc compile", "gsc decompile", "project build"], "executable": "gsc", "source": "dev/scripts.py, dev/projects.py",
      "argv": ["gsc-tool", "-m", "<comp|decomp>", "-g", "t6", "-s", "pc", "-i", "<server|client>", "[-w <includes>]", "<script>"],
      "checks": "exit status, error lines in the log, non-empty output files"},
     {"routes": ["ff link", "project build"], "executable": "linker", "source": "dev/fastfiles.py",
