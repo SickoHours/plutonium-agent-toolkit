@@ -375,6 +375,21 @@ class SecondReviewRegressionTests(DevRouteFixture):
         self.assertIn("loading failure", row["message"])
 
 
+    def test_linker_error_with_exit_zero_fails(self):
+        # Review of the Phase C docs: pat-build promised the toolkit treats a Linker ERROR line
+        # with exit zero as failure, but only the Unlinker readback log was scanned.
+        project = self.root / "proj2"
+        (project / "zone_source").mkdir(parents=True)
+        (project / "raw").mkdir()
+        (project / "raw" / "a.txt").write_text("A")
+        (project / "zone_source" / "bad.zone").write_text("> game,T6\n> fixture_linker_error\nrawfile,a.txt\n")
+        code, row = invoke(["ff", "link", str(project), "--zone", "bad", "--output", self.out()])
+        self.assertEqual(code, 1)
+        self.assertEqual(row["error_code"], "backend_failed")
+        self.assertIn("Linker reported an error", row["message"])
+        self.assertEqual(row["details"]["log"], "step-01.log")
+
+
 class ThirdReviewRegressionTests(DevRouteFixture):
     def test_extract_accepts_zero_byte_assets(self):
         import base64

@@ -73,6 +73,11 @@ Every entry states what shipped, on which platform it was verified, and what rem
   on a changed input hash, never replay `delivery_uncertain`, read the playbook first, state
   unverified facts instead of inventing checks.
 
+### Fixed
+
+- `ff link` and `project build` now fail when OpenAssetTools Linker prints an `ERROR` line and
+  exits zero, as the Unlinker readback already did; the fake Linker reproduces the case.
+
 ### Changed
 
 - **Platform claims corrected.** The development tools are supported on Windows and Linux; the

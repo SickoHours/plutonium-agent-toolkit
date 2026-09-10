@@ -20,6 +20,10 @@ then rebuild the mod and prove the new bytes are in the package.
    ```sh
    pat gsc compile <mod>/scripts/<name>.<gsc|csc> [--includes <dir>] --output ../jobs/<name>-compile-001 --json
    ```
+   `project build` compiles each recipe script with its own directory as the include root and
+   nothing else, so any `#include` files must live under `<mod>/scripts/` (the script's
+   directory); an `--includes` directory elsewhere passes this standalone compile and then
+   fails the build.
    Proof: `ok: true` and `result.files[]` lists one non-empty compiled file. A wrong suffix or
    unreadable input returns `input_invalid` or `input_missing`, and a missing compiler
    `backend_unavailable` with the `dev setup` to run; those happen before anything compiles. A
@@ -28,9 +32,11 @@ then rebuild the mod and prove the new bytes are in the package.
    compiler printed one (it exited zero with an `ERROR` line). When it is absent (the compiler
    exited non-zero, or produced no or empty output) read the step log named in `details.log`
    under the job directory for the message. Fix and compile into a new output.
-3. Add the script to the recipe's `scripts` array with its source path, its target inside the
-   package (`scripts/zm/<name>.gsc` for a Zombies mod script) and, when the suffix does not say,
-   its `instance`.
+3. Add the script to the recipe's `scripts` array with its source path and a target inside the
+   package whose suffix matches the side: `scripts/zm/<name>.gsc` for a server script,
+   `scripts/zm/<name>.csc` for a client script. `instance` is inferred from the target suffix;
+   set it explicitly (`server` or `client`) only to be clear, and it must agree with both
+   suffixes or the plan refuses the row.
 4. Plan, to validate the recipe without running a backend:
    ```sh
    pat project plan <mod>/project.json --output ../jobs/<mod>-plan-NNN --json

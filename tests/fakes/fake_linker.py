@@ -25,4 +25,7 @@ payload = {"zone": name, "rawfiles": raw}
 if any(line.strip() == "> fixture_readback_fail" for line in lines):
     payload["readback_fail"] = True
 (out / f"{name}.ff").write_text(json.dumps(payload))
+if any(line.strip() == "> fixture_linker_error" for line in lines):
+    # The real Linker can report an error and still exit zero with a package on disk.
+    print("ERROR: Could not find asset material 'missing_mtl'")
 print("Linked", name, len(raw), "rawfiles")
