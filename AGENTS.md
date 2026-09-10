@@ -73,8 +73,8 @@ These are how the toolkit is built, so that you can extend it without breaking i
   outputs to force a retry; investigate instead.
 - `error_code: delivery_uncertain` means inspect fresh state, not retry. Never replay an uncertain
   game command.
-- Setup, discovery, `dev`, `gsc`, `ff`, `project`, `model`, `audio`, `image`, `lua`, `weapon` and
-  `game mods`/`install-mod` touch no running game. `game launch/info/load-map/select-mod/
+- Setup, discovery, `dev`, `gsc`, `ff`, `project`, `module`, `model`, `audio`, `image`, `lua`,
+  `weapon` and `game mods`/`install-mod` touch no running game. `game launch/info/load-map/select-mod/
   reload-mod/fast-restart/map-restart/disconnect/check-load/quit` control the running client and
   need the user's go-ahead for that specific test.
 - The development (file) routes run on Windows and Linux; macOS is untested and not claimed. Game

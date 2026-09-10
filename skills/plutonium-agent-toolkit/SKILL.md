@@ -25,7 +25,7 @@ development route marked unverified on the user's host is unmeasured: run
 - `docs/knowledge/README.md`: the facts (client layout, fastfiles, scripts, contracts, foundations,
   crash classes, engine limits). Read the page for the task once per session, then work from it.
 - `docs/playbooks/`: the steps. First build, add a script, port a feature, diagnose a crash,
-  package and install, and four preflight gate lists (scripts, weapon rig, HUD text, audio
+  compose a pack, package and install, and four preflight gate lists (scripts, weapon rig, HUD text, audio
   memory) to run before a build's first install. Each playbook is finite: exact commands, the
   receipt field that proves a step, the commands that are wasted, the stop conditions. Follow its
   "Do not" list.
@@ -48,8 +48,8 @@ development route marked unverified on the user's host is unmeasured: run
 - `error_code` tells you what to do: `config_missing` run the hinted `configure`;
   `backend_unavailable` run `dev setup`; `not_implemented` stop and report the route's status;
   `delivery_uncertain` inspect fresh state and never replay.
-- Setup, discovery, `dev`, `gsc`, `ff`, `project`, `model`, `audio`, `image`, `lua`, `weapon` and
-  `game mods`/`install-mod` need no running game. Anything else under `game` needs the user's
+- Setup, discovery, `dev`, `gsc`, `ff`, `project`, `module`, `model`, `audio`, `image`, `lua`,
+  `weapon` and `game mods`/`install-mod` need no running game. Anything else under `game` needs the user's
   authorization for that specific test.
 
 ## Adapt to the machine
@@ -64,7 +64,9 @@ Never add an arbitrary-console escape hatch. Report what you changed.
 
 Build one module on a clean base and test it alone (`pat project init`, `examples/hello-zm` is the
 smallest), name a test build `<base>_<feature>_test`, keep each mod's source, recipe and receipts
-together, and compose known-good modules deliberately. `docs/FOR-AGENTS.md` has the behaviours.
+together, and compose known-good modules deliberately: a `module.json` beside each recipe and a
+`composition.json` for the pack (`docs/MODULES.md`, `pat module plan|build`). `docs/FOR-AGENTS.md`
+has the behaviours.
 
 ## Report
 

@@ -11,6 +11,7 @@
     pat ff inspect|extract <file.ff> --output <new dir>
     pat ff link <project dir> --zone <name> --output <new dir>
     pat project init|plan|build|verify ... --output <new dir>
+    pat module plan|build <composition.json> --output <new dir>
     pat <group> <action> ...          planned routes answer not_implemented
 
 Exit statuses: 0 ok, 1 failure, 2 usage, 130 cancelled. See core/errors.py.
@@ -73,11 +74,12 @@ def build_parser() -> Parser:
         q.add_argument("--timeout", type=_timeout, default=300, help="Per-backend deadline in seconds (1-1800)")
         q.add_argument("--json", action="store_true")
 
-    from .dev import fastfiles, media, models, projects, scripts, weapons
+    from .dev import compositions, fastfiles, media, models, projects, scripts, weapons
 
     scripts.add_parser(sub, common)
     fastfiles.add_parser(sub, common)
     projects.add_parser(sub, common)
+    compositions.add_parser(sub, common)
     media.add_parsers(sub, common)
     models.add_parser(sub, common)
     weapons.add_parser(sub, common)
@@ -90,7 +92,7 @@ def build_parser() -> Parser:
     g.add_argument("--json", action="store_true")
 
     # Planned/deferred groups accept any action so they can answer with a structured refusal.
-    for group in sorted({r.group for r in routes()} - {"dev", "gsc", "ff", "project", "game", "audio", "image", "lua", "model", "weapon"}):
+    for group in sorted({r.group for r in routes()} - {"dev", "gsc", "ff", "project", "module", "game", "audio", "image", "lua", "model", "weapon"}):
         g = sub.add_parser(group)
         g.add_argument("action")
         g.add_argument("rest", nargs=argparse.REMAINDER)
@@ -104,8 +106,8 @@ def _timeout(value):
     return n
 
 
-JOB_GROUPS = {"gsc": "scripts", "ff": "fastfiles", "project": "projects", "audio": "media", "image": "media",
-              "lua": "media", "model": "models", "weapon": "weapons"}
+JOB_GROUPS = {"gsc": "scripts", "ff": "fastfiles", "project": "projects", "module": "compositions", "audio": "media",
+              "image": "media", "lua": "media", "model": "models", "weapon": "weapons"}
 
 
 def run_job(args, argv: list[str]) -> dict:

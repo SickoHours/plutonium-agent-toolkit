@@ -42,6 +42,16 @@ _Avoid_: menu mod, global mod
 loads explicitly.
 _Avoid_: config, build script, manifest
 
+**Declaration**: The `module.json` beside a recipe that states what the module is and needs:
+id, version, the bases and maps it was built for, dependencies, conflicts and its resource
+contract. Facts for composing, never evidence (`docs/MODULES.md`).
+_Avoid_: manifest, metadata, package file
+
+**Composition recipe**: The `composition.json` that names a base, one map, the module
+directories and an optional resource budget; `module plan` resolves it and `module build`
+produces one `mod.ff` from it.
+_Avoid_: pack file, modpack config, bundle
+
 **Plan**: A validated, hashed preview of a recipe that runs no backend. It proves the inputs,
 not the build.
 _Avoid_: dry run, preview build

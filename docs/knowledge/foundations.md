@@ -23,7 +23,8 @@ mods differ by one feature and each carries the full pack.
 
 A `pat project` recipe is a module. Its receipt records the inputs it was built from; record the
 foundation's identity (release tag and the hashes of the base fastfiles you linked against) in
-the same place.
+the same place. A `module.json` beside the recipe declares the bases and maps it was built for,
+so `pat module plan` can refuse a composition on a base the module never saw (`docs/MODULES.md`).
 
 ## Naming
 
@@ -52,6 +53,7 @@ match the live base is a bug to report, not a template to copy.
    needs that base installed. Ask only if the base is genuinely ambiguous.
 2. Build the module alone with `pat project build`; keep the receipt.
 3. Install it as `<base>_<feature>_test` with `pat game install-mod` and test there.
-4. Add the accepted module to a composition by changing the composition's recipe, rebuild and
-   test the composition for interactions, not the feature again.
+4. Add the accepted module to a composition by changing the composition's recipe
+   (`composition.json`, built with `pat module build`), rebuild and test the composition for
+   interactions, not the feature again.
 5. Never edit an installed folder in place; never carry acceptance across bases.

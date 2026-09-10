@@ -8,7 +8,7 @@ names the OS (`os`, `platform_token`, `native_windows`, `native_linux`, `compati
 | File | Produced by | Level it can prove |
 | --- | --- | --- |
 | `<version>/<platform>-tier1-offline.json` | `qualify.py --tier offline` | `native` for discovery, configure, doctor, plan on that platform |
-| `<version>/<platform>-tier2-backends.json` | `qualify.py --tier backends [--media]` | `native` for `dev setup`, `gsc`, `ff`, `project` with real backends; with `--media`, also `audio` and `model` |
+| `<version>/<platform>-tier2-backends.json` | `qualify.py --tier backends [--media]` | `native` for `dev setup`, `gsc`, `ff`, `project`, `module` with real backends; with `--media`, also `audio` and `model` |
 | `<version>/windows-tier3-game.json` | `qualify.py --tier game --collect` plus human observations | `game` for the `game` routes exercised (Windows only) |
 
 The `0.1.0a1` receipts predate the platform prefix (`tier1-offline.json` and so on) and were

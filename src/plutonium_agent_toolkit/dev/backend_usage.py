@@ -9,17 +9,17 @@ adapters in ``scripts.py``, ``fastfiles.py``, ``projects.py``, ``media.py`` and 
 from __future__ import annotations
 
 USAGE = [
-    {"routes": ["gsc compile", "gsc decompile", "project build"], "executable": "gsc", "source": "dev/scripts.py, dev/projects.py",
+    {"routes": ["gsc compile", "gsc decompile", "project build", "module build"], "executable": "gsc", "source": "dev/scripts.py, dev/projects.py",
      "argv": ["gsc-tool", "-m", "<comp|decomp>", "-g", "t6", "-s", "pc", "-i", "<server|client>", "[-w <includes>]", "<script>"],
      "checks": "exit status, error lines in the log, non-empty output files"},
-    {"routes": ["ff link", "project build"], "executable": "linker", "source": "dev/fastfiles.py",
+    {"routes": ["ff link", "project build", "module build"], "executable": "linker", "source": "dev/fastfiles.py",
      "argv": ["Linker", "--no-color", "--base-folder", "<project>", "--output-folder", "<out>/packages",
               "[--add-asset-search-path <dir>]...", "[-l <zone.ff>]...", "<zone>"],
      "checks": "a .ff was produced; every package is read back with Unlinker"},
-    {"routes": ["ff inspect", "ff link", "project build"], "executable": "unlinker", "source": "dev/fastfiles.py",
+    {"routes": ["ff inspect", "ff link", "project build", "module build"], "executable": "unlinker", "source": "dev/fastfiles.py",
      "argv": ["Unlinker", "--no-color", "--skip-obj", "--list", "[-l <zone.ff>]...", "<fastfile>"],
      "checks": "readback log has no load failure; inventory kept as a job log"},
-    {"routes": ["ff extract", "project build"], "executable": "unlinker", "source": "dev/fastfiles.py, dev/projects.py",
+    {"routes": ["ff extract", "project build", "module build"], "executable": "unlinker", "source": "dev/fastfiles.py, dev/projects.py",
      "argv": ["Unlinker", "--no-color", "--output-folder", "<out>/assets", "[--model-format <fmt>]", "[--image-format <fmt>]",
               "[--include-assets <types>]", "[-l <zone.ff>]...", "<fastfile>"],
      "checks": "files were written; project build byte-compares every rawfile against its source"},

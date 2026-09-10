@@ -57,8 +57,10 @@ python tools/qualify_windows.py --tier backends --output docs/receipts
 
 The script runs `dev setup --only gsc oat` (about 10 MB), `doctor`, then builds
 `examples/hello-zm` with the real compiler and linker, reads it back and verifies the receipt with
-`--inputs`. It also runs `gsc compile` on a deliberately broken script and confirms the error
-surfaces. It writes `tier2-backends.json` including the SHA-256 of the produced `mod.ff`.
+`--inputs`. It then plans and builds `examples/hello-pack` (`module plan`, `module build`), verifies
+that receipt and inspects the pack's `mod.ff`. It also runs `gsc compile` on a deliberately broken
+script and confirms the error surfaces. It writes `tier2-backends.json` including the SHA-256 of
+both produced `mod.ff` files.
 
 If the real gsc-tool or Linker behaves differently from the fakes (argument order, output
 directory layout, exit status on error), fix the adapter in `src/plutonium_agent_toolkit/dev/`

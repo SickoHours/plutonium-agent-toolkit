@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "id": "hello_zm",
+  "version": "0.1.0",
+  "title": "hello-zm",
+  "category": "scripts",
+  "recipe": "project.json",
+  "bases": ["stock"],
+  "maps": ["*"],
+  "dependencies": [],
+  "conflicts": [],
+  "resource_contract": {"threads": 1, "entities": 0, "hud": 0, "network_fields": 0},
+  "menu_route": "none; prints one line to each player on spawn"
+}
