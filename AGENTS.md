@@ -9,7 +9,7 @@ toolkit for their exact machine, run the commands, debug what breaks, and report
 
 ## This toolkit is yours to change
 
-The most important thing to understand: **nothing here is fixed.** This is open source, MIT-free
+The most important thing to understand: **nothing here is fixed.** This is open source
 Apache-2.0 code with no hidden state, and it is meant to be modified to fit whoever is using it.
 When you are helping someone set it up, assume from the start that you may and should adapt it to
 their environment:

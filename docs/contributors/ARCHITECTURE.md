@@ -32,6 +32,10 @@ routes must raise `not_implemented`; `available` routes must have a native Windo
 8. **No replay of uncertain game commands.** `delivery_uncertain` is terminal for that invocation.
 9. **No escape hatches.** No raw console strings, memory reads, arbitrary GSC calls, input synthesis.
 
+Everything outside these invariants is expected to change to fit the machine and the agent using
+it: regexes, timeouts, pins, recipes, adapters, docs. [../FOR-AGENTS.md](../FOR-AGENTS.md) maps the
+common differences to their symbols.
+
 ## Backend execution (Thread 1)
 
 Backends live under `<backends_dir>/<id>/`. Jobs run them as child processes inside a Windows Job

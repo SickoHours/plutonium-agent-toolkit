@@ -4,6 +4,11 @@ Contributions are welcome from humans and from development agents working on a h
 Both follow the same path. The toolkit is Windows-only for this release; unit tests and
 documentation work run anywhere.
 
+You do not need anyone's permission to change this toolkit to fit your machine or your agent.
+Fork it, edit it, run the three checks below, keep `docs/SUPPORT.md` honest.
+[docs/FOR-AGENTS.md](docs/FOR-AGENTS.md) maps the common machine differences to the code that
+handles them. Sending the change back is welcome and optional.
+
 ## Set up a development environment
 
 ```sh

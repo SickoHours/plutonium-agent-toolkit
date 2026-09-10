@@ -14,6 +14,10 @@ memory, inject anything, focus the game or press player keys.
   over the user's text; if the console is busy it reports `busy` and sends nothing.
 - Every live route needs the user's go-ahead for that specific test. Discovery, `mods` and
   `status` need none.
+- `load-map`, `fast-restart`, `map-restart` and `check-load` act on a running match. Start one from
+  the Plutonium menu first; `select-mod` returns the client to the frontend, so start another after it.
+- If this client's window title, console prompt or reply format differs, change `TITLE`, `PROMPT` or
+  the parse patterns as [FOR-AGENTS.md](FOR-AGENTS.md) maps them. The docs describe the author's build.
 
 ## Routes
 
@@ -25,7 +29,7 @@ memory, inject anything, focus the game or press player keys.
 | `pat game launch` | Issues the fixed `plutonium://play/t6zm` URI through the registered handler, then logs every foreground change until the game window has been visible for 3 s plus a 15 s settle window, or 90 s if it never appears. | `launch_requested`, `game_detected`, `focus_preserved`, `focus_scope`, `focus_events` |
 | `pat game select-mod <id>` / `base` | Leaves the match if needed, unloads, loads. Each step is verified before the next. Selecting the current mod is a no-op. | `load_id`, `load_check.argv` |
 | `pat game reload-mod` | Same transaction for the currently selected mod. | `load_id` |
-| `pat game load-map <map-id>` | Writes and verifies the five UI/gametype dvars, then sends `map` once. DLC5 maps need a selected mod that ships `zone\<map>.ff`. | `load_id`, `load_check.argv` |
+| `pat game load-map <map-id>` | Writes and verifies the five UI/gametype dvars, then sends `map` once, switching the running match to that map. Run it from inside a match started from the Plutonium menu; cold-starting a match from the frontend with a console `map` is out of scope (issue #8: the client drops such a match right after it loads). DLC5 maps need a selected mod that ships `zone\<map>.ff`. | `load_id`, `load_check.argv` |
 | `pat game fast-restart` / `map-restart` / `disconnect` | One verb, once, in a running local match. | `load_id` |
 | `pat game check-load <load-id>` | Re-attaches to the *same* process (PID + creation time), compares fresh state to the expected state, counts new error lines in `console_zm.log`. Valid ten minutes. | `verified`, `state_matches`, `logs` |
 | `pat game quit` | `quit` once, wait up to 20 s for the pinned process to exit. Never kills. | `stopped` |

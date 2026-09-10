@@ -503,6 +503,8 @@ class CliGateTests(unittest.TestCase):
         by_id = {r["id"]: r for r in row["result"]["routes"]}
         for rid in ("game.launch", "game.load-map", "game.check-load", "game.quit", "game.mods"):
             self.assertEqual(by_id[rid]["status"], "implemented", rid)
+        # install-mod is file-only and has a native receipt; the live routes wait for a playable spawn.
+        self.assertEqual(by_id["game.install-mod"]["status"], "available")
 
 
 class WorkerGuardTests(unittest.TestCase):

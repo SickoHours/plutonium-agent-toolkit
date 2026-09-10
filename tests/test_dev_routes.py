@@ -190,8 +190,10 @@ class DevRouteTests(DevRouteFixture):
         # No native step ran these: decompile, the standalone link route, init.
         for rid in ("gsc.decompile", "ff.link", "project.init"):
             self.assertEqual(by_id[rid]["status"], "implemented", rid)
-        for rid in ("model.convert", "weapon.plan", "audio.convert", "image.convert", "lua.decompile", "game.install-mod"):
+        for rid in ("model.convert", "weapon.plan", "audio.convert", "image.convert", "lua.decompile"):
             self.assertEqual(by_id[rid]["status"], "implemented", rid)
+        # File-only route with a native receipt (tier3-game.json install step).
+        self.assertEqual(by_id["game.install-mod"]["status"], "available")
         for rid in ("capture.start", "test.start"):
             self.assertEqual(by_id[rid]["status"], "deferred", rid)
         self.assertEqual(row["result"]["counts"]["planned"], 0, "every in-scope route is implemented or available")

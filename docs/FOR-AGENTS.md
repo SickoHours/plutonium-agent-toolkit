@@ -40,6 +40,32 @@ Prefer the earliest step that solves the problem. Reach for editing the code as 
 config; both are normal here. What you should not do is silently work around a failure (focusing
 the game, deleting an output to retry, guessing a console string). Fix the cause or report it.
 
+## Where the machine-specific knobs live
+
+Found on the first native run: these are the things that differed, or could differ, between the
+author's machine and the next one. Each maps to one symbol.
+
+| If this differs on their machine | Change this | Then check |
+| --- | --- | --- |
+| Plutonium storage or launcher location | `pat configure --plutonium-storage-t6 … --plutonium-launcher …`; everything else follows `PAT_HOME` | `pat doctor --json` |
+| Game window title (build suffix, renamed client) | `TITLE` in `src/plutonium_agent_toolkit/game/native.py` | `pat game status --json` lists exactly one window |
+| External console prompt text | `PROMPT` in `game/native.py` | `pat game info --json` answers instead of `busy` |
+| Console host or buffer dimensions | `MAX_ROWS`, `MAX_WIDTH`, `Console.screen()` in `game/native.py` | same |
+| Dvar reply format | `_HEADER`, `_LATCHED`, `parse_value` in `game/engine.py` | `pat game info --json` returns every field |
+| A map, start location or gametype | `game/maps.json` (one recipe per key) and its DLC5 flag | `pat describe game load-map --json` lists it; `tests/test_game_control.py` validates the catalog |
+| How long the engine takes to answer | `WORKER_DEADLINES` in `game/control.py`; `timeout` on `Engine.query`/`state` | keep the parent deadline above the sum of the child waits (the comment shows the arithmetic) |
+| How much console log a load writes | `MAX_LOG_TAIL` in `game/control.py` | `check-load` reports `checked: true` |
+| A backend version, URL or hash | `src/plutonium_agent_toolkit/dev/backends.json`; `NOTICE` | `pat dev setup --plan --json`, then `--only <id>` |
+| A backend already installed elsewhere | `PAT_BACKEND_<NAME>=<absolute path>` | no download; the receipt records the override |
+| A tool's arguments, exit codes or output layout | the adapter: `dev/scripts.py` (gsc-tool), `dev/fastfiles.py` (Linker/Unlinker), `dev/projects.py` (recipe pipeline), `dev/media.py`, `dev/models.py` | teach the matching fake in `tests/fakes/` the same behaviour first, so the offline tests stop lying |
+| What counts as an error line in a backend log | `ERROR` in `dev/scripts.py`, `LOAD_FAILURE` in `dev/fastfiles.py`, `ERROR_LINE` in `game/control.py` | add the real line to a test before widening or narrowing |
+| Where receipts and state go | `PAT_HOME` (default `%LOCALAPPDATA%\PlutoniumAgentToolkit`) | receipts under `docs/receipts/` are redacted by `tools/qualify_windows.py` |
+
+If the difference is not here, `pat describe <group> <action> --json` names the owning module; each
+is a few hundred lines with no hidden state. One thing never to do while adapting: rename a built
+fastfile. A T6 fastfile is bound to its file name, so `packages/mod.ff` installs as `mod.ff` or not at
+all.
+
 ## Debug on their machine
 
 Every command gives you what you need to diagnose it without asking the user. The stdout JSON is
@@ -57,6 +83,16 @@ one document either way, with `schema_version`, `toolkit_version`, `command`, `r
   configuration, and which backends are present.
 - Troubleshooting tables: `docs/GAME-CONTROL.md`, `docs/WINDOWS-QUALIFICATION.md`,
   `docs/GETTING-STARTED.md`. They map a symptom to a cause and the file to change.
+- Game state files live under `PAT_HOME/game/`: `last-launch.json`, `last-load.json`,
+  `last-load-check.json`, `last-result.json`, `installs/`. They are latest-only.
+- The game's own log is `storage\t6\main\console_zm.log`. Read it locally to see what the engine did
+  after a command (fastfile loads, `SV_Shutdown` reasons, script errors). Never commit it or paste
+  it into an issue; it can carry other people's names and session data.
+- `delivery_uncertain` means the command may or may not have taken effect. Run `pat game info`,
+  read the log, look at the screen; do not resend. If the cause is a timeout too short for this
+  machine, change the timeout and say why in `CHANGELOG.md`.
+- Point `PAT_HOME` at a scratch directory while experimenting so the user's real configuration and
+  backends stay untouched.
 
 ## What "verified" means, and honesty about it
 
@@ -121,3 +157,10 @@ If your change is specific to their machine, keep it on a branch and tell them i
 would help anyone with a similar setup, it belongs upstream: run the three checks, open a pull
 request with the template, and let the automated reviewer and a maintainer look at it. Either way,
 the toolkit stays malleable because you left a clean, testable change rather than a hidden edit.
+
+## What the author's machine looked like
+
+So you can tell which assumptions are the author's: Windows 11 25H2 (build 26200), Python 3.12,
+Plutonium client r5346 with the launcher-installed console hosted by Windows Terminal, Black Ops II
+from Steam, OpenAssetTools 0.33.0 and gsc-tool 1.4.10 from `dev setup`. The native receipts under
+`docs/receipts/0.1.0a1/` record exactly what passed there and what did not.

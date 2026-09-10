@@ -7,7 +7,9 @@ sanitized receipts under `docs/receipts/<version>/` and any fixes the run expose
 
 Nothing here is optional and nothing here is a formality. The toolkit was written on Linux
 against fake backends and a fake console. The first native run *will* find defects. Each one
-is fixed in the same pull request with a regression test.
+is fixed in the same pull request with a regression test; fixing means changing this repository,
+and [FOR-AGENTS.md](FOR-AGENTS.md) maps the usual differences to their symbols. The receipts under
+`docs/receipts/` record what one machine found; yours may find more.
 
 ## Before you start
 
@@ -84,11 +86,12 @@ Then, with the game **not** running, ask for permission and run:
 | 3b | `pat game launch --json` | `launch_requested: true`. Watch what happens on screen. Record whether the launcher showed a login or update prompt, whether the game window took focus, and what `focus_preserved` reported. If `config_missing` names the URI handler, that is a finding: record it and launch from the Plutonium launcher by hand instead. |
 | 3c | wait for the main menu, then `pat game status --json` | exactly one window, title `Plutonium T6 Zombies` or `Plutonium T6 Zombies (rNNNN)` |
 | 3d | `pat game info --json` | fresh `state` with `mapname`, `fs_game`, `sv_running` |
-| 3e | `pat game load-map town --json` | `load_id` returned; the game loads Town |
+| 3e-0 | the human starts a private match from the Plutonium menu (any map) | `pat game info --json` reports `sv_running` `1`. `load-map` switches maps inside a running match; cold-starting one from the frontend is out of scope (issue #8) |
+| 3e | `pat game load-map town --json` | `load_id` returned; the game switches to Town |
 | 3f | `pat game check-load <load_id> --json` | `verified: true`, `state_matches: true`, logs `checked: true`. Let the load settle first: the check's engine query waits 8 s and the engine does not answer mid-load |
 | 3g | look at the game | you or the agent (if it can see the screen) confirm a playable spawn in Town |
 | 3h | `pat game install-mod "$env:PAT_HOME\qualify\hello_zm\mod.ff" hello_zm --json` (Tier 2 staged it there and printed the exact command), then `pat game select-mod hello_zm --json` | install receipt with `sha256`; then `load_id`; `fs_game` becomes `mods/hello_zm` |
-| 3i | `pat game load-map town --json` then `pat game check-load <load_id> --json` with the new `load_id` | verified; the green hello-zm line appears on screen after spawn |
+| 3i | the human starts a private match from the menu again (`select-mod` returned the client to the frontend), then `pat game load-map town --json` and `pat game check-load <load_id> --json` with the new `load_id` | verified; the green hello-zm line appears on screen after spawn |
 | 3j | `pat game fast-restart --json` then `pat game check-load <load_id> --json` | `load_id`; match restarts; check verified |
 | 3k | `pat game disconnect --json` | `sv_running: "0"` |
 | 3l | `pat game select-mod base --json` | `fs_game: ""` |

@@ -21,6 +21,15 @@ Every entry states what shipped, on which platform it was verified, and what rem
 - Added `tests/test_docs_consistency.py`: the credentials prohibition, the route-status
   vocabulary matching the code, and SUPPORT.md staying canonical for evidence levels are now
   enforced by tests, not review alone.
+- `docs/FOR-AGENTS.md` gains the map from each machine difference (window title, console prompt,
+  reply format, timeouts, log bound, backend pins and overrides, tool argument shapes, map recipes,
+  paths) to the file and symbol that handles it, the game state files and console log as debugging
+  inputs, and the author's machine profile; `CONTRIBUTING.md`, `GAME-CONTROL.md`,
+  `WINDOWS-QUALIFICATION.md` and `ARCHITECTURE.md` point to it.
+- `game load-map` is documented as switching maps inside a match started from the Plutonium menu;
+  cold-starting a match from the frontend with a console `map` is out of scope (issue #8), and the
+  Tier 3 procedure says so. `game install-mod` becomes `available` at level `native` on its Tier 3
+  receipt step. `BACKEND-FAKES.md` describes the name-bound fakes.
 
 
 ### Added
