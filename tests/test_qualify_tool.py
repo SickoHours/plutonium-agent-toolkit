@@ -260,6 +260,7 @@ class QualifyToolUnitTests(unittest.TestCase):
         env = {k: v for k, v in os.environ.items() if k != "PAT_HOME"}
         with tempfile.TemporaryDirectory() as temp:
             with unittest.mock.patch.dict(os.environ, env, clear=True):
+                # --allow-untested-platform: this suite itself runs on hosted CI, which the tool refuses.
                 proc = subprocess.run([sys.executable, str(ROOT / "tools/qualify.py"), "--tier", "offline",
                                        "--output", str(Path(temp) / "out"), "--allow-untested-platform"],
                                       capture_output=True, text=True, cwd=ROOT, env=env, timeout=600)
@@ -289,12 +290,14 @@ class QualifyToolUnitTests(unittest.TestCase):
         # The playbook promises a hosted runner cannot produce a receipt; enforce it.
         from unittest.mock import patch
 
+        clean = {k: v for k, v in os.environ.items() if k not in self.q.CI_MARKERS}
         argv = [str(ROOT / "tools/qualify.py"), "--tier", "offline", "--output", str(Path(self.temp.name) / "out")]
-        with patch.dict(os.environ, {"PAT_HOME": str(self.home), "GITHUB_ACTIONS": "true"}), patch.object(self.q.sys, "argv", argv):
+        with patch.dict(os.environ, {**clean, "PAT_HOME": str(self.home), "GITHUB_ACTIONS": "true"}, clear=True), \
+                patch.object(self.q.sys, "argv", argv):
             self.assertEqual(self.q.main(), 2)
-        with patch.dict(os.environ, {"CI": "false"}):
+        with patch.dict(os.environ, {**clean, "CI": "false"}, clear=True):
             self.assertIsNone(self.q.ci_runner())
-        with patch.dict(os.environ, {"CI": "1"}):
+        with patch.dict(os.environ, {**clean, "CI": "1"}, clear=True):
             self.assertEqual(self.q.ci_runner(), "CI")
 
     def test_environment_names_the_os_and_native_flags(self):

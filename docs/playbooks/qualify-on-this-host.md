@@ -43,8 +43,9 @@ and ends with a pull request the maintainers can merge. It is how the support ma
 2. Run Tier 2, adding `--media` when the route you are qualifying is under `audio` or `model`
    (same `PAT_HOME`; PowerShell keeps the `$env:PAT_HOME` from step 1):
    ```sh
-   PAT_HOME=<scratch>/pat-home python tools/qualify.py --tier backends [--media] --output docs/receipts
+   PAT_HOME=<scratch>/pat-home python tools/qualify.py --tier backends --output docs/receipts
    ```
+   Append `--media` to that command for the `audio` and `model` routes.
    Proof: `PASSED`, and the receipt's `steps[]` contains a passed step whose name covers your
    route (for example `audio convert tone.wav 48 kHz mono`, `model convert cube.obj to cast`).
 3. Read the receipt yourself before anything else: no username, hostname, home path or work

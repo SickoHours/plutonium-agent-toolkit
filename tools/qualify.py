@@ -435,8 +435,12 @@ def make_rig(work: Path) -> Path | None:
         argv = executable("blender")
     except Exception:  # noqa: BLE001  (backend_unavailable surfaces as a failed step below)
         return None
-    proc = subprocess.run([*argv, "--background", "--factory-startup", "--python", str(script), "--", str(rig)],
-                          capture_output=True, text=True, timeout=600, env=child_env())
+    try:
+        proc = subprocess.run([*argv, "--background", "--factory-startup", "--python", str(script), "--", str(rig)],
+                              capture_output=True, text=True, timeout=600, env=child_env())
+    except (subprocess.TimeoutExpired, OSError):
+        # A hung or unlaunchable Blender is a failed fixture step, not a crashed qualification.
+        return None
     return rig if proc.returncode == 0 and rig.is_file() else None
 
 

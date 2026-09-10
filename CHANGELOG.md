@@ -32,7 +32,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   steps) and `gsc decompile`, `project init` and the four remaining `model` actions move to
   `available` on Linux; their Windows run is the playbook's job.
 
->>>>>>> 98b24a8 (docs: an unverified route is unmeasured, not unsupported; playbook to qualify it on this host)
 - **Linux backend pins.** `dev setup` now downloads and verifies gsc-tool 1.4.10, OpenAssetTools
   0.33.0, FFmpeg 9.0 (BtbN gpl linux64) and Blender 5.2.1 on Linux x64, from the same upstream
   releases as the Windows pins, under `downloads.linux` in `backends.json`. Hashes were computed
