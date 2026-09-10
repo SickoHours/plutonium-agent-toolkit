@@ -181,3 +181,12 @@ class WeaponMalformedManifestTests(WeaponFixture):
             code, row = invoke(["weapon", "catalog", str(self.receipt), "--capture", "capture-01/manifest.json", "--output", self.out()])
             self.assertEqual(code, 1, label)
             self.assertEqual(row["error_code"], "input_invalid", label)
+
+
+class WeaponBoundsTests(unittest.TestCase):
+    def test_page_bound_fits_inside_index_and_job_bounds(self):
+        from plutonium_agent_toolkit.core.receipts import MAX_FILES
+        from plutonium_agent_toolkit.dev import weapons
+
+        self.assertLess(weapons.MAX_PAGES + 64, weapons.MAX_INDEX_FILES, "pages plus manifest and media must fit the index")
+        self.assertLessEqual(weapons.MAX_INDEX_FILES, MAX_FILES, "index must fit the Job declared-input cap")

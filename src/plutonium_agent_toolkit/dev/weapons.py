@@ -28,9 +28,11 @@ from ..core.errors import INPUT_CHANGED, INPUT_INVALID, INPUT_LIMIT, Failure
 from ..core.jobs import Job
 from ..core.receipts import sha256_file
 
-MAX_INDEX_FILES = 4096
+# Every snapshot page is one indexed file, so the page bound must fit inside the index
+# bound with room for the manifest and media. Both stay under the Job input cap (20000).
+MAX_INDEX_FILES = 16384
 MAX_INDEX_BYTES = 2 * 1024**3
-MAX_PAGES = 32768
+MAX_PAGES = 16000
 MAX_RECORDS = 4096
 KINDS = ("models", "animations", "weapons")
 NAME = re.compile(r"[A-Za-z0-9_./*#-]{1,240}\Z")
