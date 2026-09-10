@@ -7,6 +7,18 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+### Added
+
+- `gsc compile|decompile`, `ff inspect|link|extract` and `project init|plan|build|verify` are
+  implemented behind the Windows gate. Jobs run backends inside a Windows Job Object (process group
+  elsewhere for tests), bound log and output size, and write `receipt.json` on every exit path.
+- `core/jobs.py` job runner, `PAT_BACKEND_<NAME>` override for tests and pre-installed tools,
+  `implemented` route status between `planned` and `available`.
+- Fake gsc-tool, Linker and Unlinker under `tests/fakes/` so the whole build pipeline is unit-tested
+  offline, including compiler errors reported with exit zero, backend crashes, tampered outputs and
+  recipe path escapes.
+- C2Mv3 3.0.5 hash pinned (optional, never redistributed).
+
 ### Changed
 
 - Repository made public on 2026-09-10 at 0.1.0a1 so the program can use branch rulesets,

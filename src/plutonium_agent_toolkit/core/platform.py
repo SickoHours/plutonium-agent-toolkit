@@ -45,7 +45,7 @@ def describe() -> dict:
         "python": sys.version.split()[0],
         "native_windows": is_windows() and not is_wine(),
         "compatibility_layer": "wine" if is_wine() else None,
-        "supported": is_windows(),
+        "supported": is_windows() and not is_wine(),
     }
 
 
@@ -55,4 +55,10 @@ def require_windows(operation: str) -> None:
             UNSUPPORTED_PLATFORM,
             f"{operation} requires native Windows; this host reports {system()}.",
             "Discovery and unit tests run anywhere. Backend, game and capture operations run on Windows only in this release.",
+        )
+    if is_wine():
+        raise Failure(
+            UNSUPPORTED_PLATFORM,
+            f"{operation} requires native Windows; this interpreter is running under Wine.",
+            "Wine results never count as Windows qualification. Use a native Windows host.",
         )

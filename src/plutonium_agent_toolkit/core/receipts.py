@@ -14,7 +14,7 @@ import uuid
 from pathlib import Path
 
 from .envelope import now
-from .errors import INPUT_LIMIT, INPUT_MISSING, OUTPUT_EXISTS, OUTPUT_LIMIT, Failure
+from .errors import INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, OUTPUT_EXISTS, OUTPUT_LIMIT, Failure
 
 MAX_HASH_BYTES = 8 * 1024**3
 MAX_FILES = 20000
@@ -57,10 +57,15 @@ def inventory(root: Path) -> dict[str, str]:
 def new_output_dir(path: Path) -> Path:
     """Create the job's output directory. It must not already exist."""
     p = Path(path).absolute()
-    if p.exists():
-        raise Failure(OUTPUT_EXISTS, f"Output directory already exists: {p}",
+    if p.is_symlink() or p.exists():
+        raise Failure(OUTPUT_EXISTS, f"Output path already exists (file, directory or link): {p}",
                       "Choose a new directory for every job; the toolkit never overwrites results.")
-    p.mkdir(parents=True)
+    try:
+        p.mkdir(parents=True)
+    except FileExistsError as exc:
+        raise Failure(OUTPUT_EXISTS, f"Output path already exists: {p}") from exc
+    except OSError as exc:
+        raise Failure(OUTPUT_LIMIT, f"Cannot create output directory {p}: {exc.strerror or exc}") from exc
     return p
 
 
@@ -90,11 +95,22 @@ def write(output_dir: Path, *, command: str, argv: list[str], status: str, exit_
 
 def verify_outputs(receipt_path: Path) -> dict:
     """Re-hash every recorded output and report what changed."""
-    receipt = json.loads(Path(receipt_path).read_text(encoding="utf-8"))
+    try:
+        receipt = json.loads(Path(receipt_path).read_text(encoding="utf-8"))
+    except (ValueError, OSError) as exc:
+        raise Failure(INPUT_INVALID, f"Receipt is not readable JSON: {receipt_path}") from exc
+    if not isinstance(receipt, dict) or not isinstance(receipt.get("outputs"), dict):
+        raise Failure(INPUT_INVALID, f"Receipt lacks an outputs map: {receipt_path}")
     base = Path(receipt_path).parent
     changed, missing = [], []
     for rel, digest in receipt.get("outputs", {}).items():
-        p = base / rel
+        rel_path = Path(rel) if isinstance(rel, str) and rel else None
+        if (rel_path is None or rel_path.is_absolute() or ".." in rel_path.parts or "\\" in rel
+                or not isinstance(digest, str) or len(digest) != 64):
+            raise Failure(INPUT_INVALID, f"Receipt output entry is invalid: {rel!r}")
+        p = base / rel_path
+        if p.is_symlink() or not p.resolve().is_relative_to(base.resolve()):
+            raise Failure(INPUT_INVALID, f"Receipt output escapes the receipt directory: {rel}")
         if not p.is_file():
             missing.append(rel)
         elif sha256_file(p) != digest:

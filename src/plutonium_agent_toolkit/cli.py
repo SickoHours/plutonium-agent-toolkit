@@ -7,6 +7,10 @@
     pat configure --plutonium-storage-t6 <abs path> [--plutonium-launcher <abs path>] ...
     pat dev backends
     pat dev setup [--plan] [--only ID ...]
+    pat gsc compile|decompile <script> --output <new dir>
+    pat ff inspect|extract <file.ff> --output <new dir>
+    pat ff link <project dir> --zone <name> --output <new dir>
+    pat project init|plan|build|verify ... --output <new dir>
     pat <group> <action> ...          planned routes answer not_implemented
 
 Exit statuses: 0 ok, 1 failure, 2 usage, 130 cancelled. See core/errors.py.
@@ -14,13 +18,15 @@ Exit statuses: 0 ok, 1 failure, 2 usage, 130 cancelled. See core/errors.py.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
+from pathlib import Path
 
 from . import __version__
 from .core import config, platform
 from .core.discovery import find, manifest, routes
 from .core.envelope import emit, failure, success
-from .core.errors import INVALID_ARGUMENTS, NOT_IMPLEMENTED, Failure
+from .core.errors import INVALID_ARGUMENTS, NOT_IMPLEMENTED, OPERATION_FAILED, Failure
 
 # Importing the route modules registers their contracts.
 from .dev import routes as _dev_routes  # noqa: F401
@@ -61,16 +67,74 @@ def build_parser() -> Parser:
     s.add_argument("--only", nargs="+", metavar="ID", help="Install only these backend IDs")
     s.add_argument("--json", action="store_true")
 
-    # Generic planned groups accept any action so they can answer with a structured refusal.
-    for group in sorted({r.group for r in routes()} - {"dev"}):
+    # Implemented job groups get real parsers; every job takes --output and --timeout.
+    def common(q):
+        q.add_argument("--output", required=True, help="New directory for artifacts and receipt.json; never overwritten")
+        q.add_argument("--timeout", type=_timeout, default=300, help="Per-backend deadline in seconds (1-1800)")
+        q.add_argument("--json", action="store_true")
+
+    from .dev import fastfiles, projects, scripts
+
+    scripts.add_parser(sub, common)
+    fastfiles.add_parser(sub, common)
+    projects.add_parser(sub, common)
+
+    # Planned groups accept any action so they can answer with a structured refusal.
+    for group in sorted({r.group for r in routes()} - {"dev", "gsc", "ff", "project"}):
         g = sub.add_parser(group)
         g.add_argument("action")
         g.add_argument("rest", nargs=argparse.REMAINDER)
     return p
 
 
+def _timeout(value):
+    n = int(value)
+    if not 1 <= n <= 1800:
+        raise argparse.ArgumentTypeError("timeout must be 1-1800 seconds")
+    return n
+
+
+JOB_GROUPS = {"gsc": "scripts", "ff": "fastfiles", "project": "projects"}
+
+
+def run_job(args, argv: list[str]) -> dict:
+    """Gate, create the job directory, dispatch to the owning module, write the receipt."""
+    from importlib import import_module
+
+    from .core.jobs import Job
+
+    route = find(args.group, args.action)
+    if route.requires_windows and not os.environ.get("PAT_DEV_UNGATED"):
+        platform.require_windows(f"{args.group} {args.action}")
+    module = import_module(f".dev.{JOB_GROUPS[args.group]}", __package__)
+    job = Job(Path(args.output), f"{args.group} {args.action}", argv, timeout=max(args.timeout, 60) * 4)
+    try:
+        result = module.execute(args, job)
+        return success(f"{args.group} {args.action}", job.finish(result))
+    except Failure as exc:
+        job.fail(exc)
+        row = failure(f"{args.group} {args.action}", exc)
+        row["receipt"] = str(job.receipt_path)
+        return row
+    except KeyboardInterrupt:
+        exc = Failure("cancelled", "Job cancelled; owned backend processes stopped")
+        job.fail(exc)
+        row = failure(f"{args.group} {args.action}", exc)
+        row["receipt"] = str(job.receipt_path)
+        return row
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError) as unexpected:
+        # Never let a traceback replace the JSON contract; the receipt must not stay "running".
+        exc = Failure(OPERATION_FAILED, f"{type(unexpected).__name__}: {str(unexpected)[:400]}",
+                      "This is a toolkit defect. Keep the receipt and report it with the command you ran.")
+        job.fail(exc)
+        row = failure(f"{args.group} {args.action}", exc)
+        row["receipt"] = str(job.receipt_path)
+        return row
+
+
 def run(argv: list[str]) -> dict:
     args = build_parser().parse_args(argv)
+    argv = ["pat", *argv]
     group = args.group
     command = group if group in ("version", "manifest", "doctor", "describe", "configure") else f"{group} {args.action}"
 
@@ -122,6 +186,9 @@ def run(argv: list[str]) -> dict:
             platform.require_windows("Backend setup")
         return success(command, backends.setup(only=args.only, plan=args.plan))
 
+    if group in JOB_GROUPS:
+        return run_job(args, argv)
+
     route = find(group, args.action)
     raise Failure(NOT_IMPLEMENTED,
                   f"Route {route.id} is {route.status} in {__version__}; nothing was executed.",
@@ -138,6 +205,9 @@ def entry(argv: list[str] | None = None) -> int:
         row = failure(label, exc)
     except KeyboardInterrupt:
         row = failure(label, Failure("cancelled", "Interrupted"))
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError) as unexpected:
+        row = failure(label, Failure(OPERATION_FAILED, f"{type(unexpected).__name__}: {str(unexpected)[:400]}",
+                                     "This is a toolkit defect. Report it with the command you ran."))
     return emit(row)
 
 

@@ -4,7 +4,11 @@
   "mode": "zm",
   "name": "hello_zm",
   "scripts": [
-    { "source": "scripts/hello.gsc", "target": "maps/mp/zombies/_hello.gsc", "instance": "server" }
+    {
+      "source": "scripts/hello.gsc",
+      "target": "scripts/zm/hello_zm.gsc",
+      "instance": "server"
+    }
   ],
   "assets": [],
   "loads": []

@@ -44,6 +44,7 @@ GAME_NOT_FOUND = "game_not_found"
 GAME_AMBIGUOUS = "game_ambiguous"
 DELIVERY_UNCERTAIN = "delivery_uncertain"
 NOT_IMPLEMENTED = "not_implemented"
+OPERATION_FAILED = "operation_failed"
 
 USAGE_CODES = frozenset({INVALID_ARGUMENTS, UNKNOWN_ROUTE})
 

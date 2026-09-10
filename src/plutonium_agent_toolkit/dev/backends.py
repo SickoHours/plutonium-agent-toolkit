@@ -20,7 +20,7 @@ import zipfile
 from pathlib import Path, PurePosixPath
 
 from ..core import config
-from ..core.errors import BACKEND_FAILED, HASH_MISMATCH, INPUT_INVALID, INPUT_LIMIT, Failure
+from ..core.errors import BACKEND_FAILED, BACKEND_UNAVAILABLE, HASH_MISMATCH, INPUT_INVALID, INPUT_LIMIT, Failure
 from ..core.receipts import inventory
 
 PINS = Path(__file__).with_name("backends.json")
@@ -193,3 +193,45 @@ def doctor() -> dict:
     required_ok = all(r["present"] for r in rows if not r["optional"])
     return {"ok": required_ok, "backends_dir": str(backends_dir), "backends": rows,
             "verification": "filesystem presence only; execution and gameplay are separate facts"}
+
+
+# ----- executable resolution -----------------------------------------------------------
+
+EXECUTABLES = {
+    "gsc": ("gsc", "gsc-tool.exe"),
+    "linker": ("oat", "Linker.exe"),
+    "unlinker": ("oat", "Unlinker.exe"),
+    "image": ("oat", "ImageConverter.exe"),
+    "ffmpeg": ("ffmpeg", "bin/ffmpeg.exe"),
+    "ffprobe": ("ffmpeg", "bin/ffprobe.exe"),
+    "blender": ("blender", "blender.exe"),
+    "lua": ("lua", "CoDLuaDecompiler.exe"),
+    "greyhound": ("greyhound", "Greyhound.exe"),
+    "husky": ("husky", "Husky.exe"),
+    "c2m": ("c2m", "C2M.exe"),
+}
+
+
+def executable(name: str) -> list[str]:
+    """Return the argv prefix for a backend executable.
+
+    ``PAT_BACKEND_<NAME>`` overrides the resolved path; a ``.py`` override is run
+    through the current interpreter. The override exists for tests and for users
+    who already have a tool installed elsewhere. It never changes what is pinned.
+    """
+    import sys
+
+    if name not in EXECUTABLES:
+        raise Failure(INPUT_INVALID, f"Unknown backend executable {name!r}")
+    override = os.environ.get("PAT_BACKEND_" + name.upper())
+    if override:
+        p = Path(override)
+        if not p.is_absolute() or not p.is_file():
+            raise Failure(BACKEND_UNAVAILABLE, f"PAT_BACKEND_{name.upper()} must be an absolute path to an existing file")
+        return [sys.executable, str(p)] if p.suffix.lower() == ".py" else [str(p)]
+    program_id, relative = EXECUTABLES[name]
+    path = Path(config.load()["backends_dir"]) / program_id / relative
+    if not path.is_file():
+        raise Failure(BACKEND_UNAVAILABLE, f"Backend {name} is not installed at {path}",
+                      f"Run: pat dev setup --only {program_id}")
+    return [str(path)]
