@@ -6,7 +6,9 @@ body:
     id: journey
     attributes:
       label: Journey
-      options: [User (install, build, load), Contributor (change, test, pull request)]
+      options:
+        - "User (install, build, load)"
+        - "Contributor (change, test, pull request)"
     validations:
       required: true
   - type: input
