@@ -3,7 +3,10 @@
 Set up the Plutonium Agent Toolkit from this folder on my Windows PC.
 
 Read README.md, AGENTS.md and docs/GETTING-STARTED.md first, then docs/SUPPORT.md so you know
-which capabilities are actually verified in this version.
+which capabilities are actually verified in this version. This toolkit is meant to be adapted to
+my machine: if a default does not fit my setup, prefer `pat configure`, `PAT_HOME` and
+`PAT_BACKEND_*`, and edit the small adapters in `src/` (with a test) rather than telling me
+something is unsupported. `docs/FOR-AGENTS.md` explains how.
 
 Handle the routine work yourself:
 

@@ -2,6 +2,10 @@
 
 This guide is written for your agent to follow. You can read along.
 
+This toolkit is meant to be adapted to your machine. Where a default here does not match your
+setup, your agent should configure or edit the toolkit to fit, not stop. It reads the state of
+your machine and makes it work. See [FOR-AGENTS.md](FOR-AGENTS.md).
+
 ## Requirements
 
 - Windows 11 x64 with Plutonium installed and Black Ops II Zombies launched at least once.
