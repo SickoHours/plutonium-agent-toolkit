@@ -9,6 +9,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Changed
 
+- Repository made public on 2026-09-10 at 0.1.0a1 so the program can use branch rulesets,
+  secret scanning and private vulnerability reporting. Readiness is unchanged: see docs/SUPPORT.md.
 - CI uses actions/checkout v7, setup-python v7 and upload-artifact v7 (Node 24 runtime).
 
 ## [0.1.0a1] - 2026-09-09

@@ -4,8 +4,9 @@
 You describe the result. Your coding agent installs the tools, builds the mod, loads the game,
 records the test and shows you the evidence.
 
-> **Status: private pre-alpha.** Contracts and the Windows foundation are committed. No route has
-> passed native Windows qualification yet. Read [docs/SUPPORT.md](docs/SUPPORT.md) before trusting
+> **Status: public pre-alpha.** Contracts and the Windows foundation are committed. No route has
+> passed native Windows qualification yet. The repository is public so contributors can follow
+> along from the first commit; do not mistake visibility for readiness. Read [docs/SUPPORT.md](docs/SUPPORT.md) before trusting
 > any capability claim, and [CHANGELOG.md](CHANGELOG.md) for what each version actually ships.
 
 ## What "agent-native" means here
