@@ -468,9 +468,12 @@ def tier_game_collect(receipt, home: Path, notes: str | None):
         if not _fresh(path, began):
             return None, "stale: written before this Tier 3 run began"
         try:
-            return json.loads(path.read_text(encoding="utf-8")), None
-        except ValueError:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
             return None, "unreadable JSON"
+        if not isinstance(data, dict):
+            return None, "unreadable JSON (expected an object)"
+        return data, None
 
     checks = {
         "last-launch.json": lambda d: d.get("launch_requested") is True and d.get("game_detected") is True,
@@ -489,9 +492,11 @@ def tier_game_collect(receipt, home: Path, notes: str | None):
                                  **({} if passed else {"stderr_head": "state file present but does not record success"})})
     installs = sorted((state / "installs").glob("hello_zm-*.json")) if (state / "installs").is_dir() else []
     fresh_installs = [p for p in installs if _fresh(p, began)]
-    receipt["steps"].append({"name": "install-mod hello_zm receipt", "passed": bool(fresh_installs),
-                             "json": json.loads(fresh_installs[-1].read_text(encoding="utf-8")) if fresh_installs else None,
-                             "expected": "fresh install receipt", **({} if fresh_installs else {"stderr_head": "no fresh hello_zm install receipt"})})
+    install_data, install_problem = (load(Path("installs") / fresh_installs[-1].name) if fresh_installs
+                                     else (None, "no fresh hello_zm install receipt"))
+    receipt["steps"].append({"name": "install-mod hello_zm receipt", "passed": install_data is not None,
+                             "json": install_data, "expected": "fresh install receipt",
+                             **({} if install_data is not None else {"stderr_head": install_problem})})
     receipt["human_observations"] = {
         "launcher_prompt_shown": None, "game_window_took_focus": None, "main_menu_reached": None,
         "town_spawn_playable": None, "hello_zm_line_visible_after_spawn": None, "quit_exited_cleanly": None,

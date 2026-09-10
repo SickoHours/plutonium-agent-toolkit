@@ -95,6 +95,24 @@ class QualifyToolUnitTests(unittest.TestCase):
         self.assertTrue(by_name["last-result.json"]["passed"])
         self.assertFalse(by_name["install-mod hello_zm receipt"]["passed"])
 
+    def test_tier3_collect_treats_non_object_and_corrupt_state_as_unreadable(self):
+        # Macroscope on the Linux PR: a state file decoding to a list, or a corrupt install
+        # receipt, crashed --collect instead of producing a failed receipt.
+        state = self.home / "game"
+        self.q.tier_game_begin(self.home)
+        (state / "last-launch.json").write_text("[1, 2]")
+        (state / "last-load.json").write_text("{not json")
+        (state / "installs").mkdir()
+        (state / "installs" / "hello_zm-1.json").write_text("null")
+        receipt = self.q.new_receipt("game")
+        self.q.tier_game_collect(receipt, self.home, None)
+        by_name = {s["name"]: s for s in receipt["steps"]}
+        self.assertFalse(by_name["last-launch.json"]["passed"])
+        self.assertIn("expected an object", by_name["last-launch.json"]["stderr_head"])
+        self.assertFalse(by_name["last-load.json"]["passed"])
+        self.assertFalse(by_name["install-mod hello_zm receipt"]["passed"])
+        self.assertIsNone(by_name["install-mod hello_zm receipt"]["json"])
+
     def test_finish_moves_an_existing_receipt_aside_instead_of_overwriting(self):
         # A rerun after a fix must not erase the failed attempt: RECORDING-A-RECEIPT.md keeps it.
         out = Path(self.temp.name) / "out"
