@@ -33,6 +33,7 @@ ERROR_LINE = re.compile(r"^(?:\*+\s*)?(?:error\s*:|script (?:runtime |compile )?
                         r"|fatal error\b|unhandled exception\b|a critical exception\b|exception code\s*:"
                         r"|\d+ script error\(s\)|too early to loadmod!\s*$|LUI_ERROR\s*:|Havok Script Panic\b)", re.I)
 PLUTONIUM_URI = "plutonium://play/t6zm"
+WORKER_TOKEN_ENV = "PAT_GAME_WORKER_TOKEN"
 
 
 # ----- catalog and inventory ------------------------------------------------------------
@@ -362,8 +363,9 @@ def dispatch(action: str, argument: str | None) -> dict:
         raise Failure(NOT_IMPLEMENTED, f"game {action} is not a live route")
     request_id = uuid.uuid4().hex
     argv = [sys.executable, "-m", "plutonium_agent_toolkit.game.worker", action, argument or ""]
+    env = dict(os.environ, **{WORKER_TOKEN_ENV: request_id})
     try:
-        completed = subprocess.run(argv, capture_output=True, timeout=WORKER_SECONDS,
+        completed = subprocess.run(argv, capture_output=True, timeout=WORKER_SECONDS, env=env,
                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         if len(completed.stdout) > 65536:
             raise Failure(DELIVERY_UNCERTAIN, "Worker response too large; outcome uncertain, do not replay")

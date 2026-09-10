@@ -472,3 +472,54 @@ class CliGateTests(unittest.TestCase):
         by_id = {r["id"]: r for r in row["result"]["routes"]}
         for rid in ("game.launch", "game.load-map", "game.check-load", "game.quit", "game.mods"):
             self.assertEqual(by_id[rid]["status"], "implemented", rid)
+
+
+class WorkerGuardTests(unittest.TestCase):
+    def test_direct_worker_invocation_is_refused_before_any_native_call(self):
+        import contextlib
+        import io
+
+        from plutonium_agent_toolkit.game import worker
+
+        os.environ.pop(control.WORKER_TOKEN_ENV, None)
+        with patch.object(control, "execute_worker", side_effect=AssertionError("must not execute")):
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                code = worker.main(["quit", ""])
+        self.assertEqual(code, 1)
+        self.assertEqual(json.loads(buf.getvalue())["error_code"], "invalid_arguments")
+
+    def test_worker_with_token_still_requires_native_windows(self):
+        import contextlib
+        import io
+
+        from plutonium_agent_toolkit.game import worker
+
+        os.environ[control.WORKER_TOKEN_ENV] = "a" * 32
+        try:
+            with patch.object(control, "execute_worker", side_effect=AssertionError("must not execute")), \
+                 patch("plutonium_agent_toolkit.core.platform.is_windows", return_value=True), \
+                 patch("plutonium_agent_toolkit.core.platform.is_wine", return_value=True):
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    code = worker.main(["quit", ""])
+        finally:
+            os.environ.pop(control.WORKER_TOKEN_ENV, None)
+        self.assertEqual(code, 1)
+        self.assertEqual(json.loads(buf.getvalue())["error_code"], "unsupported_platform")
+
+    def test_dispatch_passes_a_one_shot_token(self):
+        seen = {}
+
+        def fake_run(argv, **kwargs):
+            seen["token"] = kwargs["env"].get(control.WORKER_TOKEN_ENV)
+
+            class Completed:
+                stdout = json.dumps({"ok": True}).encode()
+                returncode = 0
+            return Completed()
+
+        with patch.object(control.subprocess, "run", side_effect=fake_run):
+            result = control.dispatch("status", None)
+        self.assertRegex(seen["token"], r"^[0-9a-f]{32}$")
+        self.assertEqual(result["request_id"], seen["token"])
