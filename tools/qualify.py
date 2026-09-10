@@ -416,6 +416,7 @@ arm.animation_data.action = bpy.data.actions.new('swing')
 scene = bpy.context.scene
 scene.frame_start = 1; scene.frame_end = 10; scene.render.fps = 30
 pb = arm.pose.bones['tag_weapon']
+pb.rotation_mode = 'XYZ'  # pose bones default to quaternion; Euler keys are inert without this
 for frame, rot in ((1, 0.0), (10, 0.5)):
     pb.rotation_euler = (rot, 0, 0); pb.keyframe_insert('rotation_euler', frame=frame)
 bpy.ops.wm.save_as_mainfile(filepath=out)
