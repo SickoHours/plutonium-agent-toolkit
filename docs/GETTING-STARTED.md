@@ -2,8 +2,9 @@
 
 This guide is written for your agent to follow. You can read along.
 
-The development (build) tools run on any OS: Windows, Linux or macOS. Game control and capture are
-native-Windows-only, because their transport is the Win32 console.
+The development (build) tools run on Windows and Linux. Verified hosts: Windows 11 x64 and Arch
+Linux (Omarchy). macOS is untested and has no pinned backends; it is not claimed. Game control and
+capture use the Win32 console and run on native Windows only.
 
 This toolkit is meant to be adapted to your machine. Where a default here does not match your setup,
 your agent should configure or edit the toolkit to fit, not stop. It reads the state of your machine
@@ -11,13 +12,15 @@ and makes it work. See [FOR-AGENTS.md](FOR-AGENTS.md).
 
 ## Requirements
 
-To build and package mods (any OS):
+To build and package mods (Windows or Linux):
 
 - Python 3.11 or newer, installed for your user.
 - A coding agent with local terminal and file access.
-- Each backend you use (OpenAssetTools and gsc-tool at minimum). Where a pinned download exists for
-  your OS, `pat dev setup` fetches it; otherwise install the tool and point `PAT_BACKEND_<NAME>` at
-  it. Internet access is needed only for pinned downloads.
+- Each backend you use (OpenAssetTools and gsc-tool at minimum). `pat dev setup` fetches the pinned
+  build for your OS: gsc-tool, OpenAssetTools, FFmpeg and Blender are pinned on Windows and Linux;
+  CoDLuaDecompiler, Greyhound, Husky and C2M on Windows only. For a backend with no pin on your OS,
+  install the tool and point `PAT_BACKEND_<NAME>` at it. Internet access is needed only for
+  pinned downloads.
 
 To control a running game (Windows only):
 
@@ -75,13 +78,13 @@ game is never started.
 ## What next
 
 Read [SUPPORT.md](SUPPORT.md) for what each route has earned. The development routes have native
-Windows receipts and also run on Linux and macOS; `examples/hello-zm` has been built and byte-compared
-natively on Linux. Game routes are implemented and not yet qualified. The first thing to ask your
-agent for is the `examples/hello-zm` build:
+receipts from Windows 11 and from Arch Linux (Omarchy); `examples/hello-zm` builds, reads back and
+byte-compares on both. Game routes are implemented and not yet qualified. The first thing to ask
+your agent for is the `examples/hello-zm` build:
 
 ```sh
 pat project build examples/hello-zm/project.json --output ../jobs/hello-001 --json
-pat game install-mod ../jobs/hello-001/packages/mod.ff hello_zm --json   # file copy; any OS
+pat game install-mod ../jobs/hello-001/packages/mod.ff hello_zm --json   # file copy; Windows or Linux
 ```
 
 Live game operations (`launch`, `select-mod`, `load-map`, restarts, `quit`) run on Windows and always
@@ -94,6 +97,8 @@ deferred to a later release.
 | --- | --- |
 | `unsupported_platform` | You ran a game-control or capture route off Windows. The build tools run anywhere; game control needs a native Windows host, not WSL or Wine |
 | `backend_unavailable` | The backend is not installed for this OS. Run `pat dev setup --only <id>`, or set `PAT_BACKEND_<NAME>` to an installed binary |
+| `override-required` from setup | No build is pinned for this OS (CoDLuaDecompiler and the extraction GUIs on Linux; every backend on untested macOS). Install the tool and set `PAT_BACKEND_<NAME>` |
+| `input_invalid: Archive links are refused` | A pinned archive contains links the pin does not allow. Do not extract it by hand into the backends directory; open an issue with the backend ID |
 | `config_missing` | Run the `pat configure` command the hint names |
 | `hash_mismatch` on setup | The download did not match the pin. The failed file is kept. Do not edit the pin; open an issue with the URL and the hash you received |
 | `busy` on setup | Another setup is running, or an interrupted one left `setup.lock` in the backends directory. Inspect before removing |

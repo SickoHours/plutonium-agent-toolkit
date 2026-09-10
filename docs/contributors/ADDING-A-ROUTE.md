@@ -11,7 +11,8 @@
 4. **Wire the parser** in `cli.py` for the arguments; keep `--json` accepted.
 5. **Document**: one row in `docs/SUPPORT.md`, a paragraph in the user docs, an `Unreleased`
    changelog line.
-6. **Qualify on Windows.** Run it natively, sanitize the receipt (see RECORDING-A-RECEIPT.md), link
-   it from `docs/SUPPORT.md`, then flip `status` to `available`.
+6. **Qualify natively.** Run it on a real Windows or Linux host with `tools/qualify.py` (game
+   routes: Windows only), sanitize the receipt (see RECORDING-A-RECEIPT.md), link it from
+   `docs/SUPPORT.md`, then flip `status` to `available`.
 
 Never mark a route `available` without step 6.

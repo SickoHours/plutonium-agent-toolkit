@@ -1,11 +1,11 @@
 """Registered development (file-tool) routes.
 
-These routes run on any operating system: they drive pinned upstream backends as
+These routes run on Windows and Linux: they drive pinned upstream backends as
 ordinary subprocesses and touch no running game. ``status="available"`` means a
-native receipt is linked in docs/SUPPORT.md (Windows today; a native Linux receipt
-is tracked separately). None of these routes is platform-gated; a backend that is
-missing for the current OS reports ``backend_unavailable`` with how to supply it
-via ``pat dev setup`` or a ``PAT_BACKEND_<NAME>`` override.
+native receipt is linked in docs/SUPPORT.md. None of these routes is
+platform-gated; a backend that is missing for the current OS reports
+``backend_unavailable`` with how to supply it via ``pat dev setup`` or a
+``PAT_BACKEND_<NAME>`` override. macOS is untested and not claimed.
 """
 from ..core.discovery import Route, register
 
@@ -39,9 +39,9 @@ PLANNED = [
     Route("project", "verify", "Re-hash a receipt's outputs and optionally its inputs", "writes-output",
           status="available", owner=OWNER),
     Route("model", "convert", "Convert a model/rig/animation through Blender and the Cast add-on", "writes-output",
-          status="implemented", owner=OWNER),
+          status="available", owner=OWNER),
     Route("model", "inspect", "Report bones, meshes, materials and animation ranges", "writes-output",
-          status="implemented", owner=OWNER),
+          status="available", owner=OWNER),
     Route("model", "transform", "Scale and rotate root objects, then export", "writes-output",
           status="implemented", owner=OWNER),
     Route("model", "rename-bones", "Rename bones from a JSON mapping without .001 collisions, then export", "writes-output",
@@ -51,9 +51,9 @@ PLANNED = [
     Route("model", "preview", "Render a 640px studio-lit PNG of the mesh", "writes-output",
           status="implemented", owner=OWNER),
     Route("audio", "inspect", "Probe format, streams and duration with ffprobe", "writes-output",
-          status="implemented", owner=OWNER),
+          status="available", owner=OWNER),
     Route("audio", "convert", "Convert and verify audio streams with FFmpeg", "writes-output",
-          status="implemented", owner=OWNER),
+          status="available", owner=OWNER),
     Route("image", "convert", "Convert DDS/IWI textures with OpenAssetTools ImageConverter", "writes-output",
           status="implemented", owner=OWNER),
     Route("lua", "decompile", "Decompile LUI bytecode with CoDLuaDecompiler", "writes-output",

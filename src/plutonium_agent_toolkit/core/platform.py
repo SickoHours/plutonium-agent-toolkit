@@ -1,6 +1,6 @@
 """Platform gating.
 
-The development (file-tool) routes run on any operating system: they drive pinned
+The development (file-tool) routes run on Windows and Linux: they drive pinned
 upstream backends as ordinary subprocesses. Only the routes that control a running
 game or capture its display require native Windows, because their transport is the
 Win32 console; those call :func:`require_windows` and fail with
@@ -15,7 +15,9 @@ import sys
 
 from .errors import UNSUPPORTED_PLATFORM, Failure
 
-SUPPORTED = ("Windows",)
+# Hosts the development (file) tools are supported on; game control needs native Windows.
+SUPPORTED = ("Windows", "Linux")
+GAME_CONTROL = ("Windows",)
 
 
 def system() -> str:
@@ -40,14 +42,20 @@ def is_wine() -> bool:
 
 
 def describe() -> dict:
+    native_windows = is_windows() and not is_wine()
     return {
         "system": system(),
         "release": platform.release(),
         "machine": platform.machine(),
         "python": sys.version.split()[0],
-        "native_windows": is_windows() and not is_wine(),
+        "native_windows": native_windows,
         "compatibility_layer": "wine" if is_wine() else None,
-        "supported": is_windows() and not is_wine(),
+        # Development (file) tools: Windows and Linux. macOS is untested and not claimed.
+        "dev_tools_supported": system() in SUPPORTED and not is_wine(),
+        # Game control and capture: native Windows only (Win32 console transport). `supported`
+        # keeps its historical meaning of this flag for discovery consumers.
+        "game_control_supported": native_windows,
+        "supported": native_windows,
     }
 
 
@@ -56,7 +64,7 @@ def require_windows(operation: str) -> None:
         raise Failure(
             UNSUPPORTED_PLATFORM,
             f"{operation} requires native Windows; this host reports {system()}.",
-            "Development file tools run on any OS. Game control and capture use the Win32 console and need a native Windows host.",
+            "Development file tools run on Windows and Linux. Game control and capture use the Win32 console and need a native Windows host.",
         )
     if is_wine():
         raise Failure(

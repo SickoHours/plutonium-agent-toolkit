@@ -83,7 +83,7 @@ def find(group: str, action: str) -> Route:
 def manifest(platform_info: dict) -> dict:
     rows = [r.to_dict() for r in routes()]
     for row in rows:
-        if row["requires_windows"] and not platform_info.get("supported"):
+        if row["requires_windows"] and not platform_info.get("game_control_supported", platform_info.get("supported")):
             row["available_here"] = False
             row["availability_reason"] = "requires native Windows"
         else:

@@ -9,8 +9,8 @@ pull request that changes a route. `tools/release_check.py` verifies the version
 | --- | --- |
 | contract | Route is registered with name, effect and owner. Answers `not_implemented`. |
 | deferred | Registered contract, explicitly excluded from this release. Answers `not_implemented`. |
-| offline | Implemented; unit tests pass with synthetic fixtures and fake backends on any platform. The file tools execute on any OS; game control and capture execute on native Windows only. No native receipt. |
-| native | Ran on a real host of the OS named in the receipt, not Wine, WSL or a CI runner, with a sanitized receipt linked below. The receipts here are native Windows 11 x64; the file tools also build natively on Linux (a committed native-Linux receipt is a tracked follow-up). |
+| offline | Implemented; unit tests pass with synthetic fixtures and fake backends on any platform. The file tools execute on Windows and Linux; game control and capture execute on native Windows only. No native receipt. |
+| native | Ran on a real host of the OS named in the receipt, not Wine, WSL or a CI runner, with a sanitized receipt linked below. Receipts exist for native Windows 11 x64 and for native Arch Linux (Omarchy); each row names which. |
 | game | Produced a verified effect in a running Plutonium T6 Zombies instance with a fresh engine reply and a decoded non-black frame where applicable. |
 | accepted | A human played the result and recorded a scoped verdict. |
 
@@ -18,14 +18,20 @@ A level applies only to the exact scope in the receipt. "Loaded Town once" is no
 
 ## Platform
 
-The development (file) tools run on any OS. Game control and capture use the Win32 console and run
-on native Windows only.
+The development (file) tools run on Windows and Linux. Verified hosts: Windows 11 x64 and Arch
+Linux (Omarchy). macOS is untested and has no pinned backends; it is not claimed. Game control and
+capture use the Win32 console and run on native Windows only.
+
+Backends are pinned per platform in `src/plutonium_agent_toolkit/dev/backends.json`: gsc-tool,
+OpenAssetTools, FFmpeg and Blender on Windows and Linux; CoDLuaDecompiler, Greyhound, Husky and C2M
+on Windows only; the Cast add-on anywhere. Where a platform has no pin, `dev setup` reports
+`override-required` and `PAT_BACKEND_<NAME>` supplies the tool.
 
 | Item | Status |
 | --- | --- |
-| Development tools, any OS (Python 3.11+) | Run on Windows, Linux and macOS. Backends are per-platform: a pinned download where one exists, otherwise supply the tool and set `PAT_BACKEND_<NAME>`. Unit tests pass on any platform; `examples/hello-zm` has been built, read back and byte-compared natively on Linux with real gsc-tool and OpenAssetTools. |
 | Windows 11 x64, native Python 3.11+ | Tiers 1 (offline) and 2 (real backends) passed on Windows 11 25H2, build 26200, Python 3.12.0: [receipts/0.1.0a1/tier1-offline.json](receipts/0.1.0a1/tier1-offline.json), [receipts/0.1.0a1/tier2-backends.json](receipts/0.1.0a1/tier2-backends.json). Tier 3 (running game) attempted, [receipts/0.1.0a1/tier3-game.json](receipts/0.1.0a1/tier3-game.json): `launch` and console attach work, but a console-started match is dropped by the client right after it loads (issue #8; see the `game` rows). No `game` route earned level `game`. |
-| Linux, macOS | Development tools run natively (file-tool routes; backends via pinned downloads where available or `PAT_BACKEND_<NAME>`). Game control and capture are not available: their transport is the Win32 console. A committed native-Linux qualification receipt is a tracked follow-up. |
+| Arch Linux (Omarchy), native Python 3.11+ | Tiers 1 (offline) and 2 (real backends, with `--media`) passed on Omarchy 4.0.2 (Arch), Python 3.14.7: [receipts/0.1.0b1/linux-tier1-offline.json](receipts/0.1.0b1/linux-tier1-offline.json), [receipts/0.1.0b1/linux-tier2-backends.json](receipts/0.1.0b1/linux-tier2-backends.json). Real gsc-tool 1.4.10, OpenAssetTools 0.33.0, FFmpeg 9.0 and Blender 5.2.1 with Cast 2.00 were downloaded, verified and run; `examples/hello-zm` produced a `mod.ff` byte-identical to the Windows build (same SHA-256). Game control and capture are not available: their transport is the Win32 console. |
+| macOS | untested; no pinned downloads; not claimed. The file tools may run with every backend supplied through `PAT_BACKEND_<NAME>`, and `doctor` and `dev setup` say so in a `note`; no receipt exists and none is planned. |
 | Windows 10 | untested |
 | Windows on ARM64 | unsupported |
 | Wine / Proton / WSL | Not used for qualification and never counted as native. Run the development tools on Linux directly instead; game control needs a real Windows host. |
@@ -34,19 +40,20 @@ on native Windows only.
 
 | Route | Effect | Level | Owner | Receipt / notes |
 | --- | --- | --- | --- | --- |
-| `version`, `manifest`, `describe` | inert | native | core | [receipts/0.1.0a1/tier1-offline.json](receipts/0.1.0a1/tier1-offline.json) steps `version`, `manifest`, `describe game load-map`; tests/test_cli.py |
-| `doctor` | inert | native | core | presence and configuration only; [receipts/0.1.0a1/tier1-offline.json](receipts/0.1.0a1/tier1-offline.json) step `doctor before configure`, [receipts/0.1.0a1/tier2-backends.json](receipts/0.1.0a1/tier2-backends.json) step `doctor after setup` |
-| `configure` | writes-config | native | core | absolute paths, unknown keys rejected; [receipts/0.1.0a1/tier1-offline.json](receipts/0.1.0a1/tier1-offline.json) step `configure fake storage` (isolated `PAT_HOME`, fake storage path) |
+| `version`, `manifest`, `describe` | inert | native | core | Windows: [receipts/0.1.0a1/tier1-offline.json](receipts/0.1.0a1/tier1-offline.json); Linux: [receipts/0.1.0b1/linux-tier1-offline.json](receipts/0.1.0b1/linux-tier1-offline.json); steps `version`, `manifest`, `describe game load-map`; tests/test_cli.py |
+| `doctor` | inert | native | core | presence and configuration only; Windows: [receipts/0.1.0a1/tier1-offline.json](receipts/0.1.0a1/tier1-offline.json) step `doctor before configure`, [receipts/0.1.0a1/tier2-backends.json](receipts/0.1.0a1/tier2-backends.json) step `doctor after setup`; Linux: same steps in [receipts/0.1.0b1/linux-tier1-offline.json](receipts/0.1.0b1/linux-tier1-offline.json) and [receipts/0.1.0b1/linux-tier2-backends.json](receipts/0.1.0b1/linux-tier2-backends.json) |
+| `configure` | writes-config | native | core | absolute paths, unknown keys rejected; step `configure fake storage` (isolated `PAT_HOME`, fake storage path) in [receipts/0.1.0a1/tier1-offline.json](receipts/0.1.0a1/tier1-offline.json) and [receipts/0.1.0b1/linux-tier1-offline.json](receipts/0.1.0b1/linux-tier1-offline.json) |
 | `dev backends` | inert | offline | core | pins validated |
-| `dev setup` | downloads-backends | native | core | `--only gsc oat`: gsc-tool 1.4.10 and OpenAssetTools 0.33.0 downloaded over HTTPS, SHA-256 verified, extracted, and re-verified on rerun ([receipts/0.1.0a1/tier2-backends.json](receipts/0.1.0a1/tier2-backends.json) steps `dev setup gsc oat`, `dev setup rerun verifies`); `--plan` in [receipts/0.1.0a1/tier1-offline.json](receipts/0.1.0a1/tier1-offline.json). Archive safety tested with synthetic zips. **The other seven pinned backends have no native download** |
-| `gsc compile` | writes-output | native | thread-1 | real gsc-tool 1.4.10: minimal script compiles, broken script fails with `backend_failed` exit 1, and every hello-zm build compile ([receipts/0.1.0a1/tier2-backends.json](receipts/0.1.0a1/tier2-backends.json) steps `gsc compile minimal script`, `gsc compile broken script fails structurally`, `project build hello-zm`). Fake covers log-error-with-exit-zero, crash, missing input |
+| `dev setup` | downloads-backends | native | core | Windows: `--only gsc oat`, gsc-tool 1.4.10 and OpenAssetTools 0.33.0 downloaded over HTTPS, SHA-256 verified, extracted, and re-verified on rerun ([receipts/0.1.0a1/tier2-backends.json](receipts/0.1.0a1/tier2-backends.json) steps `dev setup gsc oat`, `dev setup rerun verifies`); `--plan` in [receipts/0.1.0a1/tier1-offline.json](receipts/0.1.0a1/tier1-offline.json). Linux: the same two plus `--only ffmpeg blender cast` (FFmpeg 9.0 tar.xz, Blender 5.2.1 tar.xz with its library symlinks written as copies, Cast 2.00 zip) in [receipts/0.1.0b1/linux-tier2-backends.json](receipts/0.1.0b1/linux-tier2-backends.json) steps `dev setup gsc oat`, `dev setup rerun verifies`, `dev setup ffmpeg blender cast`. Archive safety tested with synthetic zips and tars. **CoDLuaDecompiler, Greyhound, Husky and C2M have Windows pins that no native run has exercised yet, and no Linux pin exists for them** |
+| `gsc compile` | writes-output | native | thread-1 | real gsc-tool 1.4.10: minimal script compiles, broken script fails with `backend_failed` exit 1, and every hello-zm build compile; steps `gsc compile minimal script`, `gsc compile broken script fails structurally`, `project build hello-zm` in [receipts/0.1.0a1/tier2-backends.json](receipts/0.1.0a1/tier2-backends.json) (Windows) and [receipts/0.1.0b1/linux-tier2-backends.json](receipts/0.1.0b1/linux-tier2-backends.json) (Linux). Fake covers log-error-with-exit-zero, crash, missing input |
 | `gsc decompile` | writes-output | offline | thread-1 | fake gsc-tool only; **no native run** |
-| `ff inspect`, `ff extract` | writes-output | native | thread-1 | real OpenAssetTools 0.33.0 Unlinker on the hello-zm `mod.ff` ([receipts/0.1.0a1/tier2-backends.json](receipts/0.1.0a1/tier2-backends.json) steps `ff inspect mod.ff`, `ff extract rawfiles`) |
-| `ff link` | writes-output | offline | thread-1 | Linker plus Unlinker readback ran natively inside `project build` ([receipts/0.1.0a1/tier2-backends.json](receipts/0.1.0a1/tier2-backends.json) step `project build hello-zm`), but **the standalone route did not run** |
-| `project plan/build/verify` | writes-output | native | thread-1 | `examples/hello-zm` with real gsc-tool and OpenAssetTools: compile, stage, link as zone `mod` so the output is a readable `packages/mod.ff`, read back, byte-compare one rawfile, verify with `--inputs` ([receipts/0.1.0a1/tier2-backends.json](receipts/0.1.0a1/tier2-backends.json) steps `project plan hello-zm`, `project build hello-zm`, `project verify --inputs`); `plan` and the `output_exists` refusal also in [receipts/0.1.0a1/tier1-offline.json](receipts/0.1.0a1/tier1-offline.json). One script, no assets, no loads |
+| `ff inspect`, `ff extract` | writes-output | native | thread-1 | real OpenAssetTools 0.33.0 Unlinker on the hello-zm `mod.ff`; steps `ff inspect mod.ff`, `ff extract rawfiles` in [receipts/0.1.0a1/tier2-backends.json](receipts/0.1.0a1/tier2-backends.json) (Windows) and [receipts/0.1.0b1/linux-tier2-backends.json](receipts/0.1.0b1/linux-tier2-backends.json) (Linux) |
+| `ff link` | writes-output | offline | thread-1 | Linker plus Unlinker readback ran natively inside `project build` on both hosts ([receipts/0.1.0a1/tier2-backends.json](receipts/0.1.0a1/tier2-backends.json), [receipts/0.1.0b1/linux-tier2-backends.json](receipts/0.1.0b1/linux-tier2-backends.json) step `project build hello-zm`), but **the standalone route did not run** |
+| `project plan/build/verify` | writes-output | native | thread-1 | `examples/hello-zm` with real gsc-tool and OpenAssetTools: compile, stage, link as zone `mod` so the output is a readable `packages/mod.ff`, read back, byte-compare one rawfile, verify with `--inputs`; steps `project plan hello-zm`, `project build hello-zm`, `project verify --inputs` in [receipts/0.1.0a1/tier2-backends.json](receipts/0.1.0a1/tier2-backends.json) (Windows) and [receipts/0.1.0b1/linux-tier2-backends.json](receipts/0.1.0b1/linux-tier2-backends.json) (Linux; the `mod.ff` SHA-256 in both receipts' notes is identical). `plan` and the `output_exists` refusal also in [receipts/0.1.0a1/tier1-offline.json](receipts/0.1.0a1/tier1-offline.json) and [receipts/0.1.0b1/linux-tier1-offline.json](receipts/0.1.0b1/linux-tier1-offline.json). One script, no assets, no loads |
 | `project init` | writes-output | offline | thread-1 | unit tests only; **no native run** |
-| `model inspect/convert/transform/rename-bones/retime/preview` | writes-output | offline | thread-1 | background Blender with the bundled worker; fake Blender in tests. **Real Blender and Cast untested** |
-| `audio inspect/convert` | writes-output | offline | thread-1 | fake ffmpeg/ffprobe cover parameter mismatch and no-stream input |
+| `model inspect`, `model convert` | writes-output | native | thread-1 | Linux only: real Blender 5.2.1 with the bundled worker and Cast 2.00 on a synthetic OBJ cube, `inspect` and `convert --format cast` ([receipts/0.1.0b1/linux-tier2-backends.json](receipts/0.1.0b1/linux-tier2-backends.json) steps `model inspect cube.obj`, `model convert cube.obj to cast`). No rig, no animation, no Cast input; in-game appearance untested. **Not run natively on Windows** |
+| `model transform/rename-bones/retime/preview` | writes-output | offline | thread-1 | background Blender with the bundled worker; fake Blender in tests. **No native run** |
+| `audio inspect/convert` | writes-output | native | thread-1 | Linux only: real FFmpeg 9.0 ffprobe/ffmpeg on a generated 440 Hz stereo WAV, `inspect` and `convert --format wav --rate 48000 --channels 1` with the stream parameters verified by ffprobe ([receipts/0.1.0b1/linux-tier2-backends.json](receipts/0.1.0b1/linux-tier2-backends.json) steps `audio inspect tone.wav`, `audio convert tone.wav 48 kHz mono`). In-game playback untested. **Not run natively on Windows.** Fake ffmpeg/ffprobe cover parameter mismatch and no-stream input |
 | `image convert` | writes-output | offline | thread-1 | fake ImageConverter |
 | `lua decompile` | writes-output | offline | thread-1 | fake CoDLuaDecompiler |
 | `weapon catalog/plan` | writes-output | offline | thread-1 | synthetic sealed donor: altered/short pages, duplicates, identity mismatch, stale library, recipe rules. No live BO3 capture, no converter. `docs/WEAPONS.md` |
@@ -65,13 +72,13 @@ on native Windows only.
 - Greyhound, Husky and C2M live extraction through the toolkit. The GUIs can be downloaded; their
   use is manual.
 - BO3 live asset capture and generic weapon conversion.
-- Multiplayer, co-op, other Call of Duty titles, Linux, Stream Deck, desktop GUIs, MCP wrapper.
+- Multiplayer, co-op, other Call of Duty titles, macOS (untested), Stream Deck, desktop GUIs, MCP wrapper.
 
 ## Release bars
 
-The release program ships in halves. The development toolchain runs on any OS and is native-verified
-on Windows; game control is Windows-only and follows once issue #8 is resolved; capture and testing
-are a later release.
+The release program ships in halves. The development toolchain runs on Windows and Linux and is
+native-verified on both; game control is Windows-only and follows once issue #8 is resolved; capture
+and testing are a later release.
 
 **`0.1.0-beta.1` (development tools)** requires Tiers 1 and 2 of
 [WINDOWS-QUALIFICATION.md](WINDOWS-QUALIFICATION.md) passed on a native host with receipts under
@@ -87,8 +94,9 @@ is dropped by the client right after it loads. The likely resolution is that `lo
 inside a running private match rather than cold-starting one; the retest and any doc or scope
 change land before this bar is called met.
 
-**`1.0.0`** additionally requires: the remaining dev routes (`model`, `audio`, `image`, `lua`,
-`weapon`) at level `native`; and frozen JSON, exit-code and schema contracts. A pilot is simply a
+**`1.0.0`** additionally requires: the remaining dev routes (the other `model` actions, `image`,
+`lua`, `weapon`) at level `native` and the `audio`/`model` routes native on Windows too; and frozen
+JSON, exit-code and schema contracts. A pilot is simply a
 different person's agent, on a harness that did not build the toolkit, using the repo and succeeding;
 it is not a benchmark and there is no model-scoring gate. The contributor pilot
 ([PILOT-CONTRIBUTOR.md](PILOT-CONTRIBUTOR.md)) is the 1.0 quality check; the user pilot

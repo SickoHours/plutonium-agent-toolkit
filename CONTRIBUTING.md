@@ -1,8 +1,8 @@
 # Contributing
 
 Contributions are welcome from humans and from development agents working on a human's behalf.
-Both follow the same path. The development (build) tools run on any OS; game control and capture are
-Windows-only. Unit tests and documentation work run anywhere.
+Both follow the same path. The development (build) tools run on Windows and Linux; game control and
+capture are Windows-only. Unit tests and documentation work run anywhere.
 
 ## Set up a development environment
 
@@ -28,9 +28,9 @@ Set `PAT_HOME` to a scratch directory while developing so you never touch a real
    python tools/private_scan.py
    python tools/release_check.py
    ```
-5. If the change touches a backend, the game or capture, run it on a native Windows host and
-   attach a sanitized receipt (argv, exit status, versions, hashes). Wine, WSL and CI cannot
-   stand in for that host.
+5. If the change touches a backend, run it natively on Windows or Linux with `tools/qualify.py`
+   and attach the sanitized receipt; if it touches the game or capture, the host must be native
+   Windows. Wine, WSL and CI cannot stand in for that host.
 6. Open a pull request using the template. Fill in every section honestly, including
    "Not verified".
 

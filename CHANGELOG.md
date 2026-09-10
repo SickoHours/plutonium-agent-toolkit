@@ -7,7 +7,58 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+### Added
+
+- **Linux backend pins.** `dev setup` now downloads and verifies gsc-tool 1.4.10, OpenAssetTools
+  0.33.0, FFmpeg 9.0 (BtbN gpl linux64) and Blender 5.2.1 on Linux x64, from the same upstream
+  releases as the Windows pins, under `downloads.linux` in `backends.json`. Hashes were computed
+  from the downloaded archives on 2026-09-10; Blender's matches the `blender-5.2.1.sha256` file
+  on three official mirrors. CoDLuaDecompiler, Greyhound, Husky and C2M stay Windows-only.
+- **Tar extraction with the zip safety checks.** `.tar.gz`, `.tgz` and `.tar.xz` archives go
+  through the same plan as zips: entry and size bounds, no absolute paths, no `..`, no reserved
+  Windows names, no case collisions, single root under `strip_root`, declared sizes enforced
+  while copying, file modes preserved on POSIX. Links are refused unless a pin says
+  `"links": "copy"`, which writes in-archive relative symlinks as copies of their target (needed
+  for Blender's `lib/` on Linux; about 490 MiB extra). Binaries that upstream ships as 0644
+  (gsc-tool, OpenAssetTools) are marked executable by setup, recorded in the install receipt.
+  Download-cache files keep their real suffix.
+- **`tools/qualify.py`** runs the offline and backend tiers on Windows or Linux and writes
+  `<platform>-tier<N>-*.json`. The receipt names the OS (`os`, `platform_token`, `native_linux`,
+  `compatibility_layer` detects Wine and WSL) and redacts `/home/<name>` for any account.
+  `--media` extends Tier 2 with FFmpeg, Blender and Cast and runs `audio inspect|convert` and
+  `model inspect|convert` on synthetic inputs. `tools/qualify_windows.py` is a shim over it.
+- `tests/test_docs_consistency.py` fails on any "any OS" or macOS claim that is not qualified as
+  untested, and checks that `docs/SUPPORT.md` names both verified hosts and links only receipts
+  that exist.
+
+- **Native Arch Linux (Omarchy) receipts**: `docs/receipts/0.1.0b1/linux-tier1-offline.json` and
+  `linux-tier2-backends.json`, produced by `tools/qualify.py` on Omarchy 4.0.2 with Python 3.14.7.
+  Tier 2 downloaded and verified the four Linux pins plus Cast, built `examples/hello-zm` with the
+  real gsc-tool and OpenAssetTools (the `mod.ff` SHA-256 equals the Windows receipt's), and ran
+  `audio inspect|convert` on a generated tone and `model inspect|convert` on an OBJ cube through
+  real FFmpeg and Blender. `audio inspect`, `audio convert`, `model inspect` and `model convert`
+  move to `available`; their Windows native run is still owed.
+
 ### Changed
+
+- **Platform claims corrected.** The development tools are supported on Windows and Linux; the
+  verified hosts are Windows 11 x64 and Arch Linux (Omarchy). macOS is untested, has no pinned
+  backends and is not claimed: `doctor` and `dev setup` say so in a `note` on darwin, the PyPI
+  classifier is removed, and every user-facing document is reworded. 0.1.0b1's release notes and
+  pull request #13 said "any OS" and "Windows, Linux and macOS"; that was never backed by a pin or
+  a receipt.
+- `pat version`, `manifest` and `doctor` now report `platform.dev_tools_supported` (Windows and
+  Linux, not under Wine) separately from `platform.game_control_supported` (native Windows);
+  `supported` keeps meaning game control, which is what discovery's `available_here` used it for.
+- `tools/qualify.py` uses a fresh temporary toolkit home when `PAT_HOME` is unset, so the offline
+  tier's `configure` step cannot write a fake storage path into the user's real `config.json`;
+  and a Tier 3 receipt is not `passed` until the four required human observations are `true`.
+- `tools/private_scan.py` no longer matches the distribution name of the authoring machine, only
+  its compositor: a native Linux receipt must name the OS it ran on, exactly as the Windows
+  receipts name the Windows build. The scanner still blocks home and profile paths, private
+  thread and run identifiers, tokens and keys; usernames and hostnames are removed from receipts
+  by `tools/qualify.py`'s redactor, not by the scanner, and reviewers read every receipt before
+  it is committed.
 
 - **The development (file) tools now run on any OS, not Windows only.** `dev`, `gsc`, `ff`,
   `project`, `model`, `audio`, `image`, `lua` and `weapon` are no longer platform-gated: they
