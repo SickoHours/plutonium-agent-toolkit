@@ -192,7 +192,10 @@ def change(engine: Engine, action: str, argument: str | None, root: Path, proces
             current = before["fs_game"][5:] if before["fs_game"].startswith("mods/") else ""
             if not current:
                 raise Failure(INPUT_INVALID, "No mod is selected; nothing to reload")
-            target = mod_info(root, current)["path"]
+            row = mod_info(root, current)
+            if not row["available"]:
+                raise Failure(INPUT_INVALID, f"Selected mod {current!r} is not reloadable: {row['reason']}")
+            target = row["path"]
         if target == before["fs_game"] and action == "select-mod":
             return {"no_op": True, "state": before, "process": process}
         engine.registered("loadmod")
@@ -357,7 +360,8 @@ def execute_worker(action: str, argument: str | None) -> dict:
     from . import native
 
     validate_argument(action, argument)
-    root = storage() if action not in ("status", "launch") else None
+    # quit and status/launch never touch storage; do not fail them on a missing storage path.
+    root = storage() if action not in ("status", "launch", "quit") else None
     with native.lock():
         if action == "status":
             return {"windows": [{"pid": pid, "title": title} for pid, title in native.windows().items()],

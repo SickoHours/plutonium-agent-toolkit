@@ -56,7 +56,9 @@ class FakeEngine:
         return rows
 
 
-class GameControlTests(unittest.TestCase):
+class GameFixture(unittest.TestCase):
+    """setUp and helpers only; no tests, so subclasses do not re-run each other."""
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -80,6 +82,9 @@ class GameControlTests(unittest.TestCase):
     def last_load(self):
         return json.loads((control.state_dir() / "last-load.json").read_text())
 
+
+
+class GameControlTests(GameFixture):
     # ----- catalog and inventory -----
     def test_bus_depot_uses_the_engine_transit_token_for_survival(self):
         # T6 has no "busdepot" start location. Bus Depot survival is zstandard at location
@@ -610,3 +615,56 @@ class FourthReviewRegressionTests(unittest.TestCase):
         self.assertEqual(len(result["focus_events"]), 200)
         self.assertGreater(result["focus_event_count"], 200)
         self.assertFalse(result["focus_preserved"])
+
+
+class FifthReviewRegressionTests(GameFixture):
+    def test_reload_refuses_unpackaged_or_multiplayer_selected_mod(self):
+        self.mod("scripts_only", packaged=False)
+        engine = FakeEngine([dict(BASE, fs_game="mods/scripts_only")])
+        with self.assertRaises(Failure) as ctx:
+            self.change(engine, "reload-mod")
+        self.assertEqual(ctx.exception.code, "input_invalid")
+        self.assertEqual(engine.console.sent, [])
+        self.assertEqual(engine.verbs, [], "no registered-verb check before rejection")
+        self.mod("mp_x")
+        engine = FakeEngine([dict(BASE, fs_game="mods/mp_x")])
+        with self.assertRaises(Failure):
+            self.change(engine, "reload-mod")
+        self.assertEqual(engine.console.sent, [])
+
+    def test_quit_does_not_require_storage_configuration(self):
+        # No plutonium_storage_t6 configured in this PAT_HOME.
+        from plutonium_agent_toolkit.game import control as c
+
+        class StubConsole:
+            identity = {"pid": 1, "created": 2}
+            sent = []
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return False
+
+        captured = {}
+
+        def fake_change(engine, action, argument, root, process):
+            captured["root"] = root
+            return {"stopped": True}
+
+        class FakeNative:
+            @staticmethod
+            def lock():
+                import contextlib
+                return contextlib.nullcontext()
+            Console = StubConsole
+
+        os.environ[c.WORKER_TOKEN_ENV] = "b" * 32
+        try:
+            with patch.dict("sys.modules", {"plutonium_agent_toolkit.game.native": FakeNative}), \
+                 patch.object(c, "change", side_effect=fake_change):
+                result = c.execute_worker("quit", None)
+        finally:
+            os.environ.pop(c.WORKER_TOKEN_ENV, None)
+        self.assertTrue(result["stopped"])
+        self.assertIsNone(captured["root"])
