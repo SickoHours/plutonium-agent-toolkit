@@ -116,6 +116,8 @@ def catalog(job: Job, receipt_path: Path, capture_rel: str) -> dict:
     receipt = _read_json(receipt_path)
     _require(isinstance(receipt, dict) and {"root", "index", "index_sha256", "map", "pid", "start_ticks"} <= set(receipt),
              "Donor receipt needs root, index, index_sha256, map, pid, start_ticks")
+    _require(isinstance(receipt["root"], str) and receipt["root"], "Donor receipt root must be a non-empty string")
+    _require(isinstance(receipt["index_sha256"], str), "Donor receipt index_sha256 must be a string")
     root = Path(receipt["root"]).expanduser().resolve()
     _require(root.is_absolute() and root.is_dir(), "Donor root must be an existing absolute directory")
     index_path = job.input(_rel(root, receipt["index"]), limit=2 * 1024 * 1024)
@@ -202,8 +204,9 @@ def read_recipe(path: Path) -> dict:
     for f in required:
         _rel(Path("/donor"), f)
     variants = recipe["variants"]
-    _require(isinstance(variants, list) and 2 <= len(variants) <= 3, "Declare normal and pap variants, plus optional left")
-    roles = sorted(v.get("role") for v in variants if isinstance(v, dict))
+    _require(isinstance(variants, list) and 2 <= len(variants) <= 3 and all(isinstance(v, dict) for v in variants),
+             "Declare normal and pap variants (plus optional left) as objects")
+    roles = sorted(str(v.get("role")) for v in variants)
     _require(roles in (["normal", "pap"], ["left", "normal", "pap"]), "Variant roles must be normal+pap, optionally left")
     for v in variants:
         _require(set(v) == VARIANT_FIELDS, f"Variant fields must be exactly {sorted(VARIANT_FIELDS)}")
@@ -252,6 +255,8 @@ def execute(args, job: Job) -> dict:
     _require(not job.root.is_relative_to(library_path.parent), "Output must be outside the catalog job")
     old = _read_json(library_path)
     _require(isinstance(old, dict) and {"donor_receipt", "capture"} <= set(old), "library.json is not a weapon catalog")
+    _require(isinstance(old["donor_receipt"], str) and isinstance(old["capture"], str),
+             "library.json donor_receipt and capture must be strings")
     fresh = catalog(job, Path(old["donor_receipt"]), old["capture"])
     _require(old == fresh, "Library differs from the freshly verified donor; rebuild the catalog", INPUT_CHANGED)
     result = plan(recipe, fresh)

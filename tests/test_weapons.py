@@ -234,3 +234,97 @@ class WeaponReceiptFieldTests(WeaponFixture):
         code, row = invoke(["weapon", "catalog", str(self.receipt), "--capture", "capture-01/manifest.json", "--output", self.out()])
         self.assertEqual(row["error_code"], "input_invalid")
         self.assertIn("unknown fields", row["message"])
+
+
+class WeaponMalformedInputFuzzTests(WeaponFixture):
+    """Every malformed shape must come back as a structured input failure, never operation_failed."""
+
+    STRUCTURED = {"input_invalid", "input_changed", "input_missing", "input_limit"}
+
+    def reseal(self, manifest_obj):
+        text = json.dumps(manifest_obj)
+        (self.donor / "capture-01" / "manifest.json").write_text(text)
+        index = json.loads((self.donor / "index.json").read_text())
+        index["files"]["capture-01/manifest.json"] = sha(text.encode())
+        index_bytes = json.dumps(index).encode()
+        (self.donor / "index.json").write_bytes(index_bytes)
+        r = json.loads(self.receipt.read_text())
+        r["index_sha256"] = sha(index_bytes)
+        self.receipt.write_text(json.dumps(r))
+
+    def test_receipt_shapes(self):
+        base = json.loads(self.receipt.read_text())
+        for label, mutate in {
+            "root not str": lambda r: r.update(root=123),
+            "root list": lambda r: r.update(root=["x"]),
+            "index not str": lambda r: r.update(index={}),
+            "index_sha not str": lambda r: r.update(index_sha256=5),
+            "map not str": lambda r: r.update(map=None),
+            "pid weird": lambda r: r.update(pid={"a": 1}),
+            "adapter_index only": lambda r: r.update(adapter_index="x.json"),
+            "adapter_index not str": lambda r: r.update(adapter_index=1, adapter_index_sha256="0" * 64),
+        }.items():
+            r = dict(base)
+            mutate(r)
+            self.receipt.write_text(json.dumps(r))
+            code, row = invoke(["weapon", "catalog", str(self.receipt), "--capture", "capture-01/manifest.json", "--output", self.out()])
+            self.assertIn(row.get("error_code"), self.STRUCTURED, f"{label}: {row.get('error_code')} {row.get('message')}")
+        self.receipt.write_text(json.dumps(base))
+
+    def test_manifest_shapes(self):
+        good = json.loads((self.donor / "capture-01" / "manifest.json").read_text())
+        for label, mutate in {
+            "pages list": lambda m: m.update(pages=[]),
+            "pages value obj": lambda m: m["pages"].update({f"{8192:016x}.bin": {}}),
+            "captured_bytes str": lambda m: m.update(captured_bytes="x"),
+            "models not list": lambda m: m.update(models={}),
+            "model name int": lambda m: m["models"][0].update(name=5),
+            "tags not list": lambda m: m["models"][0].update(tags="j_root"),
+            "tags nested": lambda m: m["models"][0].update(tags=[["a"]]),
+            "lods not list": lambda m: m["models"][0].update(lods={}),
+            "lod materials not list": lambda m: m["models"][0].update(lods=[{"materials": "x"}]),
+            "lod material int": lambda m: m["models"][0].update(lods=[{"materials": [1]}]),
+            "animation row str": lambda m: m.update(animations=["x"]),
+            "map_before dict": lambda m: m.update(map_before={}, map_after={}),
+            "map_before name int": lambda m: m.update(map_before=[{"name": 1}], map_after=[{"name": 1}]),
+        }.items():
+            m = json.loads(json.dumps(good))
+            mutate(m)
+            self.reseal(m)
+            code, row = invoke(["weapon", "catalog", str(self.receipt), "--capture", "capture-01/manifest.json", "--output", self.out()])
+            self.assertIn(row.get("error_code"), self.STRUCTURED, f"{label}: {row.get('error_code')} {row.get('message')}")
+
+    def test_recipe_and_library_shapes(self):
+        code, row = invoke(["weapon", "catalog", str(self.receipt), "--capture", "capture-01/manifest.json", "--output", self.out()])
+        library = Path(row["result"]["output"]) / "library.json"
+        good = json.loads(self.recipe().read_text())
+        for label, mutate in {
+            "variants scalar": lambda r: r.update(variants=["a", "b"]),
+            "variant missing role": lambda r: r["variants"][0].pop("role"),
+            "variant role int": lambda r: r["variants"][0].update(role=1),
+            "clips list": lambda r: r["variants"][0].update(clips=["idle"]),
+            "clip value int": lambda r: r["variants"][0]["clips"].update(idle=1),
+            "family int": lambda r: r.update(family=1),
+            "adapter list": lambda r: r.update(adapter=[]),
+            "menu_route int": lambda r: r.update(menu_route=1),
+            "cap str": lambda r: r.update(resident_cap_bytes="1"),
+            "prefixes str": lambda r: r.update(keep_loaded_prefixes="ar_"),
+            "required_files str": lambda r: r.update(required_files="a.wav"),
+            "extra field": lambda r: r.update(extra=1),
+            "schema str": lambda r: r.update(schema="1"),
+        }.items():
+            r = json.loads(json.dumps(good))
+            mutate(r)
+            p = self.root / f"fuzz-{label.replace(' ', '_')}.json"
+            p.write_text(json.dumps(r))
+            code, row = invoke(["weapon", "plan", str(p), "--library", str(library), "--output", self.out()])
+            self.assertIn(row.get("error_code"), self.STRUCTURED, f"{label}: {row.get('error_code')} {row.get('message')}")
+        for label, lib in {
+            "library list": [],
+            "library null fields": {"donor_receipt": None, "capture": []},
+            "library missing capture": {"donor_receipt": "x"},
+        }.items():
+            bad = self.root / f"lib-{label.replace(' ', '_')}.json"
+            bad.write_text(json.dumps(lib))
+            code, row = invoke(["weapon", "plan", str(self.recipe()), "--library", str(bad), "--output", self.out()])
+            self.assertIn(row.get("error_code"), self.STRUCTURED, f"{label}: {row.get('error_code')} {row.get('message')}")
