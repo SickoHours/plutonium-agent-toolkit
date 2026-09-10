@@ -328,3 +328,37 @@ class WeaponMalformedInputFuzzTests(WeaponFixture):
             bad.write_text(json.dumps(lib))
             code, row = invoke(["weapon", "plan", str(self.recipe()), "--library", str(bad), "--output", self.out()])
             self.assertIn(row.get("error_code"), self.STRUCTURED, f"{label}: {row.get('error_code')} {row.get('message')}")
+
+
+class WeaponIdentityTests(WeaponFixture):
+    def reseal(self, manifest_obj, receipt_mutation):
+        text = json.dumps(manifest_obj)
+        (self.donor / "capture-01" / "manifest.json").write_text(text)
+        index = json.loads((self.donor / "index.json").read_text())
+        index["files"]["capture-01/manifest.json"] = sha(text.encode())
+        index_bytes = json.dumps(index).encode()
+        (self.donor / "index.json").write_bytes(index_bytes)
+        receipt = json.loads(self.receipt.read_text())
+        receipt["index_sha256"] = sha(index_bytes)
+        receipt_mutation(receipt)
+        self.receipt.write_text(json.dumps(receipt))
+
+    def test_missing_or_invalid_process_identity_never_matches_by_accident(self):
+        good = json.loads((self.donor / "capture-01" / "manifest.json").read_text())
+        cases = (
+            ("both missing pid", lambda d: d.pop("pid", None)),
+            ("both missing ticks", lambda d: d.pop("start_ticks", None)),
+            ("both None pid", lambda d: d.update(pid=None)),
+            ("both zero pid", lambda d: d.update(pid=0)),
+            ("both bool pid", lambda d: d.update(pid=True)),
+            ("both empty ticks", lambda d: d.update(start_ticks="")),
+            ("both bool ticks", lambda d: d.update(start_ticks=True)),
+        )
+        for label, mutate in cases:
+            manifest = json.loads(json.dumps(good))
+            mutate(manifest)
+            self.build_donor()                      # restore a clean receipt, then mutate both documents the same way
+            self.reseal(manifest, mutate)
+            code, row = invoke(["weapon", "catalog", str(self.receipt), "--capture", "capture-01/manifest.json", "--output", self.out()])
+            self.assertEqual(code, 1, label)
+            self.assertEqual(row["error_code"], "input_invalid", f"{label}: {row.get('message')}")

@@ -134,7 +134,13 @@ def catalog(job: Job, receipt_path: Path, capture_rel: str) -> dict:
     _require(isinstance(before, list) and len(before) == 1 and before == after and isinstance(before[0], dict),
              "Capture map identity changed during capture or is malformed")
     _require(before[0].get("name") == receipt["map"], "Donor map does not match the receipt")
-    _require(capture.get("pid") == receipt["pid"] and str(capture.get("start_ticks")) == str(receipt["start_ticks"]),
+    def _identity(doc, label):
+        pid, ticks = doc.get("pid"), doc.get("start_ticks")
+        _require(type(pid) is int and pid > 0, f"{label} pid must be a positive integer")
+        _require(type(ticks) in (str, int) and str(ticks).strip() != "" and type(ticks) is not bool,
+                 f"{label} start_ticks must be a non-empty string or integer")
+        return pid, str(ticks)
+    _require(_identity(receipt, "Donor receipt") == _identity(capture, "Capture manifest"),
              "Capture process identity differs from the receipt")
     pages = capture.get("pages")
     _require(isinstance(pages, dict) and 0 < len(pages) <= MAX_PAGES, "Snapshot page count exceeds bound")
