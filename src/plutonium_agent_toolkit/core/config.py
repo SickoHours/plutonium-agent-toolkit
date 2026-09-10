@@ -3,7 +3,7 @@
 Resolution order for the toolkit home:
     1. ``PAT_HOME`` environment variable (absolute path)
     2. ``%LOCALAPPDATA%\\PlutoniumAgentToolkit`` on Windows
-    3. ``~/.local/state/plutonium-agent-toolkit`` elsewhere (discovery/tests only)
+    3. ``~/.local/state/plutonium-agent-toolkit`` on Linux and macOS
 
 ``config.json`` holds only absolute paths the user or agent configured
 explicitly. Unknown keys are rejected so typos surface immediately.

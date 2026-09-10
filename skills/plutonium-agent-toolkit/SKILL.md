@@ -1,6 +1,6 @@
 ---
 name: plutonium-agent-toolkit
-description: Use the `pat` command to build, control and test Plutonium T6 Zombies mods on Windows for a user who describes outcomes and expects the agent to operate and adapt the tools. Any harness; the toolkit is meant to be configured and edited to fit the user's machine.
+description: Use the `pat` command to build, control and test Plutonium T6 Zombies mods for a user who describes outcomes and expects the agent to operate and adapt the tools. The build tools run on any OS; game control is Windows-only. Any harness; the toolkit is meant to be configured and edited to fit the user's machine.
 ---
 
 # Plutonium Agent Toolkit
@@ -10,7 +10,7 @@ describe the outcome; you install, configure, run, debug and, when the defaults 
 machine, adapt the toolkit itself. It is open source and malleable on purpose.
 
 Read the repository's `AGENTS.md` and `docs/FOR-AGENTS.md` for the full contract, and
-`docs/SUPPORT.md` for what each route has actually earned (`available` = native Windows receipt,
+`docs/SUPPORT.md` for what each route has actually earned (`available` = native receipt, Windows today,
 `implemented` = runs but no receipt, `offline` = unit-tested only, `deferred` = out of scope).
 
 ## Discover

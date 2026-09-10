@@ -81,7 +81,8 @@
       "optional": true,
       "provides": [
         "io_scene_cast/__init__.py"
-      ]
+      ],
+      "platform_independent": true
     },
     {
       "id": "greyhound",

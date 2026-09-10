@@ -1,9 +1,11 @@
-"""Platform gating. This release supports native Windows x64 only.
+"""Platform gating.
 
-Discovery (``manifest``, ``describe``, ``doctor``, ``version``) runs anywhere so
-contributors on other systems can read contracts and run unit tests. Every
-command that touches backends, the game or the display requires Windows and
-fails with ``unsupported_platform`` before doing anything else.
+The development (file-tool) routes run on any operating system: they drive pinned
+upstream backends as ordinary subprocesses. Only the routes that control a running
+game or capture its display require native Windows, because their transport is the
+Win32 console; those call :func:`require_windows` and fail with
+``unsupported_platform`` before doing anything else. Discovery (``manifest``,
+``describe``, ``doctor``, ``version``) runs anywhere.
 """
 from __future__ import annotations
 
@@ -54,7 +56,7 @@ def require_windows(operation: str) -> None:
         raise Failure(
             UNSUPPORTED_PLATFORM,
             f"{operation} requires native Windows; this host reports {system()}.",
-            "Discovery and unit tests run anywhere. Backend, game and capture operations run on Windows only in this release.",
+            "Development file tools run on any OS. Game control and capture use the Win32 console and need a native Windows host.",
         )
     if is_wine():
         raise Failure(

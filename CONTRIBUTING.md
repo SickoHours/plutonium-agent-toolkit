@@ -1,8 +1,8 @@
 # Contributing
 
 Contributions are welcome from humans and from development agents working on a human's behalf.
-Both follow the same path. The toolkit is Windows-only for this release; unit tests and
-documentation work run anywhere.
+Both follow the same path. The development (build) tools run on any OS; game control and capture are
+Windows-only. Unit tests and documentation work run anywhere.
 
 ## Set up a development environment
 
