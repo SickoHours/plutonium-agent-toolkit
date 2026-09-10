@@ -55,17 +55,20 @@ Every command gives you what you need to diagnose it without asking the user:
 
 ## What "verified" means, and honesty about it
 
-`docs/SUPPORT.md` gives every route an evidence level. Respect it in what you tell the user:
+Two vocabularies, do not mix them:
 
-| Level | Means |
-| --- | --- |
-| `available` | Ran on a native Windows host with a sanitized receipt in `docs/receipts/`. |
-| `implemented` | Code and offline tests exist; runs on Windows but has no native receipt yet. |
-| `offline` | Only unit-tested with fake backends. |
-| `deferred` | Registered contract, out of scope for this release. Answers `not_implemented`. |
+- **Route status**, from `pat manifest`: `available`, `implemented`, `planned`, `deferred`,
+  `unsupported`. This is the implementation state. `available` means a native receipt is linked in
+  `docs/SUPPORT.md`; `implemented` means the code runs but has no receipt yet; `planned` means a
+  registered contract not built for this release; `deferred` means out of scope and it answers
+  `not_implemented`.
+- **Evidence level**, defined canonically in `docs/SUPPORT.md`: `contract`, `offline`, `native`,
+  `game`, `accepted`. This is how far a route has actually been proven. Read the definitions there;
+  do not restate them from memory, so this page cannot drift from the matrix.
 
-Keep offline verified, installed, launched, playable, captured and player-accepted as separate
-statements. A mod that compiles and links is not a mod that plays. Say which one you have.
+Respect both in what you tell the user, and keep offline verified, installed, launched, playable,
+captured and player-accepted as separate statements. A mod that compiles and links is not a mod
+that plays. Say which one you have.
 
 ## Modding behaviours worth carrying
 

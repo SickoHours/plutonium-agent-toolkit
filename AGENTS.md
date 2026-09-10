@@ -38,10 +38,13 @@ Treat "make it work for this person's setup" as the job, not an exception to it.
 1. `README.md` for the product and its current status.
 2. `docs/FOR-AGENTS.md` for how to operate and adapt the toolkit, and the modding behaviours
    (foundation-first modular building, mod organization, the lessons that shaped the safety rules).
-3. `docs/SUPPORT.md` for what each route has actually earned. Never present a `planned` or
-   `implemented` route as verified, a Wine result as native Windows, or a compile as a gameplay
-   pass. `available` means a native Windows receipt exists; `implemented` means it runs but has no
-   receipt yet; `offline` means only unit-tested; `deferred` means out of scope for now.
+3. `docs/SUPPORT.md` for what each route has actually earned. It is canonical for the evidence
+   levels (`contract`, `offline`, `native`, `game`, `accepted`); read the definitions there and do
+   not restate them from memory. Separately, `pat manifest` reports a route's implementation
+   **status** (`available`, `implemented`, `planned`, `deferred`, `unsupported`). Never present a
+   `planned`, `deferred` or `implemented` route as verified, a Wine result as native Windows, or a
+   compile as a gameplay pass; a route reaches `available` only when `docs/SUPPORT.md` links a
+   native receipt for it.
 4. `pat manifest --json` once per session, then `pat describe <group> <action> --json` for a known
    route. Discovery never executes anything and needs no authorization.
 5. For development work, `CONTRIBUTING.md` and `docs/contributors/`.
@@ -72,6 +75,9 @@ These are how the toolkit is built, so that you can extend it without breaking i
 - Do not focus, minimize, kill or send keystrokes to the game as a workaround. Report the failure.
 - Do not elevate privileges, read process memory, launcher arguments or logins, or change registry
   keys beyond a documented per-user PATH entry.
+- Never ask the user for, or use, a password, token, launcher credential or login database. You do
+  not need any of them to install, configure, adapt or run this toolkit. If a step seems to require
+  one, that is a signal to stop and report, not to request it.
 - Keep the user's paths, receipts, recordings and logs on their machine. Sanitize before sharing.
 - There is no arbitrary console-string, memory-write or arbitrary-function route, and you should
   not add one. Adapting the toolkit means new typed, validated routes, not an escape hatch.

@@ -18,6 +18,9 @@ Every entry states what shipped, on which platform it was verified, and what rem
   installable skill.
 - `docs/SUPPORT.md` release bars split into a development-tools beta (met now) and a later
   game-control beta gated on issue #8; the first line tracks the current version.
+- Added `tests/test_docs_consistency.py`: the credentials prohibition, the route-status
+  vocabulary matching the code, and SUPPORT.md staying canonical for evidence levels are now
+  enforced by tests, not review alone.
 
 
 ### Added
