@@ -40,7 +40,7 @@ See [AGENTS.md](AGENTS.md) and [docs/FOR-AGENTS.md](docs/FOR-AGENTS.md).
 
 | Component | Group(s) | Purpose |
 | --- | --- | --- |
-| Development (Windows, Linux) | `dev`, `gsc`, `ff`, `project`, `model`, `audio`, `image`, `lua`, `weapon` | Scripts, fastfiles, models, media and saved-asset recipes through pinned upstream backends. Verified on Windows 11 and Arch Linux (Omarchy); macOS untested |
+| Development (Windows, Linux) | `dev`, `gsc`, `ff`, `project`, `module`, `model`, `audio`, `image`, `lua`, `weapon` | Scripts, fastfiles, models, media, saved-asset recipes and compositions of declared modules through pinned upstream backends. Verified on Windows 11 and Arch Linux (Omarchy); macOS untested |
 | Game control (Windows) | `game` | Launch T6 Zombies, select mods, load maps, verify loads through the external Win32 console. Native Windows only |
 | Testing | `capture`, `test` | **Deferred to a later release.** Contracts registered; routes refuse with `not_implemented` |
 
@@ -91,7 +91,9 @@ the one that built the toolkit.
 building (client layout, fastfiles, scripts, engine limits, foundations, crashes); the project's
 words are defined once in [CONTEXT.md](CONTEXT.md).
 [docs/playbooks/](docs/playbooks/README.md) holds finite recipes for the common tasks: first build,
-add a script, port a feature, four preflights, diagnose a crash, package and install.
+add a script, port a feature, four preflights, diagnose a crash, compose a pack, package and install.
+[docs/MODULES.md](docs/MODULES.md) specifies the module declaration and composition recipe that
+let an agent compose several mods, from local directories or cloned repositories, into one pack.
 [docs/TRACK-RECORD.md](docs/TRACK-RECORD.md) records what that workflow has produced, and the
 workflows that went beyond the packaged routes.
 
@@ -122,6 +124,7 @@ python tools/release_check.py
 | `src/plutonium_agent_toolkit/game/` | Game control routes |
 | `src/plutonium_agent_toolkit/testing/` | Capture and test routes |
 | `examples/hello-zm/` | The bundled first-run mod used by the qualification loop |
+| `examples/hello-pack/` | The smallest composition: both example modules on the stock game as one `mod.ff`; formats in `docs/MODULES.md` |
 | `docs/` | User guide, packaged route qualification, contributor docs, engineering history |
 | `docs/TRACK-RECORD.md`, `docs/track-record.json` | Generated track record: accepted modules by category, milestones with the scope of each verdict, workflows completed without a packaged route |
 | `CONTEXT.md` | The vocabulary every doc, receipt and skill uses, one definition each |

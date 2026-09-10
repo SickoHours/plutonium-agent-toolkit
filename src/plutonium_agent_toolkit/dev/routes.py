@@ -62,6 +62,13 @@ PLANNED = [
           status="implemented", owner=OWNER),
     Route("weapon", "plan", "Validate a normal/PAP weapon recipe against a catalog", "writes-output",
           status="implemented", owner=OWNER),
+    Route("module", "plan", "Resolve a composition of declared modules (dependency order, conflicts, base and map fit, "
+          "target collisions, resource budget) and hash every input without running a backend", "writes-output",
+          status="available", owner=OWNER,
+          notes="Formats: docs/MODULES.md. A module.json beside each project.json; a composition.json naming base, map and module directories."),
+    Route("module", "build", "Compile every module's scripts, stage every asset, link one mod.ff, read it back and compare every rawfile",
+          "writes-output", status="available", owner=OWNER,
+          notes="Same backends and readback as project build; the composition's fit and budget come from declarations, not from the game."),
 ]
 
 for route in AVAILABLE + PLANNED:

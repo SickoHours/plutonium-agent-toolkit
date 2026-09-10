@@ -523,6 +523,18 @@ def tier_backends(receipt, home: Path, work: Path, media: bool = False):
             if staged is not None:
                 receipt["notes"].append({"tier3_mod_ff": "<pat-home>/qualify/hello_zm/mod.ff"})
                 print(f"\nTier 3 step 3h uses this file:\n  pat game install-mod \"{staged}\" hello_zm --json", flush=True)
+    composition = ROOT / "examples/hello-pack/composition.json"
+    step(receipt, "module plan hello-pack", PAT + ["module", "plan", str(composition), "--output", str(work / "pack-plan"), "--json"])
+    pack = step(receipt, "module build hello-pack (real gsc-tool + OAT)", PAT + ["module", "build", str(composition), "--output", str(work / "pack-build"), "--json"], timeout=600)
+    if pack["passed"]:
+        result = pack["json"]["result"]
+        pack_ff = Path(result["output"]) / result["mod_ff"]
+        receipt["notes"].append({"hello_pack_mod_ff_sha256": hashlib.sha256(pack_ff.read_bytes()).hexdigest(),
+                                 "hello_pack_mod_ff_bytes": pack_ff.stat().st_size, "hello_pack_rawfiles_verified": result["rawfiles_verified"],
+                                 "hello_pack_modules": [m["id"] for m in result["modules"]]})
+        step(receipt, "project verify --inputs the pack receipt", PAT + ["project", "verify", str(Path(result["output"]) / "receipt.json"),
+                                                                       "--inputs", "--output", str(work / "pack-verify"), "--json"])
+        step(receipt, "ff inspect the pack mod.ff", PAT + ["ff", "inspect", str(pack_ff), "--output", str(work / "pack-inspect"), "--json"])
     bad = work / "bad.gsc"
     bad.write_text("main()\n{\n    this is not gsc ;;; \n}\n", encoding="utf-8")
     step(receipt, "gsc compile broken script fails structurally", PAT + ["gsc", "compile", str(bad), "--output", str(work / "bad-compile"), "--json"], expect_ok=False)

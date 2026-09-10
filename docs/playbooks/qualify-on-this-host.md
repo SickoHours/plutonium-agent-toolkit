@@ -47,7 +47,8 @@ and ends with a pull request the maintainers can merge. It is how the support ma
    ```
    Append `--media` to that command for the `audio` and `model` routes.
    Proof: `PASSED`, and the receipt's `steps[]` contains a passed step whose name covers your
-   route (for example `audio convert tone.wav 48 kHz mono`, `model convert cube.obj to cast`).
+   route (for example `audio convert tone.wav 48 kHz mono`, `model convert cube.obj to cast`,
+   `module build hello-pack (real gsc-tool + OAT)`).
 3. Read the receipt yourself before anything else: no username, hostname, home path or work
    directory survives (`tools/qualify.py` redacts them; you confirm). Run
    `python tools/private_scan.py`. Proof: `"ok": true`.

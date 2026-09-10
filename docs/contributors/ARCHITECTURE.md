@@ -6,7 +6,7 @@
 pat <group> <action> [options]
         │
         ├── core/        errors · envelope · config · receipts · platform · discovery
-        ├── dev/         backends (setup, doctor) · gsc · ff · project · model · audio · image · lua · weapon
+        ├── dev/         backends (setup, doctor) · gsc · ff · project · module · model · audio · image · lua · weapon
         ├── game/        status · info · launch · select-mod · load-map · reload-mod · check-load · mods · quit
         └── testing/     capture start/status/screenshot/mark/save-clip/stop · test plan/start/status/cancel/report
 ```

@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "name": "stock_hello_pack",
+  "base": "stock",
+  "map": "zm_transit",
+  "modules": ["../hello-zm", "../hello-zm-two"],
+  "loads": [],
+  "budget": {"threads": 4, "entities": 0, "hud": 0, "network_fields": 0}
+}

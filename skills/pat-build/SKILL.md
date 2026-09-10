@@ -12,8 +12,9 @@ and `docs/knowledge/gsc.md`.
 ## Steps
 
 1. Pick the playbook. New machine: `docs/playbooks/first-build.md`. Script change:
-   `docs/playbooks/add-a-script.md`. Otherwise plan then build the recipe. Proof: the
-   playbook is open and its preconditions are true.
+   `docs/playbooks/add-a-script.md`. Several declared modules into one pack:
+   `docs/playbooks/compose-a-pack.md` (`pat module plan|build`). Otherwise plan then build the
+   recipe. Proof: the playbook is open and its preconditions are true.
 2. Plan. `pat project plan <recipe> --output <new dir> --json`. Proof: `ok: true` and
    `result.backends_available` is `true`; when it is `false`, `result.backends[]` lists each
    backend by `id` (`gsc`, `linker`, `unlinker`) with `available` false for the missing ones.

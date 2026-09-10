@@ -19,7 +19,9 @@ verified, installed, launched, playable, captured, accepted. Words are defined i
    playbooks for the classes the change touches.
 3. **`pat-review`** before install: standards, spec, and the evidence level actually earned, as
    three separate reports.
-4. `docs/playbooks/package-and-install.md` puts the profile on disk without touching the game.
+4. `docs/playbooks/compose-a-pack.md` when several accepted modules should become one pack on a
+   named base and map (`pat module plan|build`; formats in `docs/MODULES.md`).
+5. `docs/playbooks/package-and-install.md` puts the profile on disk without touching the game.
    Live operations after that need the user's go and a qualified host.
 
 ## On-ramps
