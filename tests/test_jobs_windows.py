@@ -44,6 +44,19 @@ class WindowsJobRunnerTests(unittest.TestCase):
             self.assertEqual(caught.exception.code, BACKEND_TIMEOUT)
             os.unlink(job.root / "step-01.log")  # must not raise ERROR_SHARING_VIOLATION
 
+    def test_unreleased_log_records_the_wait_duration_on_the_step(self):
+        from unittest.mock import patch
+
+        from plutonium_agent_toolkit.core import _winjob
+
+        job = jobs.Job(self.root / "job-wait", "test", ["test"], timeout=30)
+        with patch.object(_winjob, "wait_until_released", return_value=False):
+            job.run([sys.executable, "-c", "pass"], timeout=10)
+        step = job.steps[-1]
+        self.assertTrue(step.get("log_still_open"))
+        self.assertIsInstance(step.get("log_release_wait_seconds"), float)
+        self.assertGreaterEqual(step["log_release_wait_seconds"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

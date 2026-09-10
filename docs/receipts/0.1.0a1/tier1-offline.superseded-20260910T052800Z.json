@@ -1500,8 +1500,7 @@
           {
             "file": ".qualify-home/config.json",
             "line": 2,
-            "pattern": "personal_home",
-            "excerpt": "C:\\\\Users\\\\m"
+            "pattern": "personal_home"
           }
         ],
         "allow": {
@@ -1539,7 +1538,11 @@
   ],
   "notes": [
     "work directory <work>",
-    "PAT_HOME=<pat-home>"
+    "PAT_HOME=<pat-home>",
+    {
+      "re_redacted": "2026-09-10T05:51:23+00:00",
+      "by": "tools/qualify_windows.py --redact-existing"
+    }
   ],
   "passed": false,
   "summary": {

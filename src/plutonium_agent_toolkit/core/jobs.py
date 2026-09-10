@@ -237,8 +237,10 @@ def _run_windows(job: Job, argv: list[str], cwd: Path, timeout: float, log: Path
     finally:
         # Our handle is closed now. A terminated backend tree's inherited handle to the log can
         # outlive process.wait() by a scheduler tick; wait so the caller can delete the job directory.
+        waited = time.monotonic()
         if not _winjob.wait_until_released(log):
             job.steps[-1]["log_still_open"] = True
+            job.steps[-1]["log_release_wait_seconds"] = round(time.monotonic() - waited, 3)
 
 
 def _wait(job: Job, process: subprocess.Popen, timeout: float, log: Path) -> int:

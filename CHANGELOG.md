@@ -76,6 +76,18 @@ Every entry states what shipped, on which platform it was verified, and what rem
   - The tier commands said `--output docs/receipts/qualify`, contradicting `docs/receipts/README.md`
     and this changelog; they say `--output docs/receipts` now.
 
+- Maintainer review of the Tier 1 and 2 receipts: the failed first-attempt receipt embedded
+  `private_scan`'s own hit excerpt, a truncated `C:\Users\m`, which the redactor missed because it only
+  knew the exact `USERPROFILE`; other accounts' and other drives' `Users` paths would also have
+  survived. `tools/qualify_windows.py` now replaces any drive-letter `Users` path for any account,
+  in either slash style, before the account-specific patterns; strips `excerpt` from embedded scan
+  hits; and gains `--redact-existing <file>`, which reapplies the current rules to a committed
+  receipt in place, is idempotent, notes the rewrite and runs on any platform. The affected receipt
+  was re-redacted with it, not hand-edited. `redactor()` is unit-tested directly with the
+  reviewer's five inputs plus the JSON-escaped form.
+- Windows job runner: when the step log is still held after the bounded wait, the step records
+  `log_release_wait_seconds` next to `log_still_open`.
+
 ### Verified
 
 - Native Windows Tier 1 (offline) receipt `docs/receipts/0.1.0a1/tier1-offline.json`: Windows 11

@@ -92,3 +92,56 @@ class QualifyToolUnitTests(unittest.TestCase):
         latest = json.loads((out / "tier1-offline.json").read_text(encoding="utf-8"))
         self.assertTrue(latest["passed"])
         self.assertIn(superseded[0], json.dumps(latest["notes"]))
+
+    def test_redactor_covers_any_users_path_regardless_of_account(self):
+        # Maintainer finding on PR #7: a truncated excerpt (C:\Users\m), another account's path and
+        # another drive's Users path all survived because only the exact USERPROFILE was known.
+        from unittest.mock import patch
+
+        with patch.dict(os.environ, {"USERPROFILE": r"C:\Users\maria"}):
+            redact = self.q.redactor()
+        cases = {
+            r"C:\Users\m": "<userprofile>",
+            r"C:\Users\maria\x": r"<userprofile>\x",
+            r"C:\Users\someoneelse\z": r"<userprofile>\z",
+            r"D:\Users\bob\y": r"<userprofile>\y",
+            "C:/Users/maria/y": "<userprofile>/y",
+            "C:\\\\Users\\\\m": "<userprofile>",  # JSON-escaped form, as private_scan quotes it
+        }
+        for raw, expected in cases.items():
+            self.assertEqual(redact(raw), expected, raw)
+        self.assertEqual(redact({"k": [r"C:\Users\m"]}), {"k": ["<userprofile>"]})
+
+    def test_finish_strips_private_scan_excerpts(self):
+        # The excerpt quotes the offending text itself; file, line and pattern are enough.
+        hit = {"file": ".qualify-home/config.json", "line": 2, "pattern": "personal_home", "excerpt": "C:\\\\Users\\\\m"}
+        receipt = self.q.new_receipt("offline")
+        receipt["steps"].append({"name": "private scan", "passed": False, "json": {"ok": False, "hits": [hit]}})
+        out = Path(self.temp.name) / "out"
+        self.q.finish(receipt, out, "tier1-offline.json", self.q.redactor())
+        saved = json.loads((out / "tier1-offline.json").read_text(encoding="utf-8"))["steps"][0]["json"]["hits"][0]
+        self.assertNotIn("excerpt", saved)
+        self.assertEqual((saved["file"], saved["line"], saved["pattern"]), (".qualify-home/config.json", 2, "personal_home"))
+
+    def test_redact_existing_rewrites_a_committed_receipt_in_place_once(self):
+        path = Path(self.temp.name) / "old.json"
+        stale = {"schema_version": 1, "tier": "offline", "environment": {}, "notes": ["kept"],
+                 "steps": [{"name": "private scan", "passed": False,
+                            "json": {"ok": False, "hits": [{"file": "x.json", "line": 2, "pattern": "personal_home",
+                                                             "excerpt": "C:\\\\Users\\\\m"}]}},
+                           {"name": "unit tests", "passed": False, "stderr_head": r"D:\Users\bob\y failed"}]}
+        path.write_text(json.dumps(stale, indent=2) + "\n", encoding="utf-8")
+        argv = [sys.executable, str(ROOT / "tools/qualify_windows.py"), "--redact-existing", str(path)]
+        proc = subprocess.run(argv, capture_output=True, text=True, cwd=ROOT)  # no --allow-non-windows: works anywhere
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        text = path.read_text(encoding="utf-8")
+        self.assertNotIn("Users", text)
+        data = json.loads(text)
+        self.assertNotIn("excerpt", data["steps"][0]["json"]["hits"][0])
+        self.assertIn(r"<userprofile>\y", data["steps"][1]["stderr_head"])
+        self.assertEqual(data["notes"][0], "kept")
+        self.assertTrue(any(isinstance(n, dict) and "re_redacted" in n for n in data["notes"]))
+        # Idempotent: a second run changes nothing and adds no note.
+        proc = subprocess.run(argv, capture_output=True, text=True, cwd=ROOT)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(path.read_text(encoding="utf-8"), text)
