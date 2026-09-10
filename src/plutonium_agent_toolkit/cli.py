@@ -205,6 +205,9 @@ def entry(argv: list[str] | None = None) -> int:
         row = failure(label, exc)
     except KeyboardInterrupt:
         row = failure(label, Failure("cancelled", "Interrupted"))
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError) as unexpected:
+        row = failure(label, Failure(OPERATION_FAILED, f"{type(unexpected).__name__}: {str(unexpected)[:400]}",
+                                     "This is a toolkit defect. Report it with the command you ran."))
     return emit(row)
 
 

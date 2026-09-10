@@ -57,10 +57,15 @@ def inventory(root: Path) -> dict[str, str]:
 def new_output_dir(path: Path) -> Path:
     """Create the job's output directory. It must not already exist."""
     p = Path(path).absolute()
-    if p.exists():
-        raise Failure(OUTPUT_EXISTS, f"Output directory already exists: {p}",
+    if p.is_symlink() or p.exists():
+        raise Failure(OUTPUT_EXISTS, f"Output path already exists (file, directory or link): {p}",
                       "Choose a new directory for every job; the toolkit never overwrites results.")
-    p.mkdir(parents=True)
+    try:
+        p.mkdir(parents=True)
+    except FileExistsError as exc:
+        raise Failure(OUTPUT_EXISTS, f"Output path already exists: {p}") from exc
+    except OSError as exc:
+        raise Failure(OUTPUT_LIMIT, f"Cannot create output directory {p}: {exc.strerror or exc}") from exc
     return p
 
 

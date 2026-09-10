@@ -164,7 +164,7 @@ class Job:
         """Bound the output directory while a backend runs; tolerate transient files."""
         count = total = 0
         for directory, dirs, files in os.walk(self.root, followlinks=False):
-            count += len(files)
+            count += len(dirs) + len(files)
             for name in files:
                 try:
                     total += (Path(directory) / name).stat().st_size

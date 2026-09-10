@@ -18,6 +18,9 @@ if "CRASH" in text:
 if "SPAM_LOG" in text:
     for _ in range(2000):
         print("x" * 80)
+if "MANY_DIRS" in text:
+    for i in range(40):
+        Path(f"dir-{i:02d}").mkdir(exist_ok=True)
 if "HIJACK_RECEIPT" in text:
     receipt = Path("receipt.json")
     receipt.unlink(missing_ok=True)

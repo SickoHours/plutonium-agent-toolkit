@@ -323,3 +323,46 @@ class SecondReviewRegressionTests(DevRouteTests):
         self.assertEqual(code, 1)
         self.assertEqual(row["error_code"], "backend_failed")
         self.assertIn("loading failure", row["message"])
+
+
+class ThirdReviewRegressionTests(DevRouteTests):
+    def test_extract_accepts_zero_byte_assets(self):
+        import base64
+        ff = self.root / "empty.ff"
+        ff.write_text(json.dumps({"zone": "e", "rawfiles": {"scripts/zm/empty.gsc": base64.b64encode(b"").decode()}}))
+        code, row = invoke(["ff", "extract", str(ff), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        self.assertTrue((Path(row["result"]["output"]) / "assets/scripts/zm/empty.gsc").is_file())
+
+    def test_asset_names_containing_error_words_do_not_fail_inspect(self):
+        import base64
+        ff = self.root / "named.ff"
+        names = {"scripts/fatal error.gsc": "A", "failed to load.txt": "B", "x/error loading.csv": "C"}
+        ff.write_text(json.dumps({"zone": "n", "rawfiles": {k: base64.b64encode(v.encode()).decode() for k, v in names.items()}}))
+        code, row = invoke(["ff", "inspect", str(ff), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        self.assertIn("rawfile scripts/fatal error.gsc", row["result"]["listing"])
+
+    def test_directory_count_is_bounded(self):
+        from unittest.mock import patch
+
+        from plutonium_agent_toolkit.core import jobs
+
+        src = self.root / "dirs.gsc"
+        src.write_text("main() { MANY_DIRS }\n")
+        with patch.object(jobs, "MAX_FILES", 10):
+            code, row = invoke(["gsc", "compile", str(src), "--output", self.out()])
+        self.assertEqual(code, 1)
+        self.assertEqual(row["error_code"], "output_limit")
+
+    def test_dangling_symlink_output_is_output_exists_json(self):
+        link = self.root / "dangling"
+        try:
+            link.symlink_to(self.root / "nowhere")
+        except (OSError, NotImplementedError):
+            self.skipTest("symlinks unavailable")
+        src = self.root / "a.gsc"
+        src.write_text("main(){}\n")
+        code, row = invoke(["gsc", "compile", str(src), "--output", str(link)])
+        self.assertEqual(code, 1)
+        self.assertEqual(row["error_code"], "output_exists")

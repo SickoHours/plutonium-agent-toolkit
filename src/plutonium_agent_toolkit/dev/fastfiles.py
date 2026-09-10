@@ -15,7 +15,9 @@ from ..core.receipts import sha256_file
 from .backends import executable
 
 IDENTIFIER = re.compile(r"^[A-Za-z0-9_]{1,64}\Z")
-LOAD_FAILURE = re.compile(r"(?im)^.*(?:failed to load|error loading|fatal error)")
+# Diagnostics only: anchored at line start so an asset *named* "fatal error.gsc" in a
+# `--list` inventory line (which starts with the asset type) cannot trip the check.
+LOAD_FAILURE = re.compile(r"(?im)^(?:\[?(?:error|fatal)\]?\s*[:\-]|failed to load\b|error loading\b|fatal error\b)")
 
 
 def add_parser(sub, common):
@@ -101,7 +103,7 @@ def execute(args, job: Job) -> dict:
         argv += ["-l", str(job.input(zone))]
     log = job.run([*argv, str(src)], timeout=args.timeout)
     text = check_readback_log(log)
-    if args.action == "extract" and not any(p.is_file() and p.stat().st_size for p in (job.root / "assets").rglob("*")):
+    if args.action == "extract" and not any(p.is_file() for p in (job.root / "assets").rglob("*")):
         raise Failure(BACKEND_FAILED, "No assets were extracted", log=log.name)
     return {"input": str(src), "inventory_log": log.name, "listing": text[:65536], "listing_truncated": len(text) > 65536,
             "verification": "OpenAssetTools readback; not gameplay acceptance"}
