@@ -2,7 +2,7 @@
 
 A playbook is a finite recipe: the commands to run, in order, each with the receipt field that
 proves it, and the conditions that end it. Read the playbook for the task before the first
-command, then run it. Read `docs/knowledge/` once for the facts behind the steps.
+command, then run it. Read `docs/knowledge/` once for the facts behind the steps, and `CONTEXT.md` for the words.
 
 | Playbook | Use it when |
 | --- | --- |
@@ -11,6 +11,8 @@ command, then run it. Read `docs/knowledge/` once for the facts behind the steps
 | [port-a-feature.md](port-a-feature.md) | A feature from another mod or title is wanted in a T6 mod |
 | [preflight-weapon-rig.md](preflight-weapon-rig.md) | A weapon's first-person model or animations are about to be packaged for the first time |
 | [preflight-hud-text.md](preflight-hud-text.md) | A mod draws text or icons on the HUD |
+| [preflight-scripts.md](preflight-scripts.md) | Any build with new or changed scripts is about to be installed for the first time |
+| [preflight-audio-memory.md](preflight-audio-memory.md) | A build adds sounds or large assets and is about to be installed for the first time |
 | [diagnose-a-crash.md](diagnose-a-crash.md) | The game dropped to the menu, closed or the player said "crashed" |
 | [package-and-install.md](package-and-install.md) | A build is verified and should go into the client's storage folder |
 

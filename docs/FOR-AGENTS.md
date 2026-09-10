@@ -91,9 +91,16 @@ the evidence ladder. Read `docs/knowledge/README.md` once per session.
 
 `docs/playbooks/` turns those facts into finite recipes with the same five sections each:
 preconditions, numbered steps with the receipt field that proves each, the commands that are
-wasted, stop conditions, and the separate facts to report. The two preflight playbooks (weapon
-rig, HUD text) exist because every failure of that class reached a player after a clean
-conversion and a passing suite; run them before the first package, not after the first crash.
+wasted, stop conditions, and the separate facts to report. The four preflight playbooks (scripts,
+weapon rig, HUD text, audio memory) exist because every failure of that class reached a player
+after a clean conversion and a passing suite; run them before the first package, not after the
+first crash.
+
+`CONTEXT.md` at the repository root defines the words those pages, the receipts and the skills
+use, one definition each with the synonyms to avoid. `skills/` holds one skill per flow:
+`pat-help` routes, and `pat-grill`, `pat-build`, `pat-port`, `pat-diagnose` and `pat-review` do
+the work. Three of them adapt Matt Pocock's skills (MIT); the unmodified originals are under
+`vendor/matt-pocock/`.
 
 ## Modding behaviours worth carrying
 

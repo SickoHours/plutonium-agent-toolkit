@@ -114,7 +114,11 @@ python tools/release_check.py
 | `src/plutonium_agent_toolkit/testing/` | Capture and test routes |
 | `examples/hello-zm/` | The bundled first-run mod used by the qualification loop |
 | `docs/` | User guide, support matrix, contributor docs, engineering history |
-| `skills/` | Installable agent skill |
+| `CONTEXT.md` | The vocabulary every doc, receipt and skill uses, one definition each |
+| `docs/knowledge/` | Facts an agent reads once per task: client layout, fastfiles, scripts, contracts, foundations, crashes, limits |
+| `docs/playbooks/` | Finite recipes with the receipt field that proves each step, including four preflight gate lists |
+| `skills/` | Installable agent skills: `pat-help` routes; `pat-grill`, `pat-build`, `pat-port`, `pat-diagnose`, `pat-review` do the work |
+| `vendor/matt-pocock/` | Unmodified upstream skills (MIT) that three of ours adapt; pinned by commit and hash |
 | `tools/` | Qualification runner, backends-page generator, private-material scanner and release check used by CI |
 
 ## License

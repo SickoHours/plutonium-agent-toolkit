@@ -27,6 +27,26 @@ An OpenAssetTools core dump is a tool crash, not a game crash. One clean startup
 crash-free game. A passing offline suite before a crash is normal: most failures that reach a
 player passed every offline check first.
 
+## Signatures seen after clean compiles and readbacks
+
+Each row is a build that passed compile, link and readback and then produced this line. The
+cause beside it is the one that was found and fixed, not the only possible one. After each fix a
+regression that consumes the failed artifact was added; the preflight playbooks collect them.
+
+| Log text | Cause found | Fix that worked |
+| --- | --- | --- |
+| `Unresolved external: precachemodel with 1 parameters` | Server-only builtin called from a client script | Remove the client call; keep the server precache |
+| `Unresolved external: setclientfield with 2 parameters` | The include that exports the method was missing | Add the direct include; resolve helpers per instance |
+| `bad animtree token: '{'` | Animation-tree leaves wrapped in an anonymous brace block | Emit a bare leaf list |
+| Server registered `<tree A>` where client registered `<tree B>` | Registration inserted at different positions on server and client | Register at the same relative position on both sides |
+| `Trying to assign 1 bits for netfield <name> but Client Field Set actor is out of space.` | New actor field bits in an already full composition | Remove the bits; reuse existing FX through owned entities |
+| `Could not load default asset 'defaulttracer' for asset type 'tracer'.` | Tracer reference registered before its default | Preserve parent registration order; require the default first |
+| `dobj for xmodel '<name>' has more than 160 bones` | Assembly counted one model, not hands plus attachments | Count the full assembly; remove inherited attachments |
+| `G_ParseSpawnVars: closing brace without data` | Whitespace between quoted tokens lost in an entity edit | Preserve token separators and every original key |
+| `Exceeded limit of 32 'sound' assets` | Aggregate sound assets across map plus mod | Merge banks; it is an aggregate-load concern |
+| `BG_AnimStateDef_Parse ... referenced missing <anim>` | Animation-state entry without a compiled tree reference | Add the reference to both compiled aitypes |
+| "Out of memory" dialog at map load | Preloaded sound-bank reservation plus the fastfile's virtual block | Stream large samples losslessly; keep critical one-shots loaded |
+
 ## Correlate
 
 - Which load produced it: the load ID and the `check-load` result before the failure.

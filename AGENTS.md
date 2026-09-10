@@ -38,8 +38,10 @@ Treat "make it work for this person's setup" as the job, not an exception to it.
 1. `README.md` for the product and its current status.
 2. `docs/FOR-AGENTS.md` for how to operate and adapt the toolkit, and the modding behaviours
    (foundation-first modular building, mod organization, the lessons that shaped the safety rules).
-   Then `docs/knowledge/README.md` (T6 and Plutonium facts, once per session) and the playbook
-   in `docs/playbooks/README.md` that matches the task.
+   Then `CONTEXT.md` for the words, `docs/knowledge/README.md` (T6 and Plutonium facts, once
+   per session) and the playbook in `docs/playbooks/README.md` that matches the task; run the
+   `docs/playbooks/preflight-*.md` gates before a build's first install. `skills/pat-help`
+   names the flow for a situation.
 3. `docs/SUPPORT.md` for what each route has actually earned. It is canonical for the evidence
    levels (`contract`, `offline`, `native`, `game`, `accepted`); read the definitions there and do
    not restate them from memory. Separately, `pat manifest` reports a route's implementation
