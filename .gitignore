@@ -13,4 +13,7 @@ __pycache__/
 /evidence/
 *.zip
 *.zip.sha256
+*.tar.gz
+*.tar.xz
+*.tgz
 .private-scan-report.json

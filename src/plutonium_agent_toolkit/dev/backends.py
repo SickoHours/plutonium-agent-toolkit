@@ -6,13 +6,22 @@ receipt. Rerunning setup verifies existing installs and refuses to overwrite a
 tree that changed. No vendor installer is executed, no PATH or registry is
 modified and no game is touched.
 
-Backends are cross-platform. A pin may carry per-platform downloads under
-``downloads`` keyed by ``windows``/``linux``/``darwin``; a bare top-level
-``url``/``sha256`` is treated as the Windows download for backward compatibility.
-Where the current platform has no pinned download, setup reports the backend as
+Backends are pinned per platform. A pin may carry per-platform downloads under
+``downloads`` keyed by ``windows`` / ``linux``; a bare top-level ``url`` /
+``sha256`` is treated as the Windows download for backward compatibility. Where
+the current platform has no pinned download, setup reports the backend as
 ``override-required`` (not an error): install it yourself and point the toolkit
 at it with ``PAT_BACKEND_<NAME>``. Executable names are resolved per OS (the
-``.exe`` suffix is dropped off Windows).
+``.exe`` suffix is dropped off Windows). macOS (``darwin``) is untested and has no
+pinned downloads; nothing is claimed for it.
+
+Archives may be ``.zip``, ``.tar.gz``/``.tgz`` or ``.tar.xz``. Both readers go
+through the same plan: entry and size bounds, no absolute paths, no ``..``, no
+Windows-reserved names, no case collisions, a single root when ``strip_root`` is
+set, and declared sizes enforced while copying. Links are refused unless the pin
+says ``"links": "copy"``, in which case a relative symlink that resolves to a
+regular file inside the same archive is written as a copy of that file (Blender's
+Linux build ships its shared libraries as versioned files plus symlinks).
 """
 from __future__ import annotations
 
@@ -20,12 +29,17 @@ import hashlib
 import json
 import os
 import platform as _platform
+import posixpath
 import re
+import shutil
 import stat
+import tarfile
 import time
+import urllib.parse
 import urllib.request
 import uuid
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from ..core import config
@@ -36,13 +50,26 @@ PINS = Path(__file__).with_name("backends.json")
 MAX_ARCHIVE = 2 * 1024**3
 MAX_UNPACKED = 6 * 1024**3
 MAX_ENTRIES = 150000
+MAX_LINK_HOPS = 8
 RESERVED = re.compile(r"(?i)^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?$")
+ARCHIVE_SUFFIXES = (".tar.gz", ".tar.xz", ".tgz", ".zip")
+PINNED_PLATFORMS = ("windows", "linux")
 
 
 def platform_token() -> str:
     """windows / linux / darwin for the host running this process."""
     system = _platform.system()
     return {"Windows": "windows", "Linux": "linux", "Darwin": "darwin"}.get(system, system.lower())
+
+
+def platform_note(token: str | None = None) -> str | None:
+    """A sentence for platforms that have no pins and no claim, or None for pinned ones."""
+    token = token or platform_token()
+    if token in PINNED_PLATFORMS:
+        return None
+    name = "macOS" if token == "darwin" else token
+    return (f"{name} is untested: no backend is pinned for it and nothing is claimed. "
+            "Supply each backend yourself with PAT_BACKEND_<NAME>; see docs/SUPPORT.md.")
 
 
 def resolve_download(item: dict, token: str | None = None) -> dict | None:
@@ -61,6 +88,22 @@ def resolve_download(item: dict, token: str | None = None) -> dict | None:
         return {"id": item["id"], "url": item["url"], "sha256": item.get("sha256"),
                 "bytes": item.get("bytes"), "strip_root": item.get("strip_root", False)}
     return None
+
+
+def provides_for(item: dict, token: str | None = None) -> list[str]:
+    """Relative paths a program's install must contain on this platform.
+
+    A per-platform download may list its own ``provides``; otherwise the Windows list applies with
+    the ``.exe`` suffix dropped off Windows.
+    """
+    token = token or platform_token()
+    dl = resolve_download(item, token)
+    if dl and dl.get("provides"):
+        return list(dl["provides"])
+    rows = list(item.get("provides", []))
+    if token == "windows":
+        return rows
+    return [r[:-4] if r.lower().endswith(".exe") else r for r in rows]
 
 
 def pins() -> dict:
@@ -86,66 +129,261 @@ def digest(path: Path) -> str:
     return h.hexdigest()
 
 
-def safe_extract(archive: Path, dest: Path, strip_root: bool = False) -> None:
-    with zipfile.ZipFile(archive) as z:
-        rows = z.infolist()
-        if len(rows) > MAX_ENTRIES or sum(r.file_size for r in rows) > MAX_UNPACKED:
-            raise Failure(INPUT_LIMIT, "Archive exceeds extraction limits")
-        seen: set[str] = set()
-        planned = []
-        root = None
-        for row in rows:
-            name = row.filename.replace("\\", "/")
-            path = PurePosixPath(name)
-            parts = list(path.parts)
-            if path.is_absolute() or not parts or ".." in parts or ":" in name or "\x00" in name:
-                raise Failure(INPUT_INVALID, f"Unsafe archive path: {name}")
-            if stat.S_ISLNK(row.external_attr >> 16):
-                raise Failure(INPUT_INVALID, "Archive links are refused")
-            if strip_root:
-                if root is None:
-                    root = parts[0]
-                if parts[0] != root:
-                    raise Failure(INPUT_INVALID, "Expected a single archive root")
-                parts = parts[1:]
-            if not parts:
-                continue
-            for part in parts:
-                if part.endswith((".", " ")) or RESERVED.match(part):
-                    raise Failure(INPUT_INVALID, f"Reserved Windows path component: {part}")
-            key = "/".join(parts).casefold()
-            if key in seen:
-                raise Failure(INPUT_INVALID, f"Case-colliding archive entries: {name}")
-            seen.add(key)
-            planned.append((row, dest.joinpath(*parts)))
-        total = 0
-        for row, target in planned:
+# ----- archives -------------------------------------------------------------------------
+
+def archive_suffix(url: str) -> str:
+    """The archive suffix of a pin URL: .zip, .tar.gz, .tgz or .tar.xz."""
+    path = urllib.parse.urlparse(url).path.lower()
+    for suffix in ARCHIVE_SUFFIXES:
+        if path.endswith(suffix):
+            return suffix
+    raise Failure(INPUT_INVALID, f"Unsupported archive type in pin URL: {url}",
+                  "Pins may point at .zip, .tar.gz, .tgz or .tar.xz archives")
+
+
+@dataclass
+class Member:
+    """One archive entry in a reader-independent form."""
+    name: str
+    kind: str            # dir | file | link | other
+    size: int
+    mode: int | None     # permission bits, or None when the archive does not record them
+    link: str | None     # link target as stored, for kind == link
+    raw: object
+
+
+class _ZipReader:
+    def __init__(self, archive: Path):
+        self.z = zipfile.ZipFile(archive)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.z.close()
+
+    def members(self) -> list[Member]:
+        rows = []
+        for row in self.z.infolist():
+            attrs = row.external_attr >> 16
             if row.is_dir():
+                kind = "dir"
+            elif stat.S_ISLNK(attrs):
+                kind = "link"
+            else:
+                kind = "file"
+            link = None
+            if kind == "link":
+                with self.z.open(row) as src:
+                    link = src.read(4096).decode("utf-8", errors="replace")
+            rows.append(Member(row.filename, kind, row.file_size, (attrs & 0o777) or None, link, row))
+        return rows
+
+    def open(self, member: Member):
+        return self.z.open(member.raw)
+
+
+class _TarReader:
+    def __init__(self, archive: Path):
+        self.t = tarfile.open(archive, "r:*")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.t.close()
+
+    def members(self) -> list[Member]:
+        rows = []
+        for m in self.t.getmembers():
+            if m.isdir():
+                kind = "dir"
+            elif m.isfile():
+                kind = "file"
+            elif m.issym() or m.islnk():
+                kind = "link"
+            else:
+                kind = "other"
+            rows.append(Member(m.name, kind, m.size, m.mode & 0o777, m.linkname if kind == "link" else None, m))
+        return rows
+
+    def open(self, member: Member):
+        stream = self.t.extractfile(member.raw)
+        if stream is None:
+            raise Failure(INPUT_INVALID, f"Archive member is not a regular file: {member.name}")
+        return stream
+
+
+def _reader(archive: Path):
+    name = archive.name.lower()
+    if name.endswith(".zip"):
+        return _ZipReader(archive)
+    if name.endswith((".tar.gz", ".tgz", ".tar.xz")):
+        return _TarReader(archive)
+    raise Failure(INPUT_INVALID, f"Unsupported archive: {archive.name}")
+
+
+@dataclass
+class Planned:
+    member: Member
+    parts: list[str]
+    copy_from: list[str] | None = None   # for links written as copies: the target's parts
+
+
+def _plan(members: list[Member], strip_root: bool, links: str | None) -> list[Planned]:
+    """Validate every entry before anything is written. Shared by the zip and tar readers."""
+    if len(members) > MAX_ENTRIES:
+        raise Failure(INPUT_LIMIT, "Archive exceeds extraction limits")
+    seen: set[str] = set()
+    planned: list[Planned] = []
+    root = None
+    for m in members:
+        name = m.name.replace("\\", "/")
+        path = PurePosixPath(name)
+        parts = [p for p in path.parts if p != "."]
+        if path.is_absolute() or ".." in parts or ":" in name or "\x00" in name:
+            raise Failure(INPUT_INVALID, f"Unsafe archive path: {name}")
+        if not parts:
+            # A bare "." or "./" directory entry is the destination itself (tar from `tar -C dir .`).
+            if m.kind == "dir":
+                continue
+            raise Failure(INPUT_INVALID, f"Unsafe archive path: {name}")
+        if m.kind == "other":
+            raise Failure(INPUT_INVALID, f"Unsupported archive member type: {name}")
+        if m.kind == "link" and links != "copy":
+            raise Failure(INPUT_INVALID, "Archive links are refused")
+        if strip_root:
+            if root is None:
+                root = parts[0]
+            if parts[0] != root:
+                raise Failure(INPUT_INVALID, "Expected a single archive root")
+            parts = parts[1:]
+        if not parts:
+            continue
+        for part in parts:
+            if part.endswith((".", " ")) or RESERVED.match(part):
+                raise Failure(INPUT_INVALID, f"Reserved Windows path component: {part}")
+        key = "/".join(parts).casefold()
+        if key in seen:
+            raise Failure(INPUT_INVALID, f"Case-colliding archive entries: {name}")
+        seen.add(key)
+        planned.append(Planned(m, parts))
+    by_key = {"/".join(p.parts): p for p in planned}
+    declared = 0
+    for p in planned:
+        if p.member.kind == "file":
+            declared += p.member.size
+        elif p.member.kind == "link":
+            p.copy_from = _resolve_link(p, by_key)
+            declared += by_key["/".join(p.copy_from)].member.size
+    if declared > MAX_UNPACKED:
+        raise Failure(INPUT_LIMIT, "Archive exceeds extraction limits")
+    return planned
+
+
+def _resolve_link(link: Planned, by_key: dict[str, Planned]) -> list[str]:
+    """Follow a relative link inside the archive to a regular file member, or refuse."""
+    current = link
+    for _ in range(MAX_LINK_HOPS):
+        target = current.member.link or ""
+        if not target or target.startswith("/") or "\x00" in target or ":" in target:
+            raise Failure(INPUT_INVALID, f"Archive link escapes the archive: {link.member.name}")
+        joined = posixpath.normpath(posixpath.join("/".join(current.parts[:-1]), target))
+        if joined.startswith("../") or joined == ".." or joined.startswith("/"):
+            raise Failure(INPUT_INVALID, f"Archive link escapes the archive: {link.member.name}")
+        found = by_key.get(joined)
+        if found is None:
+            raise Failure(INPUT_INVALID, f"Archive link points outside the archive: {link.member.name}")
+        if found.member.kind == "file":
+            return found.parts
+        if found.member.kind != "link":
+            raise Failure(INPUT_INVALID, f"Archive link does not resolve to a file: {link.member.name}")
+        current = found
+    raise Failure(INPUT_INVALID, f"Archive link chain is too long: {link.member.name}")
+
+
+def safe_extract(archive: Path, dest: Path, strip_root: bool = False, links: str | None = None) -> None:
+    """Extract a zip or tar archive into ``dest`` with the checks described in the module docstring.
+
+    ``links="copy"`` writes in-archive relative symlinks as copies of their target; any other
+    value refuses links. Permission bits recorded by the archive are applied on POSIX, with the
+    owner always able to read and write what was written.
+    """
+    with _reader(archive) as reader:
+        planned = _plan(reader.members(), strip_root, links)
+        total = 0
+        for p in planned:
+            target = dest.joinpath(*p.parts)
+            if p.member.kind == "dir":
                 target.mkdir(parents=True, exist_ok=True)
                 continue
+            if p.member.kind == "link":
+                continue
             target.parent.mkdir(parents=True, exist_ok=True)
-            with z.open(row) as src, target.open("xb") as out:
+            with reader.open(p.member) as src, target.open("xb") as out:
                 count = 0
                 while block := src.read(1024 * 1024):
                     count += len(block)
                     total += len(block)
-                    if count > row.file_size or total > MAX_UNPACKED:
+                    if count > p.member.size or total > MAX_UNPACKED:
                         raise Failure(INPUT_LIMIT, "Archive grew beyond declared size")
                     out.write(block)
+            _apply_mode(target, p.member.mode)
+        for p in planned:
+            if p.member.kind != "link":
+                continue
+            source = dest.joinpath(*p.copy_from)
+            target = dest.joinpath(*p.parts)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            total += source.stat().st_size
+            if total > MAX_UNPACKED:
+                raise Failure(INPUT_LIMIT, "Archive grew beyond declared size")
+            if target.exists():
+                raise Failure(INPUT_INVALID, f"Archive link collides with a file: {p.member.name}")
+            shutil.copyfile(source, target)
+            _apply_mode(target, stat.S_IMODE(source.stat().st_mode))
 
+
+def _apply_mode(target: Path, mode: int | None) -> None:
+    if os.name == "nt" or mode is None:
+        return
+    os.chmod(target, (mode & 0o777) | 0o600)
+
+
+def mark_executable(root: Path, relative_paths: list[str]) -> list[str]:
+    """Give the program's declared binaries an execute bit on POSIX.
+
+    Some upstream Linux archives (gsc-tool, OpenAssetTools) store their binaries as 0644. The
+    bytes are unchanged; only the mode is, and only for files the pin names in ``provides``.
+    """
+    if os.name == "nt":
+        return []
+    marked = []
+    for rel in relative_paths:
+        p = root / rel
+        if p.is_file() and not p.is_symlink():
+            mode = stat.S_IMODE(p.stat().st_mode)
+            if not mode & 0o100:
+                os.chmod(p, mode | 0o111)
+                marked.append(rel)
+    return marked
+
+
+# ----- download and install --------------------------------------------------------------
 
 def download(dl: dict, cache: Path) -> Path:
     if not dl.get("sha256"):
         raise Failure(INPUT_INVALID, f"{dl['id']} has no pinned hash for this platform; it cannot be installed by this release")
+    suffix = archive_suffix(dl["url"])
     cache.mkdir(parents=True, exist_ok=True)
-    archive = cache / f"{dl['id']}-{dl['sha256'][:12]}.zip"
+    archive = cache / f"{dl['id']}-{dl['sha256'][:12]}{suffix}"
     if archive.exists():
         if digest(archive) != dl["sha256"]:
             raise Failure(HASH_MISMATCH, f"Cached archive for {dl['id']} does not match its pin; delete it manually after review")
         return archive
     if not dl["url"].startswith("https://"):
         raise Failure(INPUT_INVALID, "Only HTTPS downloads are permitted")
-    tmp = archive.with_suffix(f".download-{uuid.uuid4().hex}")
+    tmp = archive.with_name(f"{archive.name}.download-{uuid.uuid4().hex}")
     started = time.monotonic()
     total = 0
     with urllib.request.urlopen(dl["url"], timeout=60) as src, tmp.open("xb") as out:
@@ -167,30 +405,33 @@ def install(item: dict, backends_dir: Path, cache: Path) -> dict:
     receipts = backends_dir / "receipts"
     receipts.mkdir(parents=True, exist_ok=True)
     receipt = receipts / f"{item['id']}.json"
-    dl = resolve_download(item)
+    token = platform_token()
+    dl = resolve_download(item, token)
     if dest.exists():
         if not receipt.is_file():
             raise Failure(BACKEND_FAILED, f"{dest} exists without an install receipt; preserving it")
         saved = json.loads(receipt.read_text(encoding="utf-8"))
         saved_platform = saved.get("platform")
-        if saved_platform and saved_platform != platform_token() and not item.get("platform_independent"):
+        if saved_platform and saved_platform != token and not item.get("platform_independent"):
             # A tree installed for another OS cannot be used here (its binaries will not resolve).
-            return {"id": item["id"], "action": "override-required", "platform": platform_token(),
+            return {"id": item["id"], "action": "override-required", "platform": token,
                     "installed_for": saved_platform, "hint": override_hint(item)}
         if (dl and saved["sha256"] != dl["sha256"]) or inventory(dest) != saved["files"]:
             raise Failure(BACKEND_FAILED, f"{item['id']}: installed files differ from the receipt; preserving them")
         return {"id": item["id"], "action": "verified", "files": len(saved["files"])}
     if dl is None:
-        return {"id": item["id"], "action": "override-required", "platform": platform_token(),
+        return {"id": item["id"], "action": "override-required", "platform": token,
                 "hint": override_hint(item)}
     archive = download(dl, cache)
     stage = backends_dir / f"{item['id']}.staging-{uuid.uuid4().hex}"
     stage.mkdir(parents=True)
-    safe_extract(archive, stage, dl.get("strip_root", False))
+    safe_extract(archive, stage, dl.get("strip_root", False), dl.get("links"))
+    executables = mark_executable(stage, provides_for(item, token))
     files = inventory(stage)
     stage.rename(dest)
     receipt.write_text(json.dumps({"id": item["id"], "url": dl["url"], "sha256": dl["sha256"],
-                                   "platform": platform_token(), "license": item.get("license"), "files": files}, indent=2) + "\n",
+                                   "platform": token, "license": item.get("license"),
+                                   "executables_marked": executables, "files": files}, indent=2) + "\n",
                        encoding="utf-8")
     return {"id": item["id"], "action": "installed", "files": len(files)}
 
@@ -207,10 +448,14 @@ def setup(only: list[str] | None = None, plan: bool = False) -> dict:
     else:
         items = [p for p in items if not p["optional"]]
     token = platform_token()
+    note = platform_note(token)
     if plan:
-        programs = [dict(p, download_available=resolve_download(p) is not None) for p in items]
-        return {"plan": True, "platform": token, "destination": str(backends_dir),
-                "programs": programs, "executes_installers": False}
+        programs = [dict(p, download_available=resolve_download(p, token) is not None) for p in items]
+        result = {"plan": True, "platform": token, "destination": str(backends_dir),
+                  "programs": programs, "executes_installers": False}
+        if note:
+            result["note"] = note
+        return result
     lock = backends_dir / "setup.lock"
     backends_dir.mkdir(parents=True, exist_ok=True)
     try:
@@ -223,12 +468,17 @@ def setup(only: list[str] | None = None, plan: bool = False) -> dict:
         results = [install(item, backends_dir, backends_dir / "download-cache") for item in items]
     finally:
         lock.unlink(missing_ok=True)
-    return {"destination": str(backends_dir), "platform": token, "results": results, "game_touched": False}
+    result = {"destination": str(backends_dir), "platform": token, "results": results, "game_touched": False}
+    if note:
+        result["note"] = note
+    return result
 
 
 # ----- executable resolution -----------------------------------------------------------
 
-# name -> (program_id, Windows-relative path). The .exe suffix is dropped off Windows.
+# name -> (program_id, Windows-relative path). Off Windows the .exe suffix is dropped; the
+# Linux archives of every pinned program lay their binaries out at exactly that path
+# (inspected 2026-09-10: gsc-tool 1.4.10, OpenAssetTools 0.33.0, BtbN FFmpeg, Blender 5.2.1).
 EXECUTABLES = {
     "gsc": ("gsc", "gsc-tool.exe"),
     "linker": ("oat", "Linker.exe"),
@@ -249,10 +499,11 @@ for _name, (_pid, _rel) in EXECUTABLES.items():
     PROGRAM_EXECUTABLES.setdefault(_pid, []).append(_name)
 
 
-def relative(name: str) -> str:
+def relative(name: str, token: str | None = None) -> str:
     """Per-OS relative path of a backend binary under ``<backends_dir>/<program_id>``."""
     _pid, win_rel = EXECUTABLES[name]
-    if os.name == "nt":
+    token = token or platform_token()
+    if token == "windows":
         return win_rel
     return win_rel[:-4] if win_rel.lower().endswith(".exe") else win_rel
 
@@ -304,7 +555,7 @@ def doctor() -> dict:
                 if ov is not None:
                     overrides[name] = str(ov)
                     per[name] = "override"
-                elif (backends_dir / item["id"] / relative(name)).is_file():
+                elif (backends_dir / item["id"] / relative(name, token)).is_file():
                     per[name] = "pinned"
                 else:
                     per[name] = "missing"
@@ -315,7 +566,7 @@ def doctor() -> dict:
                       "pinned" if kinds == {"pinned"} else "mixed")
         else:
             # Directory-resolved backend (e.g. Cast): check its declared files exist.
-            provides = item.get("provides", [])
+            provides = provides_for(item, token)
             present = bool(provides) and all((backends_dir / item["id"] / rel).exists() for rel in provides)
             source = "pinned" if present else "missing"
         rows.append({"id": item["id"], "name": item["name"], "optional": item["optional"],
@@ -323,8 +574,12 @@ def doctor() -> dict:
                      "path": str(backends_dir / item["id"]),
                      "download_available": resolve_download(item, token) is not None})
     required_ok = all(r["present"] for r in rows if not r["optional"])
-    return {"ok": required_ok, "platform": token, "backends_dir": str(backends_dir), "backends": rows,
-            "verification": "filesystem presence or override resolution only; execution and gameplay are separate facts"}
+    result = {"ok": required_ok, "platform": token, "backends_dir": str(backends_dir), "backends": rows,
+              "verification": "filesystem presence or override resolution only; execution and gameplay are separate facts"}
+    note = platform_note(token)
+    if note:
+        result["note"] = note
+    return result
 
 
 def executable(name: str) -> list[str]:

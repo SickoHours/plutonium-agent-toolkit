@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "note": "Pinned upstream Windows x64 distributions. Setup downloads over HTTPS, verifies SHA-256 and extracts into the configured backends directory. Nothing here is redistributed by this repository. Review each license before sharing an installed tree.",
+  "note": "Pinned upstream distributions, per platform. A bare top-level url/sha256 is the Windows x64 archive; downloads.<platform> carries other platforms (linux today). Setup downloads over HTTPS, verifies SHA-256 and extracts into the configured backends directory. Nothing here is redistributed by this repository. Review each license before sharing an installed tree. macOS has no pins and is not claimed.",
   "programs": [
     {
       "id": "oat",
@@ -15,7 +15,21 @@
         "Linker.exe",
         "Unlinker.exe",
         "ImageConverter.exe"
-      ]
+      ],
+      "downloads": {
+        "linux": {
+          "url": "https://github.com/Laupetin/OpenAssetTools/releases/download/v0.33.0/oat-linux.tar.gz",
+          "bytes": 7654034,
+          "sha256": "aa0b80f633c50d656b26d28b4899fd76bd994024ff0c669303ed5db52cc9e864",
+          "strip_root": false,
+          "provides": [
+            "Linker",
+            "Unlinker",
+            "ImageConverter"
+          ],
+          "note": "Archive stores the binaries as 0644; setup marks them executable. Hash pinned from a 2026-09-10 download."
+        }
+      }
     },
     {
       "id": "gsc",
@@ -28,7 +42,19 @@
       "optional": false,
       "provides": [
         "gsc-tool.exe"
-      ]
+      ],
+      "downloads": {
+        "linux": {
+          "url": "https://github.com/xensik/gsc-tool/releases/download/1.4.10/linux-amd64-release.tar.gz",
+          "bytes": 8258447,
+          "sha256": "257d03f4757203305e681736f76081e1e7210a2f881bb1261b6f740fa6fed5ec",
+          "strip_root": false,
+          "provides": [
+            "gsc-tool"
+          ],
+          "note": "Archive stores the binary as 0644; setup marks it executable. Hash pinned from a 2026-09-10 download."
+        }
+      }
     },
     {
       "id": "lua",
@@ -41,11 +67,12 @@
       "optional": true,
       "provides": [
         "CoDLuaDecompiler.exe"
-      ]
+      ],
+      "note": "Windows only (.NET build). On Linux set PAT_BACKEND_LUA to a working CoDLuaDecompiler if you have one; no Linux download is pinned."
     },
     {
       "id": "ffmpeg",
-      "name": "FFmpeg 9.0 (BtbN gpl-shared build)",
+      "name": "FFmpeg 9.0 (BtbN gpl builds)",
       "license": "GPL-2.0-or-later (build); see upstream",
       "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-08-23-15/ffmpeg-n9.0.1-27-g9b0578816c-win64-gpl-shared-9.0.zip",
       "bytes": 76445302,
@@ -55,7 +82,20 @@
       "provides": [
         "bin/ffmpeg.exe",
         "bin/ffprobe.exe"
-      ]
+      ],
+      "downloads": {
+        "linux": {
+          "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-08-23-15/ffmpeg-n9.0.1-27-g9b0578816c-linux64-gpl-9.0.tar.xz",
+          "bytes": 126636172,
+          "sha256": "6483bb419026c92ba6776d79f5dd651189748c0b61e2c704af50692fe720aa5d",
+          "strip_root": true,
+          "provides": [
+            "bin/ffmpeg",
+            "bin/ffprobe"
+          ],
+          "note": "gpl (statically linked) linux64 build of the same autobuild as the Windows pin. Hash pinned from a 2026-09-10 download."
+        }
+      }
     },
     {
       "id": "blender",
@@ -68,7 +108,20 @@
       "optional": true,
       "provides": [
         "blender.exe"
-      ]
+      ],
+      "downloads": {
+        "linux": {
+          "url": "https://mirrors.ocf.berkeley.edu/blender/release/Blender5.2/blender-5.2.1-linux-x64.tar.xz",
+          "bytes": 383688088,
+          "sha256": "a31f524fa99a527d3d52b7f5aaa68c34e1a19d5a1c9473f79c5cc610fd5b10e9",
+          "strip_root": true,
+          "links": "copy",
+          "provides": [
+            "blender"
+          ],
+          "note": "Matches blender-5.2.1.sha256 on download.blender.org mirrors (checked 2026-09-10 on three mirrors). The archive's 81 lib/ symlinks are written as copies (about 490 MiB extra) because links are otherwise refused."
+        }
+      }
     },
     {
       "id": "cast",

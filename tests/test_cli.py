@@ -116,11 +116,12 @@ class ConfigTests(IsolatedHome):
         self.assertFalse(row["result"]["executes_installers"])
         self.assertTrue(all(not p["optional"] for p in row["result"]["programs"]))
         if os.name != "nt":
-            # No Windows gate: a platform with no pinned build reports override-required, not an error.
-            code, row = invoke(["dev", "setup", "--only", "gsc"])
+            # No Windows gate: a backend with no pinned build for this platform reports
+            # override-required, not an error. CoDLuaDecompiler is Windows-only (.NET).
+            code, row = invoke(["dev", "setup", "--only", "lua"])
             self.assertEqual(code, 0, row)
-            gsc = next(r for r in row["result"]["results"] if r["id"] == "gsc")
-            self.assertEqual(gsc["action"], "override-required")
+            lua = next(r for r in row["result"]["results"] if r["id"] == "lua")
+            self.assertEqual(lua["action"], "override-required")
             self.assertEqual(row["result"]["platform"], backends.platform_token())
 
 

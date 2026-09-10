@@ -2,8 +2,7 @@
 
 A ``Job`` owns exactly one output directory that did not exist before. Every
 backend it runs is a child process whose whole tree is terminated on timeout,
-cancellation or exit: a Job Object on Windows, a process group elsewhere (used
-only by unit tests; execution routes are Windows-gated at the CLI). Output size,
+cancellation or exit: a Job Object on Windows, a process group on Linux. Output size,
 file count and log size are bounded. ``receipt.json`` is written when the job
 starts, after every step and on every exit path, including failure.
 """
