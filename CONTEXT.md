@@ -149,6 +149,15 @@ _Avoid_: supported, working, ready
 scope in the receipt.
 _Avoid_: tested, verified (say which level)
 
+**Packaged route**: A `pat` command with a registered contract, a receipt shape and a row in
+`docs/SUPPORT.md`. The qualification matrix grades packaged routes only.
+_Avoid_: supported feature, capability, "the toolkit can"
+
+**Track record**: The generated record (`docs/TRACK-RECORD.md`) of what agents have produced
+with this environment, including workflows that had no packaged route. Descriptive and scoped
+per verdict; never a promise about another base, map or machine.
+_Avoid_: portfolio, proof of support, benchmark
+
 **Build evidence**: The separate facts stated about one mod build, in order: offline verified,
 installed, launched, loaded, playable, captured, accepted. Each is its own sentence; say the
 highest reached and the first not reached.

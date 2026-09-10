@@ -15,6 +15,10 @@ backend tools live in one place. It assumes **you** will read the state of their
 So when you set it up for someone, your job is not "run the documented commands and stop if one
 does not fit". It is "make this work here". That is expected, and the toolkit is shaped for it.
 
+That includes driving tools that have no packaged route. `docs/TRACK-RECORD.md` lists the modules
+this way of working has produced and the workflows that went beyond the routes; treat it as the
+demonstration, and `docs/SUPPORT.md` as the strict grade of the routes themselves.
+
 ## Adapt to the machine, in this order
 
 1. **Configuration.** `pat configure --plutonium-storage-t6 <path> [--plutonium-launcher <path>]

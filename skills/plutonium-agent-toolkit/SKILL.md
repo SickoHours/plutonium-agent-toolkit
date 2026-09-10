@@ -17,6 +17,9 @@ macOS is untested and not claimed; say so if the user is on one.
 ## Where things are
 
 - `CONTEXT.md`: the words. One definition each, with the synonyms to avoid; use them exactly.
+- `docs/TRACK-RECORD.md`: what has been built this way, with the scope of each verdict, and the
+  workflows that went beyond the packaged routes. Read it before telling a user something is
+  impossible; `docs/SUPPORT.md` grades the routes, not the ceiling.
 - `docs/knowledge/README.md`: the facts (client layout, fastfiles, scripts, contracts, foundations,
   crash classes, engine limits). Read the page for the task once per session, then work from it.
 - `docs/playbooks/`: the steps. First build, add a script, port a feature, diagnose a crash,

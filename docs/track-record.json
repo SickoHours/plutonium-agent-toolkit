@@ -1,0 +1,319 @@
+{
+  "schema": 1,
+  "source": "Private module registry and reviewed acceptance records of the authoring workspace",
+  "registry_reviewed_at": "2026-09-10T08:04:07.923197+00:00",
+  "milestones_reviewed_on": "2026-09-10",
+  "totals": {
+    "entries": 165,
+    "accepted": 107
+  },
+  "counting": "One implementation family per row; PAP/alternate/internal forms are not additional ports. Reawakened and native same-name guns remain distinct implementations. Support and program rows are not weapon counts.",
+  "status_definitions": {
+    "accepted-scoped": "Owner acceptance in stated legacy scope, which may be broad or presentation-only; not automatically independently modular.",
+    "accepted-report-unbound": "Owner success report lacks exact tested package/map binding.",
+    "pending": "Source/candidate exists but reviewed evidence does not establish player acceptance.",
+    "failed-or-paused": "Player failure or paused work; repairs do not inherit acceptance.",
+    "preview": "Incomplete presentation/behavior preview."
+  },
+  "scope_note": "Every acceptance is scoped to the exact package, base and map in its private receipt. Acceptance does not transfer to another base, map, composition, co-op play or measured performance.",
+  "categories": [
+    {
+      "category": "firearms-reawakened",
+      "entries": 43,
+      "accepted": 43,
+      "by_status": {
+        "accepted-scoped": 43
+      }
+    },
+    {
+      "category": "wonder-weapons",
+      "entries": 26,
+      "accepted": 20,
+      "by_status": {
+        "accepted-scoped": 17,
+        "accepted-report-unbound": 3,
+        "failed-or-paused": 2,
+        "pending": 4
+      }
+    },
+    {
+      "category": "firearms-native-ports",
+      "entries": 11,
+      "accepted": 11,
+      "by_status": {
+        "accepted-scoped": 11
+      }
+    },
+    {
+      "category": "gobblegums",
+      "entries": 21,
+      "accepted": 6,
+      "by_status": {
+        "accepted-scoped": 6,
+        "pending": 15
+      }
+    },
+    {
+      "category": "melee",
+      "entries": 13,
+      "accepted": 5,
+      "by_status": {
+        "accepted-scoped": 5,
+        "failed-or-paused": 2,
+        "preview": 6
+      }
+    },
+    {
+      "category": "perks",
+      "entries": 5,
+      "accepted": 5,
+      "by_status": {
+        "accepted-scoped": 5
+      }
+    },
+    {
+      "category": "tacticals",
+      "entries": 6,
+      "accepted": 5,
+      "by_status": {
+        "accepted-scoped": 5,
+        "pending": 1
+      }
+    },
+    {
+      "category": "perk-support",
+      "entries": 3,
+      "accepted": 3,
+      "by_status": {
+        "accepted-scoped": 3
+      }
+    },
+    {
+      "category": "powerups",
+      "entries": 10,
+      "accepted": 3,
+      "by_status": {
+        "accepted-scoped": 3,
+        "pending": 7
+      }
+    },
+    {
+      "category": "bosses",
+      "entries": 3,
+      "accepted": 2,
+      "by_status": {
+        "accepted-scoped": 2,
+        "pending": 1
+      }
+    },
+    {
+      "category": "equipment",
+      "entries": 4,
+      "accepted": 2,
+      "by_status": {
+        "accepted-scoped": 2,
+        "failed-or-paused": 1,
+        "pending": 1
+      }
+    },
+    {
+      "category": "firearms-other",
+      "entries": 1,
+      "accepted": 1,
+      "by_status": {
+        "accepted-scoped": 1
+      }
+    },
+    {
+      "category": "gum-support",
+      "entries": 1,
+      "accepted": 1,
+      "by_status": {
+        "accepted-scoped": 1
+      }
+    },
+    {
+      "category": "abilities",
+      "entries": 1,
+      "accepted": 0,
+      "by_status": {
+        "pending": 1
+      }
+    },
+    {
+      "category": "companions",
+      "entries": 1,
+      "accepted": 0,
+      "by_status": {
+        "pending": 1
+      }
+    },
+    {
+      "category": "core-services",
+      "entries": 2,
+      "accepted": 0,
+      "by_status": {
+        "pending": 2
+      }
+    },
+    {
+      "category": "effect-adapters",
+      "entries": 8,
+      "accepted": 0,
+      "by_status": {
+        "pending": 8
+      }
+    },
+    {
+      "category": "powerup-support",
+      "entries": 1,
+      "accepted": 0,
+      "by_status": {
+        "pending": 1
+      }
+    },
+    {
+      "category": "programs",
+      "entries": 1,
+      "accepted": 0,
+      "by_status": {
+        "pending": 1
+      }
+    },
+    {
+      "category": "specialists",
+      "entries": 3,
+      "accepted": 0,
+      "by_status": {
+        "pending": 3
+      }
+    },
+    {
+      "category": "weapon-support",
+      "entries": 1,
+      "accepted": 0,
+      "by_status": {
+        "pending": 1
+      }
+    }
+  ],
+  "workflow": [
+    "You describe the feature.",
+    "The agent researches the donor, extracts or recovers assets, adapts or writes tools, then builds and verifies the package offline.",
+    "The agent installs the build and launches the game under the shared live lock.",
+    "You playtest and give a scoped verdict; the agent records it against the exact package hash, base and map."
+  ],
+  "milestones": [
+    {
+      "id": "babygun",
+      "title": "Baby Gun / 31-79 JGb215",
+      "category": "wonder-weapons",
+      "accepted_on": "2026-09-05",
+      "base": "Zombies Declassified Beta 1",
+      "map": "Der Riese",
+      "how": "Ported with its shrink-and-stomp behaviour, miniature Hellhound coat textures and a real Pack-a-Punch path; runtime dog tags and same-frame contact kills were verified from logs before the player verdict.",
+      "scope": "Solo Der Riese: appearance, audio, shrink/stomp, miniature dogs and PAP.",
+      "quote": null
+    },
+    {
+      "id": "arsenal",
+      "title": "17-family wonder-weapon Arsenal",
+      "category": "wonder-weapons",
+      "accepted_on": "2026-09-06",
+      "base": "Zombies Declassified Beta 1",
+      "map": "Der Riese",
+      "how": "Five consecutive startup failures (unresolved builtins, a malformed animation state table, a projectile-effect table overflow, a missing rumble asset) were each diagnosed from logs and fixed by the agent before the accepted build.",
+      "scope": "Broad pool acceptance; individual modes, charge and soak cases not itemized. Co-op and other maps separate.",
+      "quote": "i tested most and omg they all work so good"
+    },
+    {
+      "id": "firearms",
+      "title": "Eleven native firearm ports",
+      "category": "firearms-native-ports",
+      "accepted_on": "2026-09-06",
+      "base": "Zombies Declassified Beta 1",
+      "map": "Der Riese",
+      "how": "Normal and Pack-a-Punch forms registered through the native weapon registry; the verdict was bound to fresh engine state (loaded profile, map, running server) and the package hash.",
+      "scope": "All eleven reported working; per-action, co-op and soak cases not itemized.",
+      "quote": "also just confirmed the firearms all work !!"
+    },
+    {
+      "id": "bosses",
+      "title": "Panzer Soldat and Brutus",
+      "category": "bosses",
+      "accepted_on": "2026-09-07",
+      "base": "Zombies Declassified Beta 1",
+      "map": "Der Riese",
+      "how": "Native actor implementations preserved and summoned through the developer menu; pursuit, flamethrower, claw grab, armour weak points and repeated summons were on the pre-load checklist.",
+      "scope": "Manually summoned Der Riese scope through the menu.",
+      "quote": "Panzer's fully ported, working great."
+    },
+    {
+      "id": "reawakened",
+      "title": "43 Reawakened normal/PAP pairs",
+      "category": "firearms-reawakened",
+      "accepted_on": "2026-09-08",
+      "base": "Zombies Declassified Beta 1",
+      "map": "Der Riese",
+      "how": "Fitted under the engine's byte-wide weapon index by measuring the live slot table read-only and substituting stock IDs from a reviewed roster manifest.",
+      "scope": "Accepted across three separate rosters, including both repaired scopes; the combined roster's box, wall-buy and PAP acceptance is pending.",
+      "quote": "Everything sounds good. All of the weapons were tested going good."
+    },
+    {
+      "id": "waw-perks",
+      "title": "World at War perks on four maps",
+      "category": "perks",
+      "accepted_on": "2026-09-08",
+      "base": "Zombies Declassified Beta 1",
+      "map": "Nacht der Untoten, Verruckt, Shi No Numa, Der Riese",
+      "how": "Perk machines placed and rendered per map with correct icons; installed file hashes were reverified against the build before the verdict was recorded.",
+      "scope": "Placement, machine and icon verdict on all four maps; not every perk effect, co-op or soak.",
+      "quote": "Okay, I just tested and it all works perfectly good. Everything is so beautiful. Consider this pass."
+    },
+    {
+      "id": "bloodhound",
+      "title": "Bloodhound and Meat Wagon (from Black Ops III Shadows of Evil)",
+      "category": "firearms-other",
+      "accepted_on": "2026-09-09",
+      "base": "Zombies Declassified Beta 1",
+      "map": "Der Riese",
+      "how": "Donor recovered by a read-only page snapshot of the user's already-loaded BO3 match, pinned by process identity, sealed into a hashed donor index and replayed offline; layouts decoded from Greyhound and HydraX source. The first install was rejected for a distorted first-person rig; the agent rewrote the animation encoder, then repaired the native left-hand slot, and that build was accepted.",
+      "scope": "Normal Bloodhound and PAP Meat Wagon on Der Riese after the native left-hand repair; a PAP projectile/audio follow-up, lifecycle, co-op, other maps and performance are separate.",
+      "quote": null
+    },
+    {
+      "id": "gobblegums-beta2",
+      "title": "GobbleGum machine and gums on Beta 2",
+      "category": "gobblegums",
+      "accepted_on": "2026-09-10",
+      "base": "Zombies Declassified Beta 2",
+      "map": "Der Riese",
+      "how": "Original machine art and animations, a memory repair and a purchase-flow replacement, rebuilt as a single module on the new base after the foundation cutover; the first Beta 2 module to reach playable Der Riese.",
+      "scope": "Five previously reported bugs confirmed fixed on this build; frame drops unresolved; not an all-gum, lifecycle, co-op or other-map verdict.",
+      "quote": null
+    }
+  ],
+  "crossings": [
+    {
+      "id": "bo3-page-capture",
+      "title": "Live BO3 donor capture",
+      "packaged_route": "`weapon catalog` and `weapon plan` consume the sealed donor; the capture itself has no packaged route",
+      "what_happened": "A read-only snapshot of an already-loaded Shadows of Evil match, process identity pinned by PID and start time, about 4.6 MB of pages sealed with SHA-256 for offline replay. Nothing was launched, restarted or written to the game.",
+      "reproducible_from": "The donor receipt and `bo3-page-capture-v1` manifest format in `docs/WEAPONS.md`; Greyhound and HydraX source for the layouts"
+    },
+    {
+      "id": "ipak-adapter",
+      "title": "T6 IPAK texture extraction on Linux",
+      "packaged_route": "none",
+      "what_happened": "The agent ported Greyhound's IPAK reader to a bounded Linux adapter, indexed a 13,366-entry base package and decoded selected images to DDS with validated dimensions.",
+      "reproducible_from": "Greyhound's `IPAKCache.cpp`; the adapter pattern in `docs/contributors/ADDING-A-BACKEND.md`"
+    },
+    {
+      "id": "husky-c2m",
+      "title": "Live map geometry capture (Husky and C2M)",
+      "packaged_route": "none",
+      "what_happened": "Both original exporters were driven against an already-loaded Nuketown under the live lock, every consumed byte re-verified against the process, with an offline replay that reproduces every artifact.",
+      "reproducible_from": "The upstream exporters' source; `docs/FOR-AGENTS.md` step 4 (add a route) once the adapter exists on the user's machine"
+    }
+  ]
+}
