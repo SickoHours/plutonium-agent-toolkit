@@ -7,9 +7,9 @@
     "platform": "Windows-11-10.0.26200-SP0",
     "machine": "AMD64",
     "native_windows": true,
-    "at": "2026-09-10T08:28:04+00:00",
+    "at": "2026-09-10T07:35:03+00:00",
     "windows_build": "10.0.26200",
-    "git_head": "55b183d52d70590ff303d447d76883e93e54cef1",
+    "git_head": "dd2242c1504ca0ab7d92247622eeff022d657740",
     "git_dirty": false,
     "pat_home_isolated": true
   },
@@ -21,7 +21,7 @@
         "launch_requested": true,
         "uri": "plutonium://play/t6zm",
         "game_window": {
-          "pid": 10676,
+          "pid": 28524,
           "title": "Plutonium T6 Zombies (r5346)"
         },
         "game_detected": true,
@@ -32,43 +32,37 @@
         "focus_events": [
           {
             "t": 0.0,
-            "pid": 14316,
-            "title": "",
+            "pid": 21160,
+            "title": "ChatGPT - Google Chrome",
             "event": "before-launch"
           },
           {
-            "t": 0.53,
-            "pid": 3644,
-            "title": "Terminal",
-            "event": "foreground-changed"
-          },
-          {
             "t": 0.78,
-            "pid": 3644,
+            "pid": 11504,
             "title": "bin\\plutonium-bootstrapper-win32.exe",
             "event": "foreground-changed"
           },
           {
             "t": 1.03,
-            "pid": 3644,
+            "pid": 11504,
             "title": "Plutonium r5346",
             "event": "foreground-changed"
           },
           {
             "t": 5.3,
-            "pid": 10676,
+            "pid": 28524,
             "title": "Plutonium T6 Zombies (r5346)",
             "event": "foreground-changed"
           },
           {
-            "t": 8.31,
-            "pid": 10676,
+            "t": 8.3,
+            "pid": 28524,
             "title": "Plutonium T6 Zombies (r5346)",
             "event": "game-detected"
           }
         ],
         "focus_events_truncated": false,
-        "focus_event_count": 6,
+        "focus_event_count": 5,
         "focus_preserved": false,
         "ready_for_handoff": false,
         "note": "Window detection is not a playable menu. Run game status/info and inspect the screen. Launcher login or update prompts are reported here, never answered."
@@ -81,36 +75,36 @@
       "json": {
         "schema_version": 1,
         "id": "<id>",
-        "created": 1789027479.2110155,
+        "created": 1789023685.1131995,
         "action": "select-mod",
-        "argument": "hello_zm",
+        "argument": "base",
         "process": {
-          "pid": 10676,
-          "created": 134335010439811151
+          "pid": 28524,
+          "created": 134334936745116763
         },
         "before": {
-          "fs_game": "",
-          "mapname": "",
+          "fs_game": "mods/zm_gobblegums",
+          "mapname": "zm_transit",
           "sv_running": "0",
           "sv_cheats": "0",
-          "g_gametype": "zclassic"
+          "g_gametype": "zstandard"
         },
         "expected": {
-          "fs_game": "mods/hello_zm",
+          "fs_game": "",
           "sv_running": "0"
         },
         "status": "engine-state-verified",
         "logs": {
           "zombies": {
-            "size": 29146,
+            "size": 1003805,
             "device": 9836587407776159154,
-            "inode": 6192449487691456,
-            "anchor": "1c62951cf136aee36f9a32af9639ae071398e8fb193805c7ef90bca39c5e8082"
+            "inode": 4785074604284910,
+            "anchor": "485d3ec610fe2edf8723f3d9545b92904f0d2d00a709586c7e5820b5842413a1"
           }
         },
         "after": {
-          "fs_game": "mods/hello_zm",
-          "mapname": "",
+          "fs_game": "",
+          "mapname": "zm_transit",
           "sv_running": "0",
           "sv_cheats": "0",
           "g_gametype": "zclassic"
@@ -121,65 +115,62 @@
     {
       "name": "last-load-check.json",
       "passed": false,
+      "json": {
+        "load_id": "<id>",
+        "verified": false,
+        "state": {
+          "fs_game": "mods/zm_gobblegums",
+          "mapname": "zm_transit",
+          "sv_running": "0",
+          "sv_cheats": "0",
+          "g_gametype": "zstandard"
+        },
+        "state_matches": false,
+        "logs": {
+          "zombies": {
+            "checked": true,
+            "bytes": 163827,
+            "error_lines": 0
+          }
+        },
+        "original_status": "engine-state-verified",
+        "ready_for_handoff": false,
+        "visual_checkpoint": "Inspect the actual game image for the expected menu or playable spawn and for delayed errors"
+      },
       "expected": "fresh, successful state",
-      "stderr_head": "stale: written before this Tier 3 run began"
+      "stderr_head": "state file present but does not record success"
     },
     {
       "name": "last-result.json",
       "passed": true,
       "json": {
         "ok": true,
-        "state": {
-          "fs_game": "mods/hello_zm",
-          "mapname": "",
-          "sv_running": "0",
-          "sv_cheats": "0",
-          "g_gametype": "zclassic"
-        },
         "process": {
-          "pid": 10676,
-          "created": 134335010439811151
+          "pid": 28524,
+          "created": 134334936745116763
         },
-        "load_id": "<id>",
-        "ready_for_handoff": false,
-        "load_check": {
-          "argv": [
-            "pat",
-            "game",
-            "check-load",
-            "<id>"
-          ]
-        },
-        "next": "Run the load check, then inspect an actual game image. A verified state is not a playable spawn.",
+        "stopped": true,
+        "method": "engine quit",
         "request_id": "<id>"
       },
       "expected": "fresh, successful state"
     },
     {
       "name": "install-mod hello_zm receipt",
-      "passed": true,
-      "json": {
-        "schema_version": 1,
-        "at": "2026-09-10T08:04:38+00:00",
-        "folder": "hello_zm",
-        "path": "mods/hello_zm/mod.ff",
-        "sha256": "0ed41cc5f5ce9faae086e3dcf4a019f67ffc2b040f0975d73b5d9d698ac87701",
-        "bytes": 384,
-        "source": "<pat-home>\\qualify\\hello_zm\\mod.ff",
-        "backup": "<pat-home>\\game\\mod-backups\\hello_zm-<id>",
-        "game_touched": false
-      },
-      "expected": "fresh install receipt"
+      "passed": false,
+      "json": null,
+      "expected": "fresh install receipt",
+      "stderr_head": "no fresh hello_zm install receipt"
     }
   ],
   "notes": [
     "work directory <work>",
     {
-      "tier3_began_unix": 1789027443.1919606
+      "tier3_began_unix": 1789019689.7037735
     },
     "Tier 3 commands were run by hand with per-command human authorization. Only state files written after the begin marker count, and each must record success. The human observations are required for level `game`; automated state alone is not a playable spawn.",
     {
-      "superseded": "tier3-game.superseded-20260910T082804Z.json"
+      "superseded": "tier3-game.superseded-20260910T073503Z.json"
     }
   ],
   "human_observations": {
@@ -190,14 +181,15 @@
     "hello_zm_line_visible_after_spawn": null,
     "quit_exited_cleanly": null,
     "plutonium_build": null,
-    "notes": "Final Tier 3 sequence on r5346 with per-command human authorization (earlier attempts kept as superseded receipts). Native, with fresh engine replies: launch through plutonium://play/t6zm (no launcher prompt; console then game window took focus about 5 s after the request), status, info, install-mod hello_zm (twice; the second with --replace after the mod-zone naming fix), select-mod hello_zm (verified fs_game change with the corrected mod.ff; the earlier, renamed mod.ff hung the client), and select-mod base plus quit in the previous sequence. Not verified: load-map from inside a running match (cold-starting a match from the frontend with console map is out of scope, issue #8: the client drops it with SV_Shutdown: hostquit right after the level loads); check-load therefore has no verified load; the hello-zm line on screen and a playable spawn were not observed through the toolkit. Town started from the Plutonium menu by hand is a playable spawn on this install. No game route qualifies at level game; install-mod qualifies at level native as a file-only route."
+    "notes": "Sequence run with per-command human authorization on r5346 (Plutonium launcher and bootstrapper binaries updated 04:53Z the same day; BO2 zone files unchanged since 2025-10): launch (no launcher prompt; console then game window took focus about 5 s after the request), status, info, load-map town, check-load (delivery_uncertain while still loading; a later check on a second load read 160 KB of new log with 0 error lines and state_matches false), select-mod zm_gobblegums (verified fs_game change), load-map town under the mod, select-mod base (verified), quit (stopped through the engine, window gone). Human observation: Town started from the Plutonium menu by hand is a playable spawn. Console-log diff: every toolkit-started load reached Initializing game and loaded the Town gump, then the client dropped the match with SV_Shutdown: hostquit and returned to the menu; menu-started matches on the same install end with EXE_MATCHENDED. The gametype settings configs exec at frontend init in both paths, and the weapon and common_zm not-found lines are identical in the playable session, so neither is the cause; root cause is open in issue #8 and no command allowlist change was made. hello-zm was not installed or seen. No game route qualifies at level game. Remote control through the external console is demonstrated for loadmod, map, disconnect and quit."
   },
   "passed": false,
   "summary": {
     "steps": 5,
-    "passed": 4,
+    "passed": 3,
     "failed": [
-      "last-load-check.json"
+      "last-load-check.json",
+      "install-mod hello_zm receipt"
     ]
   }
 }
