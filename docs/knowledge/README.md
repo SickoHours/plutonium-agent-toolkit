@@ -16,6 +16,7 @@ uses are defined once in [`../../CONTEXT.md`](../../CONTEXT.md); read it before 
 | [foundations.md](foundations.md) | You choose what to build on, or name a test build |
 | [crashes.md](crashes.md) | The game dropped to the menu, closed, or the player said "crashed" |
 | [other-titles.md](other-titles.md) | Someone asks about Black Ops 1, World at War or Modern Warfare 3 |
+| [prior-art.md](prior-art.md) | You were asked for a feature and no donor or source is on disk |
 | [engine-limits.md](engine-limits.md) | A build compiled and linked but the engine rejected it at load; you are about to design to a number |
 
 Every fact here was learned on a real T6 Zombies install with real ports. Where a number is a

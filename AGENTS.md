@@ -65,6 +65,9 @@ the human needs a terminal-capable agent on the same machine as Plutonium.
 
 These are how the toolkit is built, so that you can extend it without breaking its guarantees:
 
+- A feature the user names without a donor is a search before it is a design:
+  `docs/playbooks/find-prior-art.md`. Do not build from a description what the community has
+  already ported or extracted, and never log in, pay or use credentials to reach a file.
 - One JSON document per invocation on stdout. Keep it and the exit status together; that pair is
   the receipt. Diagnostics go to log files, never to stdout.
 - Exit statuses: 0 ok, 1 failure, 2 usage, 130 cancelled. Error codes are stable strings in

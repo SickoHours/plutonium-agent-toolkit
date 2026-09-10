@@ -8,6 +8,7 @@ command, then run it. Read `docs/knowledge/` once for the facts behind the steps
 | --- | --- |
 | [first-build.md](first-build.md) | The toolkit is installed and nothing has been built on this machine yet |
 | [add-a-script.md](add-a-script.md) | A mod needs a new or changed server or client script |
+| [find-prior-art.md](find-prior-art.md) | The user names a feature and no donor or source is on disk |
 | [port-a-feature.md](port-a-feature.md) | A feature from another mod or title is wanted in a T6 mod |
 | [preflight-weapon-rig.md](preflight-weapon-rig.md) | A weapon's first-person model or animations are about to be packaged for the first time |
 | [preflight-hud-text.md](preflight-hud-text.md) | A mod draws text or icons on the HUD |
