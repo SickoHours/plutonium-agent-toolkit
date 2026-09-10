@@ -15,8 +15,10 @@ and `docs/knowledge/gsc.md`.
    `docs/playbooks/add-a-script.md`. Otherwise plan then build the recipe. Proof: the
    playbook is open and its preconditions are true.
 2. Plan. `pat project plan <recipe> --output <new dir> --json`. Proof: `ok: true` and
-   `result.backends_available` names every backend present. A backend reported absent stops
-   here: `pat dev setup` or a `PAT_BACKEND_<NAME>` override, then plan again.
+   `result.backends_available` is `true`; when it is `false`, `result.backends[]` lists each
+   backend by `id` with `available` false for the missing ones. A missing backend stops here:
+   `pat dev setup --only <program>` (the `id`'s program: `gsc`, `oat`) or a
+   `PAT_BACKEND_<ID>` override, then plan again.
 3. Build. `pat project build <recipe> --output <new dir> --json`. Proof: `ok: true`,
    `result.rawfiles_verified` counts every script, and `receipt.json` has `status: succeeded`.
    A `backend_failed` result: read the step log named in the receipt and report the backend's

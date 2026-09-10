@@ -26,9 +26,11 @@ cause. Diagnosis reads; it changes nothing.
    Proof: `result.state` with `sv_running`, `fs_game`, `mapname`. `sv_running: "0"` with the
    mod still selected is a dropped match, not a closed game.
 3. Read the log slice for that load: `storage/t6/main/console_zm.log` from the load's timestamp.
-   If a load ID is still valid (ten minutes), `pat game check-load <load-id> --json` reports
-   `logs.<log>.error_lines` for it (`checked: false` means the log gate is unverified, not clean).
-   Find the first error line, not the last.
+   If the client and its console are still running and the load ID is still valid (ten minutes),
+   `pat game check-load <load-id> --json` reports `logs.<log>.error_lines` for it
+   (`checked: false` means the log gate is unverified, not clean). After a closed-process
+   crash `check-load` cannot attach and fails; read the log slice directly. Find the first
+   error line, not the last.
 4. Classify with the table in `crashes.md`: script error, load refused, pool exhausted,
    allocation failure, renderer, host OOM, UI Lua, script panic. One class per failure; a second
    failure on the way out (a menu Lua error on disconnect) is recorded separately.

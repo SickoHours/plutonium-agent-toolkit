@@ -21,8 +21,10 @@ then rebuild the mod and prove the new bytes are in the package.
    pat gsc compile <mod>/scripts/<name>.<gsc|csc> [--includes <dir>] --output ../jobs/<name>-compile-001 --json
    ```
    Proof: `ok: true` and `result.files[]` lists one non-empty compiled file. A failure returns
-   `backend_failed` with `details.first_error`: the compiler's own first error line. Fix and
-   compile into a new output.
+   `backend_failed`; `details.first_error` carries the compiler's own first error line when the
+   compiler printed one (it exited zero with an `ERROR` line). When it is absent (the compiler
+   exited non-zero, or produced no or empty output) read the step log named in `details.log`
+   under the job directory for the message. Fix and compile into a new output.
 3. Add the script to the recipe's `scripts` array with its source path, its target inside the
    package (`scripts/zm/<name>.gsc` for a Zombies mod script) and, when the suffix does not say,
    its `instance`.

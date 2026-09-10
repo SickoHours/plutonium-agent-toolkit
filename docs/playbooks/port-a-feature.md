@@ -13,7 +13,9 @@ recipe-based T6 mod, on a clean base, with every offline gate before the first l
   will write the checklist first.
 - The source is on disk. For a fastfile source, `pat ff inspect <source.ff> --output <out> --json`
   lists what it ships; `pat ff extract <source.ff> --types <types> --output <out> --json` writes
-  the assets out. For a saved BO3 capture, `pat weapon catalog` inventories it.
+  the assets out. For a saved BO3 capture,
+  `pat weapon catalog <sealed-donor-receipt> --capture <capture-manifest> --output <out> --json`
+  inventories it.
 
 ## Steps
 
@@ -40,12 +42,16 @@ recipe-based T6 mod, on a clean base, with every offline gate before the first l
    pat project verify ../jobs/<module>-build-NNN/receipt.json --inputs --output ../jobs/<module>-verify-NNN --json
    ```
    Proof: `ok: true` both; `rawfiles_verified` matches the recipe.
-7. Read the package back for the engine-facing facts the linker does not check: the asset names
-   the engine will ask for, the weapon or alias fields you set, and anything the preflight
-   named:
+7. Read the package back for the engine-facing facts the linker does not check. `ff inspect`
+   lists the asset names the engine will ask for; `ff extract` writes the definitions out so
+   their fields can be read:
    ```sh
    pat ff inspect ../jobs/<module>-build-NNN/packages/mod.ff --output ../jobs/<module>-inspect-NNN --json
+   pat ff extract ../jobs/<module>-build-NNN/packages/mod.ff --types weapon,sound --output ../jobs/<module>-extract-NNN --json
    ```
+   Compare the extracted weapon and alias fields you set against the native counterpart by
+   reading the files; the toolkit has no definition-aware check, so a field it did not extract
+   as text stays unverified and the report must say so.
 8. Package and install per `package-and-install.md`; loading needs the user's go.
 
 ## Do not
