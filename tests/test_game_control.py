@@ -534,3 +534,26 @@ class WorkerGuardTests(unittest.TestCase):
             result = control.dispatch("status", None)
         self.assertRegex(seen["token"], r"^[0-9a-f]{32}$")
         self.assertEqual(result["request_id"], seen["token"])
+
+
+class ArgumentValidationTests(unittest.TestCase):
+    def test_extra_argument_on_no_argument_action_is_refused_before_worker(self):
+        with patch.object(control.subprocess, "run") as run:
+            for action in ("quit", "info", "status", "launch", "reload-mod", "fast-restart", "disconnect"):
+                with self.assertRaises(Failure, msg=action) as ctx:
+                    control.dispatch(action, "typo")
+                self.assertEqual(ctx.exception.code, "input_invalid")
+        run.assert_not_called()
+
+    def test_required_argument_actions_need_one(self):
+        with patch.object(control.subprocess, "run") as run:
+            for action in ("select-mod", "load-map", "check-load"):
+                with self.assertRaises(Failure, msg=action):
+                    control.dispatch(action, None)
+        run.assert_not_called()
+
+    def test_worker_side_validation_also_refuses(self):
+        with self.assertRaises(Failure):
+            control.validate_argument("quit", "typo")
+        control.validate_argument("quit", None)
+        control.validate_argument("load-map", "town")

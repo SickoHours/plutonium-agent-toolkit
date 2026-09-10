@@ -210,10 +210,13 @@ def run_game(args) -> dict:
     command = f"game {args.action}"
     route = find("game", args.action)
     if args.action == "mods":
+        if args.argument:
+            raise Failure(INVALID_ARGUMENTS, "game mods takes no argument")
         root = control.storage()
         return success(command, {"storage": str(root), "mods": control.inventory(root), "game_queried": False})
     if route.requires_windows and not os.environ.get("PAT_GAME_UNGATED"):
         platform.require_windows(command)
+    control.validate_argument(args.action, args.argument)
     for key in route.requires_config:
         config.require(key)
     result = control.dispatch(args.action, args.argument)

@@ -338,12 +338,23 @@ def launch(native, root: Path, observe_seconds: int = 90) -> dict:
 
 LIVE_ACTIONS = {"status", "info", "launch", "select-mod", "load-map", "reload-mod", "check-load", "quit",
                 "fast-restart", "map-restart", "disconnect"}
+ARGUMENT_ACTIONS = {"select-mod": "mod folder ID or 'base'", "load-map": "map ID", "check-load": "load ID"}
+
+
+def validate_argument(action: str, argument: str | None) -> None:
+    """Required-argument actions need one; every other action must have none."""
+    if action in ARGUMENT_ACTIONS:
+        if not argument:
+            raise Failure(INPUT_INVALID, f"game {action} needs a {ARGUMENT_ACTIONS[action]}")
+    elif argument:
+        raise Failure(INPUT_INVALID, f"game {action} takes no argument; got {argument!r}. Nothing was sent")
 
 
 def execute_worker(action: str, argument: str | None) -> dict:
     """Runs inside the bounded child under the toolkit mutex."""
     from . import native
 
+    validate_argument(action, argument)
     root = storage() if action not in ("status", "launch") else None
     with native.lock():
         if action == "status":
@@ -361,6 +372,7 @@ def dispatch(action: str, argument: str | None) -> dict:
     """Parent side: one worker, hard deadline, structured uncertainty."""
     if action not in LIVE_ACTIONS:
         raise Failure(NOT_IMPLEMENTED, f"game {action} is not a live route")
+    validate_argument(action, argument)
     request_id = uuid.uuid4().hex
     argv = [sys.executable, "-m", "plutonium_agent_toolkit.game.worker", action, argument or ""]
     env = dict(os.environ, **{WORKER_TOKEN_ENV: request_id})
