@@ -101,8 +101,8 @@ different person's agent, on a harness that did not build the toolkit, using the
 it is not a benchmark and there is no model-scoring gate. The contributor pilot
 ([PILOT-CONTRIBUTOR.md](PILOT-CONTRIBUTOR.md)) is the 1.0 quality check; the user pilot
 ([PILOT-USER.md](PILOT-USER.md)) is a soft, post-launch confidence check, not a hard gate. Capture
-and testing are a separate later release. (A future, optional idea: a `bench/` of repeatable modding
-tasks scored only on receipts and outputs, to compare models and harnesses. It gates nothing.)
+and testing are a separate later release. [BENCHMARK.md](BENCHMARK.md) scores repeatable offline
+modding tasks from receipts to compare models and harnesses; it gates nothing.
 
 ## Release mechanics
 

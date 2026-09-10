@@ -73,6 +73,13 @@ Every entry states what shipped, on which platform it was verified, and what rem
   on a changed input hash, never replay `delivery_uncertain`, read the playbook first, state
   unverified facts instead of inventing checks.
 
+- **Offline benchmark** (`docs/BENCHMARK.md`, `tools/benchmark.py`, `tools/benchmark/`): four
+  repeatable tasks (compile a broken script, build hello-zm, extract rawfiles, port a feature)
+  scored only from receipts and the files they inventory: required routes in order, final status
+  and error code, outputs present, readback contents, invocation count against a budget, wall
+  time. `examples/hello-zm-two` (a round announcer) is the port task's source. A baseline row from
+  the authoring agent on Linux is recorded; the benchmark gates nothing.
+
 ### Fixed
 
 - `ff link` and `project build` now fail when OpenAssetTools Linker prints an `ERROR` line and

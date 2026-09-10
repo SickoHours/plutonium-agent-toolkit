@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "game": "t6",
+  "mode": "zm",
+  "name": "round_announcer",
+  "scripts": [
+    {
+      "source": "scripts/round_announcer.gsc",
+      "target": "scripts/zm/round_announcer.gsc",
+      "instance": "server"
+    }
+  ],
+  "assets": [],
+  "loads": []
+}
