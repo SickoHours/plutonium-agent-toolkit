@@ -19,6 +19,19 @@ Every entry states what shipped, on which platform it was verified, and what rem
   practices that worked beside the failures. Two new glossary terms: packaged route, track record.
   `tests/test_track_record.py` keeps page, data and framing consistent. No route, evidence level
   or receipt changed.
+- **`docs/playbooks/qualify-on-this-host.md`** and a "When a route is unverified on your host"
+  section in `docs/SUPPORT.md`: a route with no receipt for the agent's OS is unmeasured, not
+  unsupported. The playbook runs `tools/qualify.py`, keeps the redaction gate, and ends in a pull
+  request that extends the matrix. `AGENTS.md`, `docs/FOR-AGENTS.md` and the skills route to it;
+  every "not run natively" row in the matrix now names that next action, and a test keeps it so.
+- `tools/qualify.py` covers more routes: Tier 1 runs `project init` and plans the result; Tier 2
+  decompiles the script it compiled; `--media` generates a two-bone rigged, skinned, animated
+  `.blend` with the installed Blender and runs `model rename-bones`, `retime` (the 1..10 frame range
+  verified to become 2..20), `transform` and `preview` on it. It refuses hosted CI runners (`CI`,
+  `GITHUB_ACTIONS` and similar) like Wine and WSL. The Linux receipts are regenerated (15 and 23
+  steps) and `gsc decompile`, `project init` and the four remaining `model` actions move to
+  `available` on Linux; their Windows run is the playbook's job.
+
 - **Linux backend pins.** `dev setup` now downloads and verifies gsc-tool 1.4.10, OpenAssetTools
   0.33.0, FFmpeg 9.0 (BtbN gpl linux64) and Blender 5.2.1 on Linux x64, from the same upstream
   releases as the Windows pins, under `downloads.linux` in `backends.json`. Hashes were computed

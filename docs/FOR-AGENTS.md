@@ -81,6 +81,13 @@ Two vocabularies, do not mix them:
   `game`, `accepted`. This is how far a route has actually been proven. Read the definitions there;
   do not restate them from memory, so this page cannot drift from the matrix.
 
+When `docs/SUPPORT.md` has no receipt for a development route on the user's Windows or Linux
+host, the honest statement is "unverified here", and the useful next action is to verify it:
+`docs/playbooks/qualify-on-this-host.md` runs the tiers, keeps the redaction gate, and ends in a
+pull request. The matrix is meant to be extended by whoever is on the machine, which is you. On
+macOS the matrix's answer stands (untested, unclaimed, no qualification host); game and capture
+routes off Windows are unsupported by transport, not unmeasured.
+
 Respect both in what you tell the user, and keep offline verified, installed, launched, playable,
 captured and player-accepted as separate statements. A mod that compiles and links is not a mod
 that plays. Say which one you have.
