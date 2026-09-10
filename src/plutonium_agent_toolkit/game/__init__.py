@@ -1,6 +1,7 @@
 """Game component: Plutonium T6 Zombies control on native Windows (Thread 2).
 
-Status in this release: contracts registered, implementation planned. Every
-route here refuses with ``not_implemented`` until Thread 2 lands native code
-with receipts from a Windows host. See docs/SUPPORT.md.
+Modules: native (Win32 console transport), engine (marker-bracketed queries),
+control (transitions, receipts, launch observation), worker (bounded child),
+routes (contracts). Every live route is Windows-gated and runs in one worker
+under the toolkit mutex. See docs/GAME-CONTROL.md and docs/SUPPORT.md.
 """

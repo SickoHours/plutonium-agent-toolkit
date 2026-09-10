@@ -43,6 +43,7 @@ HASH_MISMATCH = "hash_mismatch"
 GAME_NOT_FOUND = "game_not_found"
 GAME_AMBIGUOUS = "game_ambiguous"
 DELIVERY_UNCERTAIN = "delivery_uncertain"
+LOAD_UNVERIFIED = "load_unverified"
 NOT_IMPLEMENTED = "not_implemented"
 OPERATION_FAILED = "operation_failed"
 

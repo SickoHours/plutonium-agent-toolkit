@@ -9,6 +9,14 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Added
 
+- `game` group implemented behind the Windows gate: `status`, `mods`, `info`, `launch`,
+  `select-mod`, `reload-mod`, `load-map`, `fast-restart`, `map-restart`, `disconnect`,
+  `check-load`, `quit`. Native Win32 console transport (attach, screen read, one bounded input
+  write), marker-bracketed engine queries, verified map settings before `map`, DLC5 zone guard,
+  ordered mod transactions, receipt-bound `check-load` with log error counts only, `quit`
+  without force-kill. Launch goes through the fixed `plutonium://play/t6zm` URI and reports
+  request, detection and focus preservation as separate facts. One bounded worker per command
+  under a named mutex; uncertain outcomes are never replayed. `docs/GAME-CONTROL.md`.
 - `gsc compile|decompile`, `ff inspect|link|extract` and `project init|plan|build|verify` are
   implemented behind the Windows gate. Jobs run backends inside a Windows Job Object (process group
   elsewhere for tests), bound log and output size, and write `receipt.json` on every exit path.

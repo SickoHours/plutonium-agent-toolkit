@@ -79,8 +79,13 @@ def build_parser() -> Parser:
     fastfiles.add_parser(sub, common)
     projects.add_parser(sub, common)
 
+    g = sub.add_parser("game", help="Plutonium T6 Zombies control through the external console")
+    g.add_argument("action", choices=sorted(r.action for r in routes() if r.group == "game"))
+    g.add_argument("argument", nargs="?", help="Mod folder ID, map ID or load ID depending on the action")
+    g.add_argument("--json", action="store_true")
+
     # Planned groups accept any action so they can answer with a structured refusal.
-    for group in sorted({r.group for r in routes()} - {"dev", "gsc", "ff", "project"}):
+    for group in sorted({r.group for r in routes()} - {"dev", "gsc", "ff", "project", "game"}):
         g = sub.add_parser(group)
         g.add_argument("action")
         g.add_argument("rest", nargs=argparse.REMAINDER)
@@ -189,11 +194,39 @@ def run(argv: list[str]) -> dict:
     if group in JOB_GROUPS:
         return run_job(args, argv)
 
+    if group == "game":
+        return run_game(args)
+
     route = find(group, args.action)
     raise Failure(NOT_IMPLEMENTED,
                   f"Route {route.id} is {route.status} in {__version__}; nothing was executed.",
                   f"Owner: {route.owner}. See docs/SUPPORT.md for the qualification status of every route.",
                   route=route.to_dict())
+
+
+def run_game(args) -> dict:
+    from .game import control
+
+    command = f"game {args.action}"
+    route = find("game", args.action)
+    if args.action == "mods":
+        if args.argument:
+            raise Failure(INVALID_ARGUMENTS, "game mods takes no argument")
+        root = control.storage()
+        return success(command, {"storage": str(root), "mods": control.inventory(root), "game_queried": False})
+    if route.requires_windows and not os.environ.get("PAT_GAME_UNGATED"):
+        platform.require_windows(command)
+    control.validate_argument(args.action, args.argument)
+    for key in route.requires_config:
+        config.require(key)
+    result = control.dispatch(args.action, args.argument)
+    if not result.get("ok", True):
+        row = failure(command, Failure(result.get("error_code", "operation_failed"), result.get("message", ""),
+                                       result.get("hint", ""), **{k: v for k, v in result.items()
+                                                                 if k not in ("ok", "error_code", "message", "hint")}))
+        return row
+    result.pop("ok", None)
+    return success(command, result)
 
 
 def entry(argv: list[str] | None = None) -> int:

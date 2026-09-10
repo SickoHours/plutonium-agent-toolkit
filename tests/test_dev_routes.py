@@ -20,7 +20,9 @@ def invoke(argv):
     return code, json.loads(buf.getvalue())
 
 
-class DevRouteTests(unittest.TestCase):
+class DevRouteFixture(unittest.TestCase):
+    """setUp and helpers only; no tests, so subclasses do not re-run each other."""
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -48,6 +50,9 @@ class DevRouteTests(unittest.TestCase):
         self.n += 1
         return str(self.root / f"job-{self.n:03d}")
 
+
+
+class DevRouteTests(DevRouteFixture):
     def test_init_plan_build_verify_round_trip(self):
         code, row = invoke(["project", "init", "--name", "hello_test", "--output", self.out()])
         self.assertEqual(code, 0, row)
@@ -161,7 +166,7 @@ class DevRouteTests(unittest.TestCase):
         by_id = {r["id"]: r for r in row["result"]["routes"]}
         for rid in ("gsc.compile", "ff.link", "project.build", "project.verify"):
             self.assertEqual(by_id[rid]["status"], "implemented", rid)
-        for rid in ("game.launch", "capture.start", "test.start", "model.convert"):
+        for rid in ("capture.start", "test.start", "model.convert", "weapon.plan"):
             self.assertEqual(by_id[rid]["status"], "planned", rid)
 
 
@@ -169,7 +174,7 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class ReviewRegressionTests(DevRouteTests):
+class ReviewRegressionTests(DevRouteFixture):
     """Regressions for the findings raised on the first review of these routes."""
 
     def test_names_with_trailing_newline_are_rejected(self):
@@ -260,7 +265,7 @@ class ReviewRegressionTests(DevRouteTests):
         self.assertNotIn("#include", example.read_text())
 
 
-class SecondReviewRegressionTests(DevRouteTests):
+class SecondReviewRegressionTests(DevRouteFixture):
     """Regressions for the second review round."""
 
     def test_log_over_bound_at_exit_is_output_limit(self):
@@ -325,7 +330,7 @@ class SecondReviewRegressionTests(DevRouteTests):
         self.assertIn("loading failure", row["message"])
 
 
-class ThirdReviewRegressionTests(DevRouteTests):
+class ThirdReviewRegressionTests(DevRouteFixture):
     def test_extract_accepts_zero_byte_assets(self):
         import base64
         ff = self.root / "empty.ff"

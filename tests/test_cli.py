@@ -63,7 +63,7 @@ class DiscoveryTests(IsolatedHome):
         self.assertEqual(row["error_code"], "unknown_route")
 
     def test_planned_routes_refuse_with_not_implemented_and_run_nothing(self):
-        for argv in (["model", "convert", "x.cast"], ["game", "launch"], ["capture", "start"], ["test", "start"]):
+        for argv in (["model", "convert", "x.cast"], ["capture", "start"], ["test", "start"], ["weapon", "catalog"]):
             code, row = invoke(argv)
             self.assertEqual(code, 1, argv)
             self.assertEqual(row["error_code"], "not_implemented", argv)
