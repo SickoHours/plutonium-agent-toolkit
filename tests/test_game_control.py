@@ -733,3 +733,67 @@ class LaunchSettleTests(unittest.TestCase):
         self.assertFalse(result["game_detected"])
         self.assertGreaterEqual(result["focus_observed_seconds"], 20)
         self.assertIn("never appeared", result["focus_scope"])
+
+
+class SixthReviewRegressionTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        os.environ["PAT_HOME"] = self.temp.name
+        self.addCleanup(lambda: os.environ.pop("PAT_HOME", None))
+
+    def test_every_live_action_has_a_deadline_that_covers_its_internal_waits(self):
+        self.assertEqual(set(control.WORKER_DEADLINES), control.LIVE_ACTIONS)
+        # Mod transaction: before(8) + verb checks(2x8) + disconnect send(3)+state(30) + unload send(3)+state(30) + load send(3)+state(40)
+        self.assertGreater(control.WORKER_DEADLINES["select-mod"], 8 + 16 + 3 + 30 + 3 + 30 + 3 + 40)
+        self.assertGreater(control.WORKER_DEADLINES["reload-mod"], 8 + 16 + 3 + 30 + 3 + 30 + 3 + 40)
+        # Map load: before(8) + verb(8) + settings query(8) + send(3) + state(40)
+        self.assertGreater(control.WORKER_DEADLINES["load-map"], 8 + 8 + 8 + 3 + 40)
+        # Launch: observe(90) + settle(15)
+        self.assertGreater(control.WORKER_DEADLINES["launch"], 90 + control.LAUNCH_SETTLE_SECONDS)
+        # Quit: before(8) + verb(8) + send(3) + 20 s wait
+        self.assertGreater(control.WORKER_DEADLINES["quit"], 8 + 8 + 3 + 20)
+
+    def test_dispatch_uses_the_per_action_deadline(self):
+        seen = {}
+
+        def fake_run(argv, **kwargs):
+            seen["timeout"] = kwargs["timeout"]
+
+            class Completed:
+                stdout = json.dumps({"ok": True}).encode()
+                returncode = 0
+            return Completed()
+
+        with patch.object(control.subprocess, "run", side_effect=fake_run):
+            control.dispatch("select-mod", "x")
+        self.assertEqual(seen["timeout"], control.WORKER_DEADLINES["select-mod"])
+        with patch.object(control.subprocess, "run", side_effect=control.subprocess.TimeoutExpired("x", 200)):
+            with self.assertRaises(Failure) as ctx:
+                control.dispatch("select-mod", "x")
+        self.assertIn("200-second", ctx.exception.message)
+
+    def test_unregistered_uri_handler_is_a_structured_config_failure(self):
+        launcher = Path(self.temp.name) / "plutonium.exe"
+        launcher.write_bytes(b"MZ")
+        from plutonium_agent_toolkit.core import config
+        config.save({"plutonium_launcher": str(launcher)})
+
+        class Native:
+            @staticmethod
+            def windows():
+                return {}
+
+            @staticmethod
+            def foreground():
+                return {"pid": 1, "title": "agent"}
+
+        def refuse(uri):
+            raise OSError(1155, "No application is associated with the specified file for this operation")
+
+        with patch.object(control.os, "startfile", refuse, create=True):
+            with self.assertRaises(Failure) as ctx:
+                control.launch(Native, None)
+        self.assertEqual(ctx.exception.code, "config_missing")
+        self.assertFalse(ctx.exception.details["launch_requested"])
+        self.assertIn("no launch request was issued", ctx.exception.message)

@@ -51,6 +51,14 @@ Map IDs: `tranzit town farm bus-depot nuketown die-rise mob buried origins` (bas
   A launcher login or update prompt shows up as a foreground change and is never answered by the
   toolkit. Focus changes after the observation window are outside this claim.
 
+## Deadlines
+
+Each live command runs in one worker with a parent deadline sized to its longest legitimate path:
+20 s for `status`, 30 s for `info`, 45 s for `quit`, 60 s for `check-load`, 120 s for restarts and
+`disconnect`, 130 s for `launch`, 150 s for `load-map` and 200 s for `select-mod` and
+`reload-mod`. A deadline hit means the worker was stopped mid-transaction and the result is
+`delivery_uncertain`; the game itself is never touched by the timeout.
+
 ## Where state lives
 
 `%LOCALAPPDATA%\PlutoniumAgentToolkit\game\`: `last-load.json`, `last-load-check.json`,

@@ -24,7 +24,16 @@ from ..core.errors import (CONFIG_MISSING, DELIVERY_UNCERTAIN, INPUT_INVALID, IN
 from .engine import SETTINGS, Engine, parse_value
 
 MAPS_PATH = Path(__file__).with_name("maps.json")
-WORKER_SECONDS = 110
+# Parent deadline per action, derived from each transition's bounded internal waits
+# (state queries of 8/30/40 s, prompt waits of 3 s, registered-verb checks of 8 s)
+# plus margin. A parent that kills a worker mid-transaction can only report
+# delivery_uncertain, so the deadline must exceed the worst legitimate path.
+WORKER_DEADLINES = {
+    "status": 20, "info": 30, "check-load": 60, "quit": 45,
+    "launch": 90 + 15 + 25,                    # observe + settle + margin
+    "fast-restart": 120, "map-restart": 120, "disconnect": 120, "load-map": 150,
+    "select-mod": 200, "reload-mod": 200,      # before + disconnect(30) + unload(30) + load(40) + sends + verb checks
+}
 LOAD_RECEIPT_MAX_AGE = 600
 MAX_LOG_TAIL = 131072
 MOD_ID = re.compile(r"[A-Za-z0-9_.-]{1,100}\Z")
@@ -312,7 +321,13 @@ def launch(native, root: Path, observe_seconds: int = 90, settle_seconds: int = 
     started = time.monotonic()
     # os.startfile on a URI asks the shell to dispatch through the registered handler.
     # No token, no bootstrapper arguments, no saved credentials.
-    os.startfile(PLUTONIUM_URI)  # noqa: S606 - fixed allowlisted URI
+    try:
+        os.startfile(PLUTONIUM_URI)  # noqa: S606 - fixed allowlisted URI
+    except OSError as error:
+        raise Failure(CONFIG_MISSING,
+                      f"Windows could not dispatch {PLUTONIUM_URI}; no launch request was issued: {error.strerror or error}",
+                      "The plutonium:// protocol handler is not registered for this user. Open the official launcher once, then retry.",
+                      uri=PLUTONIUM_URI, launch_requested=False) from error
     game = None
     appeared = None
     detected_at = None
@@ -397,8 +412,9 @@ def dispatch(action: str, argument: str | None) -> dict:
     request_id = uuid.uuid4().hex
     argv = [sys.executable, "-m", "plutonium_agent_toolkit.game.worker", action, argument or ""]
     env = dict(os.environ, **{WORKER_TOKEN_ENV: request_id})
+    deadline = WORKER_DEADLINES[action]
     try:
-        completed = subprocess.run(argv, capture_output=True, timeout=WORKER_SECONDS, env=env,
+        completed = subprocess.run(argv, capture_output=True, timeout=deadline, env=env,
                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         if len(completed.stdout) > 65536:
             raise Failure(DELIVERY_UNCERTAIN, "Worker response too large; outcome uncertain, do not replay")
@@ -408,7 +424,7 @@ def dispatch(action: str, argument: str | None) -> dict:
         if completed.returncode and result.get("ok"):
             raise Failure(DELIVERY_UNCERTAIN, "Worker exit status disagrees with its response; outcome uncertain")
     except subprocess.TimeoutExpired as exc:
-        raise Failure(DELIVERY_UNCERTAIN, f"{WORKER_SECONDS}-second worker deadline exceeded; only the CLI worker stopped. Do not replay") from exc
+        raise Failure(DELIVERY_UNCERTAIN, f"{deadline}-second worker deadline for game {action} exceeded; only the CLI worker stopped. Do not replay") from exc
     except (ValueError, OSError) as exc:
         raise Failure(DELIVERY_UNCERTAIN, str(exc)[:500]) from exc
     result["request_id"] = request_id
