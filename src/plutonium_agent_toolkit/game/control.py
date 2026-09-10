@@ -35,7 +35,11 @@ WORKER_DEADLINES = {
     "select-mod": 200, "reload-mod": 200,      # before + disconnect(30) + unload(30) + load(40) + sends + verb checks
 }
 LOAD_RECEIPT_MAX_AGE = 600
-MAX_LOG_TAIL = 131072
+# New console output written during a load. A single native Town load emits far more than the
+# original 128 KiB (about 4000 lines here: fastfile, ipak and per-weapon lines), which made
+# check-load report the log gate unverified after every real load-map. Bound it at the same
+# 4 MiB as a job's backend log; beyond that the flood is treated as unverifiable. (Native Tier 3.)
+MAX_LOG_TAIL = 4 * 1024 * 1024
 MOD_ID = re.compile(r"[A-Za-z0-9_.-]{1,100}\Z")
 LOAD_ID = re.compile(r"[a-f0-9]{32}\Z")
 ERROR_LINE = re.compile(r"^(?:\*+\s*)?(?:error\s*:|script (?:runtime |compile )?error\b|server script compile error\b"

@@ -91,6 +91,11 @@ Every entry states what shipped, on which platform it was verified, and what rem
   (no `--output`), was refused by argparse because `--output` was unconditionally required, so the
   Tier 3 marker could never be written as documented. `--output` is now required only when a
   receipt is written. Found on the first native Tier 3 attempt; regression test added.
+- `game check-load` capped the new console output it would inspect at 128 KiB and reported the log
+  gate `checked: false` above that. A single native Town load emits far more (about 4000 lines:
+  fastfile, ipak and per-weapon lines), so `check-load` could never verify a real `load-map`. The
+  bound is now 4 MiB, matching a job's backend log; regression test with a map-load-sized log.
+  Found on the first native Tier 3 attempt.
 
 ### Verified
 
