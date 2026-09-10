@@ -31,6 +31,7 @@ from ..core.receipts import sha256_file
 # Every snapshot page is one indexed file, so the page bound must fit inside the index
 # bound with room for the manifest and media. Both stay under the Job input cap (20000).
 MAX_INDEX_FILES = 16384
+MAX_ADAPTER_FILES = 2048          # adapter indexes are small; donor + adapter + metadata stay under the Job cap
 MAX_INDEX_BYTES = 2 * 1024**3
 MAX_PAGES = 16000
 MAX_RECORDS = 4096
@@ -94,8 +95,8 @@ def _read_json(path: Path, limit: int = 2 * 1024 * 1024) -> dict:
         raise Failure(INPUT_INVALID, f"Invalid JSON: {path}") from exc
 
 
-def _pinned_files(job: Job, root: Path, index: dict) -> dict:
-    _require(isinstance(index, dict) and 0 < len(index) <= MAX_INDEX_FILES, "Donor file count exceeds bound")
+def _pinned_files(job: Job, root: Path, index: dict, limit: int = MAX_INDEX_FILES) -> dict:
+    _require(isinstance(index, dict) and 0 < len(index) <= limit, f"File count exceeds the bound of {limit}", INPUT_LIMIT)
     _require(not job.root.is_relative_to(root), "Output must be outside the donor root")
     total = 0
     result = {}
@@ -165,7 +166,7 @@ def catalog(job: Job, receipt_path: Path, capture_rel: str) -> dict:
         _require(job.inputs[str(path)] == receipt.get("adapter_index_sha256"), "Native adapter index changed", INPUT_CHANGED)
         adapter_index = _read_json(path)
         _require(isinstance(adapter_index, dict) and isinstance(adapter_index.get("files"), dict), "Adapter index needs a files map")
-        adapter = _pinned_files(job, path.parent, adapter_index["files"])
+        adapter = _pinned_files(job, path.parent, adapter_index["files"], limit=MAX_ADAPTER_FILES)
     return {"schema_version": 1, "source_engine": "t7", "format": "bo3-page-capture-v1",
             "donor_receipt": str(receipt_path), "donor_receipt_sha256": job.inputs[str(receipt_path)],
             "capture": capture_rel, "map": receipt["map"], "assets": assets, "files": files,

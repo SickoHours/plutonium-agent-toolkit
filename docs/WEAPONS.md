@@ -35,8 +35,9 @@ pat weapon catalog D:\donors\shadows.json --capture capture-03/manifest.json --o
 
 Catalog re-hashes every indexed file, checks page count and size, checks that map and process
 identity did not change during capture, rejects duplicate asset names and writes `library.json`.
-Bounds: 16384 indexed files and 2 GiB per donor, 16000 snapshot pages (each page is an indexed
-file), 4096 records per asset kind, 2 MiB recipe and index JSON, 16 MiB capture manifest.
+Bounds: 16384 indexed donor files and 2 GiB per donor, 2048 adapter-index files, 16000 snapshot
+pages (each page is an indexed file), 4096 records per asset kind, 2 MiB recipe and index JSON,
+16 MiB capture manifest.
 
 ## Recipe
 

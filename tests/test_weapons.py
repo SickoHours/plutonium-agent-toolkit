@@ -189,7 +189,9 @@ class WeaponBoundsTests(unittest.TestCase):
         from plutonium_agent_toolkit.dev import weapons
 
         self.assertLess(weapons.MAX_PAGES + 64, weapons.MAX_INDEX_FILES, "pages plus manifest and media must fit the index")
-        self.assertLessEqual(weapons.MAX_INDEX_FILES, MAX_FILES, "index must fit the Job declared-input cap")
+        # donor index + adapter index + receipt/index/manifest/adapter-index metadata must fit the Job cap
+        self.assertLessEqual(weapons.MAX_INDEX_FILES + weapons.MAX_ADAPTER_FILES + 8, MAX_FILES,
+                             "donor plus adapter files must fit the Job declared-input cap")
 
 
 class WeaponElementTypeTests(WeaponFixture):
