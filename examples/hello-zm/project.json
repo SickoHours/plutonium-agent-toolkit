@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "game": "t6",
+  "mode": "zm",
+  "name": "hello_zm",
+  "scripts": [
+    { "source": "scripts/hello.gsc", "target": "maps/mp/zombies/_hello.gsc", "instance": "server" }
+  ],
+  "assets": [],
+  "loads": []
+}

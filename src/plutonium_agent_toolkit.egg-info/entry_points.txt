@@ -1,0 +1,3 @@
+[console_scripts]
+pat = plutonium_agent_toolkit.cli:entry
+plutonium-agent-toolkit = plutonium_agent_toolkit.cli:entry

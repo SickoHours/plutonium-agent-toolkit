@@ -1,0 +1,5 @@
+# Release lead reviews everything by default.
+*                                   @SickoHours
+/src/plutonium_agent_toolkit/core/  @SickoHours
+/docs/SUPPORT.md                    @SickoHours
+/CHANGELOG.md                       @SickoHours

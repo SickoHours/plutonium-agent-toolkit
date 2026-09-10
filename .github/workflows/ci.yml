@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows unit tests and checks
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        python: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install package
+        run: python -m pip install --upgrade pip && python -m pip install -e .
+      - name: Unit tests
+        env:
+          PAT_HOME: ${{ runner.temp }}\pat-home
+        run: python -m unittest discover -s tests -v
+      - name: Private material scan
+        run: python tools/private_scan.py
+      - name: Release consistency
+        run: python tools/release_check.py
+      - name: Discovery smoke
+        env:
+          PAT_HOME: ${{ runner.temp }}\pat-home
+        run: |
+          pat version --json
+          pat manifest --json | Out-Null
+          pat describe dev setup --json
+          pat dev setup --plan --json | Out-Null
+          pat doctor --json | Out-Null
+
+  contract-anywhere:
+    name: Contract tests on Linux (discovery only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -e .
+      - run: python -m unittest discover -s tests -v
+        env:
+          PAT_HOME: ${{ runner.temp }}/pat-home
+      - run: python tools/private_scan.py
+      - run: python tools/release_check.py
+
+  package:
+    name: Build wheel and sdist
+    runs-on: windows-latest
+    needs: [windows]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip build
+      - run: python -m build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 14

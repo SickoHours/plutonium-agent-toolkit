@@ -1,0 +1,28 @@
+name: Capability request
+description: Propose a new route or an extension of an existing one
+labels: [enhancement]
+body:
+  - type: input
+    id: route
+    attributes:
+      label: Proposed route
+      placeholder: "pat game load-map <recipe>"
+    validations:
+      required: true
+  - type: dropdown
+    id: effect
+    attributes:
+      label: Effect
+      options: [inert, writes-config, downloads-backends, writes-output, query-engine, changes-game, captures-display]
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: What a user would ask their agent for, and what evidence proves it worked
+    validations:
+      required: true
+  - type: textarea
+    id: limits
+    attributes:
+      label: Resource bounds, failure modes and what stays out of scope

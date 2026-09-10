@@ -1,0 +1,28 @@
+Plutonium Agent Toolkit
+Copyright 2026 SickoHours
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+This repository contains only authored source, documentation and synthetic
+fixtures. It redistributes no game data, no Plutonium files and no third-party
+program. Setup downloads the following programs from their upstream releases on
+the user's machine; each remains under its own license:
+
+  OpenAssetTools      GPL-3.0     https://github.com/Laupetin/OpenAssetTools
+  gsc-tool            GPL-3.0     https://github.com/xensik/gsc-tool
+  CoDLuaDecompiler    MIT         https://github.com/JariKCoding/CoDLuaDecompiler
+  FFmpeg (BtbN build) GPL         https://github.com/BtbN/FFmpeg-Builds
+  Blender             GPL-3.0     https://www.blender.org
+  Cast (Blender add-on) MIT       https://github.com/dtzxporter/cast
+  Greyhound           GPL-3.0     https://github.com/Scobalula/Greyhound
+  Husky               GPL-3.0     https://github.com/Scobalula/Husky
+  C2Mv3               unspecified https://github.com/o-Astral-o/C2Mv3  (optional; binary only)
+
+The toolkit invokes these programs as separate processes and does not link
+against them. Review each upstream license before sharing an installed tree.
+
+Call of Duty and Black Ops II are trademarks of Activision Publishing, Inc.
+Plutonium is an independent community project (https://plutonium.pw). This
+toolkit is not affiliated with or endorsed by either.
+
+The Contributor Covenant (CODE_OF_CONDUCT.md) is licensed CC BY 4.0 by its authors.

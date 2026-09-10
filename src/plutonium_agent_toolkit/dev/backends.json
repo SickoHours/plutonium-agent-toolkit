@@ -1,0 +1,108 @@
+{
+  "schema": 1,
+  "note": "Pinned upstream Windows x64 distributions. Setup downloads over HTTPS, verifies SHA-256 and extracts into the configured backends directory. Nothing here is redistributed by this repository. Review each license before sharing an installed tree.",
+  "programs": [
+    {
+      "id": "oat",
+      "name": "OpenAssetTools 0.33.0",
+      "license": "GPL-3.0",
+      "url": "https://github.com/Laupetin/OpenAssetTools/releases/download/v0.33.0/oat-windows.zip",
+      "bytes": 3636251,
+      "sha256": "4bf366cec03558a4b0f20bc8f197a51f4b9dad0aa3edc52b0e40fef2dd95a4f5",
+      "strip_root": false,
+      "optional": false,
+      "provides": ["Linker.exe", "Unlinker.exe", "ImageConverter.exe"]
+    },
+    {
+      "id": "gsc",
+      "name": "gsc-tool 1.4.10",
+      "license": "GPL-3.0",
+      "url": "https://github.com/xensik/gsc-tool/releases/download/1.4.10/windows-x64-release.zip",
+      "bytes": 6622894,
+      "sha256": "ef7d7c86e2356f3e4d2b75b53d28dabb4df8b2a804cf3f6be179273f0fcada20",
+      "strip_root": false,
+      "optional": false,
+      "provides": ["gsc-tool.exe"]
+    },
+    {
+      "id": "lua",
+      "name": "CoDLuaDecompiler 2.4.2",
+      "license": "MIT",
+      "url": "https://github.com/JariKCoding/CoDLuaDecompiler/releases/download/2.4.2/CoDLuaDecompiler.zip",
+      "bytes": 21305773,
+      "sha256": "ea86f6c2f2a1413043d8ec61e7276d40e2e3eb7596f14f6017f5b0a825f0ee14",
+      "strip_root": false,
+      "optional": true,
+      "provides": ["CoDLuaDecompiler.exe"]
+    },
+    {
+      "id": "ffmpeg",
+      "name": "FFmpeg 9.0 (BtbN gpl-shared build)",
+      "license": "GPL-2.0-or-later (build); see upstream",
+      "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-08-23-15/ffmpeg-n9.0.1-27-g9b0578816c-win64-gpl-shared-9.0.zip",
+      "bytes": 76445302,
+      "sha256": "b70908fc22ad3723ea53d4bee901fbf6e7a3dde4a9612dfde8c1d089bfadfcc0",
+      "strip_root": true,
+      "optional": true,
+      "provides": ["bin/ffmpeg.exe", "bin/ffprobe.exe"]
+    },
+    {
+      "id": "blender",
+      "name": "Blender 5.2.1",
+      "license": "GPL-3.0",
+      "url": "https://mirrors.ocf.berkeley.edu/blender/release/Blender5.2/blender-5.2.1-windows-x64.zip",
+      "bytes": 404851964,
+      "sha256": "0e631dad7d0cad6d5d18abdd2e2550f6c0213215334eda00ddbd3d22b96ecb2c",
+      "strip_root": true,
+      "optional": true,
+      "provides": ["blender.exe"]
+    },
+    {
+      "id": "cast",
+      "name": "Cast Blender add-on 2.00",
+      "license": "MIT",
+      "url": "https://github.com/dtzxporter/cast/releases/download/v2.00/blender_cast_plugin.zip",
+      "bytes": 32915,
+      "sha256": "c80039cd8cfbe8b0b468aa1547f3ea4fb796c50cfbde6efe0bce5526269a0f81",
+      "strip_root": false,
+      "optional": true,
+      "provides": ["io_scene_cast/__init__.py"]
+    },
+    {
+      "id": "greyhound",
+      "name": "Greyhound 1.46.3.2",
+      "license": "GPL-3.0",
+      "url": "https://github.com/Scobalula/Greyhound/releases/download/1.46.3.2/Greyhound.V.1.46.3.2-release.zip",
+      "bytes": 30712795,
+      "sha256": "a051251e0101d26dd92a163bda385247f5302f8ef2be853b586d587885735f3d",
+      "strip_root": false,
+      "optional": true,
+      "provides": ["Greyhound.exe"],
+      "note": "Original GUI. No agent-controlled live extraction is claimed by this toolkit."
+    },
+    {
+      "id": "husky",
+      "name": "Husky 0.8.0.0",
+      "license": "GPL-3.0",
+      "url": "https://github.com/Scobalula/Husky/releases/download/0.8.0.0/Husky.0.8.0.0.zip",
+      "bytes": 216807,
+      "sha256": "691fadd6d90a0408b94233e3184c2586f3c86a7270b9d23038ffc5be3d184e79",
+      "strip_root": false,
+      "optional": true,
+      "provides": ["Husky.exe"],
+      "note": "Original GUI. Windows live capture through this toolkit is not implemented."
+    },
+    {
+      "id": "c2m",
+      "name": "C2Mv3 3.0.5",
+      "license": "unspecified upstream; binary only",
+      "url": "https://github.com/o-Astral-o/C2Mv3/releases/download/v3.0.5/C2Mv3.zip",
+      "bytes": 0,
+      "sha256": "",
+      "strip_root": false,
+      "optional": true,
+      "provides": ["C2M.exe"],
+      "note": "Hash to be pinned by Thread 1 after native download; never redistributed. Remains an explicit optional external dependency."
+    }
+  ]
+}

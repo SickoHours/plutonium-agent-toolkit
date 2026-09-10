@@ -1,0 +1,37 @@
+name: Bug report
+description: A route did something other than what its describe output and docs say
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Toolkit version
+      description: Output of `pat version --json`
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version and build
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command, full stdout JSON and exit status
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: checkboxes
+    id: redaction
+    attributes:
+      label: Redaction
+      options:
+        - label: I removed my username, machine name and anything private. No recordings or raw logs attached.
+          required: true
