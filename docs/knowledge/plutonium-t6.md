@@ -40,8 +40,10 @@ which keeps the name.
 | The map | `load-map` with the five UI dvars set; a DLC or custom map also needs its fastfile where the client looks (`usermaps/<map>/<map>.ff`, or the selected mod's `zone/<map>.ff` on older bases) |
 | Nothing, but you want a clean state | `fast_restart` keeps the map loaded and restarts the round; `map_restart` reloads the map script state |
 
-A folder version or an installed hash never proves which bytes the running engine holds. Only a
-load ID checked against the same process does (`pat game check-load`).
+A folder version or an installed hash never proves which bytes the running engine holds, and
+neither does `pat game check-load`: it verifies process identity, the expected dvars and the
+console log for the load ID, not the package's content hash. To know a rebuilt `mod.ff` is the
+one loaded, reinstall it and `reload-mod` before the load you check; the engine offers no hash.
 
 ## The console
 
@@ -61,9 +63,9 @@ the mode dvar distinguishes them).
 A match started by the console `map` verb from the main menu has been observed to load the level
 and then drop back to the menu with `SV_Shutdown: hostquit`, while a match started from the menu
 on the same install plays to completion. The working assumption is that `load-map` switches
-content inside a running private match rather than cold-starting one. Until that is confirmed,
-treat "start any match from the menu by hand, then `load-map`" as the tested path and a cold
-start as unverified.
+content inside a running private match rather than cold-starting one. That combined sequence
+(menu-started match, then `load-map`) has not been run either: treat it as the likely path and
+keep both it and the cold start unverified until one is retested with a receipt.
 
 ## Facts that are still open
 

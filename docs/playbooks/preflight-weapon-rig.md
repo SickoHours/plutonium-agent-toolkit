@@ -8,8 +8,9 @@ conversion; the numbered list is the gate, not a suggestion.
 
 - The converted model and every animation clip exist as files the toolkit can inspect
   (`.cast`, `.gltf`, `.glb`, `.fbx`, `.obj` or `.blend`).
-- Blender and the Cast add-on are installed (`pat dev setup --only blender cast --json`) or
-  `PAT_BACKEND_BLENDER` points at a Blender that has Cast.
+- Blender and the Cast add-on are installed (`pat dev setup --only blender cast --json`).
+  `PAT_BACKEND_BLENDER` may point at another Blender, but the Cast add-on is always loaded from
+  the toolkit's own `backends_dir/cast`, so `--only cast` is required either way.
 - The native T6 weapon you are basing on is known, and its definition has been extracted from a
   base fastfile (`pat ff extract ... --types weapon`), so fields can be compared.
 
@@ -33,8 +34,9 @@ conversion; the numbered list is the gate, not a suggestion.
    arm at idle is this item failing.
 4. Confirm animation-tree ownership: no weapon leaf keys `tag_view`, `tag_ads` or `tag_cambone`;
    the aim layer touches `tag_torso` only; a one-bone ADS donor is not expanded to a whole pose.
-5. Retime clips to the destination rate with `pat model retime --fps <n>` when the donor rate
-   differs, then re-inspect; keep every pose and keyframe.
+5. Retime clips to the destination rate with
+   `pat model retime <clip>.cast --fps <n> --output ../jobs/<weapon>-retime-NNN --json` when the
+   donor rate differs, then re-inspect the output; keep every pose and keyframe.
 6. Validate every reload slot (including left and empty reloads) has sound notetracks that
    resolve to loaded aliases; a clip with none plays silently.
 7. Compare the weapon definition field by field with its native counterpart: inventory type per

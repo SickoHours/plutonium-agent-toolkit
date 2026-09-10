@@ -20,19 +20,21 @@ before any hypothesis. Words: `CONTEXT.md`. Facts: `docs/knowledge/crashes.md` a
 
 ## The order
 
-1. Classify from the saved log slice or dialog text: script link, asset registration, engine
+1. Preserve the failure before anything else: copy the log slice, the frame or dialog text, the
+   process identity and the installed package hash beside the task, privately. Every later step
+   can overwrite the log; this one cannot be redone.
+2. Classify from the saved log slice or dialog text: script link, asset registration, engine
    limit, allocation, process crash, host kill. Check the signature table first; most classes
    have been seen and have a known fix shape.
-2. Build the red loop at the lowest rung that reproduces this exact failure: compile with the
+3. Build the red loop at the lowest rung that reproduces this exact failure: compile with the
    right instance, build with readback, fastfile inspect, a preflight gate, then only with the
    user's go on a qualified host, one load and one `check-load`. Run it once and show it.
-3. Minimise until every remaining element is load-bearing.
-4. Three to five ranked hypotheses, each with a falsifiable prediction, written before any probe.
-5. One probe per hypothesis, in rank order, changing one variable.
-6. Fix, re-run to green, then add a regression that consumes the original failed artifact to the
-   preflight for that class.
-7. Preserve the failure: package hash, log slice, frame or dialog text, process identity, beside
-   the fix.
+4. Minimise until every remaining element is load-bearing.
+5. Three to five ranked hypotheses, each with a falsifiable prediction, written before any probe.
+6. One probe per hypothesis, in rank order, changing one variable.
+7. Fix, re-run to green, then add a regression that consumes the original failed artifact (the
+   one preserved in step 1) to the preflight for that class; keep the failed package and its
+   evidence beside the fix.
 
 ## Hard guardrails
 

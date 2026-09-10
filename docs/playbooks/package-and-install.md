@@ -11,7 +11,10 @@ end.
 - `pat configure --plutonium-storage-t6 <absolute path>` has been run on this machine, so the
   toolkit knows where `mods/` is. `pat doctor --json` shows `configuration.ok: true`.
 - The destination folder name follows `<base>_<feature>_<stage>` (`docs/knowledge/foundations.md`)
-  and is a valid folder ID (letters, digits, underscore, dot, dash).
+  and is a valid `install-mod` folder ID: letters, digits, underscore, dot, dash, not beginning
+  with `mp_` (the toolkit refuses multiplayer folders).
+- No live game command (`select-mod`, `reload-mod`, `load-map`, a restart) is in flight for this
+  folder: `install-mod` is a file copy and is not serialized with them.
 
 ## Steps
 

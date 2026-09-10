@@ -18,7 +18,7 @@ then rebuild the mod and prove the new bytes are in the package.
    server logic, `.csc` for client effects and HUD fields.
 2. Compile it alone before touching the recipe:
    ```sh
-   pat gsc compile <mod>/scripts/<name>.gsc [--includes <dir>] --output ../jobs/<name>-compile-001 --json
+   pat gsc compile <mod>/scripts/<name>.<gsc|csc> [--includes <dir>] --output ../jobs/<name>-compile-001 --json
    ```
    Proof: `ok: true` and `result.files[]` lists one non-empty compiled file. A failure returns
    `backend_failed` with `details.first_error`: the compiler's own first error line. Fix and

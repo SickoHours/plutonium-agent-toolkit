@@ -87,9 +87,10 @@ the one that built the toolkit.
 ## Knowledge and playbooks
 
 [docs/knowledge/](docs/knowledge/README.md) holds the T6 and Plutonium facts an agent needs before
-building (client layout, fastfiles, scripts, engine limits, foundations, crashes, a glossary).
+building (client layout, fastfiles, scripts, engine limits, foundations, crashes); the project's
+words are defined once in [CONTEXT.md](CONTEXT.md).
 [docs/playbooks/](docs/playbooks/README.md) holds finite recipes for the common tasks: first build,
-add a script, port a feature, two preflights, diagnose a crash, package and install.
+add a script, port a feature, four preflights, diagnose a crash, package and install.
 
 ## For contributors and their agents
 
@@ -117,7 +118,7 @@ python tools/release_check.py
 | `CONTEXT.md` | The vocabulary every doc, receipt and skill uses, one definition each |
 | `docs/knowledge/` | Facts an agent reads once per task: client layout, fastfiles, scripts, contracts, foundations, crashes, limits |
 | `docs/playbooks/` | Finite recipes with the receipt field that proves each step, including four preflight gate lists |
-| `skills/` | Installable agent skills: `pat-help` routes; `pat-grill`, `pat-build`, `pat-port`, `pat-diagnose`, `pat-review` do the work |
+| `skills/` | Installable agent skills: the `plutonium-agent-toolkit` umbrella skill; `pat-help` routes; `pat-grill`, `pat-build`, `pat-port`, `pat-diagnose`, `pat-review` do the work |
 | `vendor/matt-pocock/` | Unmodified upstream skills (MIT) that three of ours adapt; pinned by commit and hash |
 | `tools/` | Qualification runner, backends-page generator, private-material scanner and release check used by CI |
 

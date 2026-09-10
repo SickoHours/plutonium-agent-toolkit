@@ -86,8 +86,9 @@ that plays. Say which one you have.
 `docs/knowledge/` holds the T6 and Plutonium facts an agent otherwise rediscovers by trial: the
 client's storage layout and console, fastfiles and zones, the two script VMs and their traps,
 the engine contracts a Zombies feature must meet (bone cap, font scale, field budgets, sound
-reservation, normal plus PAP), foundations, crash classes, other titles, and one glossary for
-the evidence ladder. Read `docs/knowledge/README.md` once per session.
+reservation, normal plus PAP), foundations, crash classes, engine limits and other titles. The
+project's vocabulary, including both evidence ladders, is defined once in the root
+`CONTEXT.md`. Read `docs/knowledge/README.md` once per session.
 
 `docs/playbooks/` turns those facts into finite recipes with the same five sections each:
 preconditions, numbered steps with the receipt field that proves each, the commands that are

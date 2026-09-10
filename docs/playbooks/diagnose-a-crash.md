@@ -7,8 +7,9 @@ cause. Diagnosis reads; it changes nothing.
 ## Preconditions
 
 - You know which package was installed (its hash from the install receipt) and which load was
-  issued (its load ID), or you can get both from `pat game mods --json` and the last
-  `check-load` result.
+  issued (its load ID from the last `check-load` result). `pat game mods --json` names the
+  folders but reports no hash; if the install receipt is gone, hash the installed `mod.ff`
+  yourself or record the package hash as unknown.
 - On Windows with the game configured: `pat game info --json` is available for fresh state. On
   Linux, or with no game, you work from the log and receipts only.
 - `docs/knowledge/crashes.md` is read: the classes and where each cause lives.

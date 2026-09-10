@@ -23,11 +23,14 @@ recipe-based T6 mod, on a clean base, with every offline gate before the first l
 2. Resolve every call against what T6 will have loaded: engine builtins on that VM, includes
    from the base, and your own scripts. Anything unresolved is a port task, not a compile
    warning. Compile each script alone (`add-a-script.md` step 2).
-3. Convert assets to T6 formats through the toolkit's routes: `pat model inspect` then
-   `pat model convert --format cast` for models and animations (with `--rig` for an
-   animation-only file), `pat audio convert --format wav --rate 48000 --channels 1` for sounds,
-   `pat image convert` for textures. Inspect the converted artifact, not the exit status: bone
-   names, hierarchy and counts for a rig; sample rate and channels for audio.
+3. Convert assets to T6 formats through the toolkit's routes, each into its own new `--output`:
+   `pat model inspect <model> --output <out> --json` then
+   `pat model convert <model> --format cast --output <out> --json` for models and animations
+   (with `--rig <rig-model>` for an animation-only file),
+   `pat audio convert <sound> --format wav --rate 48000 --channels 1 --output <out> --json` for
+   sounds, `pat image convert <image.dds|image.iwi> --output <out> --json` for textures. Inspect
+   the converted artifact, not the exit status: bone names, hierarchy and counts for a rig;
+   sample rate and channels for audio.
 4. Run the class preflight checklist and record each item's result in the module's README.
 5. Write ownership and limits into the scripts before the first test: per-player and global caps,
    cleanup for every lifecycle event, a generation identity for workers.

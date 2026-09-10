@@ -53,8 +53,10 @@ _Avoid_: run (reserved for tests), task, command
 logs and status. Failures keep their receipts.
 _Avoid_: log, result file, manifest
 
-**Readback**: Unlinking the produced fastfile and comparing extracted files byte-for-byte with
-the inputs. Readback proves the package contains what was declared, not that it plays.
+**Readback**: Unlinking the produced fastfile and comparing the extracted `rawfile` entries
+(compiled scripts and declared rawfiles) byte-for-byte with the inputs. Readback proves those
+entries are in the package as built; other asset types are listed, not compared, and nothing
+about play is proven.
 _Avoid_: verification, validation
 
 **Backend**: An upstream program the toolkit drives as a child process, pinned by version and
@@ -111,8 +113,10 @@ _Avoid_: load verification, health check
 inspect fresh state, never replay.
 _Avoid_: timeout, retry needed, flaky
 
-**Live lock**: The one shared lock a deployment or live operation holds while it changes
-installed files or the running game.
+**Live lock**: The one lock every `pat game` command that talks to the running client holds, so
+live operations never interleave. `game install-mod` is a file copy and takes no lock: run it
+when no live command is in flight, and never while a `select-mod` or `reload-mod` of the same
+folder is running.
 _Avoid_: mutex, session lock
 
 **Test owner**: The single agent or human who currently controls the running game.

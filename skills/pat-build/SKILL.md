@@ -25,7 +25,8 @@ and `docs/knowledge/gsc.md`.
 4. Preflight. Run each playbook under `docs/playbooks/preflight-*.md` whose class the change
    touched: scripts always; weapon rig, HUD text, audio memory when those assets changed. Proof: each gate is recorded as pass, fail or unknown against the `mod.ff` hash.
 5. Verify when the build will be reused later. `pat project verify <receipt> --inputs --output
-   <new dir> --json`. Proof: `result.verified` is `true`.
+   <new dir> --json`. Proof: `result.outputs.verified` is `true` and, with `--inputs`,
+   `result.inputs.verified` is `true`.
 
 ## Do not
 
