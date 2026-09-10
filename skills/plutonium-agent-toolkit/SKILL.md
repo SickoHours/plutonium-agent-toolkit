@@ -14,9 +14,24 @@ Read the repository's `AGENTS.md` and `docs/FOR-AGENTS.md` for the full contract
 Linux, `implemented` = runs but no receipt, `offline` = unit-tested only, `deferred` = out of scope).
 macOS is untested and not claimed; say so if the user is on one.
 
+## Where things are
+
+- `CONTEXT.md`: the words. One definition each, with the synonyms to avoid; use them exactly.
+- `docs/knowledge/README.md`: the facts (client layout, fastfiles, scripts, contracts, foundations,
+  crash classes, engine limits). Read the page for the task once per session, then work from it.
+- `docs/playbooks/`: the steps. First build, add a script, port a feature, diagnose a crash,
+  package and install, and four preflight gate lists (scripts, weapon rig, HUD text, audio
+  memory) to run before a build's first install. Each playbook is finite: exact commands, the
+  receipt field that proves a step, the commands that are wasted, the stop conditions. Follow its
+  "Do not" list.
+- `skills/pat-*`: the flows. `pat-help` routes; `pat-grill`, `pat-build`, `pat-port`,
+  `pat-diagnose` and `pat-review` do the work.
+
 ## Discover
 
 - Unknown route: `pat manifest --json` once per session. Reuse it while the version is unchanged.
+  A `status: succeeded` receipt is the fact; do not re-run a job to confirm it, and rebuild only
+  after an input hash changed.
 - Known route: `pat describe <group> <action> --json`. Use the returned `argv`.
 - Installation state: `pat doctor --json`. Backend inventory: `pat dev backends --json`.
 - Discovery never executes anything and needs no authorization.

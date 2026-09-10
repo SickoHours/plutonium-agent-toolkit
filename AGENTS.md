@@ -38,6 +38,10 @@ Treat "make it work for this person's setup" as the job, not an exception to it.
 1. `README.md` for the product and its current status.
 2. `docs/FOR-AGENTS.md` for how to operate and adapt the toolkit, and the modding behaviours
    (foundation-first modular building, mod organization, the lessons that shaped the safety rules).
+   Then `CONTEXT.md` for the words, `docs/knowledge/README.md` (T6 and Plutonium facts, once
+   per session) and the playbook in `docs/playbooks/README.md` that matches the task; run the
+   `docs/playbooks/preflight-*.md` gates before a build's first install. `skills/pat-help`
+   names the flow for a situation.
 3. `docs/SUPPORT.md` for what each route has actually earned. It is canonical for the evidence
    levels (`contract`, `offline`, `native`, `game`, `accepted`); read the definitions there and do
    not restate them from memory. Separately, `pat manifest` reports a route's implementation
@@ -84,6 +88,23 @@ These are how the toolkit is built, so that you can extend it without breaking i
 - Keep the user's paths, receipts, recordings and logs on their machine. Sanitize before sharing.
 - There is no arbitrary console-string, memory-write or arbitrary-function route, and you should
   not add one. Adapting the toolkit means new typed, validated routes, not an escape hatch.
+
+## Work efficiently
+
+The toolkit is cheap per call, and every call is a receipt; spend calls on new facts, not on
+re-reading known ones.
+
+- Read `pat manifest --json` at most once per session; `describe` only a route you will run.
+- Read `docs/knowledge/README.md` once, then work from it. T6 facts there were paid for with real
+  crashes; do not re-derive them by trial builds.
+- Read the playbook in `docs/playbooks/` for the task before the first command and follow its
+  "Do not" list; the lists name the wasted commands for that task.
+- A receipt with `status: succeeded` is the fact. Do not re-run a job to "confirm" it.
+- Rebuild only after an input changed. The receipt lists every input hash; compare them.
+- Keep outputs outside the source tree; one new `--output` per job; never delete one to retry.
+- Never replay a `delivery_uncertain` game command; inspect fresh state and decide.
+- Say which facts are unverified instead of adding checks that cannot verify them. "Offline
+  verified; not loaded" is a complete, honest report.
 
 ## Reporting
 

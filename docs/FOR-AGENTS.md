@@ -81,6 +81,28 @@ Respect both in what you tell the user, and keep offline verified, installed, la
 captured and player-accepted as separate statements. A mod that compiles and links is not a mod
 that plays. Say which one you have.
 
+## Knowledge and playbooks
+
+`docs/knowledge/` holds the T6 and Plutonium facts an agent otherwise rediscovers by trial: the
+client's storage layout and console, fastfiles and zones, the two script VMs and their traps,
+the engine contracts a Zombies feature must meet (bone cap, font scale, field budgets, sound
+reservation, normal plus PAP), foundations, crash classes, engine limits and other titles. The
+project's vocabulary, including both evidence ladders, is defined once in the root
+`CONTEXT.md`. Read `docs/knowledge/README.md` once per session.
+
+`docs/playbooks/` turns those facts into finite recipes with the same five sections each:
+preconditions, numbered steps with the receipt field that proves each, the commands that are
+wasted, stop conditions, and the separate facts to report. The four preflight playbooks (scripts,
+weapon rig, HUD text, audio memory) exist because every failure of that class reached a player
+after a clean conversion and a passing suite; run them before the first package, not after the
+first crash.
+
+`CONTEXT.md` at the repository root defines the words those pages, the receipts and the skills
+use, one definition each with the synonyms to avoid. `skills/` holds one skill per flow:
+`pat-help` routes, and `pat-grill`, `pat-build`, `pat-port`, `pat-diagnose` and `pat-review` do
+the work. Three of them adapt Matt Pocock's skills (MIT); the unmodified originals are under
+`vendor/matt-pocock/`.
+
 ## Modding behaviours worth carrying
 
 These are how mods built with this toolkit stay maintainable. They are conventions, not enforced

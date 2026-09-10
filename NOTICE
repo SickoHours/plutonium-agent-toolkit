@@ -26,3 +26,8 @@ Plutonium is an independent community project (https://plutonium.pw). This
 toolkit is not affiliated with or endorsed by either.
 
 The Contributor Covenant (CODE_OF_CONDUCT.md) is licensed CC BY 4.0 by its authors.
+
+Adapted agent skills under skills/ derive from Matt Pocock's skills repository
+(https://github.com/mattpocock/skills), MIT License, Copyright (c) 2026 Matt Pocock.
+The exact upstream files are kept unmodified under vendor/matt-pocock/ with their
+LICENSE and a SOURCE.json naming the pinned commit and file hashes.

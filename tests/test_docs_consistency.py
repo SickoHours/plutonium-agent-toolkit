@@ -73,6 +73,52 @@ class DocsConsistencyTests(unittest.TestCase):
         for rel in set(re.findall(r"\]\((receipts/[^)]+\.json)\)", text)):
             self.assertTrue((ROOT / "docs" / rel).is_file(), rel)
 
+    def test_knowledge_index_lists_only_existing_pages_and_every_page(self):
+        index = read("docs/knowledge/README.md")
+        pages = sorted(p.name for p in (ROOT / "docs/knowledge").glob("*.md") if p.name != "README.md")
+        self.assertTrue(pages)
+        for name in pages:
+            self.assertIn(f"]({name})", index, f"docs/knowledge/README.md does not link {name}")
+        for name in re.findall(r"\]\(([A-Za-z0-9_.-]+\.md)\)", index):
+            self.assertTrue((ROOT / "docs/knowledge" / name).is_file(), name)
+        for name in pages:
+            lines = read(f"docs/knowledge/{name}").splitlines()
+            self.assertLessEqual(len(lines), 150, f"{name}: knowledge pages stay under 150 lines")
+
+    def test_playbooks_have_the_five_sections_and_name_only_registered_routes(self):
+        import plutonium_agent_toolkit.cli  # noqa: F401  (imports every routes.py, populating the registry)
+        from plutonium_agent_toolkit.core.discovery import routes
+
+        registered = {f"{r.group} {r.action}" for r in routes()}
+        index = read("docs/playbooks/README.md")
+        books = sorted(p.name for p in (ROOT / "docs/playbooks").glob("*.md") if p.name != "README.md")
+        self.assertTrue(books)
+        headings = ["## Preconditions", "## Steps", "## Do not", "## Stop conditions", "## Report"]
+        for name in books:
+            self.assertIn(f"]({name})", index, f"docs/playbooks/README.md does not link {name}")
+            text = read(f"docs/playbooks/{name}")
+            positions = [text.find(h + "\n") for h in headings]
+            self.assertTrue(all(pos >= 0 for pos in positions), f"{name}: missing one of {headings}")
+            self.assertEqual(positions, sorted(positions), f"{name}: sections out of order")
+            for group, action in re.findall(r"`pat ([a-z]+) ([a-z-]+)", text):
+                if group in ("version", "manifest", "describe", "doctor", "configure"):
+                    continue
+                self.assertIn(f"{group} {action}", registered, f"{name}: `pat {group} {action}` is not a route")
+
+    def test_agents_and_skill_route_to_knowledge_and_playbooks(self):
+        agents = read("AGENTS.md")
+        self.assertIn("docs/knowledge/README.md", agents)
+        self.assertIn("docs/playbooks/README.md", agents)
+        self.assertIn("## Work efficiently", agents)
+        for rule in ("at most once per session", "status: succeeded", "delivery_uncertain", "Rebuild only after an input changed"):
+            self.assertIn(rule, agents, rule)
+        skill = read("skills/plutonium-agent-toolkit/SKILL.md")
+        self.assertIn("docs/playbooks/", skill)
+        self.assertIn("docs/knowledge/README.md", skill)
+        for_agents = read("docs/FOR-AGENTS.md")
+        self.assertIn("docs/knowledge/", for_agents)
+        self.assertIn("docs/playbooks/", for_agents)
+
     def test_no_arbitrary_console_promise_anywhere_in_agent_docs(self):
         # The no-escape-hatch rule must not be contradicted by the malleability language.
         for doc in ("AGENTS.md", "docs/FOR-AGENTS.md", "skills/plutonium-agent-toolkit/SKILL.md"):

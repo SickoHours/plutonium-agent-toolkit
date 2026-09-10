@@ -50,6 +50,14 @@ def check_readback_log(log: Path) -> str:
     return text
 
 
+def check_link_log(log: Path) -> str:
+    """Linker can print an ERROR line and still exit zero; the log is authoritative here too."""
+    text = log.read_bytes()[:4 * 1024 * 1024].decode("utf-8", errors="replace")
+    if LOAD_FAILURE.search(text):
+        raise Failure(BACKEND_FAILED, "OpenAssetTools Linker reported an error", log=log.name)
+    return text
+
+
 def _link(args, job: Job) -> dict:
     base = Path(args.project).expanduser().resolve()
     if not base.is_dir():
@@ -71,7 +79,7 @@ def _link(args, job: Job) -> dict:
         argv += ["--add-asset-search-path", str(p)]
     for zone in args.load:
         argv += ["-l", str(job.input(zone))]
-    job.run([*argv, args.zone], cwd=base, timeout=args.timeout)
+    check_link_log(job.run([*argv, args.zone], cwd=base, timeout=args.timeout))
     packages = sorted(out.rglob("*.ff"))
     if not packages:
         raise Failure(BACKEND_FAILED, "Linker produced no fastfile")
