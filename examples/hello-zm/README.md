@@ -22,6 +22,6 @@ pat game install-mod ..\jobs\hello-build-001\packages\mod.ff hello_zm --json
 ```
 
 Build compiles `hello.gsc`, links `mod.ff`, reads it back and compares the raw file. This has
-native Windows receipts and has also been built natively on Linux with real gsc-tool and
+native receipts from Windows 11 and from Arch Linux (Omarchy) with real gsc-tool and
 OpenAssetTools (see `docs/SUPPORT.md`). Loading the mod in the game and seeing the line on screen
 is a separate step that needs the user's go-ahead and a native Windows host.

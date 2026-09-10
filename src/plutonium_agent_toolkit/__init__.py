@@ -1,4 +1,6 @@
-"""Plutonium Agent Toolkit: agent-native tools for Plutonium T6 Zombies modding on Windows.
+"""Plutonium Agent Toolkit: agent-native tools for Plutonium T6 Zombies modding.
+
+The development (file) tools run on Windows and Linux; game control is Windows-only.
 
 One coordinated version covers every component. Release candidates keep a
 pre-release suffix until the documented qualification gates in docs/SUPPORT.md

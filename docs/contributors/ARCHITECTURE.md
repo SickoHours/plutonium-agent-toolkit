@@ -13,8 +13,8 @@ pat <group> <action> [options]
 
 Every group registers `Route` objects in its `routes.py`. `cli.py` imports those modules, which
 populates the registry behind `manifest` and `describe`. A route's `status` is a promise: `planned`
-routes must raise `not_implemented`; `available` routes must have a native Windows receipt in
-`docs/SUPPORT.md`.
+routes must raise `not_implemented`; `available` routes must have a native receipt (Windows or
+Linux) in `docs/SUPPORT.md`.
 
 ## Invariants
 
@@ -26,7 +26,8 @@ routes must raise `not_implemented`; `available` routes must have a native Windo
 5. **Receipts** record argv, input hashes, output hashes, status, exit code and log paths. Failed
    and cancelled jobs write receipts too.
 6. **Platform gate** before side effects. `platform.require_windows(...)` in every route that
-   touches backends, the game or the display. Wine is detected and reported as not native.
+   touches the game or the display. Wine is detected and reported as not native. The development
+   routes run on Windows and Linux; macOS is untested and not claimed.
 7. **No home-directory assumptions.** All paths come from `PAT_HOME`, `%LOCALAPPDATA%` or explicit
    configuration.
 8. **No replay of uncertain game commands.** `delivery_uncertain` is terminal for that invocation.
@@ -34,8 +35,10 @@ routes must raise `not_implemented`; `available` routes must have a native Windo
 
 ## Backend execution (Thread 1)
 
-Backends live under `<backends_dir>/<id>/`. Jobs run them as child processes inside a Windows Job
-Object so the whole tree is terminated on timeout or cancel. Output size and log size are bounded.
+Backends live under `<backends_dir>/<id>/`, pinned per platform in `dev/backends.json` (zip on
+Windows, tar on Linux; both readers share one safety plan). Jobs run them as child processes inside
+a Windows Job Object, or a process group on Linux, so the whole tree is terminated on timeout or
+cancel. Output size and log size are bounded.
 Receipts record the backend's pinned SHA-256 alongside the job so a result can be tied to the exact
 tool build.
 

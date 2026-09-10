@@ -1,11 +1,11 @@
 """Registered development (file-tool) routes.
 
-These routes run on any operating system: they drive pinned upstream backends as
+These routes run on Windows and Linux: they drive pinned upstream backends as
 ordinary subprocesses and touch no running game. ``status="available"`` means a
-native receipt is linked in docs/SUPPORT.md (Windows today; a native Linux receipt
-is tracked separately). None of these routes is platform-gated; a backend that is
-missing for the current OS reports ``backend_unavailable`` with how to supply it
-via ``pat dev setup`` or a ``PAT_BACKEND_<NAME>`` override.
+native receipt is linked in docs/SUPPORT.md. None of these routes is
+platform-gated; a backend that is missing for the current OS reports
+``backend_unavailable`` with how to supply it via ``pat dev setup`` or a
+``PAT_BACKEND_<NAME>`` override. macOS is untested and not claimed.
 """
 from ..core.discovery import Route, register
 

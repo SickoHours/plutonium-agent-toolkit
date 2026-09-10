@@ -1,6 +1,6 @@
 """Platform gating.
 
-The development (file-tool) routes run on any operating system: they drive pinned
+The development (file-tool) routes run on Windows and Linux: they drive pinned
 upstream backends as ordinary subprocesses. Only the routes that control a running
 game or capture its display require native Windows, because their transport is the
 Win32 console; those call :func:`require_windows` and fail with
@@ -56,7 +56,7 @@ def require_windows(operation: str) -> None:
         raise Failure(
             UNSUPPORTED_PLATFORM,
             f"{operation} requires native Windows; this host reports {system()}.",
-            "Development file tools run on any OS. Game control and capture use the Win32 console and need a native Windows host.",
+            "Development file tools run on Windows and Linux. Game control and capture use the Win32 console and need a native Windows host.",
         )
     if is_wine():
         raise Failure(

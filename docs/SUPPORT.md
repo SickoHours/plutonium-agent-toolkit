@@ -9,8 +9,8 @@ pull request that changes a route. `tools/release_check.py` verifies the version
 | --- | --- |
 | contract | Route is registered with name, effect and owner. Answers `not_implemented`. |
 | deferred | Registered contract, explicitly excluded from this release. Answers `not_implemented`. |
-| offline | Implemented; unit tests pass with synthetic fixtures and fake backends on any platform. The file tools execute on any OS; game control and capture execute on native Windows only. No native receipt. |
-| native | Ran on a real host of the OS named in the receipt, not Wine, WSL or a CI runner, with a sanitized receipt linked below. The receipts here are native Windows 11 x64; the file tools also build natively on Linux (a committed native-Linux receipt is a tracked follow-up). |
+| offline | Implemented; unit tests pass with synthetic fixtures and fake backends on any platform. The file tools execute on Windows and Linux; game control and capture execute on native Windows only. No native receipt. |
+| native | Ran on a real host of the OS named in the receipt, not Wine, WSL or a CI runner, with a sanitized receipt linked below. Receipts exist for native Windows 11 x64 and for native Arch Linux (Omarchy); each row names which. |
 | game | Produced a verified effect in a running Plutonium T6 Zombies instance with a fresh engine reply and a decoded non-black frame where applicable. |
 | accepted | A human played the result and recorded a scoped verdict. |
 
@@ -18,14 +18,20 @@ A level applies only to the exact scope in the receipt. "Loaded Town once" is no
 
 ## Platform
 
-The development (file) tools run on any OS. Game control and capture use the Win32 console and run
-on native Windows only.
+The development (file) tools run on Windows and Linux. Verified hosts: Windows 11 x64 and Arch
+Linux (Omarchy). macOS is untested and has no pinned backends; it is not claimed. Game control and
+capture use the Win32 console and run on native Windows only.
+
+Backends are pinned per platform in `src/plutonium_agent_toolkit/dev/backends.json`: gsc-tool,
+OpenAssetTools, FFmpeg and Blender on Windows and Linux; CoDLuaDecompiler, Greyhound, Husky and C2M
+on Windows only; the Cast add-on anywhere. Where a platform has no pin, `dev setup` reports
+`override-required` and `PAT_BACKEND_<NAME>` supplies the tool.
 
 | Item | Status |
 | --- | --- |
-| Development tools, any OS (Python 3.11+) | Run on Windows, Linux and macOS. Backends are per-platform: a pinned download where one exists, otherwise supply the tool and set `PAT_BACKEND_<NAME>`. Unit tests pass on any platform; `examples/hello-zm` has been built, read back and byte-compared natively on Linux with real gsc-tool and OpenAssetTools. |
 | Windows 11 x64, native Python 3.11+ | Tiers 1 (offline) and 2 (real backends) passed on Windows 11 25H2, build 26200, Python 3.12.0: [receipts/0.1.0a1/tier1-offline.json](receipts/0.1.0a1/tier1-offline.json), [receipts/0.1.0a1/tier2-backends.json](receipts/0.1.0a1/tier2-backends.json). Tier 3 (running game) attempted, [receipts/0.1.0a1/tier3-game.json](receipts/0.1.0a1/tier3-game.json): `launch` and console attach work, but a console-started match is dropped by the client right after it loads (issue #8; see the `game` rows). No `game` route earned level `game`. |
-| Linux, macOS | Development tools run natively (file-tool routes; backends via pinned downloads where available or `PAT_BACKEND_<NAME>`). Game control and capture are not available: their transport is the Win32 console. A committed native-Linux qualification receipt is a tracked follow-up. |
+| Arch Linux (Omarchy), native Python 3.11+ | Tiers 1 (offline) and 2 (real backends, with `--media`) run natively with `tools/qualify.py`; the receipts land in the same pull request as the Linux pins. Game control and capture are not available: their transport is the Win32 console. |
+| macOS | untested; no pinned downloads; not claimed. The file tools may run with every backend supplied through `PAT_BACKEND_<NAME>`, and `doctor` and `dev setup` say so in a `note`; no receipt exists and none is planned. |
 | Windows 10 | untested |
 | Windows on ARM64 | unsupported |
 | Wine / Proton / WSL | Not used for qualification and never counted as native. Run the development tools on Linux directly instead; game control needs a real Windows host. |
@@ -65,13 +71,13 @@ on native Windows only.
 - Greyhound, Husky and C2M live extraction through the toolkit. The GUIs can be downloaded; their
   use is manual.
 - BO3 live asset capture and generic weapon conversion.
-- Multiplayer, co-op, other Call of Duty titles, Linux, Stream Deck, desktop GUIs, MCP wrapper.
+- Multiplayer, co-op, other Call of Duty titles, macOS (untested), Stream Deck, desktop GUIs, MCP wrapper.
 
 ## Release bars
 
-The release program ships in halves. The development toolchain runs on any OS and is native-verified
-on Windows; game control is Windows-only and follows once issue #8 is resolved; capture and testing
-are a later release.
+The release program ships in halves. The development toolchain runs on Windows and Linux and is
+native-verified on both; game control is Windows-only and follows once issue #8 is resolved; capture
+and testing are a later release.
 
 **`0.1.0-beta.1` (development tools)** requires Tiers 1 and 2 of
 [WINDOWS-QUALIFICATION.md](WINDOWS-QUALIFICATION.md) passed on a native host with receipts under

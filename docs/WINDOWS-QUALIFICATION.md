@@ -5,6 +5,11 @@ This is the procedure that turns a route from `offline` to `native` or `game` in
 An agent follows it; a human authorizes the game tier. The output is a pull request that adds
 sanitized receipts under `docs/receipts/<version>/` and any fixes the run exposed.
 
+Tiers 1 and 2 also run on Linux with the same tool (`python tools/qualify.py`), writing
+`linux-tier1-offline.json` and `linux-tier2-backends.json`; add `--media` to Tier 2 to install
+FFmpeg, Blender and Cast and run the `audio` and `model` routes on synthetic inputs. Tier 3 is
+Windows-only. `tools/qualify_windows.py` still works and runs the same code.
+
 Nothing here is optional and nothing here is a formality. The toolkit was written on Linux
 against fake backends and a fake console. The first native run *will* find defects. Each one
 is fixed in the same pull request with a regression test.

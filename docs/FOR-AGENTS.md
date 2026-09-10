@@ -21,7 +21,7 @@ does not fit". It is "make this work here". That is expected, and the toolkit is
    [--backends-dir <path>] [--evidence-dir <path>]`. Find the real paths on their machine; do not
    assume the defaults. Everything is stored under `PAT_HOME` (by default
    `%LOCALAPPDATA%\PlutoniumAgentToolkit` on Windows and `~/.local/state/plutonium-agent-toolkit`
-   on Linux and macOS), which you can relocate by setting `PAT_HOME`
+   on Linux), which you can relocate by setting `PAT_HOME`
    if their profile is unusual or they want the toolkit somewhere specific.
 2. **Backend overrides.** If a tool they already have should be used, or a pinned download will not
    run on their system, set `PAT_BACKEND_<NAME>` to an absolute path (a `.py` override runs through
@@ -55,7 +55,11 @@ one document either way, with `schema_version`, `toolkit_version`, `command`, `r
 - Every job writes `receipt.json` into its output directory, listing argv, input and output
   hashes, and the `log` file for each backend step. Read the step log for the real backend error.
 - `pat doctor --json` reports the platform, whether it is native Windows (not Wine), the
-  configuration, and which backends are present.
+  configuration, and which backends are present. On macOS, which is untested and not claimed, it
+  carries a `note` saying so; that is a fact to relay, not a gate to work around.
+- Which program each route runs, with its command line and license, is in `docs/BACKENDS.md`
+  once it lands; until then `src/plutonium_agent_toolkit/dev/backends.json` and the `executable()`
+  calls in `src/plutonium_agent_toolkit/dev/` are the source.
 - Troubleshooting tables: `docs/GAME-CONTROL.md`, `docs/WINDOWS-QUALIFICATION.md`,
   `docs/GETTING-STARTED.md`. They map a symptom to a cause and the file to change.
 

@@ -3,9 +3,10 @@
 Set up the Plutonium Agent Toolkit from this folder.
 
 Read README.md, AGENTS.md and docs/GETTING-STARTED.md first, then docs/SUPPORT.md so you know which
-capabilities are actually verified in this version. The development (build) tools run on any OS:
-Windows, Linux or macOS. Game control and capture are native-Windows-only, because their transport
-is the Win32 console; skip them unless you are on Windows with Plutonium installed.
+capabilities are actually verified in this version. The development (build) tools run on Windows
+and Linux. Game control and capture are native-Windows-only, because their transport is the Win32
+console; skip them unless you are on Windows with Plutonium installed. macOS is untested and has
+no pinned backends; if I am on a Mac, say so and stop after discovery.
 
 This toolkit is meant to be adapted to my machine: if a default does not fit my setup, prefer
 `pat configure`, `PAT_HOME` and `PAT_BACKEND_*`, and edit the small adapters in `src/` (with a test)
@@ -23,7 +24,7 @@ Handle the routine work yourself:
    toolkit at it with an absolute path in `PAT_BACKEND_<NAME>` (for example `PAT_BACKEND_GSC`).
 4. If I am on Windows and want game control later, find my Plutonium T6 storage folder (usually
    `%LOCALAPPDATA%\Plutonium\storage\t6`) and my `plutonium.exe`, and save them with `pat configure`.
-   On Linux or macOS, game control is out of scope; configure only what the build tools need.
+   On Linux, game control is out of scope; configure only what the build tools need.
 5. Run `pat doctor --json` and explain, in plain language, what is ready and what is not. `doctor`
    reports development-tool readiness separately from whether game control is supported on this host.
 

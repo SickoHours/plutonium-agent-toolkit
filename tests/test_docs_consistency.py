@@ -11,6 +11,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 STATUS = {"available", "implemented", "planned", "deferred", "unsupported"}
 EVIDENCE = {"contract", "offline", "native", "game", "accepted"}
+# Every document a user or their agent reads before trusting a platform claim.
+USER_DOCS = ("README.md", "SETUP-PROMPT.md", "docs/GETTING-STARTED.md", "docs/SUPPORT.md",
+             "skills/plutonium-agent-toolkit/SKILL.md", "AGENTS.md", "docs/FOR-AGENTS.md", "CONTRIBUTING.md",
+             "examples/hello-zm/README.md", "pyproject.toml")
+UNBACKED = ("any OS", "any operating system", "macOS", "Mac OS", "OS X", "MacOS", "darwin")
+QUALIFIERS = ("untested", "not claimed", "not supported", "no pinned", "no pins")
 
 
 def read(rel):
@@ -47,6 +53,25 @@ class DocsConsistencyTests(unittest.TestCase):
     def test_for_agents_doc_exists_and_is_linked(self):
         self.assertTrue((ROOT / "docs/FOR-AGENTS.md").is_file())
         self.assertIn("docs/FOR-AGENTS.md", read("AGENTS.md"))
+
+    def test_no_unbacked_platform_claims(self):
+        # macOS has no pinned backends and no receipt; "any OS" would claim it. A line may name
+        # macOS only to say it is untested / not claimed / has no pins.
+        for doc in USER_DOCS:
+            for number, line in enumerate(read(doc).splitlines(), 1):
+                if any(phrase in line for phrase in UNBACKED) and not any(q in line for q in QUALIFIERS):
+                    self.fail(f"{doc}:{number}: unbacked platform claim: {line.strip()[:120]}")
+
+    def test_support_platform_table_names_both_supported_hosts(self):
+        text = read("docs/SUPPORT.md")
+        self.assertIn("Windows 11", text)
+        self.assertRegex(text, r"Arch Linux \(Omarchy\)")
+        self.assertRegex(text, r"(?m)^\| macOS \|.*untested")
+
+    def test_support_links_only_receipts_that_exist(self):
+        text = read("docs/SUPPORT.md")
+        for rel in set(re.findall(r"\]\((receipts/[^)]+\.json)\)", text)):
+            self.assertTrue((ROOT / "docs" / rel).is_file(), rel)
 
     def test_no_arbitrary_console_promise_anywhere_in_agent_docs(self):
         # The no-escape-hatch rule must not be contradicted by the malleability language.
