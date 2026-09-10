@@ -69,5 +69,14 @@ backends building `examples/hello-zm`, `install-mod`, `launch`, `load-map town`,
 
 **`1.0.0`** additionally requires: the remaining dev routes (`model`, `audio`, `image`, `lua`,
 `weapon`) at level `native`; frozen JSON, exit-code and schema contracts; both pilot journeys
-(user and contributor) passed by agents on a different harness than the one that built the
-toolkit. Capture and testing are a separate later release.
+([PILOT-USER.md](PILOT-USER.md) and [PILOT-CONTRIBUTOR.md](PILOT-CONTRIBUTOR.md)) passed by
+agents on a different harness than the one that built the toolkit. Capture and testing are a
+separate later release.
+
+## Release mechanics
+
+`python tools/bump_version.py <version>` moves every version statement at once and promotes the
+`Unreleased` changelog section. `python tools/release_check.py --tag v…` must pass. Pushing the
+tag runs `.github/workflows/release.yml`: tests on Windows, release check against the tag, wheel
+and sdist with SHA-256 sums, GitHub Release with the changelog section as notes. Pre-release
+tags (`-alpha`, `-beta`, `-rc`) are marked pre-release automatically.

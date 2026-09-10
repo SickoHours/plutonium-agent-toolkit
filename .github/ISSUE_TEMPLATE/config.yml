@@ -3,3 +3,6 @@ contact_links:
   - name: Security report
     url: https://github.com/SickoHours/plutonium-agent-toolkit/security/advisories/new
     about: Report a vulnerability privately
+  - name: Windows qualification run
+    url: https://github.com/SickoHours/plutonium-agent-toolkit/blob/main/docs/WINDOWS-QUALIFICATION.md
+    about: Native receipts come from this procedure as a pull request, not an issue
