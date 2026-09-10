@@ -121,7 +121,9 @@ Every entry states what shipped, on which platform it was verified, and what rem
   `tier1-offline.superseded-*.json`.
 
 - Native Windows Tier 2 (backends) receipt `docs/receipts/0.1.0a1/tier2-backends.json`: same host,
-  clean tree, 10/10 steps on the first attempt. gsc-tool 1.4.10 and OpenAssetTools 0.33.0
+  clean tree, 10/10 steps on the first attempt, then re-run at 11/11 after the mod-zone naming fix
+  (the build now emits `packages/mod.ff`, staged for Tier 3 without renaming; the earlier receipt is
+  kept as superseded). gsc-tool 1.4.10 and OpenAssetTools 0.33.0
   downloaded, SHA-256 verified and re-verified on rerun; `examples/hello-zm` compiled, linked,
   read back, byte-compared and verified with `--inputs` (`mod.ff` 384 bytes, SHA-256 in the
   receipt); `ff inspect` and `ff extract` on the result; a broken script fails with
