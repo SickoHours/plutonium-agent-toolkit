@@ -20,7 +20,10 @@ then rebuild the mod and prove the new bytes are in the package.
    ```sh
    pat gsc compile <mod>/scripts/<name>.<gsc|csc> [--includes <dir>] --output ../jobs/<name>-compile-001 --json
    ```
-   Proof: `ok: true` and `result.files[]` lists one non-empty compiled file. A failure returns
+   Proof: `ok: true` and `result.files[]` lists one non-empty compiled file. A wrong suffix or
+   unreadable input returns `input_invalid` or `input_missing`, and a missing compiler
+   `backend_unavailable` with the `dev setup` to run; those happen before anything compiles. A
+   compiler or output failure returns
    `backend_failed`; `details.first_error` carries the compiler's own first error line when the
    compiler printed one (it exited zero with an `ERROR` line). When it is absent (the compiler
    exited non-zero, or produced no or empty output) read the step log named in `details.log`

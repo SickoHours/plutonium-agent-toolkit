@@ -16,9 +16,11 @@ and `docs/knowledge/gsc.md`.
    playbook is open and its preconditions are true.
 2. Plan. `pat project plan <recipe> --output <new dir> --json`. Proof: `ok: true` and
    `result.backends_available` is `true`; when it is `false`, `result.backends[]` lists each
-   backend by `id` with `available` false for the missing ones. A missing backend stops here:
-   `pat dev setup --only <program>` (the `id`'s program: `gsc`, `oat`) or a
-   `PAT_BACKEND_<ID>` override, then plan again.
+   backend by `id` (`gsc`, `linker`, `unlinker`) with `available` false for the missing ones.
+   A missing backend stops here: install it (`pat dev setup --only gsc` for `gsc`;
+   `pat dev setup --only oat` for `linker` and `unlinker`) or point the exact binary at
+   `PAT_BACKEND_GSC`, `PAT_BACKEND_LINKER` or `PAT_BACKEND_UNLINKER` (there is no
+   `PAT_BACKEND_OAT`), then plan again.
 3. Build. `pat project build <recipe> --output <new dir> --json`. Proof: `ok: true`,
    `result.rawfiles_verified` counts every script, and `receipt.json` has `status: succeeded`.
    A `backend_failed` result: read the step log named in the receipt and report the backend's
