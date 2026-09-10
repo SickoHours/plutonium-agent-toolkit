@@ -7,6 +7,10 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+### Changed
+
+- CI uses actions/checkout v7, setup-python v7 and upload-artifact v7 (Node 24 runtime).
+
 ## [0.1.0a1] - 2026-09-09
 
 First private foundation commit. Nothing in this version has run on a native Windows host.
