@@ -76,6 +76,21 @@ Every entry states what shipped, on which platform it was verified, and what rem
   - The tier commands said `--output docs/receipts/qualify`, contradicting `docs/receipts/README.md`
     and this changelog; they say `--output docs/receipts` now.
 
+### Verified
+
+- Native Windows Tier 1 (offline) receipt `docs/receipts/0.1.0a1/tier1-offline.json`: Windows 11
+  25H2 build 26200, Python 3.12.0, clean tree. 13/13 steps: unit tests, `version`, `manifest`,
+  `describe`, `doctor`, `configure`, `game mods` on an empty storage, `dev setup --plan`,
+  `project plan` of `examples/hello-zm`, the `output_exists` refusal, the deferred-route refusal,
+  private scan and release check. `version`, `manifest`, `describe`, `doctor` and `configure`
+  move to level `native` in `docs/SUPPORT.md`. The failed first attempt is kept alongside as
+  `tier1-offline.superseded-*.json`.
+
+### Not verified
+
+- Tiers 2 (real backends) and 3 (running game) have not run yet; every route they cover stays
+  at `offline`.
+
 ## [0.1.0a1] - 2026-09-09
 
 First private foundation commit. Nothing in this version has run on a native Windows host.
