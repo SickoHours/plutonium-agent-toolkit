@@ -81,8 +81,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
   knew the exact `USERPROFILE`; other accounts' and other drives' `Users` paths would also have
   survived. `tools/qualify_windows.py` now replaces any drive-letter `Users` path for any account,
   in either slash style, including account names that contain spaces, before the account-specific
-  patterns; strips `excerpt` from embedded scan hits; and gains `--redact-existing <file>`, which reapplies the current rules to a committed
-  receipt in place, is idempotent, notes the rewrite and runs on any platform. The affected receipt
+  patterns; strips `excerpt` from embedded scan hits; and gains `--redact-existing <file>`, which
+  reapplies the current rules to a committed receipt in place, is idempotent, notes the rewrite and runs on any platform. The affected receipt
   was re-redacted with it, not hand-edited. `redactor()` is unit-tested directly with the
   reviewer's five inputs plus the JSON-escaped form.
 - Windows job runner: when the step log is still held after the bounded wait, the step records
@@ -98,6 +98,17 @@ Every entry states what shipped, on which platform it was verified, and what rem
   fastfile, ipak and per-weapon lines), so `check-load` could never verify a real `load-map`. The
   bound is now 4 MiB, matching a job's backend log; regression test with a map-load-sized log.
   Found on the first native Tier 3 attempt.
+
+- `project build` linked the mod zone under the recipe name (`> name,hello_zm`), so the real Linker
+  emitted `packages/hello_zm.ff`, and the qualification staging (and the old `install_hint`) renamed it
+  to `mod.ff`. A T6 fastfile is bound to its file name: the zone name keys its compressed streams, so
+  the renamed copy cannot be inflated (OpenAssetTools Unlinker: `inflate of stream 0 failed`, exit -1;
+  a known-good `mod.ff` fails the same way when renamed) and the Plutonium r5346 client hung loading it
+  (busy, no log output, no dialog). The zone is now always linked as `mod`, so the build emits a real
+  `packages/mod.ff`; `tools/qualify_windows.py` stages it only under that name and fails the tier
+  otherwise; the fake Linker names its output from `> name,` and the fake Unlinker refuses a renamed
+  file, so the offline round-trip test now catches this (it previously passed for the wrong reason).
+  Found on the first native Tier 3 attempt with `hello_zm`; Tier 2 re-run with the corrected build.
 
 ### Verified
 

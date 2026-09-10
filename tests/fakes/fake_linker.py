@@ -10,14 +10,19 @@ base = Path(args[args.index("--base-folder") + 1])
 out = Path(args[args.index("--output-folder") + 1])
 zone = args[-1]
 lines = (base / "zone_source" / f"{zone}.zone").read_text().splitlines()
+# Like the real Linker, the fastfile is named after the zone's `> name,X` metadata, not the
+# .zone file, and that name is the zone name baked into the output (native Tier 2/3 finding).
+name = zone
 raw = {}
 for line in lines:
+    if line.startswith("> name,"):
+        name = line.split(",", 1)[1].strip()
     if line.startswith("rawfile,"):
         rel = line.split(",", 1)[1]
         raw[rel] = base64.b64encode((base / "raw" / rel).read_bytes()).decode()
 out.mkdir(parents=True, exist_ok=True)
-payload = {"zone": zone, "rawfiles": raw}
+payload = {"zone": name, "rawfiles": raw}
 if any(line.strip() == "> fixture_readback_fail" for line in lines):
     payload["readback_fail"] = True
-(out / f"{zone}.ff").write_text(json.dumps(payload))
-print("Linked", zone, len(raw), "rawfiles")
+(out / f"{name}.ff").write_text(json.dumps(payload))
+print("Linked", name, len(raw), "rawfiles")

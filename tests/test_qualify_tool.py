@@ -158,6 +158,18 @@ class QualifyToolUnitTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(path.read_text(encoding="utf-8"), text)
 
+    def test_stage_for_tier3_refuses_to_rename_a_fastfile(self):
+        # Native Tier 3 finding: hello_zm.ff copied to mod.ff could not be inflated and hung the client.
+        built = Path(self.temp.name) / "packages" / "hello_zm.ff"
+        built.parent.mkdir()
+        built.write_bytes(b"ff")
+        self.assertIsNone(self.q.stage_for_tier3(built, self.home))
+        good = built.with_name("mod.ff")
+        good.write_bytes(b"ff")
+        staged = self.q.stage_for_tier3(good, self.home)
+        self.assertEqual(staged, self.home / "qualify" / "hello_zm" / "mod.ff")
+        self.assertEqual(staged.read_bytes(), b"ff")
+
     def test_redactor_handles_account_names_with_spaces(self):
         # Macroscope on PR #7: USERS_PATH stopped at whitespace, leaving "Doe\y" of "Jane Doe\y" in place.
         from unittest.mock import patch

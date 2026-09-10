@@ -11,6 +11,12 @@ try:
 except ValueError:
     print("Failed to load fastfile", ff)
     sys.exit(1)
+# A real T6 fastfile is bound to its file name: the zone name keys the compressed streams, so a
+# renamed copy fails to inflate (native Tier 3 finding: hello_zm.ff copied to mod.ff hung the
+# client). Reproduce it so no test can pass by renaming.
+if data.get("zone") and ff.stem != data["zone"]:
+    print("ERROR: inflate of stream 0 failed with error code -3: invalid code lengths set")
+    sys.exit(1)
 if data.get("readback_fail"):
     print("error loading fixture asset; continuing")
     sys.exit(0)
