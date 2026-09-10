@@ -450,6 +450,12 @@ def tier_game_begin(home: Path) -> None:
 
 
 def _fresh(path: Path, began_unix: float) -> bool:
+    """Written at or after the begin marker, with one second of slack for coarse mtimes.
+
+    Filesystems that store mtimes at one- or two-second granularity (FAT, some network shares)
+    can stamp a file written just after the marker with a time before it. The marker is written
+    before any Tier 3 command runs and nothing in the sequence writes these files in the second
+    before it, so the slack admits no stale run; it is deliberate and predates this file."""
     return path.stat().st_mtime >= began_unix - 1
 
 
