@@ -13,7 +13,14 @@ body:
     id: effect
     attributes:
       label: Effect
-      options: [inert, writes-config, downloads-backends, writes-output, query-engine, changes-game, captures-display]
+      options:
+        - inert
+        - writes-config
+        - downloads-backends
+        - writes-output
+        - query-engine
+        - changes-game
+        - captures-display
     validations:
       required: true
   - type: textarea

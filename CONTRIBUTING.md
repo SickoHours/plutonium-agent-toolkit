@@ -53,6 +53,18 @@ Step-by-step guides for the common contributions live in [docs/contributors/](do
 - Adding a test scenario
 - Recording a qualification receipt
 
+## Releasing (maintainers)
+
+```sh
+python tools/bump_version.py 0.1.0b1        # updates __init__, pyproject, SUPPORT.md, promotes Unreleased
+python tools/release_check.py               # prints the tag to use
+git commit -am "release: 0.1.0b1" && git push
+git tag v0.1.0-beta.1 && git push origin v0.1.0-beta.1
+```
+
+The tag push runs the release workflow. It refuses a tag that disagrees with the version,
+changelog or support matrix, so a mismatched release cannot ship.
+
 ## Reporting bugs
 
 Use the bug template. Include `pat version --json`, the command's full JSON output and exit

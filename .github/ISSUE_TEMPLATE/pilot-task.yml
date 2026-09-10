@@ -1,0 +1,22 @@
+name: Pilot task (maintainer)
+description: A seeded change for the contributor pilot; see docs/PILOT-CONTRIBUTOR.md
+labels: [pilot-task]
+body:
+  - type: textarea
+    id: task
+    attributes:
+      label: The change
+      description: Small, real, and not already done. Name the route or file and the observable result.
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: What a mergeable pull request contains
+      value: |
+        - Code on a branch, following docs/contributors/ADDING-A-ROUTE.md if a route is involved
+        - Tests including failure paths; fake backend if a new backend is touched
+        - docs/SUPPORT.md row (status `implemented`, not `available`) and an Unreleased changelog line
+        - Pull request template filled in, including "Not verified"
+    validations:
+      required: true

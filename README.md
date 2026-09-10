@@ -48,6 +48,13 @@ Paste [WINDOWS-QUALIFY-PROMPT.md](WINDOWS-QUALIFY-PROMPT.md) into your agent on 
 It follows [docs/WINDOWS-QUALIFICATION.md](docs/WINDOWS-QUALIFICATION.md), fixes what breaks,
 and opens a pull request with redacted receipts.
 
+## Pilots
+
+Two acceptance tests gate 1.0: an unfamiliar user's agent installs and loads the example mod
+([docs/PILOT-USER.md](docs/PILOT-USER.md)), and an unfamiliar development agent lands a change
+([docs/PILOT-CONTRIBUTOR.md](docs/PILOT-CONTRIBUTOR.md)). Both use a different agent harness than
+the one that built the toolkit.
+
 ## For contributors and their agents
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md), then [AGENTS.md](AGENTS.md). Development agents get

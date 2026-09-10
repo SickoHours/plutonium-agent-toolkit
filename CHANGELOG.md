@@ -9,22 +9,24 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Added
 
-- Windows-gated development routes implemented: `model
-  inspect|convert|transform|rename-bones|retime|preview` (background Blender with the bundled
-  worker and pinned Cast add-on), `audio inspect|convert`, `image convert`, `lua decompile`.
-- `weapon catalog|plan` implemented (any platform): sealed BO3 donor verification and recipe
-  planning; `docs/WEAPONS.md`.
-- `game install-mod <mod.ff> <folder>`: file-only install into storage with hash verification;
-  refuses to overwrite without `--replace`, which moves the old folder aside.
+- Release automation: `tools/bump_version.py` (moves the version everywhere and promotes the
+  `Unreleased` section), `tools/release_notes.py` (changelog section as release notes), and
+  `.github/workflows/release.yml` (tag push verifies, tests on Windows, builds, publishes a
+  GitHub Release with checksums; pre-release tags flagged automatically).
+- Pilot acceptance journeys: `docs/PILOT-USER.md` and `docs/PILOT-CONTRIBUTOR.md`.
+- Maintainer checklist for the Windows qualification pull request:
+  `docs/contributors/REVIEWING-QUALIFICATION.md`.
 - Windows qualification procedure: `WINDOWS-QUALIFY-PROMPT.md` for the agent on the Windows PC,
   `docs/WINDOWS-QUALIFICATION.md` (three tiers, human-authorized game tier),
   `tools/qualify_windows.py` producing redacted receipts under `docs/receipts/<version>/`.
-- Fake ffmpeg/ffprobe, ImageConverter, CoDLuaDecompiler and Blender under `tests/fakes/`.
-
-### Changed
-
-- `capture` and `test` routes are now `deferred` (product decision 2026-09-10): registered, refuse
-  with `not_implemented`, and excluded from the beta and 1.0 bars in `docs/SUPPORT.md`.
+- Windows-gated development routes implemented: `gsc compile|decompile`,
+  `ff inspect|link|extract`, `project init|plan|build|verify`, `model
+  inspect|convert|transform|rename-bones|retime|preview` (background Blender with the bundled
+  worker and pinned Cast add-on), `audio inspect|convert`, `image convert`, `lua decompile`.
+  Jobs run backends inside a Windows Job Object (process group elsewhere for tests), bound log
+  and output size, and write `receipt.json` on every exit path.
+- `weapon catalog|plan` implemented (any platform): sealed BO3 donor verification and recipe
+  planning; `docs/WEAPONS.md`.
 - `game` group implemented behind the Windows gate: `status`, `mods`, `info`, `launch`,
   `select-mod`, `reload-mod`, `load-map`, `fast-restart`, `map-restart`, `disconnect`,
   `check-load`, `quit`. Native Win32 console transport (attach, screen read, one bounded input
@@ -33,18 +35,19 @@ Every entry states what shipped, on which platform it was verified, and what rem
   without force-kill. Launch goes through the fixed `plutonium://play/t6zm` URI and reports
   request, detection and focus preservation as separate facts. One bounded worker per command
   under a named mutex; uncertain outcomes are never replayed. `docs/GAME-CONTROL.md`.
-- `gsc compile|decompile`, `ff inspect|link|extract` and `project init|plan|build|verify` are
-  implemented behind the Windows gate. Jobs run backends inside a Windows Job Object (process group
-  elsewhere for tests), bound log and output size, and write `receipt.json` on every exit path.
+- `game install-mod <mod.ff> <folder>`: file-only install into storage with hash verification;
+  refuses to overwrite without `--replace`, which moves the old folder aside.
 - `core/jobs.py` job runner, `PAT_BACKEND_<NAME>` override for tests and pre-installed tools,
-  `implemented` route status between `planned` and `available`.
-- Fake gsc-tool, Linker and Unlinker under `tests/fakes/` so the whole build pipeline is unit-tested
-  offline, including compiler errors reported with exit zero, backend crashes, tampered outputs and
-  recipe path escapes.
+  `implemented` and `deferred` route statuses alongside `planned` and `available`.
+- Fake gsc-tool, Linker, Unlinker, ffmpeg/ffprobe, ImageConverter, CoDLuaDecompiler and Blender
+  under `tests/fakes/` so every adapter is unit-tested offline, including compiler errors reported
+  with exit zero, backend crashes, tampered outputs and recipe path escapes.
 - C2Mv3 3.0.5 hash pinned (optional, never redistributed).
 
 ### Changed
 
+- `capture` and `test` routes are `deferred` (product decision 2026-09-10): registered, refuse
+  with `not_implemented`, and excluded from the beta and 1.0 bars in `docs/SUPPORT.md`.
 - Repository made public on 2026-09-10 at 0.1.0a1 so the program can use branch rulesets,
   secret scanning and private vulnerability reporting. Readiness is unchanged: see docs/SUPPORT.md.
 - CI uses actions/checkout v7, setup-python v7 and upload-artifact v7 (Node 24 runtime).
