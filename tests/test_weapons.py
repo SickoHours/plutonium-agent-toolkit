@@ -217,3 +217,20 @@ class WeaponElementTypeTests(WeaponFixture):
         for field, value in (("keep_loaded_prefixes", [[]]), ("required_files", [{}])):
             code, row = invoke(["weapon", "plan", str(self.recipe(**{field: value})), "--library", str(library), "--output", self.out()])
             self.assertEqual(row["error_code"], "input_invalid", field)
+
+
+class WeaponReceiptFieldTests(WeaponFixture):
+    def test_adapter_fields_must_come_together_and_no_unknown_fields(self):
+        r = json.loads(self.receipt.read_text())
+        r["adapter_index_sha256"] = "0" * 64
+        self.receipt.write_text(json.dumps(r))
+        code, row = invoke(["weapon", "catalog", str(self.receipt), "--capture", "capture-01/manifest.json", "--output", self.out()])
+        self.assertEqual(row["error_code"], "input_invalid")
+        self.assertIn("together", row["message"])
+        r = json.loads(self.receipt.read_text())
+        del r["adapter_index_sha256"]
+        r["typo_field"] = 1
+        self.receipt.write_text(json.dumps(r))
+        code, row = invoke(["weapon", "catalog", str(self.receipt), "--capture", "capture-01/manifest.json", "--output", self.out()])
+        self.assertEqual(row["error_code"], "input_invalid")
+        self.assertIn("unknown fields", row["message"])

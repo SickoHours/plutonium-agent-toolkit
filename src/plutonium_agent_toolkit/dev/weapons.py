@@ -161,6 +161,10 @@ def catalog(job: Job, receipt_path: Path, capture_rel: str) -> dict:
         _require(len({i["name"] for i in items}) == len(items), f"Ambiguous duplicate {kind}")
         assets[kind] = sorted(items, key=lambda i: i["name"])
     adapter = {}
+    _require(("adapter_index" in receipt) == ("adapter_index_sha256" in receipt),
+             "adapter_index and adapter_index_sha256 must be provided together or not at all")
+    unknown = set(receipt) - {"root", "index", "index_sha256", "map", "pid", "start_ticks", "adapter_index", "adapter_index_sha256"}
+    _require(not unknown, f"Donor receipt has unknown fields: {sorted(unknown)}")
     if "adapter_index" in receipt:
         path = job.input(_rel(root, receipt["adapter_index"]))
         _require(job.inputs[str(path)] == receipt.get("adapter_index_sha256"), "Native adapter index changed", INPUT_CHANGED)
