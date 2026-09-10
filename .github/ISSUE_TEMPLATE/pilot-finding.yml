@@ -1,0 +1,44 @@
+name: Pilot finding
+description: Something an unfamiliar agent or person hit while following docs/PILOT-USER.md or docs/PILOT-CONTRIBUTOR.md
+labels: [pilot]
+body:
+  - type: dropdown
+    id: journey
+    attributes:
+      label: Journey
+      options:
+        - "User (install, build, load)"
+        - "Contributor (change, test, pull request)"
+    validations:
+      required: true
+  - type: input
+    id: harness
+    attributes:
+      label: Agent harness and model
+      placeholder: "Codex CLI, gpt-…  /  Gemini CLI  /  Cursor  /  …"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What the agent did, and what happened
+      description: Paste the command and its full JSON output where relevant. Redact your username.
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind of gap
+      options:
+        - Documentation missing or unclear
+        - Error message did not say what to do
+        - Agent had to guess or read source
+        - Agent had to ask the human
+        - Toolkit defect
+        - Something AGENTS.md forbids happened anyway
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What would have let the agent proceed without help
