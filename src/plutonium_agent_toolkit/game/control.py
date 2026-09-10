@@ -290,7 +290,10 @@ def check_load(load_id: str, root: Path, console_factory) -> dict:
 
 # ----- launch ---------------------------------------------------------------------------
 
-def launch(native, root: Path, observe_seconds: int = 90) -> dict:
+LAUNCH_SETTLE_SECONDS = 15
+
+
+def launch(native, root: Path, observe_seconds: int = 90, settle_seconds: int = LAUNCH_SETTLE_SECONDS) -> dict:
     """Start T6 Zombies through the registered plutonium:// handler and observe.
 
     Reports three separate facts: whether the request was issued, whether a game
@@ -312,26 +315,38 @@ def launch(native, root: Path, observe_seconds: int = 90) -> dict:
     os.startfile(PLUTONIUM_URI)  # noqa: S606 - fixed allowlisted URI
     game = None
     appeared = None
+    detected_at = None
+    # Observe until the interval ends, or until the game has been visible for three
+    # seconds and a further settle window has passed. Startup focus theft commonly
+    # happens after the window appears, so detection alone does not end observation.
     while time.monotonic() - started < observe_seconds:
         now = native.foreground()
         if (now["pid"], now["title"]) != (last["pid"], last["title"]):
             focus_log.append({"t": round(time.monotonic() - started, 2), **now, "event": "foreground-changed"})
             last = now
-        found = native.windows()
-        if found:
-            if appeared is None:
-                appeared = time.monotonic()
-            if time.monotonic() - appeared >= 3:
-                pid, title = next(iter(found.items()))
-                game = {"pid": pid, "title": title}
-                break
-        else:
-            appeared = None
+        if game is None:
+            found = native.windows()
+            if found:
+                if appeared is None:
+                    appeared = time.monotonic()
+                if time.monotonic() - appeared >= 3:
+                    pid, title = next(iter(found.items()))
+                    game = {"pid": pid, "title": title}
+                    detected_at = time.monotonic()
+                    focus_log.append({"t": round(detected_at - started, 2), **now, "event": "game-detected"})
+            else:
+                appeared = None
+        elif time.monotonic() - detected_at >= settle_seconds:
+            break
         time.sleep(0.25)
+    observed = round(time.monotonic() - started, 2)
     focus_preserved = all(e.get("event") != "foreground-changed" for e in focus_log)
     truncated = len(focus_log) > 200
     result = {"launch_requested": True, "uri": PLUTONIUM_URI, "game_window": game, "game_detected": game is not None,
-              "observe_seconds": observe_seconds, "focus_events": focus_log[:200], "focus_events_truncated": truncated,
+              "observe_seconds": observe_seconds, "settle_seconds": settle_seconds, "focus_observed_seconds": observed,
+              "focus_scope": f"foreground changes during {observed}s from launch request"
+                             + (f", including {settle_seconds}s after the game window appeared" if game else ", game window never appeared"),
+              "focus_events": focus_log[:200], "focus_events_truncated": truncated,
               "focus_event_count": len(focus_log), "focus_preserved": focus_preserved,
               "ready_for_handoff": False,
               "note": "Window detection is not a playable menu. Run game status/info and inspect the screen. Launcher login or update prompts are reported here, never answered."}

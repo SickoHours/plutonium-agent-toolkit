@@ -22,7 +22,7 @@ memory, inject anything, focus the game or press player keys.
 | `pat game status` | Lists visible T6 Zombies windows and the foreground window. No engine input. | `windows`, `foreground` |
 | `pat game mods` | Disk inventory of `storage\t6\mods`; `available` needs `mod.ff` or `mod_load.ff` and not an `mp_` folder. | `mods[]` |
 | `pat game info` | Fresh `fs_game`, `mapname`, `sv_running`, `sv_cheats`, `g_gametype`. | `state`, `process` |
-| `pat game launch` | Issues the fixed `plutonium://play/t6zm` URI through the registered handler, then watches for the game window and logs every foreground change for up to 90 s. | `launch_requested`, `game_detected`, `focus_preserved`, `focus_events` |
+| `pat game launch` | Issues the fixed `plutonium://play/t6zm` URI through the registered handler, then logs every foreground change until the game window has been visible for 3 s plus a 15 s settle window, or 90 s if it never appears. | `launch_requested`, `game_detected`, `focus_preserved`, `focus_scope`, `focus_events` |
 | `pat game select-mod <id>` / `base` | Leaves the match if needed, unloads, loads. Each step is verified before the next. Selecting the current mod is a no-op. | `load_id`, `load_check.argv` |
 | `pat game reload-mod` | Same transaction for the currently selected mod. | `load_id` |
 | `pat game load-map <map-id>` | Writes and verifies the five UI/gametype dvars, then sends `map` once. DLC5 maps need a selected mod that ships `zone\<map>.ff`. | `load_id`, `load_check.argv` |
@@ -47,8 +47,9 @@ Map IDs: `tranzit town farm bus-depot nuketown die-rise mob buried origins` (bas
 - `game_not_found` / `game_ambiguous`: zero or more than one T6 Zombies window. The launcher alone
   is not a game.
 - Launch reports three facts separately: the URI was issued, a game window appeared, and whether
-  the foreground window changed during startup. A launcher login or update prompt shows up as a
-  foreground change and is never answered by the toolkit.
+  the foreground window changed during the observed window (`focus_scope` says exactly how long).
+  A launcher login or update prompt shows up as a foreground change and is never answered by the
+  toolkit. Focus changes after the observation window are outside this claim.
 
 ## Where state lives
 

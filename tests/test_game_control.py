@@ -413,10 +413,11 @@ class LaunchTests(unittest.TestCase):
         native = self.make_native([{}, {}, {4242: "Plutonium T6 Zombies (r5346)"}],
                                   [{"pid": 1, "title": "agent"}, {"pid": 1, "title": "agent"}, {"pid": 9, "title": "Plutonium Launcher"}])
         opened = []
+        clock = iter([0.0] + [0.3 * i for i in range(1, 400)])
         with patch.object(control.os, "startfile", lambda uri: opened.append(uri), create=True), \
              patch.object(control.time, "sleep", lambda *_: None), \
-             patch.object(control.time, "monotonic", side_effect=[0, 0.3, 0.6, 0.6, 0.9, 4.0, 4.0, 4.1]):
-            result = control.launch(native, None, observe_seconds=90)
+             patch.object(control.time, "monotonic", lambda: next(clock)):
+            result = control.launch(native, None, observe_seconds=90, settle_seconds=2)
         self.assertEqual(opened, ["plutonium://play/t6zm"])
         self.assertTrue(result["launch_requested"])
         self.assertTrue(result["game_detected"])
@@ -668,3 +669,62 @@ class FifthReviewRegressionTests(GameFixture):
             os.environ.pop(c.WORKER_TOKEN_ENV, None)
         self.assertTrue(result["stopped"])
         self.assertIsNone(captured["root"])
+
+
+class LaunchSettleTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        os.environ["PAT_HOME"] = self.temp.name
+        self.addCleanup(lambda: os.environ.pop("PAT_HOME", None))
+        launcher = Path(self.temp.name) / "plutonium.exe"
+        launcher.write_bytes(b"MZ")
+        from plutonium_agent_toolkit.core import config
+        config.save({"plutonium_launcher": str(launcher)})
+
+    def test_focus_change_after_detection_is_still_recorded(self):
+        # Game visible from the first poll; the launcher steals focus 5 s after detection.
+        class Native:
+            calls = 0
+
+            @staticmethod
+            def windows():
+                return {7: "Plutonium T6 Zombies"}
+
+            @staticmethod
+            def foreground():
+                Native.calls += 1
+                return {"pid": 9, "title": "Plutonium Launcher"} if Native.calls > 40 else {"pid": 1, "title": "agent"}
+
+        clock = iter([0.0] + [0.25 * i for i in range(1, 1000)])
+        with patch.object(control.os, "startfile", lambda uri: None, create=True), \
+             patch.object(control.time, "sleep", lambda *_: None), \
+             patch.object(control.time, "monotonic", lambda: next(clock)):
+            result = control.launch(Native, None, observe_seconds=90, settle_seconds=15)
+        self.assertTrue(result["game_detected"])
+        self.assertFalse(result["focus_preserved"])
+        events = [e["event"] for e in result["focus_events"]]
+        self.assertIn("game-detected", events)
+        self.assertLess(events.index("game-detected"), events.index("foreground-changed"), "change came after detection")
+        self.assertGreaterEqual(result["focus_observed_seconds"], 15)
+        self.assertLess(result["focus_observed_seconds"], 90)
+        self.assertIn("15s after the game window appeared", result["focus_scope"])
+
+    def test_without_a_game_window_the_full_interval_is_observed(self):
+        class Native:
+            @staticmethod
+            def windows():
+                return {}
+
+            @staticmethod
+            def foreground():
+                return {"pid": 1, "title": "agent"}
+
+        clock = iter([0.0] + [0.5 * i for i in range(1, 1000)])
+        with patch.object(control.os, "startfile", lambda uri: None, create=True), \
+             patch.object(control.time, "sleep", lambda *_: None), \
+             patch.object(control.time, "monotonic", lambda: next(clock)):
+            result = control.launch(Native, None, observe_seconds=20)
+        self.assertFalse(result["game_detected"])
+        self.assertGreaterEqual(result["focus_observed_seconds"], 20)
+        self.assertIn("never appeared", result["focus_scope"])
