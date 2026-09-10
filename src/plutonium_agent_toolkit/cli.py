@@ -174,8 +174,13 @@ def run(argv: list[str]) -> dict:
             result["backends"] = backends.doctor()
         except Failure as exc:
             result["backends"] = {"ok": False, "error": exc.to_dict()}
-        result["ok"] = bool(info["supported"]) and cfg_state.get("ok", False) and result["backends"].get("ok", False)
-        result["verification"] = "Presence and configuration only. Native Windows execution, game control and capture are separate facts."
+        result["ok"] = cfg_state.get("ok", False) and result["backends"].get("ok", False)
+        result["game_control"] = {
+            "supported_here": bool(info["supported"]),
+            "note": "Game control and capture use the Win32 console and need a native Windows host. "
+                    "Development file tools run on this platform.",
+        }
+        result["verification"] = "Presence and configuration only. Execution, game control and capture are separate facts."
         return success(command, result)
 
     if group == "configure":
@@ -193,8 +198,6 @@ def run(argv: list[str]) -> dict:
     if group == "dev" and args.action == "setup":
         from .dev import backends
 
-        if not args.plan:
-            platform.require_windows("Backend setup")
         return success(command, backends.setup(only=args.only, plan=args.plan))
 
     if group in JOB_GROUPS:

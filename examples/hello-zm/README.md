@@ -21,7 +21,7 @@ pat project verify ..\jobs\hello-build-001\receipt.json --inputs --output ..\job
 pat game install-mod ..\jobs\hello-build-001\packages\mod.ff hello_zm --json
 ```
 
-Build compiles `hello.gsc`, links `mod.ff`, reads it back and compares the raw file. That is
-offline evidence, and in this version it has only been exercised against fake backends (see
-`docs/SUPPORT.md`). Loading the mod in the game and seeing the line on screen is a separate step
-that needs the user's go-ahead and a native Windows host.
+Build compiles `hello.gsc`, links `mod.ff`, reads it back and compares the raw file. This has
+native Windows receipts and has also been built natively on Linux with real gsc-tool and
+OpenAssetTools (see `docs/SUPPORT.md`). Loading the mod in the game and seeing the line on screen
+is a separate step that needs the user's go-ahead and a native Windows host.

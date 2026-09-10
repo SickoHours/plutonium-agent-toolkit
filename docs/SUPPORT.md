@@ -9,8 +9,8 @@ pull request that changes a route. `tools/release_check.py` verifies the version
 | --- | --- |
 | contract | Route is registered with name, effect and owner. Answers `not_implemented`. |
 | deferred | Registered contract, explicitly excluded from this release. Answers `not_implemented`. |
-| offline | Implemented; unit tests pass with synthetic fixtures and fake backends on any platform. Executes on Windows but has no native receipt. |
-| native | Ran on a native Windows 11 x64 host with a sanitized receipt linked below. Wine, WSL and CI runners do not count. |
+| offline | Implemented; unit tests pass with synthetic fixtures and fake backends on any platform. The file tools execute on any OS; game control and capture execute on native Windows only. No native receipt. |
+| native | Ran on a real host of the OS named in the receipt, not Wine, WSL or a CI runner, with a sanitized receipt linked below. The receipts here are native Windows 11 x64; the file tools also build natively on Linux (a committed native-Linux receipt is a tracked follow-up). |
 | game | Produced a verified effect in a running Plutonium T6 Zombies instance with a fresh engine reply and a decoded non-black frame where applicable. |
 | accepted | A human played the result and recorded a scoped verdict. |
 
@@ -18,13 +18,17 @@ A level applies only to the exact scope in the receipt. "Loaded Town once" is no
 
 ## Platform
 
+The development (file) tools run on any OS. Game control and capture use the Win32 console and run
+on native Windows only.
+
 | Item | Status |
 | --- | --- |
+| Development tools, any OS (Python 3.11+) | Run on Windows, Linux and macOS. Backends are per-platform: a pinned download where one exists, otherwise supply the tool and set `PAT_BACKEND_<NAME>`. Unit tests pass on any platform; `examples/hello-zm` has been built, read back and byte-compared natively on Linux with real gsc-tool and OpenAssetTools. |
 | Windows 11 x64, native Python 3.11+ | Tiers 1 (offline) and 2 (real backends) passed on Windows 11 25H2, build 26200, Python 3.12.0: [receipts/0.1.0a1/tier1-offline.json](receipts/0.1.0a1/tier1-offline.json), [receipts/0.1.0a1/tier2-backends.json](receipts/0.1.0a1/tier2-backends.json). Tier 3 (running game) attempted, [receipts/0.1.0a1/tier3-game.json](receipts/0.1.0a1/tier3-game.json): `launch` and console attach work, but a console-started match is dropped by the client right after it loads (issue #8; see the `game` rows). No `game` route earned level `game`. |
+| Linux, macOS | Development tools run natively (file-tool routes; backends via pinned downloads where available or `PAT_BACKEND_<NAME>`). Game control and capture are not available: their transport is the Win32 console. A committed native-Linux qualification receipt is a tracked follow-up. |
 | Windows 10 | untested |
 | Windows on ARM64 | unsupported |
-| Wine / Proton / WSL | unsupported for execution; discovery and unit tests only |
-| Linux, macOS | discovery and unit tests only; a Linux distribution is a separate future project |
+| Wine / Proton / WSL | Not used for qualification and never counted as native. Run the development tools on Linux directly instead; game control needs a real Windows host. |
 
 ## Routes
 
@@ -65,8 +69,9 @@ A level applies only to the exact scope in the receipt. "Loaded Town once" is no
 
 ## Release bars
 
-The release program ships in halves. The development toolchain is native-verified now; game
-control follows once issue #8 is resolved; capture and testing are a later release.
+The release program ships in halves. The development toolchain runs on any OS and is native-verified
+on Windows; game control is Windows-only and follows once issue #8 is resolved; capture and testing
+are a later release.
 
 **`0.1.0-beta.1` (development tools)** requires Tiers 1 and 2 of
 [WINDOWS-QUALIFICATION.md](WINDOWS-QUALIFICATION.md) passed on a native host with receipts under
@@ -83,10 +88,13 @@ inside a running private match rather than cold-starting one; the retest and any
 change land before this bar is called met.
 
 **`1.0.0`** additionally requires: the remaining dev routes (`model`, `audio`, `image`, `lua`,
-`weapon`) at level `native`; frozen JSON, exit-code and schema contracts; both pilot journeys
-([PILOT-USER.md](PILOT-USER.md) and [PILOT-CONTRIBUTOR.md](PILOT-CONTRIBUTOR.md)) passed by
-agents on a different harness than the one that built the toolkit. Capture and testing are a
-separate later release.
+`weapon`) at level `native`; and frozen JSON, exit-code and schema contracts. A pilot is simply a
+different person's agent, on a harness that did not build the toolkit, using the repo and succeeding;
+it is not a benchmark and there is no model-scoring gate. The contributor pilot
+([PILOT-CONTRIBUTOR.md](PILOT-CONTRIBUTOR.md)) is the 1.0 quality check; the user pilot
+([PILOT-USER.md](PILOT-USER.md)) is a soft, post-launch confidence check, not a hard gate. Capture
+and testing are a separate later release. (A future, optional idea: a `bench/` of repeatable modding
+tasks scored only on receipts and outputs, to compare models and harnesses. It gates nothing.)
 
 ## Release mechanics
 

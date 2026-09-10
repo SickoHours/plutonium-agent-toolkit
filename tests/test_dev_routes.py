@@ -1,5 +1,5 @@
-"""gsc / ff / project routes against fake backends. Exercises the real Job runner
-(Job Object on Windows, process group elsewhere) with PAT_DEV_UNGATED for non-Windows hosts."""
+"""gsc / ff / project routes against fake backends. These file tools run on any OS;
+the real Job runner uses a Job Object on Windows and a process group elsewhere."""
 import contextlib
 import io
 import json
@@ -170,16 +170,34 @@ class DevRouteTests(DevRouteFixture):
         self.assertEqual(code, 1)
         self.assertEqual(row["error_code"], "backend_failed")
 
-    def test_execution_is_windows_gated_without_the_test_hook(self):
-        if os.name == "nt":
-            self.skipTest("gate does not apply on Windows")
-        os.environ.pop("PAT_DEV_UNGATED")
+    def test_dev_routes_run_on_any_platform_without_a_gate(self):
+        # The file tools are not platform-gated. The old PAT_DEV_UNGATED hook is gone;
+        # removing it changes nothing, and no route returns unsupported_platform here.
+        os.environ.pop("PAT_DEV_UNGATED", None)
         src = self.root / "a.gsc"
         src.write_text("main(){}\n")
         code, row = invoke(["gsc", "compile", str(src), "--output", self.out()])
-        self.assertEqual(code, 1)
-        self.assertEqual(row["error_code"], "unsupported_platform")
-        self.assertFalse(Path(self.root / "job-001").exists(), "no output directory before the gate")
+        self.assertEqual(code, 0, row)  # the fake gsc backend is configured for tests
+        self.assertNotEqual(row.get("error_code"), "unsupported_platform")
+
+    def test_doctor_counts_overrides_and_mixed_pinned_backends(self):
+        # Regression: a backend present by a mix of PAT_BACKEND_* overrides and a pinned file must
+        # read as present (not missing). oat provides Linker+Unlinker (overridden by the fixture)
+        # plus ImageConverter, which we pin on disk here.
+        from plutonium_agent_toolkit.dev import backends as b
+        bd = self.root / "bk"
+        code, _ = invoke(["configure", "--backends-dir", str(bd)])
+        self.assertEqual(code, 0)
+        img = bd / "oat" / b.relative("image")
+        img.parent.mkdir(parents=True, exist_ok=True)
+        img.write_bytes(b"IMG")
+        code, row = invoke(["doctor"])
+        self.assertEqual(code, 0, row)
+        by_id = {x["id"]: x for x in row["result"]["backends"]["backends"]}
+        self.assertTrue(by_id["gsc"]["present"])
+        self.assertEqual(by_id["gsc"]["source"], "override")
+        self.assertTrue(by_id["oat"]["present"], by_id["oat"])
+        self.assertEqual(by_id["oat"]["source"], "mixed")
 
     def test_manifest_marks_dev_routes_by_native_evidence(self):
         code, row = invoke(["manifest"])
@@ -270,16 +288,15 @@ class ReviewRegressionTests(DevRouteFixture):
         self.assertEqual(code, 1)
         self.assertEqual(row["error_code"], "output_limit")
 
-    def test_wine_is_refused_as_not_native(self):
+    def test_wine_is_refused_for_the_windows_gated_routes(self):
+        # Dev file tools run under Wine (it is just Linux). The Win32 gate that game
+        # control and capture use still refuses Wine so it is never mistaken for native.
         from unittest.mock import patch
 
         from plutonium_agent_toolkit.core import platform as plat
 
-        os.environ.pop("PAT_DEV_UNGATED")
-        src = self.root / "a.gsc"
-        src.write_text("main(){}\n")
         with patch.object(plat, "is_windows", return_value=True), patch.object(plat, "is_wine", return_value=True):
-            code, row = invoke(["gsc", "compile", str(src), "--output", self.out()])
+            code, row = invoke(["game", "status"])
         self.assertEqual(code, 1)
         self.assertEqual(row["error_code"], "unsupported_platform")
         self.assertIn("Wine", row["message"])

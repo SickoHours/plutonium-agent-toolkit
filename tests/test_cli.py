@@ -9,6 +9,7 @@ from pathlib import Path
 
 from plutonium_agent_toolkit import __version__
 from plutonium_agent_toolkit.cli import entry
+from plutonium_agent_toolkit.dev import backends
 from plutonium_agent_toolkit.core import config
 from plutonium_agent_toolkit.core.discovery import EFFECTS, routes
 
@@ -108,16 +109,19 @@ class ConfigTests(IsolatedHome):
         # Nothing is installed, so doctor's overall ok is False even where the platform is supported.
         self.assertFalse(row["result"]["backends"]["ok"])
 
-    def test_setup_plan_never_downloads_and_setup_requires_windows_elsewhere(self):
+    def test_setup_plan_never_downloads_and_setup_is_cross_platform(self):
         code, row = invoke(["dev", "setup", "--plan"])
         self.assertEqual(code, 0)
         self.assertTrue(row["result"]["plan"])
         self.assertFalse(row["result"]["executes_installers"])
         self.assertTrue(all(not p["optional"] for p in row["result"]["programs"]))
         if os.name != "nt":
+            # No Windows gate: a platform with no pinned build reports override-required, not an error.
             code, row = invoke(["dev", "setup", "--only", "gsc"])
-            self.assertEqual(code, 1)
-            self.assertEqual(row["error_code"], "unsupported_platform")
+            self.assertEqual(code, 0, row)
+            gsc = next(r for r in row["result"]["results"] if r["id"] == "gsc")
+            self.assertEqual(gsc["action"], "override-required")
+            self.assertEqual(row["result"]["platform"], backends.platform_token())
 
 
 if __name__ == "__main__":

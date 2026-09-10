@@ -7,6 +7,19 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+### Changed
+
+- **The development (file) tools now run on any OS, not Windows only.** `dev`, `gsc`, `ff`,
+  `project`, `model`, `audio`, `image`, `lua` and `weapon` are no longer platform-gated: they
+  drive the pinned upstream backends as ordinary subprocesses wherever the backend runs. Backend
+  resolution is per-OS (the `.exe` suffix is dropped off Windows) and `doctor` now counts
+  `PAT_BACKEND_<NAME>` overrides. `dev setup` runs on any platform: where a platform has no
+  pinned download it reports the backend as `override-required` with how to supply it, instead
+  of refusing with `unsupported_platform`. Game control and capture stay native-Windows-only
+  (Win32 console transport). Verified by building `examples/hello-zm` natively on Linux with the
+  real gsc-tool and OpenAssetTools: a `mod.ff` was linked and byte-compared on read-back. A
+  committed native-Linux qualification receipt is a tracked follow-up.
+
 ## [0.1.0b1] - 2026-09-10
 
 First public beta. Scope is the **development toolchain**, verified on a native Windows 11 host:

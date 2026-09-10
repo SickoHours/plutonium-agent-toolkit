@@ -19,8 +19,9 @@ does not fit". It is "make this work here". That is expected, and the toolkit is
 
 1. **Configuration.** `pat configure --plutonium-storage-t6 <path> [--plutonium-launcher <path>]
    [--backends-dir <path>] [--evidence-dir <path>]`. Find the real paths on their machine; do not
-   assume the defaults. Everything is stored under `PAT_HOME`
-   (`%LOCALAPPDATA%\PlutoniumAgentToolkit` by default), which you can relocate by setting `PAT_HOME`
+   assume the defaults. Everything is stored under `PAT_HOME` (by default
+   `%LOCALAPPDATA%\PlutoniumAgentToolkit` on Windows and `~/.local/state/plutonium-agent-toolkit`
+   on Linux and macOS), which you can relocate by setting `PAT_HOME`
    if their profile is unusual or they want the toolkit somewhere specific.
 2. **Backend overrides.** If a tool they already have should be used, or a pinned download will not
    run on their system, set `PAT_BACKEND_<NAME>` to an absolute path (a `.py` override runs through

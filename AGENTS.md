@@ -72,6 +72,8 @@ These are how the toolkit is built, so that you can extend it without breaking i
   `game mods`/`install-mod` touch no running game. `game launch/info/load-map/select-mod/
   reload-mod/fast-restart/map-restart/disconnect/check-load/quit` control the running client and
   need the user's go-ahead for that specific test.
+- The development (file) routes run on any OS. Game control and capture use the Win32 console and
+  run on native Windows only; off Windows they refuse with `unsupported_platform` before acting.
 - Do not focus, minimize, kill or send keystrokes to the game as a workaround. Report the failure.
 - Do not elevate privileges, read process memory, launcher arguments or logins, or change registry
   keys beyond a documented per-user PATH entry.
@@ -96,8 +98,10 @@ checkpoint is unverified. A failed original attempt stays failed even if a later
 - Run `python -m unittest discover -s tests -v`, `python tools/private_scan.py` and
   `python tools/release_check.py` before opening a pull request.
 - New routes register in the owning `routes.py` with an honest `status`. A route becomes
-  `available` only with a native Windows receipt in `docs/SUPPORT.md`, produced by
-  `tools/qualify_windows.py` per `docs/WINDOWS-QUALIFICATION.md`.
+  `available` only with a native receipt in `docs/SUPPORT.md` (Windows via
+  `tools/qualify_windows.py` per `docs/WINDOWS-QUALIFICATION.md`; other platforms as their
+  qualification lands). The development (file) routes run on any OS; only game control and
+  capture require native Windows, because their transport is the Win32 console.
 - Never commit game assets, recordings, logs, credentials or personal paths. `tools/private_scan.py`
   runs in CI and blocks them.
 
