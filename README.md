@@ -1,16 +1,23 @@
 # Plutonium Agent Toolkit
 
 **Agent-native tools for building, controlling and testing Plutonium T6 Zombies mods on Windows.**
-You describe the result. Your coding agent installs the tools, builds the mod, loads the game,
-records the test and shows you the evidence.
+You describe the result. Your coding agent installs the tools, builds the mod, loads the game and
+shows you the evidence. If your setup is unusual, the agent adapts the toolkit to it.
 
-> **Status: public pre-alpha.** Contracts and the Windows foundation are committed. The first native
-> Windows run passed Tiers 1 and 2: discovery, `configure`, `doctor`, `dev setup` (gsc, oat), `gsc compile`,
-> `ff inspect|extract` and `project plan|build|verify` have native receipts. The `game` routes talk to a
-> running client natively but a console-started match is dropped by the client right after it loads (issue #8), so none has
-> earned level `game`. The repository is public so contributors can follow
-> along from the first commit; do not mistake visibility for readiness. Read [docs/SUPPORT.md](docs/SUPPORT.md) before trusting
-> any capability claim, and [CHANGELOG.md](CHANGELOG.md) for what each version actually ships.
+**This is meant to be modified.** It is open source and malleable by design. The person using it
+already has a coding agent; the agent reads the docs, configures the toolkit to that machine, and
+edits or extends it when the defaults do not fit. Every doc here is written for that agent to read.
+See [AGENTS.md](AGENTS.md) and [docs/FOR-AGENTS.md](docs/FOR-AGENTS.md).
+
+> **Status: public pre-alpha, development tools verified on native Windows.** The build toolchain
+> has native Windows receipts and is `available`: `dev setup`, `gsc compile`, `ff inspect|extract`,
+> `project plan|build|verify`, and discovery/`configure`/`doctor`. You can build and package a T6
+> Zombies mod with the real tools today. Game control is present and `implemented` but not yet
+> qualified: a console-started match is dropped by the client right after it loads
+> ([issue #8](https://github.com/SickoHours/plutonium-agent-toolkit/issues/8)), so no `game` route
+> has earned level `game`. Screen recording and the autonomous test runner are deferred. Read
+> [docs/SUPPORT.md](docs/SUPPORT.md) before trusting any capability claim, and
+> [CHANGELOG.md](CHANGELOG.md) for what each version actually ships.
 
 ## What "agent-native" means here
 
@@ -21,6 +28,7 @@ records the test and shows you the evidence.
 | Work leaves receipts | Each job creates a new output directory with `receipt.json`: argv, input hashes, output hashes, logs. Failures keep their receipts. |
 | Uncertainty is never replayed | Game commands report admitted, delivered, rejected or uncertain. An uncertain outcome is inspected, not retried. |
 | Instructions travel with the code | `AGENTS.md`, `CLAUDE.md`, an installable skill and `SETUP-PROMPT.md` are versioned with the release they describe. |
+| Malleable by default | The agent configures paths, overrides backends, edits adapters and adds routes to fit the user's machine. Nothing assumes a fixed install. `docs/FOR-AGENTS.md`. |
 | Truth over marketing | Offline verified, installed, launched, playable, captured and player-accepted are separate statements. `docs/SUPPORT.md` says which one each route has earned. |
 
 ## Components
@@ -37,13 +45,20 @@ See [NOTICE](NOTICE) for licenses.
 
 ## For users: hand this to your agent
 
-1. Install Python 3.11 or newer on Windows 11 x64 from python.org.
+You already have a coding agent, so let it do the work. On a Windows 11 x64 machine with Plutonium
+installed:
+
+1. Install Python 3.11 or newer from python.org.
 2. Clone or download this repository.
 3. Paste [SETUP-PROMPT.md](SETUP-PROMPT.md) into your agent, working in the repository folder.
 
-The agent installs the toolkit for your user, configures your Plutonium storage path, downloads
-the required backends and reports what is ready. Nothing launches or touches the game during
-setup. Live game operations happen only when you ask for a specific test.
+The agent installs the toolkit for your user, finds and configures your Plutonium storage path,
+downloads the required backends, and reports what is ready. If anything about your machine is
+unusual, the agent is expected to adapt the toolkit to it rather than give up. Nothing launches or
+touches the game during setup; live game operations happen only when you ask for a specific test.
+
+Any harness works: Claude Code, Codex, T3 Code, Gemini CLI, Cursor or another. The toolkit needs a
+terminal-capable agent on the same machine as Plutonium, not a particular vendor.
 
 ## For the Windows qualification run
 

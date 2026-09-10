@@ -63,12 +63,24 @@ A level applies only to the exact scope in the receipt. "Loaded Town once" is no
 - BO3 live asset capture and generic weapon conversion.
 - Multiplayer, co-op, other Call of Duty titles, Linux, Stream Deck, desktop GUIs, MCP wrapper.
 
-## Beta and 1.0 bars
+## Release bars
 
-**`0.1.0-beta.1`** requires [WINDOWS-QUALIFICATION.md](WINDOWS-QUALIFICATION.md) Tiers 1 to 3 passed
-on a native host from shipped materials, with receipts under `docs/receipts/`: install, real
-backends building `examples/hello-zm`, `install-mod`, `launch`, `load-map town`, `check-load`,
-`select-mod hello_zm`, and a human-observed playable spawn with the hello-zm line on screen.
+The release program ships in halves. The development toolchain is native-verified now; game
+control follows once issue #8 is resolved; capture and testing are a later release.
+
+**`0.1.0-beta.1` (development tools)** requires Tiers 1 and 2 of
+[WINDOWS-QUALIFICATION.md](WINDOWS-QUALIFICATION.md) passed on a native host with receipts under
+`docs/receipts/`: install, `dev setup` downloading and verifying the real backends, and
+`examples/hello-zm` built, read back and verified with `gsc compile`, `ff` and
+`project plan|build|verify`. This is met: see the Tier 1 and Tier 2 receipts. The beta ships game
+control as `implemented` and documents it as not yet qualified.
+
+**Game-control beta** requires a native Tier 3 receipt reaching a human-observed playable Town with
+the hello-zm line, through the toolkit. That is blocked on
+[issue #8](https://github.com/SickoHours/plutonium-agent-toolkit/issues/8): a console-started match
+is dropped by the client right after it loads. The likely resolution is that `load-map` operates
+inside a running private match rather than cold-starting one; the retest and any doc or scope
+change land before this bar is called met.
 
 **`1.0.0`** additionally requires: the remaining dev routes (`model`, `audio`, `image`, `lua`,
 `weapon`) at level `native`; frozen JSON, exit-code and schema contracts; both pilot journeys

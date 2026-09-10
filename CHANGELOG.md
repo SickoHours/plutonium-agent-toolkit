@@ -7,6 +7,19 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+### Changed
+
+- Documentation aligned around the agent-native, malleable-by-default premise: every doc is written
+  for the agent that operates the toolkit, and states plainly that it is meant to be configured and
+  edited to fit whatever machine and harness the user has. Rewrote `AGENTS.md`, made `CLAUDE.md` an
+  intelligent Claude-Code pointer that imports it, added `docs/FOR-AGENTS.md` (how to adapt, debug
+  and extend on the user's machine, plus modding behaviours: foundation-first modular building and
+  mod organization), and refreshed `README.md`, `docs/GETTING-STARTED.md`, `SETUP-PROMPT.md` and the
+  installable skill.
+- `docs/SUPPORT.md` release bars split into a development-tools beta (met now) and a later
+  game-control beta gated on issue #8; the first line tracks the current version.
+
+
 ### Added
 
 - Release automation: `tools/bump_version.py` (moves the version everywhere and promotes the
