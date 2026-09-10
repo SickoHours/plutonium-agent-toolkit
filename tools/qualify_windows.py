@@ -90,13 +90,21 @@ def child_env():
 
 def run(argv, timeout=900, cwd=None):
     started = time.monotonic()
-    proc = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, cwd=cwd, env=child_env())
+    shown = argv[len(PAT):] if argv[:len(PAT)] == PAT else argv
+    try:
+        proc = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, cwd=cwd, env=child_env())
+    except subprocess.TimeoutExpired as exc:
+        return {"argv": shown, "exit_code": 124, "elapsed_seconds": round(time.monotonic() - started, 3), "json": None,
+                "stdout_head": str(exc.stdout or "")[:2000], "stderr_head": f"timed out after {timeout}s; " + str(exc.stderr or "")[:1800]}
+    except OSError as exc:
+        return {"argv": shown, "exit_code": 127, "elapsed_seconds": round(time.monotonic() - started, 3), "json": None,
+                "stdout_head": None, "stderr_head": f"could not start: {exc}"}
     elapsed = round(time.monotonic() - started, 3)
     try:
         payload = json.loads(proc.stdout) if proc.stdout.strip() else None
     except ValueError:
         payload = None
-    return {"argv": argv[len(PAT):] if argv[:len(PAT)] == PAT else argv, "exit_code": proc.returncode,
+    return {"argv": shown, "exit_code": proc.returncode,
             "elapsed_seconds": elapsed, "json": payload,
             "stdout_head": None if payload is not None else proc.stdout[:2000],
             "stderr_head": proc.stderr[:2000] if proc.stderr else ""}
@@ -188,10 +196,13 @@ def tier_backends(receipt, home: Path, work: Path):
         step(receipt, "ff inspect mod.ff", PAT + ["ff", "inspect", str(mod_ff), "--output", str(work / "inspect"), "--json"])
         step(receipt, "ff extract rawfiles", PAT + ["ff", "extract", str(mod_ff), "--types", "rawfile",
                                                     "--output", str(work / "extract"), "--json"])
-        # Keep the built mod where Tier 3 can find it.
-        staged = work / "hello_zm-mod.ff"
+        # Stage the built mod at a durable, documented location for Tier 3 step 3h.
+        staged_dir = home / "qualify" / "hello_zm"
+        staged_dir.mkdir(parents=True, exist_ok=True)
+        staged = staged_dir / "mod.ff"
         shutil.copyfile(mod_ff, staged)
-        receipt["notes"].append({"tier3_mod_ff": str(staged)})
+        receipt["notes"].append({"tier3_mod_ff": "<pat-home>/qualify/hello_zm/mod.ff"})
+        print(f"\nTier 3 step 3h uses this file:\n  pat game install-mod \"{staged}\" hello_zm --json", flush=True)
     bad = work / "bad.gsc"
     bad.write_text("main()\n{\n    this is not gsc ;;; \n}\n", encoding="utf-8")
     step(receipt, "gsc compile broken script fails structurally", PAT + ["gsc", "compile", str(bad), "--output", str(work / "bad-compile"), "--json"], expect_ok=False)
@@ -200,29 +211,73 @@ def tier_backends(receipt, home: Path, work: Path):
     step(receipt, "gsc compile minimal script", PAT + ["gsc", "compile", str(good), "--output", str(work / "good-compile"), "--json"])
 
 
+BEGIN_MARKER = "qualify-tier3-begin.json"
+
+
+def tier_game_begin(home: Path) -> None:
+    """Record when the human-authorized Tier 3 run starts so stale state files cannot count."""
+    marker = home / "game" / BEGIN_MARKER
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(json.dumps({"began": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                                  "began_unix": time.time()}) + "\n", encoding="utf-8")
+    print(f"Tier 3 begun at {marker.read_text().strip()}. Run the commands in docs/WINDOWS-QUALIFICATION.md, then rerun with --collect.")
+
+
+def _fresh(path: Path, began_unix: float) -> bool:
+    return path.stat().st_mtime >= began_unix - 1
+
+
 def tier_game_collect(receipt, home: Path, notes: str | None):
     state = home / "game"
-    for name in ("last-launch.json", "last-load.json", "last-load-check.json", "last-result.json"):
+    marker = state / BEGIN_MARKER
+    if not marker.is_file():
+        raise SystemExit("Run `--tier game --begin` before the Tier 3 commands; no begin marker found, so freshness cannot be established.")
+    began = json.loads(marker.read_text(encoding="utf-8"))["began_unix"]
+    receipt["notes"].append({"tier3_began_unix": began})
+
+    def load(name):
         path = state / name
-        if path.is_file():
-            try:
-                receipt["steps"].append({"name": name, "passed": True, "json": json.loads(path.read_text(encoding="utf-8")),
-                                         "expected": "state file present"})
-            except ValueError:
-                receipt["steps"].append({"name": name, "passed": False, "expected": "valid JSON", "stderr_head": "unreadable"})
-        else:
-            receipt["steps"].append({"name": name, "passed": False, "expected": "state file present", "stderr_head": "missing"})
+        if not path.is_file():
+            return None, "missing"
+        if not _fresh(path, began):
+            return None, "stale: written before this Tier 3 run began"
+        try:
+            return json.loads(path.read_text(encoding="utf-8")), None
+        except ValueError:
+            return None, "unreadable JSON"
+
+    checks = {
+        "last-launch.json": lambda d: d.get("launch_requested") is True and d.get("game_detected") is True,
+        "last-load.json": lambda d: d.get("status") == "engine-state-verified",
+        "last-load-check.json": lambda d: d.get("verified") is True and d.get("state_matches") is True,
+        "last-result.json": lambda d: d.get("ok") is True,
+    }
+    for name, check in checks.items():
+        data, problem = load(name)
+        if problem:
+            receipt["steps"].append({"name": name, "passed": False, "expected": "fresh, successful state", "stderr_head": problem})
+            continue
+        passed = bool(check(data))
+        receipt["steps"].append({"name": name, "passed": passed, "json": data,
+                                 "expected": "fresh, successful state",
+                                 **({} if passed else {"stderr_head": "state file present but does not record success"})})
+    installs = sorted((state / "installs").glob("hello_zm-*.json")) if (state / "installs").is_dir() else []
+    fresh_installs = [p for p in installs if _fresh(p, began)]
+    receipt["steps"].append({"name": "install-mod hello_zm receipt", "passed": bool(fresh_installs),
+                             "json": json.loads(fresh_installs[-1].read_text(encoding="utf-8")) if fresh_installs else None,
+                             "expected": "fresh install receipt", **({} if fresh_installs else {"stderr_head": "no fresh hello_zm install receipt"})})
     receipt["human_observations"] = {
         "launcher_prompt_shown": None, "game_window_took_focus": None, "main_menu_reached": None,
         "town_spawn_playable": None, "hello_zm_line_visible_after_spawn": None, "quit_exited_cleanly": None,
         "plutonium_build": None, "notes": notes or "Fill these in from what you saw on screen; null means not observed."}
-    receipt["notes"].append("Tier 3 commands were run by hand with per-command human authorization; this file collects their saved state and the human's observations.")
+    receipt["notes"].append("Tier 3 commands were run by hand with per-command human authorization. Only state files written after the begin marker count, and each must record success. The human observations are required for level `game`; automated state alone is not a playable spawn.")
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--tier", choices=["offline", "backends", "game"], required=True)
     ap.add_argument("--output", type=Path, required=True, help="Directory for receipts, e.g. docs/receipts/qualify")
+    ap.add_argument("--begin", action="store_true", help="Tier game: write the begin marker before the human-authorized commands")
     ap.add_argument("--collect", action="store_true", help="Tier game: fold saved state into a receipt; runs nothing")
     ap.add_argument("--notes", help="Tier game: free-text human observations to include")
     ap.add_argument("--allow-non-windows", action="store_true", help="For testing this script only; receipts are marked non-native")
@@ -243,8 +298,11 @@ def main() -> int:
         elif args.tier == "backends":
             tier_backends(receipt, home, work)
         else:
+            if args.begin:
+                tier_game_begin(home)
+                return 0
             if not args.collect:
-                print("Tier game runs nothing automatically. Run the commands in docs/WINDOWS-QUALIFICATION.md with human authorization, then rerun with --collect.", file=sys.stderr)
+                print("Tier game runs nothing automatically. Use --begin, run the commands in docs/WINDOWS-QUALIFICATION.md with human authorization, then rerun with --collect.", file=sys.stderr)
                 return 2
             tier_game_collect(receipt, home, args.notes)
     finally:

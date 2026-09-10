@@ -119,11 +119,15 @@ def catalog(job: Job, receipt_path: Path, capture_rel: str) -> dict:
     _require(job.inputs[str(index_path)] == receipt["index_sha256"], "Sealed index changed", INPUT_CHANGED)
     index = _read_json(index_path)
     _require(isinstance(index, dict) and isinstance(index.get("files"), dict), "Index needs a files map")
+    _require(isinstance(receipt.get("map"), str) and receipt["map"], "Donor receipt map must be a string")
     files = _pinned_files(job, root, index["files"])
     _require(capture_rel in files, "Capture manifest must be in the sealed index")
-    capture = _read_json(_rel(root, capture_rel))
+    # 32768 page entries need about 3 MiB of JSON; allow headroom above the default 2 MiB.
+    capture = _read_json(_rel(root, capture_rel), limit=16 * 1024 * 1024)
+    _require(isinstance(capture, dict), "Capture manifest must be a JSON object")
     before, after = capture.get("map_before"), capture.get("map_after")
-    _require(isinstance(before, list) and len(before) == 1 and before == after, "Capture map identity changed during capture")
+    _require(isinstance(before, list) and len(before) == 1 and before == after and isinstance(before[0], dict),
+             "Capture map identity changed during capture or is malformed")
     _require(before[0].get("name") == receipt["map"], "Donor map does not match the receipt")
     _require(capture.get("pid") == receipt["pid"] and str(capture.get("start_ticks")) == str(receipt["start_ticks"]),
              "Capture process identity differs from the receipt")
@@ -140,11 +144,16 @@ def catalog(job: Job, receipt_path: Path, capture_rel: str) -> dict:
         _require(isinstance(rows, list) and len(rows) <= MAX_RECORDS, f"{kind} count exceeds bound")
         items = []
         for row in rows:
+            _require(isinstance(row, dict), f"{kind} records must be objects")
             item = {"name": _name(row.get("name"))}
             if kind == "models":
                 tags = row.get("tags")
-                _require(isinstance(tags, list) and 0 < len(tags) <= 255 and len(set(tags)) == len(tags), "Invalid model bone names")
-                item.update(bones=len(tags), materials=sorted({_name(m) for lod in row.get("lods", []) for m in lod.get("materials", [])}))
+                _require(isinstance(tags, list) and 0 < len(tags) <= 255 and len(set(tags)) == len(tags)
+                         and all(isinstance(t, str) for t in tags), "Invalid model bone names")
+                lods = row.get("lods", [])
+                _require(isinstance(lods, list) and all(isinstance(lod, dict) and isinstance(lod.get("materials", []), list) for lod in lods),
+                         "Model lods must be objects with material lists")
+                item.update(bones=len(tags), materials=sorted({_name(m) for lod in lods for m in lod.get("materials", [])}))
             items.append(item)
         _require(len({i["name"] for i in items}) == len(items), f"Ambiguous duplicate {kind}")
         assets[kind] = sorted(items, key=lambda i: i["name"])
@@ -152,7 +161,9 @@ def catalog(job: Job, receipt_path: Path, capture_rel: str) -> dict:
     if "adapter_index" in receipt:
         path = job.input(_rel(root, receipt["adapter_index"]))
         _require(job.inputs[str(path)] == receipt.get("adapter_index_sha256"), "Native adapter index changed", INPUT_CHANGED)
-        adapter = _pinned_files(job, path.parent, _read_json(path).get("files", {}))
+        adapter_index = _read_json(path)
+        _require(isinstance(adapter_index, dict) and isinstance(adapter_index.get("files"), dict), "Adapter index needs a files map")
+        adapter = _pinned_files(job, path.parent, adapter_index["files"])
     return {"schema_version": 1, "source_engine": "t7", "format": "bo3-page-capture-v1",
             "donor_receipt": str(receipt_path), "donor_receipt_sha256": job.inputs[str(receipt_path)],
             "capture": capture_rel, "map": receipt["map"], "assets": assets, "files": files,

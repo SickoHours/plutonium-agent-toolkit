@@ -15,10 +15,13 @@ inputs to a weapon port are verifiable before anyone spends hours converting.
   "map": "zm_zod",
   "pid": 4242,
   "start_ticks": "133700000",
-  "adapter_index": "native/index.json",            // optional
-  "adapter_index_sha256": "<64 hex>"                 // optional
+  "adapter_index": "native/index.json",
+  "adapter_index_sha256": "<64 hex>"
 }
 ```
+
+`adapter_index` and `adapter_index_sha256` are optional; omit both when the donor has no native
+adapter capture.
 
 `index.json` is `{"files": {"<relative path>": "<sha256>", ...}}` covering every file the capture
 depends on, including the capture manifest and every 4096-byte snapshot page named

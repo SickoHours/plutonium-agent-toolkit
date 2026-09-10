@@ -9,10 +9,11 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Added
 
-- All remaining development routes implemented behind the Windows gate: `model
+- Windows-gated development routes implemented: `model
   inspect|convert|transform|rename-bones|retime|preview` (background Blender with the bundled
-  worker and pinned Cast add-on), `audio inspect|convert`, `image convert`, `lua decompile`,
-  `weapon catalog|plan` (sealed BO3 donor verification and recipe planning; `docs/WEAPONS.md`).
+  worker and pinned Cast add-on), `audio inspect|convert`, `image convert`, `lua decompile`.
+- `weapon catalog|plan` implemented (any platform): sealed BO3 donor verification and recipe
+  planning; `docs/WEAPONS.md`.
 - `game install-mod <mod.ff> <folder>`: file-only install into storage with hash verification;
   refuses to overwrite without `--replace`, which moves the old folder aside.
 - Windows qualification procedure: `WINDOWS-QUALIFY-PROMPT.md` for the agent on the Windows PC,

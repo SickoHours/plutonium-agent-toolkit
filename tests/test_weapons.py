@@ -158,3 +158,26 @@ class WeaponTests(WeaponFixture):
         self.assertEqual(row["error_code"], "input_invalid")
         code, row = invoke(["weapon", "plan", str(self.recipe(keep_loaded_prefixes=["x"])), "--library", str(library), "--output", self.out()])
         self.assertIn("Resident prefix", row["message"])
+
+
+class WeaponMalformedManifestTests(WeaponFixture):
+    def test_malformed_manifest_shapes_are_structured_failures(self):
+        manifest_path = self.donor / "capture-01" / "manifest.json"
+        cases = {
+            "not an object": "[]",
+            "map_before not objects": json.dumps({"map_before": ["zm_zod"], "map_after": ["zm_zod"], "pid": 4242, "start_ticks": "99", "captured_bytes": 8192, "pages": {}, "models": [], "animations": [], "weapons": []}),
+            "model row not object": json.dumps({"map_before": [{"name": "zm_zod"}], "map_after": [{"name": "zm_zod"}], "pid": 4242, "start_ticks": "99", "captured_bytes": 0, "pages": {}, "models": ["x"], "animations": [], "weapons": []}),
+        }
+        for label, text in cases.items():
+            manifest_path.write_text(text)
+            # re-seal the index so the manifest hash matches and the structural check is what fails
+            index = json.loads((self.donor / "index.json").read_text())
+            index["files"]["capture-01/manifest.json"] = sha(text.encode())
+            index_bytes = json.dumps(index).encode()
+            (self.donor / "index.json").write_bytes(index_bytes)
+            r = json.loads(self.receipt.read_text())
+            r["index_sha256"] = sha(index_bytes)
+            self.receipt.write_text(json.dumps(r))
+            code, row = invoke(["weapon", "catalog", str(self.receipt), "--capture", "capture-01/manifest.json", "--output", self.out()])
+            self.assertEqual(code, 1, label)
+            self.assertEqual(row["error_code"], "input_invalid", label)

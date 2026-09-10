@@ -6,6 +6,7 @@ never touches the game. Loading the mod is a separate, authorized ``select-mod``
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
@@ -33,6 +34,10 @@ def install_mod(mod_ff: Path, folder: str, replace: bool = False) -> dict:
     mods = root / "mods"
     mods.mkdir(exist_ok=True)
     dest_dir = _regular_child(mods, folder)
+    # Read and hash the source before anything moves: the source may live inside the
+    # very folder --replace is about to move aside.
+    source_bytes = src.read_bytes()
+    source_sha = hashlib.sha256(source_bytes).hexdigest()
     backup = None
     if dest_dir.exists():
         if not replace:
@@ -41,13 +46,20 @@ def install_mod(mod_ff: Path, folder: str, replace: bool = False) -> dict:
         backup = state_dir() / "mod-backups" / f"{folder}-{uuid.uuid4().hex}"
         backup.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(dest_dir), str(backup))
-    source_sha = sha256_file(src)
-    dest_dir.mkdir()
     dest = dest_dir / "mod.ff"
-    shutil.copyfile(src, dest)
-    dest_sha = sha256_file(dest)
-    if dest_sha != source_sha:
-        raise Failure("hash_mismatch", "Installed mod.ff does not match the source after copy; inspect the storage volume")
+    try:
+        dest_dir.mkdir()
+        dest.write_bytes(source_bytes)
+        dest_sha = sha256_file(dest)
+        if dest_sha != source_sha:
+            raise Failure("hash_mismatch", "Installed mod.ff does not match the source after copy; inspect the storage volume")
+    except (OSError, Failure):
+        # Put the previous installation back so --replace never leaves the user with nothing.
+        shutil.rmtree(dest_dir, ignore_errors=True)
+        if backup is not None:
+            shutil.move(str(backup), str(dest_dir))
+            backup = None
+        raise
     receipt = {"schema_version": 1, "at": now(), "folder": folder, "path": f"mods/{folder}/mod.ff", "sha256": dest_sha,
                "bytes": dest.stat().st_size, "source": str(src), "backup": str(backup) if backup else None,
                "game_touched": False}

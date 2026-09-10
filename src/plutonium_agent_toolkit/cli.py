@@ -84,9 +84,9 @@ def build_parser() -> Parser:
 
     g = sub.add_parser("game", help="Plutonium T6 Zombies control through the external console")
     g.add_argument("action", choices=sorted(r.action for r in routes() if r.group == "game"))
-    g.add_argument("argument", nargs="?", help="Mod folder ID, map ID, load ID or mod.ff path depending on the action")
-    g.add_argument("argument2", nargs="?", help="install-mod: destination folder ID")
-    g.add_argument("--replace", action="store_true", help="install-mod: move an existing folder aside first")
+    g.add_argument("argument", nargs="?", help="Mod folder ID, map ID, load ID or (install-mod) mod.ff path")
+    g.add_argument("argument2", nargs="?", help="install-mod only: destination folder ID")
+    g.add_argument("--replace", action="store_true", help="install-mod only: move an existing folder aside first")
     g.add_argument("--json", action="store_true")
 
     # Planned/deferred groups accept any action so they can answer with a structured refusal.
@@ -215,6 +215,11 @@ def run_game(args) -> dict:
 
     command = f"game {args.action}"
     route = find("game", args.action)
+    if args.action != "install-mod":
+        if args.argument2 is not None:
+            raise Failure(INVALID_ARGUMENTS, f"game {args.action} takes at most one argument; got extra {args.argument2!r}. Nothing was sent")
+        if args.replace:
+            raise Failure(INVALID_ARGUMENTS, "--replace applies only to game install-mod. Nothing was sent")
     if args.action == "mods":
         if args.argument:
             raise Failure(INVALID_ARGUMENTS, "game mods takes no argument")

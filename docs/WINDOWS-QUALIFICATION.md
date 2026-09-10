@@ -67,11 +67,13 @@ Every command in this tier needs the human's explicit go-ahead in the chat, one 
 time. The script does not automate this tier; the agent runs each command and the script
 collects the outputs afterwards.
 
-Configure paths first (offline):
+Configure paths and write the begin marker first (offline). The marker is how the collector
+later tells this run's state files from stale ones:
 
 ```powershell
 pat configure --plutonium-storage-t6 "$env:LOCALAPPDATA\Plutonium\storage\t6" --plutonium-launcher "C:\path\to\plutonium.exe" --json
 pat game mods --json
+python tools/qualify_windows.py --tier game --begin
 ```
 
 Then, with the game **not** running, ask for permission and run:
@@ -85,7 +87,7 @@ Then, with the game **not** running, ask for permission and run:
 | 3e | `pat game load-map town --json` | `load_id` returned; the game loads Town |
 | 3f | `pat game check-load <load_id> --json` | `verified: true`, `state_matches: true`, logs `checked: true` |
 | 3g | look at the game | you or the agent (if it can see the screen) confirm a playable spawn in Town |
-| 3h | copy `hello_zm` from Tier 2 into `storage\t6\mods\hello_zm\mod.ff`, then `pat game select-mod hello_zm --json` | `load_id`; `fs_game` becomes `mods/hello_zm` |
+| 3h | `pat game install-mod "$env:PAT_HOME\qualify\hello_zm\mod.ff" hello_zm --json` (Tier 2 staged it there and printed the exact command), then `pat game select-mod hello_zm --json` | install receipt with `sha256`; then `load_id`; `fs_game` becomes `mods/hello_zm` |
 | 3i | `pat game load-map town --json` then `check-load` | verified; the green hello-zm line appears on screen after spawn |
 | 3j | `pat game fast-restart --json` | `load_id`; match restarts |
 | 3k | `pat game disconnect --json` | `sv_running: "0"` |
@@ -99,9 +101,12 @@ python tools/qualify_windows.py --tier game --output docs/receipts/qualify --col
 ```
 
 The script reads the toolkit's state files (`last-launch.json`, `last-load.json`,
-`last-load-check.json`, `last-result.json`) and your notes, redacts paths and writes
-`tier3-game.json`. Add the human observations the script cannot know: did the launcher prompt,
-did focus move, was the spawn playable, did the hello-zm line appear.
+`last-load-check.json`, `last-result.json`, the `hello_zm` install receipt), accepts only files
+written after the begin marker, checks that each records success (`verified: true`,
+`engine-state-verified`, `launch_requested` and `game_detected`), redacts paths and writes
+`tier3-game.json`. Then edit `human_observations` in that file with what the script cannot know:
+did the launcher prompt, did focus move, was the spawn playable, did the hello-zm line appear.
+A Tier 3 receipt with `null` human observations does not qualify any route at level `game`.
 
 ## Common native failures and what they mean
 
