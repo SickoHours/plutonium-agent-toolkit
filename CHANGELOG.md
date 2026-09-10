@@ -7,8 +7,21 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+## [0.1.0b1] - 2026-09-10
+
+First public beta. Scope is the **development toolchain**, verified on a native Windows 11 host:
+`dev setup`, `gsc compile`, `ff inspect|extract`, `project plan|build|verify`, and
+discovery/`configure`/`doctor` are `available` with receipts under `docs/receipts/`. You can build
+and package a T6 Zombies mod with the real tools. **Game control ships but is not qualified**: a
+console-started match is dropped by the client right after it loads
+([issue #8](https://github.com/SickoHours/plutonium-agent-toolkit/issues/8)), so no `game` route
+has earned level `game`. Screen recording and the autonomous test runner are deferred. See
+`docs/SUPPORT.md` for the exact per-route evidence.
+
 ### Changed
 
+- `pyproject.toml` development-status classifier moved from Pre-Alpha to Beta for the 0.1.0b1
+  release, so package indexes label it correctly.
 - Documentation aligned around the agent-native, malleable-by-default premise: every doc is written
   for the agent that operates the toolkit, and states plainly that it is meant to be configured and
   edited to fit whatever machine and harness the user has. Rewrote `AGENTS.md`, made `CLAUDE.md` an

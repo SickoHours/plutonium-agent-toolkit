@@ -1,4 +1,4 @@
-# Support matrix for `0.1.0a1`
+# Support matrix for `0.1.0b1`
 
 This file is the single source of truth for what each route has earned. Update it in the same
 pull request that changes a route. `tools/release_check.py` verifies the version in the first line.
