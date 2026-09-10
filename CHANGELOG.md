@@ -55,7 +55,10 @@ Every entry states what shipped, on which platform it was verified, and what rem
   and a Tier 3 receipt is not `passed` until the four required human observations are `true`.
 - `tools/private_scan.py` no longer matches the distribution name of the authoring machine, only
   its compositor: a native Linux receipt must name the OS it ran on, exactly as the Windows
-  receipts name the Windows build. Paths, usernames and hostnames are still blocked.
+  receipts name the Windows build. The scanner still blocks home and profile paths, private
+  thread and run identifiers, tokens and keys; usernames and hostnames are removed from receipts
+  by `tools/qualify.py`'s redactor, not by the scanner, and reviewers read every receipt before
+  it is committed.
 
 - **The development (file) tools now run on any OS, not Windows only.** `dev`, `gsc`, `ff`,
   `project`, `model`, `audio`, `image`, `lua` and `weapon` are no longer platform-gated: they

@@ -255,6 +255,18 @@ class QualifyToolUnitTests(unittest.TestCase):
             if real_config.is_file():
                 self.assertNotIn("fake-storage", real_config.read_text(encoding="utf-8"))
 
+    def test_compatibility_layers_are_refused_unless_allowed(self):
+        # Macroscope on the first Linux PR: WSL passed the gate and could write linux-* receipts.
+        from unittest.mock import patch
+
+        argv = [str(ROOT / "tools/qualify.py"), "--tier", "offline", "--output", str(Path(self.temp.name) / "out")]
+        with patch.object(self.q, "compatibility_layer", return_value="wsl"):
+            self.assertEqual(self.q.compatibility_layer(), "wsl")
+        # The gate lives in main(); exercise it through the module with the detector patched.
+        with patch.object(self.q, "compatibility_layer", return_value="wsl"), patch.object(self.q.sys, "argv", argv), \
+                patch.dict(os.environ, {"PAT_HOME": str(self.home)}):
+            self.assertEqual(self.q.main(), 2)
+
     def test_environment_names_the_os_and_native_flags(self):
         info = self.q.environment()
         self.assertIn(info["platform_token"], ("windows", "linux", "darwin"))

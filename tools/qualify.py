@@ -538,8 +538,14 @@ def main() -> int:
         # (docs/WINDOWS-QUALIFICATION.md); every other tier writes a receipt and needs --output.
         ap.error("--output is required unless `--tier game --begin` or --redact-existing is given")
     token = platform_token()
+    layer = compatibility_layer()
     if token not in NATIVE_PLATFORMS and not args.allow_untested:
         print(f"This script qualifies native Windows and Linux; this host is {token}, which the toolkit does not claim.", file=sys.stderr)
+        return 2
+    if layer and not args.allow_untested:
+        # Wine and WSL are not native hosts; a receipt from them would carry native_* false and
+        # must not be produced as if it qualified anything (docs/SUPPORT.md Platform table).
+        print(f"This host runs {token} under {layer}, which never counts as native; qualify on a real host.", file=sys.stderr)
         return 2
     if args.tier == "game" and token != "windows" and not args.allow_untested:
         print("Tier game qualifies game control, which uses the Win32 console: run it on native Windows.", file=sys.stderr)
