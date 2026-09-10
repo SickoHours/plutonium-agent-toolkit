@@ -57,9 +57,10 @@ one document either way, with `schema_version`, `toolkit_version`, `command`, `r
 - `pat doctor --json` reports the platform, whether it is native Windows (not Wine), the
   configuration, and which backends are present. On macOS, which is untested and not claimed, it
   carries a `note` saying so; that is a fact to relay, not a gate to work around.
-- Which program each route runs, with its command line and license, is in `docs/BACKENDS.md`
-  once it lands; until then `src/plutonium_agent_toolkit/dev/backends.json` and the `executable()`
-  calls in `src/plutonium_agent_toolkit/dev/` are the source.
+- Which program each route runs, with its command line, license and pinned platforms, is in
+  `docs/BACKENDS.md`. It is generated from `dev/backends.json` and `dev/backend_usage.py`; when
+  you change an adapter's argv, update the usage table and run `python tools/backends_doc.py
+  --write`, or the test fails.
 - Troubleshooting tables: `docs/GAME-CONTROL.md`, `docs/WINDOWS-QUALIFICATION.md`,
   `docs/GETTING-STARTED.md`. They map a symptom to a cause and the file to change.
 

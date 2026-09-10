@@ -17,7 +17,9 @@
    `provides` only tells `doctor` what to check and setup what to mark executable; it does not
    change where `executable()` looks. If upstream's layout differs, add a `linux` path to
    `EXECUTABLES` rather than pointing `provides` elsewhere.
-5. Add the program and license to `NOTICE`.
+5. Add the program and license to `NOTICE`, its project page to `HOMEPAGES` in
+   `tools/backends_doc.py`, and the routes that run it to `dev/backend_usage.py` (or to `MANUAL`
+   if no route runs it). Regenerate `docs/BACKENDS.md` with `python tools/backends_doc.py --write`.
 6. Run `tests/test_backends.py`. Then natively on each pinned platform: `pat dev setup --only <id>
    --json` and `pat doctor --json`, or the backends tier of `tools/qualify.py`. Attach the
    sanitized output to your pull request.
