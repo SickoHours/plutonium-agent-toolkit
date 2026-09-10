@@ -31,9 +31,10 @@ does not fit". It is "make this work here". That is expected, and the toolkit is
    are small and single-purpose. Read `docs/contributors/ARCHITECTURE.md`, make the change, add a
    test to `tests/` (a fake backend under `tests/fakes/` if needed), run the suite, and tell the
    user what you changed. If the change would help everyone, offer to open a pull request.
-4. **Add a route.** If they need a capability that is not here, add it. `docs/contributors/
-   ADDING-A-ROUTE.md` and `ADDING-A-BACKEND.md` are step by step. Register it with an honest
-   `status`, and do not build an arbitrary-console escape hatch to shortcut it.
+4. **Add a route.** If they need a capability that is not here, add it. The guides
+   `docs/contributors/ADDING-A-ROUTE.md` and `docs/contributors/ADDING-A-BACKEND.md` are step by
+   step. Register it with an honest `status`, and do not build an arbitrary-console escape hatch to
+   shortcut it.
 
 Prefer the earliest step that solves the problem. Reach for editing the code as readily as editing
 config; both are normal here. What you should not do is silently work around a failure (focusing
@@ -41,11 +42,15 @@ the game, deleting an output to retry, guessing a console string). Fix the cause
 
 ## Debug on their machine
 
-Every command gives you what you need to diagnose it without asking the user:
+Every command gives you what you need to diagnose it without asking the user. The stdout JSON is
+one document either way, with `schema_version`, `toolkit_version`, `command`, `request_id` and `at`:
 
-- The stdout JSON carries `ok`, `error_code`, `message`, `hint` and often `details`. The `hint`
-  usually names the fix (`config_missing` names the `configure` to run; `backend_unavailable` names
-  the `dev setup`; `not_implemented` names the route's status).
+- **On success**, `ok` is `true` and the payload is under `result`. There is no `error_code` on a
+  success; do not treat its absence as a problem.
+- **On failure**, `ok` is `false` with a stable `error_code` and a `message`, and usually a `hint`
+  and sometimes `details`. The `hint` typically names the fix (`config_missing` names the
+  `configure` to run; `backend_unavailable` names the `dev setup`; `not_implemented` names the
+  route's status). A failing job also sets `receipt` to its receipt path.
 - Every job writes `receipt.json` into its output directory, listing argv, input and output
   hashes, and the `log` file for each backend step. Read the step log for the real backend error.
 - `pat doctor --json` reports the platform, whether it is native Windows (not Wine), the
