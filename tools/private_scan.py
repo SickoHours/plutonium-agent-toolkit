@@ -18,7 +18,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 PATTERNS = {
     "personal_home": re.compile(r"/home/[a-z][a-z0-9_-]*/|Z:\\\\home\\\\|C:\\\\Users\\\\(?!<)[A-Za-z]"),
-    "authoring_desktop": re.compile(r"\bomarchy\b|\bhyprland\b|\bhyprctl\b", re.I),
+    # The authoring desktop's compositor and its scripts stay private. The distribution name
+    # (Omarchy, an Arch-based public distribution) is deliberately not matched since 0.1.0b1's
+    # Linux qualification: a native receipt must name the OS it ran on, exactly as the Windows
+    # receipts name "Windows 11 build 26200". Paths, users and hosts are covered by the other rules.
+    "authoring_desktop": re.compile(r"\bhyprland\b|\bhyprctl\b", re.I),
     "private_thread_or_run_id": re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b"),
     "github_token": re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b"),
     "private_key": re.compile(r"-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----"),

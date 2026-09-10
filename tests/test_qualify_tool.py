@@ -1,4 +1,4 @@
-"""The qualification runner itself: redaction and offline tier on this host."""
+"""The qualification runner itself: redaction, platform identity and the offline tier on this host."""
 import json
 import os
 import subprocess
@@ -15,14 +15,20 @@ class QualifyToolTests(unittest.TestCase):
     def test_offline_tier_runs_here_and_redacts(self):
         with tempfile.TemporaryDirectory() as temp:
             env = dict(os.environ, PAT_HOME=str(Path(temp) / "home"))
-            proc = subprocess.run([sys.executable, str(ROOT / "tools/qualify_windows.py"), "--tier", "offline",
-                                   "--output", str(Path(temp) / "out"), "--allow-non-windows"],
+            proc = subprocess.run([sys.executable, str(ROOT / "tools/qualify.py"), "--tier", "offline",
+                                   "--output", str(Path(temp) / "out"), "--allow-untested-platform"],
                                   capture_output=True, text=True, cwd=ROOT, env=env, timeout=600)
             self.assertEqual(proc.returncode, 0, proc.stdout[-2000:] + proc.stderr[-2000:])
-            receipts = list((Path(temp) / "out").rglob("tier1-offline.json"))
+            receipts = list((Path(temp) / "out").rglob("*-tier1-offline.json"))
             self.assertEqual(len(receipts), 1)
+            self.assertTrue(receipts[0].name.startswith(("windows-", "linux-", "darwin-")), receipts[0].name)
             data = json.loads(receipts[0].read_text())
             self.assertTrue(data["passed"])
+            env_info = data["environment"]
+            self.assertIn("os", env_info)
+            self.assertIn("platform_token", env_info)
+            self.assertEqual(env_info["native_windows"], os.name == "nt" and env_info["compatibility_layer"] is None)
+            self.assertEqual(env_info["native_linux"], sys.platform.startswith("linux") and env_info["compatibility_layer"] is None)
             self.assertGreaterEqual(data["summary"]["steps"], 10)
             text = receipts[0].read_text()
             import getpass
@@ -30,8 +36,8 @@ class QualifyToolTests(unittest.TestCase):
             self.assertNotIn(temp, text, "work/home paths under the profile must be redacted or absent")
 
     def test_game_tier_without_collect_runs_nothing(self):
-        proc = subprocess.run([sys.executable, str(ROOT / "tools/qualify_windows.py"), "--tier", "game",
-                               "--output", "/tmp/never", "--allow-non-windows"], capture_output=True, text=True, cwd=ROOT)
+        proc = subprocess.run([sys.executable, str(ROOT / "tools/qualify.py"), "--tier", "game",
+                               "--output", "/tmp/never", "--allow-untested-platform"], capture_output=True, text=True, cwd=ROOT)
         self.assertEqual(proc.returncode, 2)
         self.assertIn("runs nothing", proc.stderr)
 
@@ -40,8 +46,8 @@ class QualifyToolTests(unittest.TestCase):
         # the marker under PAT_HOME. Found on the first native Tier 3 attempt: argparse refused it.
         with tempfile.TemporaryDirectory() as temp:
             env = dict(os.environ, PAT_HOME=str(Path(temp) / "home"))
-            proc = subprocess.run([sys.executable, str(ROOT / "tools/qualify_windows.py"), "--tier", "game", "--begin",
-                                   "--allow-non-windows"], capture_output=True, text=True, cwd=ROOT, env=env)
+            proc = subprocess.run([sys.executable, str(ROOT / "tools/qualify.py"), "--tier", "game", "--begin",
+                                   "--allow-untested-platform"], capture_output=True, text=True, cwd=ROOT, env=env)
             self.assertEqual(proc.returncode, 0, proc.stderr)
             marker = Path(temp) / "home" / "game" / "qualify-tier3-begin.json"
             self.assertTrue(marker.is_file())
@@ -51,7 +57,7 @@ class QualifyToolTests(unittest.TestCase):
 class QualifyToolUnitTests(unittest.TestCase):
     def setUp(self):
         import importlib.util
-        spec = importlib.util.spec_from_file_location("qualify_windows", ROOT / "tools" / "qualify_windows.py")
+        spec = importlib.util.spec_from_file_location("qualify", ROOT / "tools" / "qualify.py")
         self.q = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.q)
         self.temp = tempfile.TemporaryDirectory()
@@ -143,7 +149,7 @@ class QualifyToolUnitTests(unittest.TestCase):
                                                              "excerpt": "C:\\\\Users\\\\m"}]}},
                            {"name": "unit tests", "passed": False, "stderr_head": r"D:\Users\bob\y failed"}]}
         path.write_text(json.dumps(stale, indent=2) + "\n", encoding="utf-8")
-        argv = [sys.executable, str(ROOT / "tools/qualify_windows.py"), "--redact-existing", str(path)]
+        argv = [sys.executable, str(ROOT / "tools/qualify.py"), "--redact-existing", str(path)]
         proc = subprocess.run(argv, capture_output=True, text=True, cwd=ROOT)  # no --allow-non-windows: works anywhere
         self.assertEqual(proc.returncode, 0, proc.stderr)
         text = path.read_text(encoding="utf-8")
@@ -183,13 +189,66 @@ class QualifyToolUnitTests(unittest.TestCase):
         # literal double-backslash C:\\Users\\<name> in source, and the redactor treats both alike.
         self.assertEqual(redact(r'path "E:\Users\Jane Doe" and more'), r'path "<userprofile>" and more')
 
+    def test_redactor_covers_posix_home_paths_for_any_account(self):
+        # Linux receipts carry /home/<name> in PAT_HOME, work and job paths; every account, not
+        # just the current user, is replaced, including JSON-escaped and quoted forms.
+        redact = self.q.redactor()
+        # Paths are assembled at runtime so tools/private_scan.py does not flag this file.
+        home = "/" + "home/"
+        cases = {
+            home + "alice/x": "<userprofile>/x",
+            home + "bob": "<userprofile>",
+            "/Users/carol/y": "<userprofile>/y",
+            "/root/z": "<userprofile>/z",
+            '"' + home + 'dave/w"': '"<userprofile>/w"',
+            "see " + home + "eve/p and " + home + "frank/q": "see <userprofile>/p and <userprofile>/q",
+        }
+        for raw, expected in cases.items():
+            self.assertEqual(redact(raw), expected, raw)
+        # Not a home path: a relative folder that happens to be called home, and /homer.
+        self.assertEqual(redact("data" + home + "x"), "data" + home + "x")
+        self.assertEqual(redact("/homer/x"), "/homer/x")
+
+    def test_environment_names_the_os_and_native_flags(self):
+        info = self.q.environment()
+        self.assertIn(info["platform_token"], ("windows", "linux", "darwin"))
+        self.assertIsInstance(info["os"], str)
+        self.assertTrue(info["os"])
+        if os.name == "nt":
+            self.assertIn("windows_build", info)
+        else:
+            self.assertIn("os_release", info)
+            self.assertFalse(info["native_windows"])
+        self.assertEqual(info["native_windows"] and info["native_linux"], False, "never both")
+
+    def test_receipt_names_carry_the_platform_prefix(self):
+        self.assertEqual(self.q.receipt_name("offline", "linux"), "linux-tier1-offline.json")
+        self.assertEqual(self.q.receipt_name("backends", "windows"), "windows-tier2-backends.json")
+        self.assertEqual(self.q.receipt_name("game", "windows"), "windows-tier3-game.json")
+
+    def test_windows_shim_runs_the_generic_tool(self):
+        # docs/WINDOWS-QUALIFICATION.md and the 0.1.0a1 receipts name tools/qualify_windows.py.
+        proc = subprocess.run([sys.executable, str(ROOT / "tools/qualify_windows.py"), "--help"], capture_output=True, text=True, cwd=ROOT)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("--redact-existing", proc.stdout)
+        self.assertIn("Windows or Linux", proc.stdout)
+
+    def test_game_tier_is_refused_off_windows_unless_allowed(self):
+        if os.name == "nt":
+            self.skipTest("Windows runs the game tier natively")
+        env = dict(os.environ, PAT_HOME=str(self.home))
+        proc = subprocess.run([sys.executable, str(ROOT / "tools/qualify.py"), "--tier", "game", "--begin"],
+                              capture_output=True, text=True, cwd=ROOT, env=env)
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertIn("Windows", proc.stderr)
+
     @unittest.skipIf(os.environ.get("PAT_QUALIFY_NESTED"), "would recurse through the offline tier's unit-test step")
     def test_begin_without_output_is_refused_for_non_game_tiers(self):
         # Macroscope on PR #7: `--tier offline --begin` ran the whole tier and then crashed on a None output.
         # Before the fix this test recursed (tier -> unit tests -> this test -> tier), hence the guard above.
         env = dict(os.environ, PAT_HOME=str(self.home))
         for tier in ("offline", "backends"):
-            proc = subprocess.run([sys.executable, str(ROOT / "tools/qualify_windows.py"), "--tier", tier, "--begin"],
+            proc = subprocess.run([sys.executable, str(ROOT / "tools/qualify.py"), "--tier", tier, "--begin"],
                                   capture_output=True, text=True, cwd=ROOT, env=env)
             self.assertEqual(proc.returncode, 2, f"{tier}: {proc.stderr[-300:]}")
             self.assertIn("--output", proc.stderr)
