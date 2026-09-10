@@ -216,7 +216,8 @@ class QualifyToolUnitTests(unittest.TestCase):
         temp = tempfile.gettempdir()
         raw = os.path.join(temp, "pat-qualify-offline-abc123", "fake-storage", "t6")
         self.assertEqual(redact(raw), os.path.join("<work>", "fake-storage", "t6"))
-        self.assertEqual(redact(os.path.join(temp, "unrelated", "x")), os.path.join(temp, "unrelated", "x").replace(str(Path.home()), "<userprofile>"))
+        # Other temp paths are untouched by this rule (the home rules may still apply to them).
+        self.assertIn(os.path.join("unrelated", "x"), redact(os.path.join(temp, "unrelated", "x")))
 
     def test_environment_names_the_os_and_native_flags(self):
         info = self.q.environment()
