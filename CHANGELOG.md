@@ -80,8 +80,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
   `private_scan`'s own hit excerpt, a truncated `C:\Users\m`, which the redactor missed because it only
   knew the exact `USERPROFILE`; other accounts' and other drives' `Users` paths would also have
   survived. `tools/qualify_windows.py` now replaces any drive-letter `Users` path for any account,
-  in either slash style, before the account-specific patterns; strips `excerpt` from embedded scan
-  hits; and gains `--redact-existing <file>`, which reapplies the current rules to a committed
+  in either slash style, including account names that contain spaces, before the account-specific
+  patterns; strips `excerpt` from embedded scan hits; and gains `--redact-existing <file>`, which reapplies the current rules to a committed
   receipt in place, is idempotent, notes the rewrite and runs on any platform. The affected receipt
   was re-redacted with it, not hand-edited. `redactor()` is unit-tested directly with the
   reviewer's five inputs plus the JSON-escaped form.
@@ -90,7 +90,9 @@ Every entry states what shipped, on which platform it was verified, and what rem
 - `tools/qualify_windows.py --tier game --begin`, exactly as `docs/WINDOWS-QUALIFICATION.md` writes it
   (no `--output`), was refused by argparse because `--output` was unconditionally required, so the
   Tier 3 marker could never be written as documented. `--output` is now required only when a
-  receipt is written. Found on the first native Tier 3 attempt; regression test added.
+  receipt is written, and only for `--tier game`: `--tier offline --begin` or `--tier backends --begin`
+  without `--output` is refused up front instead of running the whole tier and crashing at the end.
+  Found on the first native Tier 3 attempt; regression tests added.
 - `game check-load` capped the new console output it would inspect at 128 KiB and reported the log
   gate `checked: false` above that. A single native Town load emits far more (about 4000 lines:
   fastfile, ipak and per-weapon lines), so `check-load` could never verify a real `load-map`. The
@@ -126,14 +128,18 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Not verified
 
-- No `game` route qualifies at level `game`. `load-map` does not start a survival match on a native
-  client: it skips the gametype settings config the Plutonium menu execs (`zm/gamesettings_zstandard.cfg`),
-  so weapons and `common_zm` fail to load and the engine returns to the menu (the map plays when
-  started from the menu by hand). The fix runs that config before `map` and revises the readiness
-  check, and it widens what commands the toolkit may send, so it is a maintainer design decision, not
-  applied here. `select-mod`, `reload-mod`, restarts, `disconnect`, `quit` and `install-mod` in game
-  were not exercised because the base load never became playable. Tracked as issues #8 (`load-map`
-  survival config) and #9 (opt-in focus restore after launch).
+- No `game` route qualifies at level `game`. `load-map` starts the match but the client then drops it.
+  Console-log diff on this install: every toolkit-started load reaches `Initializing game`, loads the
+  Town gump, and ends within seconds with `SV_Shutdown: hostquit` and `Dropping client num 0:
+  EXE_DISCONNECTED`, returning to the menu; the two menu-started matches play to completion and end
+  with `EXE_MATCHENDED`. The gametype settings configs (`zm/gamesettings_*.cfg`) exec at frontend init
+  in both paths, and the `Could not load weapon` and `ipak file not found: common_zm` lines appear
+  identically in the playable session, so neither the config nor the base assets is the cause (the
+  `zm_transit` zone set is complete and unchanged since 2025-10). The console `map` path connects
+  the local client through the mod-download check (`Searching for files required to download mod`),
+  which the menu's party-lobby path does not. Root cause remains open in issue #8; no command
+  allowlist change was made. `reload-mod`, restarts, `disconnect` and `install-mod` in game were not
+  exercised. Issue #9 tracks the opt-in focus restore after launch.
 - `gsc decompile`, `project init` and the standalone `ff link` route did not run natively and stay
   `implemented`. The seven other pinned backends were not downloaded.
 

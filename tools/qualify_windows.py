@@ -44,8 +44,10 @@ PAT = [sys.executable, "-m", "plutonium_agent_toolkit"]
 # Any drive letter, any account, either slash style, single or JSON-escaped separators. This
 # does not depend on USERPROFILE, so a truncated excerpt such as C:\Users\m, another account's
 # profile or another drive's Users folder cannot survive (maintainer finding on the first
-# qualification pull request).
-USERS_PATH = re.compile(r"(?i)[A-Za-z]:[\\/]{1,2}Users[\\/]{1,2}[^\\/\"\s]*")
+# qualification pull request). The account segment runs to the next separator, quote or line
+# end, so names containing spaces ("Jane Doe") are covered too; over-redacting prose that
+# follows a bare path is the safe direction.
+USERS_PATH = re.compile(r"(?i)[A-Za-z]:[\\/]{1,2}Users[\\/]{1,2}[^\\/\"\r\n\t]*")
 
 
 def redactor(extra_paths=()):
@@ -355,9 +357,10 @@ def main() -> int:
         return 0
     if not args.tier:
         ap.error("--tier is required unless --redact-existing is given")
-    if not args.output and not args.begin:
-        # `--tier game --begin` writes only the marker under PAT_HOME (docs/WINDOWS-QUALIFICATION.md).
-        ap.error("--output is required unless --begin or --redact-existing is given")
+    if not args.output and not (args.begin and args.tier == "game"):
+        # Only `--tier game --begin` writes nothing but the marker under PAT_HOME
+        # (docs/WINDOWS-QUALIFICATION.md); every other tier writes a receipt and needs --output.
+        ap.error("--output is required unless `--tier game --begin` or --redact-existing is given")
     if os.name != "nt" and not args.allow_non_windows:
         print("This script qualifies native Windows. Run it there.", file=sys.stderr)
         return 2

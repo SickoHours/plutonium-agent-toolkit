@@ -119,7 +119,7 @@ A Tier 3 receipt with `null` human observations does not qualify any route at le
 | `config_missing` from `launch` | `plutonium://` handler not registered | finding, not a fix: record it |
 | `backend_failed` from real gsc-tool with exit 0 | Error line format differs from the fake | `dev/scripts.py` `ERROR` pattern and `tests/fakes/fake_gsc.py` |
 | `Rawfile did not round-trip` | Unlinker output layout differs | `dev/projects.py` readback path |
-| `load-map` reports `sv_running` `1`, then the client returns to the main menu; console shows every `*_zm` weapon failing to load | The survival gametype config the menu execs (`zm/gamesettings_<mode>.cfg`) is never run before `map` | Issue #8; a maintainer decision because it widens the command allowlist |
+| `load-map` reports `sv_running` `1`, then the client returns to the main menu (`SV_Shutdown: hostquit` right after the Town gump loads) | Open. The console `map` path connects the local client through the mod-download check where the menu uses its party lobby. The `*_zm` weapon and `common_zm` ipak not-found lines are noise: identical in a playable menu-started match | Issue #8. Diff the console log of a menu start against the toolkit load before changing anything |
 
 ## Flipping routes to `available`
 

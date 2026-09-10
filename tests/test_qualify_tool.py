@@ -157,3 +157,27 @@ class QualifyToolUnitTests(unittest.TestCase):
         proc = subprocess.run(argv, capture_output=True, text=True, cwd=ROOT)
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(path.read_text(encoding="utf-8"), text)
+
+    def test_redactor_handles_account_names_with_spaces(self):
+        # Macroscope on PR #7: USERS_PATH stopped at whitespace, leaving "Doe\y" of "Jane Doe\y" in place.
+        from unittest.mock import patch
+
+        with patch.dict(os.environ, {"USERPROFILE": r"C:\Users\maria"}):
+            redact = self.q.redactor()
+        self.assertEqual(redact(r"D:\Users\Jane Doe\y"), r"<userprofile>\y")
+        self.assertEqual(redact("D:\\\\Users\\\\Jane Doe\\\\y"), "<userprofile>\\\\y")
+        self.assertEqual(redact("C:/Users/Jane Doe/y"), "<userprofile>/y")
+        # Single-backslash raw strings here: the private scanner's own pattern rightly flags a
+        # literal double-backslash C:\\Users\\<name> in source, and the redactor treats both alike.
+        self.assertEqual(redact(r'path "E:\Users\Jane Doe" and more'), r'path "<userprofile>" and more')
+
+    @unittest.skipIf(os.environ.get("PAT_QUALIFY_NESTED"), "would recurse through the offline tier's unit-test step")
+    def test_begin_without_output_is_refused_for_non_game_tiers(self):
+        # Macroscope on PR #7: `--tier offline --begin` ran the whole tier and then crashed on a None output.
+        # Before the fix this test recursed (tier -> unit tests -> this test -> tier), hence the guard above.
+        env = dict(os.environ, PAT_HOME=str(self.home))
+        for tier in ("offline", "backends"):
+            proc = subprocess.run([sys.executable, str(ROOT / "tools/qualify_windows.py"), "--tier", tier, "--begin"],
+                                  capture_output=True, text=True, cwd=ROOT, env=env)
+            self.assertEqual(proc.returncode, 2, f"{tier}: {proc.stderr[-300:]}")
+            self.assertIn("--output", proc.stderr)
