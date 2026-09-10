@@ -33,6 +33,9 @@ ROUTES = [
           notes="Argument: the load_id from the original response; valid for ten minutes."),
     Route("game", "quit", "Ask the engine to quit once and wait up to 20 s; never force-kills", "changes-game",
           status="implemented", owner=OWNER, requires_windows=True),
+    Route("game", "install-mod", "Copy a built mod.ff into storage/t6/mods/<folder>; file-only, never overwrites silently", "writes-output",
+          status="implemented", owner=OWNER, requires_config=STORAGE,
+          notes="Arguments: <path to mod.ff> <folder-id> [--replace]. Loading it is a separate select-mod."),
 ]
 
 for route in ROUTES:

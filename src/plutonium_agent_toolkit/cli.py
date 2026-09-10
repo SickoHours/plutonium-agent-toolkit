@@ -73,19 +73,24 @@ def build_parser() -> Parser:
         q.add_argument("--timeout", type=_timeout, default=300, help="Per-backend deadline in seconds (1-1800)")
         q.add_argument("--json", action="store_true")
 
-    from .dev import fastfiles, projects, scripts
+    from .dev import fastfiles, media, models, projects, scripts, weapons
 
     scripts.add_parser(sub, common)
     fastfiles.add_parser(sub, common)
     projects.add_parser(sub, common)
+    media.add_parsers(sub, common)
+    models.add_parser(sub, common)
+    weapons.add_parser(sub, common)
 
     g = sub.add_parser("game", help="Plutonium T6 Zombies control through the external console")
     g.add_argument("action", choices=sorted(r.action for r in routes() if r.group == "game"))
-    g.add_argument("argument", nargs="?", help="Mod folder ID, map ID or load ID depending on the action")
+    g.add_argument("argument", nargs="?", help="Mod folder ID, map ID, load ID or mod.ff path depending on the action")
+    g.add_argument("argument2", nargs="?", help="install-mod: destination folder ID")
+    g.add_argument("--replace", action="store_true", help="install-mod: move an existing folder aside first")
     g.add_argument("--json", action="store_true")
 
-    # Planned groups accept any action so they can answer with a structured refusal.
-    for group in sorted({r.group for r in routes()} - {"dev", "gsc", "ff", "project", "game"}):
+    # Planned/deferred groups accept any action so they can answer with a structured refusal.
+    for group in sorted({r.group for r in routes()} - {"dev", "gsc", "ff", "project", "game", "audio", "image", "lua", "model", "weapon"}):
         g = sub.add_parser(group)
         g.add_argument("action")
         g.add_argument("rest", nargs=argparse.REMAINDER)
@@ -99,7 +104,8 @@ def _timeout(value):
     return n
 
 
-JOB_GROUPS = {"gsc": "scripts", "ff": "fastfiles", "project": "projects"}
+JOB_GROUPS = {"gsc": "scripts", "ff": "fastfiles", "project": "projects", "audio": "media", "image": "media",
+              "lua": "media", "model": "models", "weapon": "weapons"}
 
 
 def run_job(args, argv: list[str]) -> dict:
@@ -198,10 +204,10 @@ def run(argv: list[str]) -> dict:
         return run_game(args)
 
     route = find(group, args.action)
-    raise Failure(NOT_IMPLEMENTED,
-                  f"Route {route.id} is {route.status} in {__version__}; nothing was executed.",
-                  f"Owner: {route.owner}. See docs/SUPPORT.md for the qualification status of every route.",
-                  route=route.to_dict())
+    hint = ("Deferred by product decision; not part of this release. See docs/SUPPORT.md." if route.status == "deferred"
+            else f"Owner: {route.owner}. See docs/SUPPORT.md for the qualification status of every route.")
+    raise Failure(NOT_IMPLEMENTED, f"Route {route.id} is {route.status} in {__version__}; nothing was executed.",
+                  hint, route=route.to_dict())
 
 
 def run_game(args) -> dict:
@@ -214,6 +220,12 @@ def run_game(args) -> dict:
             raise Failure(INVALID_ARGUMENTS, "game mods takes no argument")
         root = control.storage()
         return success(command, {"storage": str(root), "mods": control.inventory(root), "game_queried": False})
+    if args.action == "install-mod":
+        from .game import install
+
+        if not args.argument or not args.argument2:
+            raise Failure(INVALID_ARGUMENTS, "Usage: pat game install-mod <path to mod.ff> <folder-id> [--replace]")
+        return success(command, install.install_mod(Path(args.argument), args.argument2, replace=args.replace))
     if route.requires_windows and not os.environ.get("PAT_GAME_UNGATED"):
         platform.require_windows(command)
     control.validate_argument(args.action, args.argument)

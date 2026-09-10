@@ -26,7 +26,7 @@ records the test and shows you the evidence.
 | --- | --- | --- |
 | Development | `dev`, `gsc`, `ff`, `project`, `model`, `audio`, `image`, `lua`, `weapon` | Scripts, fastfiles, models, media and saved-asset recipes through pinned upstream backends |
 | Game control | `game` | Launch T6 Zombies, select mods, load maps, verify loads through the external console |
-| Testing | `capture`, `test` | Record the game window with game-only audio, screenshots, markers, finite test recipes, sanitized reports |
+| Testing | `capture`, `test` | **Deferred to a later release.** Contracts registered; routes refuse with `not_implemented` |
 
 Backends (OpenAssetTools, gsc-tool, Blender, Cast, FFmpeg and others) are downloaded from their
 upstream releases at setup and verified by SHA-256. This repository redistributes none of them.
@@ -41,6 +41,12 @@ See [NOTICE](NOTICE) for licenses.
 The agent installs the toolkit for your user, configures your Plutonium storage path, downloads
 the required backends and reports what is ready. Nothing launches or touches the game during
 setup. Live game operations happen only when you ask for a specific test.
+
+## For the Windows qualification run
+
+Paste [WINDOWS-QUALIFY-PROMPT.md](WINDOWS-QUALIFY-PROMPT.md) into your agent on the Windows PC.
+It follows [docs/WINDOWS-QUALIFICATION.md](docs/WINDOWS-QUALIFICATION.md), fixes what breaks,
+and opens a pull request with redacted receipts.
 
 ## For contributors and their agents
 

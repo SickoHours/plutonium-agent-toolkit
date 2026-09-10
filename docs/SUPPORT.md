@@ -8,6 +8,7 @@ pull request that changes a route. `tools/release_check.py` verifies the version
 | Level | Meaning |
 | --- | --- |
 | contract | Route is registered with name, effect and owner. Answers `not_implemented`. |
+| deferred | Registered contract, explicitly excluded from this release. Answers `not_implemented`. |
 | offline | Implemented; unit tests pass with synthetic fixtures and fake backends on any platform. Executes on Windows but has no native receipt. |
 | native | Ran on a native Windows 11 x64 host with a sanitized receipt linked below. Wine, WSL and CI runners do not count. |
 | game | Produced a verified effect in a running Plutonium T6 Zombies instance with a fresh engine reply and a decoded non-black frame where applicable. |
@@ -37,23 +38,23 @@ A level applies only to the exact scope in the receipt. "Loaded Town once" is no
 | `gsc compile`, `gsc decompile` | writes-output | offline | thread-1 | fake gsc-tool covers log-error-with-exit-zero, crash, missing input; **real gsc-tool untested** |
 | `ff inspect`, `ff link`, `ff extract` | writes-output | offline | thread-1 | fake Linker/Unlinker; **real OpenAssetTools untested** |
 | `project init/plan/build/verify` | writes-output | offline | thread-1 | hello-zm round-trips through fakes: compile, stage, link, read back, byte-compare, verify with --inputs |
-| `model convert/inspect` | writes-output | contract | thread-1 | Blender + Cast |
-| `audio convert` | writes-output | contract | thread-1 | |
-| `image convert` | writes-output | contract | thread-1 | |
-| `lua decompile` | writes-output | contract | thread-1 | |
-| `weapon catalog/plan` | writes-output | contract | thread-1 | saved BO3 asset libraries; no live BO3 capture, no generic converter |
+| `model inspect/convert/transform/rename-bones/retime/preview` | writes-output | offline | thread-1 | background Blender with the bundled worker; fake Blender in tests. **Real Blender and Cast untested** |
+| `audio inspect/convert` | writes-output | offline | thread-1 | fake ffmpeg/ffprobe cover parameter mismatch and no-stream input |
+| `image convert` | writes-output | offline | thread-1 | fake ImageConverter |
+| `lua decompile` | writes-output | offline | thread-1 | fake CoDLuaDecompiler |
+| `weapon catalog/plan` | writes-output | offline | thread-1 | synthetic sealed donor: altered/short pages, duplicates, identity mismatch, stale library, recipe rules. No live BO3 capture, no converter. `docs/WEAPONS.md` |
+| `game install-mod` | writes-output | offline | thread-2 | file copy with hash check; refuses overwrite without `--replace`; moves old folder aside |
 | `game status`, `game mods` | inert | offline | thread-2 | window enumeration and disk inventory; **no native run** |
 | `game info`, `game check-load` | query-engine | offline | thread-2 | marker-bracketed queries, receipt-bound re-attach, log counts only; fake console |
 | `game launch` | changes-game | offline | thread-2 | fixed `plutonium://play/t6zm` URI; `launch_requested`, `game_detected` and `focus_preserved` are reported separately. **Whether the handler exists and whether focus is preserved are open native questions** |
 | `game select-mod/reload-mod/load-map/fast-restart/map-restart/disconnect/quit` | changes-game | offline | thread-2 | verified settings before `map`, DLC5 zone guard, ordered mod transaction, never-replay; fake console. **Real console attach untested** |
-| `capture start/status/screenshot/mark/save-clip/stop` | captures-display | contract | thread-2 | Windows.Graphics.Capture + WASAPI process loopback + hardware encoder: Stage 1 spike |
-| `test plan/start/status/cancel/report` | mixed | contract | thread-2 | |
+| `capture *`, `test *` | mixed | **deferred** | thread-2 | Not in this release by product decision (2026-09-10). Contracts stay registered; every route answers `not_implemented`. Research notes for a later release are in the project history. |
 
 ## Explicitly out of scope for this release
 
+- Screen recording, screenshots and the autonomous test runner (`capture`, `test`). Deferred.
 - Native gameplay input (fire, ADS, reload, Use). Refused rather than simulated.
-- The in-game typed feature receiver. A standalone Apache-2.0 receiver is a 1.0 deliverable.
-- Display-off / monitor-asleep capture. To be qualified per condition, never assumed.
+- The in-game typed feature receiver.
 - Greyhound, Husky and C2M live extraction through the toolkit. The GUIs can be downloaded; their
   use is manual.
 - BO3 live asset capture and generic weapon conversion.
@@ -61,12 +62,12 @@ A level applies only to the exact scope in the receipt. "Loaded Town once" is no
 
 ## Beta and 1.0 bars
 
-**`0.1.0-beta.1`** requires the first complete workflow at level `game` on a native host from
-shipped materials: setup prompt, install, `examples/hello-zm` build and verify, install into
-storage, `capture start`, `game launch`, `game load-map town`, fresh engine reply plus decoded
-non-black frame, `capture screenshot`, `capture stop`, sanitized report.
+**`0.1.0-beta.1`** requires [WINDOWS-QUALIFICATION.md](WINDOWS-QUALIFICATION.md) Tiers 1 to 3 passed
+on a native host from shipped materials, with receipts under `docs/receipts/`: install, real
+backends building `examples/hello-zm`, `install-mod`, `launch`, `load-map town`, `check-load`,
+`select-mod hello_zm`, and a human-observed playable spawn with the hello-zm line on screen.
 
-**`1.0.0`** additionally requires: standalone receiver with one shipped feature scenario at level
-`game`; capture qualified per display condition; published frametime and encoder measurements;
-frozen JSON, exit-code and schema contracts; both pilot journeys (user and contributor) passed
-by agents on a different harness than the one that built the toolkit.
+**`1.0.0`** additionally requires: the remaining dev routes (`model`, `audio`, `image`, `lua`,
+`weapon`) at level `native`; frozen JSON, exit-code and schema contracts; both pilot journeys
+(user and contributor) passed by agents on a different harness than the one that built the
+toolkit. Capture and testing are a separate later release.

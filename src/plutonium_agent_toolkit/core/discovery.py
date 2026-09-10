@@ -21,9 +21,10 @@ EFFECTS = (
     "captures-display",    # records or screenshots the game window
 )
 
-STATUS = ("available", "implemented", "planned", "unsupported")
+STATUS = ("available", "implemented", "planned", "deferred", "unsupported")
 # available: native Windows receipt in docs/SUPPORT.md. implemented: code and offline
-# tests exist; executes on Windows but has no native receipt yet. planned: contract only.
+# tests exist; executes on Windows but has no native receipt yet. planned: contract only,
+# work intended for this release. deferred: contract only, explicitly not in this release.
 
 
 @dataclass

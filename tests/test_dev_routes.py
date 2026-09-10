@@ -166,8 +166,11 @@ class DevRouteTests(DevRouteFixture):
         by_id = {r["id"]: r for r in row["result"]["routes"]}
         for rid in ("gsc.compile", "ff.link", "project.build", "project.verify"):
             self.assertEqual(by_id[rid]["status"], "implemented", rid)
-        for rid in ("capture.start", "test.start", "model.convert", "weapon.plan"):
-            self.assertEqual(by_id[rid]["status"], "planned", rid)
+        for rid in ("model.convert", "weapon.plan", "audio.convert", "image.convert", "lua.decompile", "game.install-mod"):
+            self.assertEqual(by_id[rid]["status"], "implemented", rid)
+        for rid in ("capture.start", "test.start"):
+            self.assertEqual(by_id[rid]["status"], "deferred", rid)
+        self.assertEqual(row["result"]["counts"]["planned"], 0, "every in-scope route is implemented or available")
 
 
 if __name__ == "__main__":
