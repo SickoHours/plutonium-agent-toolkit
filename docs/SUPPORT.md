@@ -42,9 +42,10 @@ A level applies only to the exact scope in the receipt. "Loaded Town once" is no
 | `image convert` | writes-output | contract | thread-1 | |
 | `lua decompile` | writes-output | contract | thread-1 | |
 | `weapon catalog/plan` | writes-output | contract | thread-1 | saved BO3 asset libraries; no live BO3 capture, no generic converter |
-| `game status/info/mods/check-load` | inert / query-engine | contract | thread-2 | |
-| `game launch` | changes-game | contract | thread-2 | direct launch via `plutonium://play/t6zm` and focus preservation are separate results |
-| `game select-mod/load-map/reload-mod/quit` | changes-game | contract | thread-2 | |
+| `game status`, `game mods` | inert | offline | thread-2 | window enumeration and disk inventory; **no native run** |
+| `game info`, `game check-load` | query-engine | offline | thread-2 | marker-bracketed queries, receipt-bound re-attach, log counts only; fake console |
+| `game launch` | changes-game | offline | thread-2 | fixed `plutonium://play/t6zm` URI; `launch_requested`, `game_detected` and `focus_preserved` are reported separately. **Whether the handler exists and whether focus is preserved are open native questions** |
+| `game select-mod/reload-mod/load-map/fast-restart/map-restart/disconnect/quit` | changes-game | offline | thread-2 | verified settings before `map`, DLC5 zone guard, ordered mod transaction, never-replay; fake console. **Real console attach untested** |
 | `capture start/status/screenshot/mark/save-clip/stop` | captures-display | contract | thread-2 | Windows.Graphics.Capture + WASAPI process loopback + hardware encoder: Stage 1 spike |
 | `test plan/start/status/cancel/report` | mixed | contract | thread-2 | |
 

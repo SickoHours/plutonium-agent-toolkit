@@ -161,7 +161,7 @@ class DevRouteTests(unittest.TestCase):
         by_id = {r["id"]: r for r in row["result"]["routes"]}
         for rid in ("gsc.compile", "ff.link", "project.build", "project.verify"):
             self.assertEqual(by_id[rid]["status"], "implemented", rid)
-        for rid in ("game.launch", "capture.start", "test.start", "model.convert"):
+        for rid in ("capture.start", "test.start", "model.convert", "weapon.plan"):
             self.assertEqual(by_id[rid]["status"], "planned", rid)
 
 

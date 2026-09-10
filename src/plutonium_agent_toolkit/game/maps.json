@@ -1,0 +1,146 @@
+{
+  "tranzit": {
+    "label": "TranZit",
+    "map": "zm_transit",
+    "location": "transit",
+    "mode": "zclassic",
+    "group": "zclassic",
+    "dlc5": false
+  },
+  "town": {
+    "label": "Town",
+    "map": "zm_transit",
+    "location": "town",
+    "mode": "zstandard",
+    "group": "zsurvival",
+    "dlc5": false
+  },
+  "farm": {
+    "label": "Farm",
+    "map": "zm_transit",
+    "location": "farm",
+    "mode": "zstandard",
+    "group": "zsurvival",
+    "dlc5": false
+  },
+  "bus-depot": {
+    "label": "Bus Depot",
+    "map": "zm_transit",
+    "location": "transit",
+    "mode": "zstandard",
+    "group": "zsurvival",
+    "dlc5": false
+  },
+  "nuketown": {
+    "label": "Nuketown",
+    "map": "zm_nuked",
+    "location": "nuked",
+    "mode": "zstandard",
+    "group": "zsurvival",
+    "dlc5": false
+  },
+  "die-rise": {
+    "label": "Die Rise",
+    "map": "zm_highrise",
+    "location": "rooftop",
+    "mode": "zclassic",
+    "group": "zclassic",
+    "dlc5": false
+  },
+  "mob": {
+    "label": "Mob of the Dead",
+    "map": "zm_prison",
+    "location": "prison",
+    "mode": "zclassic",
+    "group": "zclassic",
+    "dlc5": false
+  },
+  "buried": {
+    "label": "Buried",
+    "map": "zm_buried",
+    "location": "processing",
+    "mode": "zclassic",
+    "group": "zclassic",
+    "dlc5": false
+  },
+  "origins": {
+    "label": "Origins",
+    "map": "zm_tomb",
+    "location": "tomb",
+    "mode": "zclassic",
+    "group": "zclassic",
+    "dlc5": false
+  },
+  "nacht": {
+    "label": "Nacht",
+    "map": "zm_prototype",
+    "location": "default",
+    "mode": "zclassic",
+    "group": "zclassic",
+    "dlc5": true
+  },
+  "verruckt": {
+    "label": "Verr\u00fcckt",
+    "map": "zm_asylum",
+    "location": "asylum",
+    "mode": "zclassic",
+    "group": "zclassic",
+    "dlc5": true
+  },
+  "shi-no-numa": {
+    "label": "Shi No Numa",
+    "map": "zm_sumpf",
+    "location": "sumpf",
+    "mode": "zclassic",
+    "group": "zclassic",
+    "dlc5": true
+  },
+  "der-riese": {
+    "label": "Der Riese",
+    "map": "zm_factory",
+    "location": "factory",
+    "mode": "zclassic",
+    "group": "zclassic",
+    "dlc5": true
+  },
+  "kino": {
+    "label": "Kino",
+    "map": "zm_theater",
+    "location": "theater",
+    "mode": "zclassic",
+    "group": "zclassic",
+    "dlc5": true
+  },
+  "five": {
+    "label": "Five",
+    "map": "zm_pentagon",
+    "location": "pentagon",
+    "mode": "zclassic",
+    "group": "zclassic",
+    "dlc5": true
+  },
+  "ascension": {
+    "label": "Ascension",
+    "map": "zm_cosmodrome",
+    "location": "cosmodrome",
+    "mode": "zclassic",
+    "group": "zclassic",
+    "dlc5": true
+  },
+  "shangri-la": {
+    "label": "Shangri-La",
+    "map": "zm_temple",
+    "location": "temple",
+    "mode": "zclassic",
+    "group": "zclassic",
+    "dlc5": true
+  },
+  "moon": {
+    "label": "Moon",
+    "map": "zm_moon",
+    "location": "moon",
+    "mode": "zclassic",
+    "group": "zclassic",
+    "dlc5": true
+  }
+}
