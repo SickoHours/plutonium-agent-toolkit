@@ -45,6 +45,10 @@ class BumpVersionTests(unittest.TestCase):
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / rel, dest)
         subprocess.run(["git", "init", "-q", "-b", "main"], cwd=self.repo, check=True)
+        # The scratch repo has no .gitattributes, so pin newline handling: without this, a Windows
+        # runner with core.autocrlf=true reports a newline-only change that it normalizes away at
+        # commit time, so `git status` and `git commit` disagree.
+        subprocess.run(["git", "config", "core.autocrlf", "false"], cwd=self.repo, check=True)
         subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "add", "-A"], cwd=self.repo, check=True)
         subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "seed"], cwd=self.repo, check=True)
 
@@ -56,7 +60,7 @@ class BumpVersionTests(unittest.TestCase):
         text = changelog.read_text()
         if not re.search(r"^## \[Unreleased\]\n\n### ", text, re.M):
             text = text.replace("## [Unreleased]\n", "## [Unreleased]\n\n### Added\n\n- fixture entry\n", 1)
-            changelog.write_text(text)
+            changelog.write_text(text, newline="\n")
             subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "unreleased"], cwd=self.repo, check=True)
         proc = self.run_tool("bump_version.py", "0.2.0", "--date", "2026-09-12")
         self.assertEqual(proc.returncode, 0, proc.stderr)
@@ -83,7 +87,7 @@ class BumpVersionTests(unittest.TestCase):
         # Ensure the Unreleased section is empty. After a real release bump it already is, so only
         # commit if emptying it actually changed the file; a clean tree is the precondition anyway.
         changelog = self.repo / "CHANGELOG.md"
-        changelog.write_text(re.sub(r"(^## \[Unreleased\]\n)(.*?)(?=^## \[)", r"\1\n", changelog.read_text(), count=1, flags=re.M | re.S))
+        changelog.write_text(re.sub(r"(^## \[Unreleased\]\n)(.*?)(?=^## \[)", r"\1\n", changelog.read_text(), count=1, flags=re.M | re.S), newline="\n")
         if subprocess.run(["git", "status", "--porcelain"], cwd=self.repo, capture_output=True, text=True).stdout.strip():
             subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "empty"], cwd=self.repo, check=True)
         proc = self.run_tool("bump_version.py", "0.2.0")

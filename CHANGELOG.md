@@ -20,6 +20,8 @@ has earned level `game`. Screen recording and the autonomous test runner are def
 
 ### Changed
 
+- `pyproject.toml` development-status classifier moved from Pre-Alpha to Beta for the 0.1.0b1
+  release, so package indexes label it correctly.
 - Documentation aligned around the agent-native, malleable-by-default premise: every doc is written
   for the agent that operates the toolkit, and states plainly that it is meant to be configured and
   edited to fit whatever machine and harness the user has. Rewrote `AGENTS.md`, made `CLAUDE.md` an
