@@ -557,3 +557,56 @@ class ArgumentValidationTests(unittest.TestCase):
             control.validate_argument("quit", "typo")
         control.validate_argument("quit", None)
         control.validate_argument("load-map", "town")
+
+
+class FourthReviewRegressionTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        os.environ["PAT_HOME"] = self.temp.name
+        self.addCleanup(lambda: os.environ.pop("PAT_HOME", None))
+        self.storage = Path(self.temp.name) / "s"
+        (self.storage / "main").mkdir(parents=True)
+
+    def test_pre_load_error_lines_do_not_count(self):
+        log = self.storage / "main" / "console_zm.log"
+        log.write_bytes(b"script runtime error: BEFORE the load\n")
+        cursors = {"zombies": control._log_cursor(log)}
+        with log.open("ab") as stream:
+            stream.write(b"loading fine\n")
+        result = control.inspect_logs(self.storage, cursors)
+        self.assertTrue(result["zombies"]["checked"])
+        self.assertEqual(result["zombies"]["error_lines"], 0)
+        self.assertEqual(result["zombies"]["bytes"], len(b"loading fine\n"))
+
+    def test_focus_preserved_uses_the_full_log_even_when_truncated(self):
+        launcher = Path(self.temp.name) / "plutonium.exe"
+        launcher.write_bytes(b"MZ")
+        from plutonium_agent_toolkit.core import config
+        config.save({"plutonium_launcher": str(launcher)})
+        # 250 distinct foreground titles, then the game appears.
+        fg = [{"pid": i, "title": f"w{i}"} for i in range(251)]
+        windows_seq = [{}] * 260 + [{99: "Plutonium T6 Zombies"}]
+
+        class Native:
+            fi = wi = 0
+
+            @staticmethod
+            def foreground():
+                Native.fi += 1
+                return fg[min(Native.fi - 1, len(fg) - 1)]
+
+            @staticmethod
+            def windows():
+                Native.wi += 1
+                return windows_seq[min(Native.wi - 1, len(windows_seq) - 1)]
+
+        ticks = iter([0.0] + [i * 0.01 for i in range(1, 2000)] + [5.0] * 20)
+        with patch.object(control.os, "startfile", lambda uri: None, create=True), \
+             patch.object(control.time, "sleep", lambda *_: None), \
+             patch.object(control.time, "monotonic", lambda: next(ticks)):
+            result = control.launch(Native, None, observe_seconds=90)
+        self.assertTrue(result["focus_events_truncated"])
+        self.assertEqual(len(result["focus_events"]), 200)
+        self.assertGreater(result["focus_event_count"], 200)
+        self.assertFalse(result["focus_preserved"])

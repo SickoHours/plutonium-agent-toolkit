@@ -145,6 +145,8 @@ def inspect_logs(root: Path, cursors: dict) -> dict:
                 stream.seek(max(0, cursor["size"] - 128))
                 if hashlib.sha256(stream.read(min(128, cursor["size"]))).hexdigest() != cursor["anchor"]:
                     raise ValueError("log prefix changed")
+                # Only output written after the load started counts; the anchor bytes are pre-load.
+                stream.seek(cursor["size"])
                 raw = stream.read(MAX_LOG_TAIL + 1)
             if len(raw) > MAX_LOG_TAIL:
                 raise ValueError("new log output exceeds 128 KiB")
@@ -323,11 +325,11 @@ def launch(native, root: Path, observe_seconds: int = 90) -> dict:
         else:
             appeared = None
         time.sleep(0.25)
-    if len(focus_log) > 200:
-        focus_log = focus_log[:200]
+    focus_preserved = all(e.get("event") != "foreground-changed" for e in focus_log)
+    truncated = len(focus_log) > 200
     result = {"launch_requested": True, "uri": PLUTONIUM_URI, "game_window": game, "game_detected": game is not None,
-              "observe_seconds": observe_seconds, "focus_events": focus_log,
-              "focus_preserved": all(e.get("event") != "foreground-changed" for e in focus_log),
+              "observe_seconds": observe_seconds, "focus_events": focus_log[:200], "focus_events_truncated": truncated,
+              "focus_event_count": len(focus_log), "focus_preserved": focus_preserved,
               "ready_for_handoff": False,
               "note": "Window detection is not a playable menu. Run game status/info and inspect the screen. Launcher login or update prompts are reported here, never answered."}
     _save(state_dir() / "last-launch.json", result)
