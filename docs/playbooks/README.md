@@ -14,7 +14,7 @@ command, then run it. Read `docs/knowledge/` once for the facts behind the steps
 | [preflight-scripts.md](preflight-scripts.md) | Any build with new or changed scripts is about to be installed for the first time |
 | [preflight-audio-memory.md](preflight-audio-memory.md) | A build adds sounds or large assets and is about to be installed for the first time |
 | [diagnose-a-crash.md](diagnose-a-crash.md) | The game dropped to the menu, closed or the player said "crashed" |
-| [qualify-on-this-host.md](qualify-on-this-host.md) | `docs/SUPPORT.md` has no receipt for your host, or a route's row says it is unverified here |
+| [qualify-on-this-host.md](qualify-on-this-host.md) | `docs/SUPPORT.md` has no receipt from your host for a route you rely on, or a real program differed from the fake here |
 | [compose-a-pack.md](compose-a-pack.md) | Several declared modules should become one mod on a named base and map |
 | [package-and-install.md](package-and-install.md) | A build is verified and should go into the client's storage folder |
 

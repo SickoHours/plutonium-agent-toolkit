@@ -105,15 +105,19 @@ class DocsConsistencyTests(unittest.TestCase):
                     continue
                 self.assertIn(f"{group} {action}", registered, f"{name}: `pat {group} {action}` is not a route")
 
-    def test_unverified_routes_point_agents_at_the_qualification_playbook(self):
-        # A row that says a route is unverified on some host must send the agent to measure it,
-        # not leave "not run" as a dead end; the playbook and its links must exist.
+    def test_rows_without_a_receipt_from_a_host_state_the_expectation_not_a_doubt(self):
+        # A row whose receipt came from one OS must not read as a warning about the other: the
+        # development routes are one code path, Linux is the harder host, and a Linux receipt is
+        # strong evidence for Windows. The section states that once; rows say which host their
+        # receipt is from and point at the playbook that records the other; the old tags are banned.
         self.assertTrue((ROOT / "docs/playbooks/qualify-on-this-host.md").is_file())
         support = read("docs/SUPPORT.md")
-        self.assertIn("## When a route is unverified on your host", support)
+        self.assertIn("## Receipts are per host; the routes are not", support)
+        self.assertIn("Linux is the harder host", support)
         self.assertIn("playbooks/qualify-on-this-host.md", support)
-        for banned in ("Not run natively", "**no native run**", "**No native run**"):
-            self.assertNotIn(banned, support, f"SUPPORT.md: {banned!r} without a next action")
+        for banned in ("Not run natively", "**no native run**", "**No native run**",
+                       "Unverified on Windows", "Unverified on Linux", "unverified on Windows", "Linux only:", "Windows only:"):
+            self.assertNotIn(banned, support, f"SUPPORT.md: {banned!r} reads as doubt about a host; state the receipt's host and the expectation")
         for doc in ("AGENTS.md", "docs/FOR-AGENTS.md", "skills/pat-help/SKILL.md", "skills/plutonium-agent-toolkit/SKILL.md"):
             self.assertIn("qualify-on-this-host.md", read(doc), doc)
 

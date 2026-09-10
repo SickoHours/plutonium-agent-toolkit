@@ -1,9 +1,11 @@
 # Qualify a route on this host
 
 `docs/SUPPORT.md` names the exact host each route has a receipt from. When your host is not one
-of them, or a row says a route is unverified here, the route is not broken and not forbidden: it
-is unmeasured. This playbook measures it, produces the receipt that would make the claim true,
-and ends with a pull request the maintainers can merge. It is how the support matrix grows.
+of them, the route is expected to work anyway: the code path is the same on Windows and Linux,
+and a Linux receipt is strong evidence for Windows because the upstream programs are built for
+Windows first. This playbook records that it does, produces the receipt that makes the table say
+so, and ends with a pull request the maintainers can merge. It is how the support matrix grows,
+and it is where a real program that differs from the fake gets its adapter fixed.
 
 ## Preconditions
 
@@ -94,6 +96,6 @@ and ends with a pull request the maintainers can merge. It is how the support ma
 ## Report
 
 State the host (OS, version, Python), which tiers ran, which route steps passed, the receipt
-paths, what the redaction check found, and what is still unverified on this host (routes with
-no step, and every route on the other OS). Then the six build facts as always: this playbook
+paths, what the redaction check found, and which routes still have no receipt from this host
+(routes with no tier step, and every route whose only receipt is from the other OS). Then the six build facts as always: this playbook
 earns **offline verified** and **native** for the named steps and nothing further.
