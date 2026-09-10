@@ -362,3 +362,19 @@ class WeaponIdentityTests(WeaponFixture):
             code, row = invoke(["weapon", "catalog", str(self.receipt), "--capture", "capture-01/manifest.json", "--output", self.out()])
             self.assertEqual(code, 1, label)
             self.assertEqual(row["error_code"], "input_invalid", f"{label}: {row.get('message')}")
+
+
+class WeaponJsonLimitTests(unittest.TestCase):
+    def test_json_limits_cover_maximal_bounded_inputs(self):
+        from plutonium_agent_toolkit.dev import weapons as w
+
+        # Worst-case serialized sizes with generous per-entry estimates.
+        index_entry = len(json.dumps({"capture-01/0000000000001000.bin": "0" * 64})) + 2
+        self.assertGreater(w.INDEX_JSON_LIMIT, w.MAX_INDEX_FILES * index_entry)
+        page_entry = len(json.dumps({"0000000000001000.bin": "0" * 64})) + 2
+        record = len(json.dumps({"name": "x" * 240, "tags": ["t" * 32] * 255, "lods": [{"materials": ["m" * 64] * 8}]}))
+        self.assertGreater(w.MANIFEST_JSON_LIMIT, w.MAX_PAGES * page_entry + w.MAX_RECORDS * 3 * 400)
+        library_file_entry = len(json.dumps({"capture-01/0000000000001000.bin": {"sha256": "0" * 64, "bytes": 4096}})) + 2
+        library_asset = len(json.dumps({"name": "x" * 240, "bones": 255, "materials": ["m" * 64] * 8}))
+        self.assertGreater(w.LIBRARY_JSON_LIMIT, (w.MAX_INDEX_FILES + w.MAX_ADAPTER_FILES) * library_file_entry
+                           + w.MAX_RECORDS * 3 * library_asset)

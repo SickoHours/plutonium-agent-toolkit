@@ -34,6 +34,12 @@ MAX_INDEX_FILES = 16384
 MAX_ADAPTER_FILES = 2048          # adapter indexes are small; donor + adapter + metadata stay under the Job cap
 MAX_INDEX_BYTES = 2 * 1024**3
 MAX_PAGES = 16000
+# JSON read limits sized to the file-count bounds above: an index entry is ~110 bytes,
+# a manifest page entry ~90 bytes plus asset records, a library carries files + assets + adapter.
+RECIPE_JSON_LIMIT = 2 * 1024**2
+INDEX_JSON_LIMIT = 8 * 1024**2
+MANIFEST_JSON_LIMIT = 16 * 1024**2
+LIBRARY_JSON_LIMIT = 32 * 1024**2
 MAX_RECORDS = 4096
 KINDS = ("models", "animations", "weapons")
 NAME = re.compile(r"[A-Za-z0-9_./*#-]{1,240}\Z")
@@ -112,23 +118,23 @@ def _pinned_files(job: Job, root: Path, index: dict, limit: int = MAX_INDEX_FILE
 
 
 def catalog(job: Job, receipt_path: Path, capture_rel: str) -> dict:
-    receipt_path = job.input(receipt_path, limit=2 * 1024 * 1024)
-    receipt = _read_json(receipt_path)
+    receipt_path = job.input(receipt_path, limit=RECIPE_JSON_LIMIT)
+    receipt = _read_json(receipt_path, limit=RECIPE_JSON_LIMIT)
     _require(isinstance(receipt, dict) and {"root", "index", "index_sha256", "map", "pid", "start_ticks"} <= set(receipt),
              "Donor receipt needs root, index, index_sha256, map, pid, start_ticks")
     _require(isinstance(receipt["root"], str) and receipt["root"], "Donor receipt root must be a non-empty string")
     _require(isinstance(receipt["index_sha256"], str), "Donor receipt index_sha256 must be a string")
     root = Path(receipt["root"]).expanduser().resolve()
     _require(root.is_absolute() and root.is_dir(), "Donor root must be an existing absolute directory")
-    index_path = job.input(_rel(root, receipt["index"]), limit=2 * 1024 * 1024)
+    index_path = job.input(_rel(root, receipt["index"]), limit=INDEX_JSON_LIMIT)
     _require(job.inputs[str(index_path)] == receipt["index_sha256"], "Sealed index changed", INPUT_CHANGED)
-    index = _read_json(index_path)
+    index = _read_json(index_path, limit=INDEX_JSON_LIMIT)
     _require(isinstance(index, dict) and isinstance(index.get("files"), dict), "Index needs a files map")
     _require(isinstance(receipt.get("map"), str) and receipt["map"], "Donor receipt map must be a string")
     files = _pinned_files(job, root, index["files"])
     _require(capture_rel in files, "Capture manifest must be in the sealed index")
     # 32768 page entries need about 3 MiB of JSON; allow headroom above the default 2 MiB.
-    capture = _read_json(_rel(root, capture_rel), limit=16 * 1024 * 1024)
+    capture = _read_json(_rel(root, capture_rel), limit=MANIFEST_JSON_LIMIT)
     _require(isinstance(capture, dict), "Capture manifest must be a JSON object")
     before, after = capture.get("map_before"), capture.get("map_after")
     _require(isinstance(before, list) and len(before) == 1 and before == after and isinstance(before[0], dict),
@@ -174,9 +180,9 @@ def catalog(job: Job, receipt_path: Path, capture_rel: str) -> dict:
     unknown = set(receipt) - {"root", "index", "index_sha256", "map", "pid", "start_ticks", "adapter_index", "adapter_index_sha256"}
     _require(not unknown, f"Donor receipt has unknown fields: {sorted(unknown)}")
     if "adapter_index" in receipt:
-        path = job.input(_rel(root, receipt["adapter_index"]))
+        path = job.input(_rel(root, receipt["adapter_index"]), limit=INDEX_JSON_LIMIT)
         _require(job.inputs[str(path)] == receipt.get("adapter_index_sha256"), "Native adapter index changed", INPUT_CHANGED)
-        adapter_index = _read_json(path)
+        adapter_index = _read_json(path, limit=INDEX_JSON_LIMIT)
         _require(isinstance(adapter_index, dict) and isinstance(adapter_index.get("files"), dict), "Adapter index needs a files map")
         adapter = _pinned_files(job, path.parent, adapter_index["files"], limit=MAX_ADAPTER_FILES)
     return {"schema_version": 1, "source_engine": "t7", "format": "bo3-page-capture-v1",
@@ -191,7 +197,7 @@ def catalog(job: Job, receipt_path: Path, capture_rel: str) -> dict:
 
 
 def read_recipe(path: Path) -> dict:
-    recipe = _read_json(path)
+    recipe = _read_json(path, limit=RECIPE_JSON_LIMIT)
     _require(isinstance(recipe, dict) and set(recipe) == RECIPE_FIELDS, f"Recipe must have exactly these fields: {sorted(RECIPE_FIELDS)}")
     _require(recipe["schema"] == 1 and recipe["source_engine"] == "t7" and recipe["target_engine"] == "t6", "Expected schema 1, source t7, target t6")
     _require(isinstance(recipe["family"], str) and FAMILY.match(recipe["family"]), "Invalid family")
@@ -256,10 +262,10 @@ def execute(args, job: Job) -> dict:
         (job.root / "library.json").write_text(json.dumps(library, indent=2) + "\n", encoding="utf-8")
         return {"library": "library.json", "identity": library["identity"],
                 "counts": {k: len(v) for k, v in library["assets"].items()}, "live_access": False}
-    recipe = read_recipe(job.input(Path(args.recipe), limit=2 * 1024 * 1024))
-    library_path = job.input(Path(args.library), limit=2 * 1024 * 1024)
+    recipe = read_recipe(job.input(Path(args.recipe), limit=RECIPE_JSON_LIMIT))
+    library_path = job.input(Path(args.library), limit=LIBRARY_JSON_LIMIT)
     _require(not job.root.is_relative_to(library_path.parent), "Output must be outside the catalog job")
-    old = _read_json(library_path)
+    old = _read_json(library_path, limit=LIBRARY_JSON_LIMIT)
     _require(isinstance(old, dict) and {"donor_receipt", "capture"} <= set(old), "library.json is not a weapon catalog")
     _require(isinstance(old["donor_receipt"], str) and isinstance(old["capture"], str),
              "library.json donor_receipt and capture must be strings")
