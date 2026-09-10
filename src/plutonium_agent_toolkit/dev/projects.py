@@ -185,7 +185,11 @@ def _build(data, compiled, loose, loads, plan, args, job: Job) -> dict:
     raw, zone_dir = base / "raw", base / "zone_source"
     raw.mkdir(parents=True)
     zone_dir.mkdir()
-    lines = ["> game,T6", f"> name,{data['name']}"]
+    # Plutonium loads mods/<folder>/mod.ff, and a T6 fastfile is bound to its file name (the zone
+    # name keys its compressed streams), so the zone is always linked as "mod". The recipe name is
+    # the install folder only. Native Tier 3 finding: a hello_zm.ff renamed to mod.ff could not be
+    # inflated by OpenAssetTools and hung the Plutonium client on load.
+    lines = ["> game,T6", "> name,mod"]
     rawfiles = []
     for index, (source, target, instance) in enumerate(compiled):
         child = Job(job.root / f"script-{index:03d}", "gsc compile", ["pat", "gsc", "compile", str(source)],
@@ -224,7 +228,7 @@ def _build(data, compiled, loose, loads, plan, args, job: Job) -> dict:
         if not restored.is_file() or sha256_file(raw / rel) != sha256_file(restored):
             raise Failure(BACKEND_FAILED, f"Rawfile did not round-trip through the fastfile: {rel.as_posix()}")
     return {**link, "plan": "plan.json", "rawfiles_verified": len(rawfiles), "mod_ff": link["packages"][0]["path"],
-            "install_hint": f"Copy {link['packages'][0]['path']} to <storage>/t6/mods/{data['name']}/mod.ff; loading it in game is a separate, authorized step"}
+            "install_hint": f"pat game install-mod <output>/{link['packages'][0]['path']} {data['name']}  (keeps the name mod.ff; a renamed T6 fastfile cannot be read). Loading it in game is a separate, authorized step"}
 
 
 def _verify(args, job: Job) -> dict:

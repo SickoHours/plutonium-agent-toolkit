@@ -35,6 +35,18 @@ class QualifyToolTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 2)
         self.assertIn("runs nothing", proc.stderr)
 
+    def test_game_tier_begin_needs_no_output_directory(self):
+        # docs/WINDOWS-QUALIFICATION.md runs `--tier game --begin` without --output; it writes only
+        # the marker under PAT_HOME. Found on the first native Tier 3 attempt: argparse refused it.
+        with tempfile.TemporaryDirectory() as temp:
+            env = dict(os.environ, PAT_HOME=str(Path(temp) / "home"))
+            proc = subprocess.run([sys.executable, str(ROOT / "tools/qualify_windows.py"), "--tier", "game", "--begin",
+                                   "--allow-non-windows"], capture_output=True, text=True, cwd=ROOT, env=env)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            marker = Path(temp) / "home" / "game" / "qualify-tier3-begin.json"
+            self.assertTrue(marker.is_file())
+            self.assertIn("began_unix", json.loads(marker.read_text(encoding="utf-8")))
+
 
 class QualifyToolUnitTests(unittest.TestCase):
     def setUp(self):
@@ -75,3 +87,109 @@ class QualifyToolUnitTests(unittest.TestCase):
         self.assertTrue(by_name["last-load.json"]["passed"])
         self.assertTrue(by_name["last-result.json"]["passed"])
         self.assertFalse(by_name["install-mod hello_zm receipt"]["passed"])
+
+    def test_finish_moves_an_existing_receipt_aside_instead_of_overwriting(self):
+        # A rerun after a fix must not erase the failed attempt: RECORDING-A-RECEIPT.md keeps it.
+        out = Path(self.temp.name) / "out"
+        first = self.q.new_receipt("offline")
+        first["steps"].append({"name": "x", "passed": False})
+        self.q.finish(first, out, "tier1-offline.json", lambda value: value)
+        second = self.q.new_receipt("offline")
+        second["steps"].append({"name": "x", "passed": True})
+        self.q.finish(second, out, "tier1-offline.json", lambda value: value)
+        names = sorted(p.name for p in out.iterdir())
+        superseded = [n for n in names if n.startswith("tier1-offline.superseded-") and n.endswith(".json")]
+        self.assertEqual(len(superseded), 1, names)
+        self.assertFalse(json.loads((out / superseded[0]).read_text(encoding="utf-8"))["passed"])
+        latest = json.loads((out / "tier1-offline.json").read_text(encoding="utf-8"))
+        self.assertTrue(latest["passed"])
+        self.assertIn(superseded[0], json.dumps(latest["notes"]))
+
+    def test_redactor_covers_any_users_path_regardless_of_account(self):
+        # Maintainer finding on PR #7: a truncated excerpt (C:\Users\m), another account's path and
+        # another drive's Users path all survived because only the exact USERPROFILE was known.
+        from unittest.mock import patch
+
+        with patch.dict(os.environ, {"USERPROFILE": r"C:\Users\maria"}):
+            redact = self.q.redactor()
+        cases = {
+            r"C:\Users\m": "<userprofile>",
+            r"C:\Users\maria\x": r"<userprofile>\x",
+            r"C:\Users\someoneelse\z": r"<userprofile>\z",
+            r"D:\Users\bob\y": r"<userprofile>\y",
+            "C:/Users/maria/y": "<userprofile>/y",
+            "C:\\\\Users\\\\m": "<userprofile>",  # JSON-escaped form, as private_scan quotes it
+        }
+        for raw, expected in cases.items():
+            self.assertEqual(redact(raw), expected, raw)
+        self.assertEqual(redact({"k": [r"C:\Users\m"]}), {"k": ["<userprofile>"]})
+
+    def test_finish_strips_private_scan_excerpts(self):
+        # The excerpt quotes the offending text itself; file, line and pattern are enough.
+        hit = {"file": ".qualify-home/config.json", "line": 2, "pattern": "personal_home", "excerpt": "C:\\\\Users\\\\m"}
+        receipt = self.q.new_receipt("offline")
+        receipt["steps"].append({"name": "private scan", "passed": False, "json": {"ok": False, "hits": [hit]}})
+        out = Path(self.temp.name) / "out"
+        self.q.finish(receipt, out, "tier1-offline.json", self.q.redactor())
+        saved = json.loads((out / "tier1-offline.json").read_text(encoding="utf-8"))["steps"][0]["json"]["hits"][0]
+        self.assertNotIn("excerpt", saved)
+        self.assertEqual((saved["file"], saved["line"], saved["pattern"]), (".qualify-home/config.json", 2, "personal_home"))
+
+    def test_redact_existing_rewrites_a_committed_receipt_in_place_once(self):
+        path = Path(self.temp.name) / "old.json"
+        stale = {"schema_version": 1, "tier": "offline", "environment": {}, "notes": ["kept"],
+                 "steps": [{"name": "private scan", "passed": False,
+                            "json": {"ok": False, "hits": [{"file": "x.json", "line": 2, "pattern": "personal_home",
+                                                             "excerpt": "C:\\\\Users\\\\m"}]}},
+                           {"name": "unit tests", "passed": False, "stderr_head": r"D:\Users\bob\y failed"}]}
+        path.write_text(json.dumps(stale, indent=2) + "\n", encoding="utf-8")
+        argv = [sys.executable, str(ROOT / "tools/qualify_windows.py"), "--redact-existing", str(path)]
+        proc = subprocess.run(argv, capture_output=True, text=True, cwd=ROOT)  # no --allow-non-windows: works anywhere
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        text = path.read_text(encoding="utf-8")
+        self.assertNotIn("Users", text)
+        data = json.loads(text)
+        self.assertNotIn("excerpt", data["steps"][0]["json"]["hits"][0])
+        self.assertIn(r"<userprofile>\y", data["steps"][1]["stderr_head"])
+        self.assertEqual(data["notes"][0], "kept")
+        self.assertTrue(any(isinstance(n, dict) and "re_redacted" in n for n in data["notes"]))
+        # Idempotent: a second run changes nothing and adds no note.
+        proc = subprocess.run(argv, capture_output=True, text=True, cwd=ROOT)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(path.read_text(encoding="utf-8"), text)
+
+    def test_stage_for_tier3_refuses_to_rename_a_fastfile(self):
+        # Native Tier 3 finding: hello_zm.ff copied to mod.ff could not be inflated and hung the client.
+        built = Path(self.temp.name) / "packages" / "hello_zm.ff"
+        built.parent.mkdir()
+        built.write_bytes(b"ff")
+        self.assertIsNone(self.q.stage_for_tier3(built, self.home))
+        good = built.with_name("mod.ff")
+        good.write_bytes(b"ff")
+        staged = self.q.stage_for_tier3(good, self.home)
+        self.assertEqual(staged, self.home / "qualify" / "hello_zm" / "mod.ff")
+        self.assertEqual(staged.read_bytes(), b"ff")
+
+    def test_redactor_handles_account_names_with_spaces(self):
+        # Macroscope on PR #7: USERS_PATH stopped at whitespace, leaving "Doe\y" of "Jane Doe\y" in place.
+        from unittest.mock import patch
+
+        with patch.dict(os.environ, {"USERPROFILE": r"C:\Users\maria"}):
+            redact = self.q.redactor()
+        self.assertEqual(redact(r"D:\Users\Jane Doe\y"), r"<userprofile>\y")
+        self.assertEqual(redact("D:\\\\Users\\\\Jane Doe\\\\y"), "<userprofile>\\\\y")
+        self.assertEqual(redact("C:/Users/Jane Doe/y"), "<userprofile>/y")
+        # Single-backslash raw strings here: the private scanner's own pattern rightly flags a
+        # literal double-backslash C:\\Users\\<name> in source, and the redactor treats both alike.
+        self.assertEqual(redact(r'path "E:\Users\Jane Doe" and more'), r'path "<userprofile>" and more')
+
+    @unittest.skipIf(os.environ.get("PAT_QUALIFY_NESTED"), "would recurse through the offline tier's unit-test step")
+    def test_begin_without_output_is_refused_for_non_game_tiers(self):
+        # Macroscope on PR #7: `--tier offline --begin` ran the whole tier and then crashed on a None output.
+        # Before the fix this test recursed (tier -> unit tests -> this test -> tier), hence the guard above.
+        env = dict(os.environ, PAT_HOME=str(self.home))
+        for tier in ("offline", "backends"):
+            proc = subprocess.run([sys.executable, str(ROOT / "tools/qualify_windows.py"), "--tier", tier, "--begin"],
+                                  capture_output=True, text=True, cwd=ROOT, env=env)
+            self.assertEqual(proc.returncode, 2, f"{tier}: {proc.stderr[-300:]}")
+            self.assertIn("--output", proc.stderr)

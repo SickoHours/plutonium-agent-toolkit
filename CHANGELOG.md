@@ -52,6 +52,110 @@ Every entry states what shipped, on which platform it was verified, and what rem
   secret scanning and private vulnerability reporting. Readiness is unchanged: see docs/SUPPORT.md.
 - CI uses actions/checkout v7, setup-python v7 and upload-artifact v7 (Node 24 runtime).
 
+### Fixed
+
+- Findings of the first native Windows run (Windows 11 25H2 build 26200, Python 3.12.0), Tier 1 of
+  `docs/WINDOWS-QUALIFICATION.md`:
+  - The documented `PAT_HOME` at `<repo>/.qualify-home` was not ignored by git, so `configure` put
+    the user's absolute storage path where `tools/private_scan.py` lists untracked files and the
+    Tier 1 private scan failed. `.gitignore` ignores it; `tests/test_release_tools.py` checks that
+    the documented location stays ignored.
+  - `src/plutonium_agent_toolkit.egg-info/` was tracked, so `pip install -e .` dirtied the tree and
+    every receipt recorded `git_dirty: true`. Untracked and ignored, with a test that refuses
+    tracked egg-info.
+  - Windows job runner: a backend tree terminated through the Job Object (timeout, output bound,
+    cancellation) kept its inherited handle to the step log for up to a scheduler tick after
+    `process.wait()` returned, so deleting the job directory immediately failed with
+    `ERROR_SHARING_VIOLATION` about one time in ten and made `test_finish_rechecks_output_bound`
+    flaky. `_run_windows` now waits, bounded, for the log to be released after closing its own
+    handle and records `log_still_open` on the step if it is not. `tests/test_jobs_windows.py`
+    (native Windows only) covers the wait and the timeout path.
+  - `tools/qualify_windows.py` overwrote an earlier receipt on rerun. It now moves the previous
+    file to `<name>.superseded-<utc stamp>.json` and notes it, so a failed attempt survives the fix
+    as `docs/contributors/RECORDING-A-RECEIPT.md` requires.
+  - The tier commands said `--output docs/receipts/qualify`, contradicting `docs/receipts/README.md`
+    and this changelog; they say `--output docs/receipts` now.
+
+- Maintainer review of the Tier 1 and 2 receipts: the failed first-attempt receipt embedded
+  `private_scan`'s own hit excerpt, a truncated `C:\Users\m`, which the redactor missed because it only
+  knew the exact `USERPROFILE`; other accounts' and other drives' `Users` paths would also have
+  survived. `tools/qualify_windows.py` now replaces any drive-letter `Users` path for any account,
+  in either slash style, including account names that contain spaces, before the account-specific
+  patterns; strips `excerpt` from embedded scan hits; and gains `--redact-existing <file>`, which
+  reapplies the current rules to a committed receipt in place, is idempotent, notes the rewrite and runs on any platform. The affected receipt
+  was re-redacted with it, not hand-edited. `redactor()` is unit-tested directly with the
+  reviewer's five inputs plus the JSON-escaped form.
+- Windows job runner: when the step log is still held after the bounded wait, the step records
+  `log_release_wait_seconds` next to `log_still_open`.
+- `tools/qualify_windows.py --tier game --begin`, exactly as `docs/WINDOWS-QUALIFICATION.md` writes it
+  (no `--output`), was refused by argparse because `--output` was unconditionally required, so the
+  Tier 3 marker could never be written as documented. `--output` is now required only when a
+  receipt is written, and only for `--tier game`: `--tier offline --begin` or `--tier backends --begin`
+  without `--output` is refused up front instead of running the whole tier and crashing at the end.
+  Found on the first native Tier 3 attempt; regression tests added.
+- `game check-load` capped the new console output it would inspect at 128 KiB and reported the log
+  gate `checked: false` above that. A single native Town load emits far more (about 4000 lines:
+  fastfile, ipak and per-weapon lines), so `check-load` could never verify a real `load-map`. The
+  bound is now 4 MiB, matching a job's backend log; regression test with a map-load-sized log.
+  Found on the first native Tier 3 attempt.
+
+- `project build` linked the mod zone under the recipe name (`> name,hello_zm`), so the real Linker
+  emitted `packages/hello_zm.ff`, and the qualification staging (and the old `install_hint`) renamed it
+  to `mod.ff`. A T6 fastfile is bound to its file name: the zone name keys its compressed streams, so
+  the renamed copy cannot be inflated (OpenAssetTools Unlinker: `inflate of stream 0 failed`, exit -1;
+  a known-good `mod.ff` fails the same way when renamed) and the Plutonium r5346 client hung loading it
+  (busy, no log output, no dialog). The zone is now always linked as `mod`, so the build emits a real
+  `packages/mod.ff`; `tools/qualify_windows.py` stages it only under that name and fails the tier
+  otherwise; the fake Linker names its output from `> name,` and the fake Unlinker refuses a renamed
+  file, so the offline round-trip test now catches this (it previously passed for the wrong reason).
+  Found on the first native Tier 3 attempt with `hello_zm`; Tier 2 re-run with the corrected build.
+
+### Verified
+
+- Native Windows Tier 1 (offline) receipt `docs/receipts/0.1.0a1/tier1-offline.json`: Windows 11
+  25H2 build 26200, Python 3.12.0, clean tree. 13/13 steps: unit tests, `version`, `manifest`,
+  `describe`, `doctor`, `configure`, `game mods` on an empty storage, `dev setup --plan`,
+  `project plan` of `examples/hello-zm`, the `output_exists` refusal, the deferred-route refusal,
+  private scan and release check. `version`, `manifest`, `describe`, `doctor` and `configure`
+  move to level `native` in `docs/SUPPORT.md`. The failed first attempt is kept alongside as
+  `tier1-offline.superseded-*.json`.
+
+- Native Windows Tier 2 (backends) receipt `docs/receipts/0.1.0a1/tier2-backends.json`: same host,
+  clean tree, 10/10 steps on the first attempt, then re-run at 11/11 after the mod-zone naming fix
+  (the build now emits `packages/mod.ff`, staged for Tier 3 without renaming; the earlier receipt is
+  kept as superseded). gsc-tool 1.4.10 and OpenAssetTools 0.33.0
+  downloaded, SHA-256 verified and re-verified on rerun; `examples/hello-zm` compiled, linked,
+  read back, byte-compared and verified with `--inputs` (`mod.ff` 384 bytes, SHA-256 in the
+  receipt); `ff inspect` and `ff extract` on the result; a broken script fails with
+  `backend_failed`; a minimal script compiles. `gsc compile`, `ff inspect`, `ff extract` and
+  `project plan|build|verify` become `available` and move to level `native`; `dev setup` moves to
+  `native` for `gsc` and `oat`.
+
+- Native Windows Tier 3 (running game) attempted, receipt `docs/receipts/0.1.0a1/tier3-game.json`
+  (3/5 collector checks): `game launch` started T6 Zombies through the `plutonium://play/t6zm`
+  handler with no launcher prompt (`focus_preserved` false, ~5 s); `game status` and `game info`
+  attached to the live external console and returned correct window and dvar state. `load-map town`
+  set the dvars and sent `map` but did not start a survival match, so `check-load` could not verify.
+  `select-mod zm_gobblegums`, `select-mod base` (verified `fs_game` changes) and `quit` (stopped through
+  the engine) ran natively. No `game` route earned level `game`; all stay `offline`.
+
+### Not verified
+
+- No `game` route qualifies at level `game`. `load-map` starts the match but the client then drops it.
+  Console-log diff on this install: every toolkit-started load reaches `Initializing game`, loads the
+  Town gump, and ends within seconds with `SV_Shutdown: hostquit` and `Dropping client num 0:
+  EXE_DISCONNECTED`, returning to the menu; the two menu-started matches play to completion and end
+  with `EXE_MATCHENDED`. The gametype settings configs (`zm/gamesettings_*.cfg`) exec at frontend init
+  in both paths, and the `Could not load weapon` and `ipak file not found: common_zm` lines appear
+  identically in the playable session, so neither the config nor the base assets is the cause (the
+  `zm_transit` zone set is complete and unchanged since 2025-10). The console `map` path connects
+  the local client through the mod-download check (`Searching for files required to download mod`),
+  which the menu's party-lobby path does not. Root cause remains open in issue #8; no command
+  allowlist change was made. `reload-mod`, restarts, `disconnect` and `install-mod` in game were not
+  exercised. Issue #9 tracks the opt-in focus restore after launch.
+- `gsc decompile`, `project init` and the standalone `ff link` route did not run natively and stay
+  `implemented`. The seven other pinned backends were not downloaded.
+
 ## [0.1.0a1] - 2026-09-09
 
 First private foundation commit. Nothing in this version has run on a native Windows host.

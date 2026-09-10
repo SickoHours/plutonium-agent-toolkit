@@ -1,0 +1,195 @@
+{
+  "schema_version": 1,
+  "tier": "game",
+  "environment": {
+    "toolkit_version": "0.1.0a1",
+    "python": "3.12.0",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "machine": "AMD64",
+    "native_windows": true,
+    "at": "2026-09-10T07:35:03+00:00",
+    "windows_build": "10.0.26200",
+    "git_head": "dd2242c1504ca0ab7d92247622eeff022d657740",
+    "git_dirty": false,
+    "pat_home_isolated": true
+  },
+  "steps": [
+    {
+      "name": "last-launch.json",
+      "passed": true,
+      "json": {
+        "launch_requested": true,
+        "uri": "plutonium://play/t6zm",
+        "game_window": {
+          "pid": 28524,
+          "title": "Plutonium T6 Zombies (r5346)"
+        },
+        "game_detected": true,
+        "observe_seconds": 90,
+        "settle_seconds": 15,
+        "focus_observed_seconds": 23.33,
+        "focus_scope": "foreground changes during 23.33s from launch request, including 15s after the game window appeared",
+        "focus_events": [
+          {
+            "t": 0.0,
+            "pid": 21160,
+            "title": "ChatGPT - Google Chrome",
+            "event": "before-launch"
+          },
+          {
+            "t": 0.78,
+            "pid": 11504,
+            "title": "bin\\plutonium-bootstrapper-win32.exe",
+            "event": "foreground-changed"
+          },
+          {
+            "t": 1.03,
+            "pid": 11504,
+            "title": "Plutonium r5346",
+            "event": "foreground-changed"
+          },
+          {
+            "t": 5.3,
+            "pid": 28524,
+            "title": "Plutonium T6 Zombies (r5346)",
+            "event": "foreground-changed"
+          },
+          {
+            "t": 8.3,
+            "pid": 28524,
+            "title": "Plutonium T6 Zombies (r5346)",
+            "event": "game-detected"
+          }
+        ],
+        "focus_events_truncated": false,
+        "focus_event_count": 5,
+        "focus_preserved": false,
+        "ready_for_handoff": false,
+        "note": "Window detection is not a playable menu. Run game status/info and inspect the screen. Launcher login or update prompts are reported here, never answered."
+      },
+      "expected": "fresh, successful state"
+    },
+    {
+      "name": "last-load.json",
+      "passed": true,
+      "json": {
+        "schema_version": 1,
+        "id": "<id>",
+        "created": 1789023685.1131995,
+        "action": "select-mod",
+        "argument": "base",
+        "process": {
+          "pid": 28524,
+          "created": 134334936745116763
+        },
+        "before": {
+          "fs_game": "mods/zm_gobblegums",
+          "mapname": "zm_transit",
+          "sv_running": "0",
+          "sv_cheats": "0",
+          "g_gametype": "zstandard"
+        },
+        "expected": {
+          "fs_game": "",
+          "sv_running": "0"
+        },
+        "status": "engine-state-verified",
+        "logs": {
+          "zombies": {
+            "size": 1003805,
+            "device": 9836587407776159154,
+            "inode": 4785074604284910,
+            "anchor": "485d3ec610fe2edf8723f3d9545b92904f0d2d00a709586c7e5820b5842413a1"
+          }
+        },
+        "after": {
+          "fs_game": "",
+          "mapname": "zm_transit",
+          "sv_running": "0",
+          "sv_cheats": "0",
+          "g_gametype": "zclassic"
+        }
+      },
+      "expected": "fresh, successful state"
+    },
+    {
+      "name": "last-load-check.json",
+      "passed": false,
+      "json": {
+        "load_id": "<id>",
+        "verified": false,
+        "state": {
+          "fs_game": "mods/zm_gobblegums",
+          "mapname": "zm_transit",
+          "sv_running": "0",
+          "sv_cheats": "0",
+          "g_gametype": "zstandard"
+        },
+        "state_matches": false,
+        "logs": {
+          "zombies": {
+            "checked": true,
+            "bytes": 163827,
+            "error_lines": 0
+          }
+        },
+        "original_status": "engine-state-verified",
+        "ready_for_handoff": false,
+        "visual_checkpoint": "Inspect the actual game image for the expected menu or playable spawn and for delayed errors"
+      },
+      "expected": "fresh, successful state",
+      "stderr_head": "state file present but does not record success"
+    },
+    {
+      "name": "last-result.json",
+      "passed": true,
+      "json": {
+        "ok": true,
+        "process": {
+          "pid": 28524,
+          "created": 134334936745116763
+        },
+        "stopped": true,
+        "method": "engine quit",
+        "request_id": "<id>"
+      },
+      "expected": "fresh, successful state"
+    },
+    {
+      "name": "install-mod hello_zm receipt",
+      "passed": false,
+      "json": null,
+      "expected": "fresh install receipt",
+      "stderr_head": "no fresh hello_zm install receipt"
+    }
+  ],
+  "notes": [
+    "work directory <work>",
+    {
+      "tier3_began_unix": 1789019689.7037735
+    },
+    "Tier 3 commands were run by hand with per-command human authorization. Only state files written after the begin marker count, and each must record success. The human observations are required for level `game`; automated state alone is not a playable spawn.",
+    {
+      "superseded": "tier3-game.superseded-20260910T073503Z.json"
+    }
+  ],
+  "human_observations": {
+    "launcher_prompt_shown": null,
+    "game_window_took_focus": null,
+    "main_menu_reached": null,
+    "town_spawn_playable": null,
+    "hello_zm_line_visible_after_spawn": null,
+    "quit_exited_cleanly": null,
+    "plutonium_build": null,
+    "notes": "Sequence run with per-command human authorization on r5346 (Plutonium launcher and bootstrapper binaries updated 04:53Z the same day; BO2 zone files unchanged since 2025-10): launch (no launcher prompt; console then game window took focus about 5 s after the request), status, info, load-map town, check-load (delivery_uncertain while still loading; a later check on a second load read 160 KB of new log with 0 error lines and state_matches false), select-mod zm_gobblegums (verified fs_game change), load-map town under the mod, select-mod base (verified), quit (stopped through the engine, window gone). Human observation: Town started from the Plutonium menu by hand is a playable spawn. Console-log diff: every toolkit-started load reached Initializing game and loaded the Town gump, then the client dropped the match with SV_Shutdown: hostquit and returned to the menu; menu-started matches on the same install end with EXE_MATCHENDED. The gametype settings configs exec at frontend init in both paths, and the weapon and common_zm not-found lines are identical in the playable session, so neither is the cause; root cause is open in issue #8 and no command allowlist change was made. hello-zm was not installed or seen. No game route qualifies at level game. Remote control through the external console is demonstrated for loadmod, map, disconnect and quit."
+  },
+  "passed": false,
+  "summary": {
+    "steps": 5,
+    "passed": 3,
+    "failed": [
+      "last-load-check.json",
+      "install-mod hello_zm receipt"
+    ]
+  }
+}

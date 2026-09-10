@@ -1,6 +1,8 @@
 __pycache__/
 *.pyc
 /.venv/
+/.qualify-home/
+*.egg-info/
 /build/
 /dist/
 /tools-cache/

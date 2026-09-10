@@ -25,5 +25,21 @@ class ReleaseToolTests(unittest.TestCase):
         self.assertEqual(code, 1)
 
 
+class RepositoryHygieneTests(unittest.TestCase):
+    """Native-run findings: the documented procedure must not dirty or leak into the tree."""
+
+    def test_documented_qualify_home_is_ignored_by_git(self):
+        # docs/WINDOWS-QUALIFICATION.md sets PAT_HOME to <repo>/.qualify-home, and `configure`
+        # writes the user's absolute storage path into its config.json. If git does not ignore
+        # that directory, private_scan.py (which lists untracked files too) flags it.
+        proc = subprocess.run(["git", "check-ignore", "-q", ".qualify-home/config.json"], cwd=ROOT)
+        self.assertEqual(proc.returncode, 0, ".qualify-home/ must be ignored by git")
+
+    def test_no_generated_egg_info_is_tracked(self):
+        # `pip install -e .` regenerates *.egg-info; tracking it makes every install dirty the tree.
+        out = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True).stdout
+        self.assertEqual([line for line in out.splitlines() if ".egg-info" in line], [])
+
+
 if __name__ == "__main__":
     unittest.main()

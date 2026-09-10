@@ -35,7 +35,7 @@ pat version --json
 ## Tier 1: offline (no downloads, no game)
 
 ```powershell
-python tools/qualify_windows.py --tier offline --output docs/receipts/qualify
+python tools/qualify_windows.py --tier offline --output docs/receipts
 ```
 
 The script runs the unit tests, `manifest`, `describe`, `doctor`, `configure`, `dev setup --plan`
@@ -47,7 +47,7 @@ Commit: `git add docs/receipts && git commit -m "qualify(windows): tier 1 offlin
 ## Tier 2: backends (downloads, real gsc-tool and OpenAssetTools, no game)
 
 ```powershell
-python tools/qualify_windows.py --tier backends --output docs/receipts/qualify
+python tools/qualify_windows.py --tier backends --output docs/receipts
 ```
 
 The script runs `dev setup --only gsc oat` (about 10 MB), `doctor`, then builds
@@ -85,7 +85,7 @@ Then, with the game **not** running, ask for permission and run:
 | 3c | wait for the main menu, then `pat game status --json` | exactly one window, title `Plutonium T6 Zombies` or `Plutonium T6 Zombies (rNNNN)` |
 | 3d | `pat game info --json` | fresh `state` with `mapname`, `fs_game`, `sv_running` |
 | 3e | `pat game load-map town --json` | `load_id` returned; the game loads Town |
-| 3f | `pat game check-load <load_id> --json` | `verified: true`, `state_matches: true`, logs `checked: true` |
+| 3f | `pat game check-load <load_id> --json` | `verified: true`, `state_matches: true`, logs `checked: true`. Let the load settle first: the check's engine query waits 8 s and the engine does not answer mid-load |
 | 3g | look at the game | you or the agent (if it can see the screen) confirm a playable spawn in Town |
 | 3h | `pat game install-mod "$env:PAT_HOME\qualify\hello_zm\mod.ff" hello_zm --json` (Tier 2 staged it there and printed the exact command), then `pat game select-mod hello_zm --json` | install receipt with `sha256`; then `load_id`; `fs_game` becomes `mods/hello_zm` |
 | 3i | `pat game load-map town --json` then `pat game check-load <load_id> --json` with the new `load_id` | verified; the green hello-zm line appears on screen after spawn |
@@ -97,7 +97,7 @@ Then, with the game **not** running, ask for permission and run:
 After the run:
 
 ```powershell
-python tools/qualify_windows.py --tier game --output docs/receipts/qualify --collect
+python tools/qualify_windows.py --tier game --output docs/receipts --collect
 ```
 
 The script reads the toolkit's state files (`last-launch.json`, `last-load.json`,
@@ -119,6 +119,7 @@ A Tier 3 receipt with `null` human observations does not qualify any route at le
 | `config_missing` from `launch` | `plutonium://` handler not registered | finding, not a fix: record it |
 | `backend_failed` from real gsc-tool with exit 0 | Error line format differs from the fake | `dev/scripts.py` `ERROR` pattern and `tests/fakes/fake_gsc.py` |
 | `Rawfile did not round-trip` | Unlinker output layout differs | `dev/projects.py` readback path |
+| `load-map` reports `sv_running` `1`, then the client returns to the main menu (`SV_Shutdown: hostquit` right after the Town gump loads) | Open. The console `map` path connects the local client through the mod-download check where the menu uses its party lobby. The `*_zm` weapon and `common_zm` ipak not-found lines are noise: identical in a playable menu-started match | Issue #8. Diff the console log of a menu start against the toolkit load before changing anything |
 
 ## Flipping routes to `available`
 

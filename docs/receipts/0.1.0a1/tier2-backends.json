@@ -1,0 +1,541 @@
+{
+  "schema_version": 1,
+  "tier": "backends",
+  "environment": {
+    "toolkit_version": "0.1.0a1",
+    "python": "3.12.0",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "machine": "AMD64",
+    "native_windows": true,
+    "at": "2026-09-10T08:01:48+00:00",
+    "windows_build": "10.0.26200",
+    "git_head": "769920846696ceb0bbe590cd8b4ed55551ba7518",
+    "git_dirty": false,
+    "pat_home_isolated": true
+  },
+  "steps": [
+    {
+      "argv": [
+        "dev",
+        "setup",
+        "--only",
+        "gsc",
+        "oat",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 5.156,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0a1",
+        "command": "dev setup",
+        "request_id": "<id>",
+        "at": "2026-09-10T08:01:54+00:00",
+        "result": {
+          "destination": "<pat-home>\\backends",
+          "results": [
+            {
+              "id": "oat",
+              "action": "verified",
+              "files": 162
+            },
+            {
+              "id": "gsc",
+              "action": "verified",
+              "files": 1
+            }
+          ],
+          "game_touched": false
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "dev setup gsc oat",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "doctor",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.187,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0a1",
+        "command": "doctor",
+        "request_id": "<id>",
+        "at": "2026-09-10T08:01:54+00:00",
+        "result": {
+          "platform": {
+            "system": "Windows",
+            "release": "11",
+            "machine": "AMD64",
+            "python": "3.12.0",
+            "native_windows": true,
+            "compatibility_layer": null,
+            "supported": true
+          },
+          "configuration": {
+            "home": "<pat-home>",
+            "config": {
+              "plutonium_storage_t6": "<userprofile>\\AppData\\Local\\Plutonium\\storage\\t6",
+              "plutonium_launcher": "<userprofile>\\Downloads\\plutonium.exe",
+              "backends_dir": "<pat-home>\\backends",
+              "evidence_dir": "<pat-home>\\evidence"
+            },
+            "ok": true
+          },
+          "backends": {
+            "ok": true,
+            "backends_dir": "<pat-home>\\backends",
+            "backends": [
+              {
+                "id": "oat",
+                "name": "OpenAssetTools 0.33.0",
+                "optional": false,
+                "present": true,
+                "path": "<pat-home>\\backends\\oat",
+                "pinned": true
+              },
+              {
+                "id": "gsc",
+                "name": "gsc-tool 1.4.10",
+                "optional": false,
+                "present": true,
+                "path": "<pat-home>\\backends\\gsc",
+                "pinned": true
+              },
+              {
+                "id": "lua",
+                "name": "CoDLuaDecompiler 2.4.2",
+                "optional": true,
+                "present": false,
+                "path": "<pat-home>\\backends\\lua",
+                "pinned": true
+              },
+              {
+                "id": "ffmpeg",
+                "name": "FFmpeg 9.0 (BtbN gpl-shared build)",
+                "optional": true,
+                "present": false,
+                "path": "<pat-home>\\backends\\ffmpeg",
+                "pinned": true
+              },
+              {
+                "id": "blender",
+                "name": "Blender 5.2.1",
+                "optional": true,
+                "present": false,
+                "path": "<pat-home>\\backends\\blender",
+                "pinned": true
+              },
+              {
+                "id": "cast",
+                "name": "Cast Blender add-on 2.00",
+                "optional": true,
+                "present": false,
+                "path": "<pat-home>\\backends\\cast",
+                "pinned": true
+              },
+              {
+                "id": "greyhound",
+                "name": "Greyhound 1.46.3.2",
+                "optional": true,
+                "present": false,
+                "path": "<pat-home>\\backends\\greyhound",
+                "pinned": true
+              },
+              {
+                "id": "husky",
+                "name": "Husky 0.8.0.0",
+                "optional": true,
+                "present": false,
+                "path": "<pat-home>\\backends\\husky",
+                "pinned": true
+              },
+              {
+                "id": "c2m",
+                "name": "C2Mv3 3.0.5",
+                "optional": true,
+                "present": false,
+                "path": "<pat-home>\\backends\\c2m",
+                "pinned": true
+              }
+            ],
+            "verification": "filesystem presence only; execution and gameplay are separate facts"
+          },
+          "ok": true,
+          "verification": "Presence and configuration only. Native Windows execution, game control and capture are separate facts."
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "doctor after setup",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "dev",
+        "setup",
+        "--only",
+        "gsc",
+        "oat",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.297,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0a1",
+        "command": "dev setup",
+        "request_id": "<id>",
+        "at": "2026-09-10T08:01:54+00:00",
+        "result": {
+          "destination": "<pat-home>\\backends",
+          "results": [
+            {
+              "id": "oat",
+              "action": "verified",
+              "files": 162
+            },
+            {
+              "id": "gsc",
+              "action": "verified",
+              "files": 1
+            }
+          ],
+          "game_touched": false
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "dev setup rerun verifies",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "project",
+        "plan",
+        "<repo>\\examples\\hello-zm\\project.json",
+        "--output",
+        "<work>\\plan",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.172,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0a1",
+        "command": "project plan",
+        "request_id": "<id>",
+        "at": "2026-09-10T08:01:54+00:00",
+        "result": {
+          "job_id": "<id>",
+          "output": "<work>\\plan",
+          "receipt": "<work>\\plan\\receipt.json",
+          "artifact_count": 1,
+          "plan": "plan.json",
+          "name": "hello_zm",
+          "backends": [
+            {
+              "id": "gsc",
+              "argv": [
+                "<pat-home>\\backends\\gsc\\gsc-tool.exe"
+              ],
+              "available": true
+            },
+            {
+              "id": "linker",
+              "argv": [
+                "<pat-home>\\backends\\oat\\Linker.exe"
+              ],
+              "available": true
+            },
+            {
+              "id": "unlinker",
+              "argv": [
+                "<pat-home>\\backends\\oat\\Unlinker.exe"
+              ],
+              "available": true
+            }
+          ],
+          "backends_available": true,
+          "input_files": 2,
+          "verification": "recipe and declared inputs validated and hashed; backend presence checked; nothing compiled",
+          "scripts": 1,
+          "assets": 0,
+          "loads": 0
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "project plan hello-zm",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "project",
+        "build",
+        "<repo>\\examples\\hello-zm\\project.json",
+        "--output",
+        "<work>\\build",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.797,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0a1",
+        "command": "project build",
+        "request_id": "<id>",
+        "at": "2026-09-10T08:01:55+00:00",
+        "result": {
+          "job_id": "<id>",
+          "output": "<work>\\build",
+          "receipt": "<work>\\build\\receipt.json",
+          "artifact_count": 13,
+          "packages": [
+            {
+              "path": "packages/mod.ff",
+              "sha256": "0ed41cc5f5ce9faae086e3dcf4a019f67ffc2b040f0975d73b5d9d698ac87701",
+              "inventory_log": "step-02.log"
+            }
+          ],
+          "verification": "linked and read back by OpenAssetTools; gameplay untested",
+          "plan": "plan.json",
+          "rawfiles_verified": 1,
+          "mod_ff": "packages/mod.ff",
+          "install_hint": "pat game install-mod <output>/packages/mod.ff hello_zm  (keeps the name mod.ff; a renamed T6 fastfile cannot be read). Loading it in game is a separate, authorized step"
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "project build hello-zm (real gsc-tool + OAT)",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "project",
+        "verify",
+        "<work>\\build\\receipt.json",
+        "--inputs",
+        "--output",
+        "<work>\\verify",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.203,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0a1",
+        "command": "project verify",
+        "request_id": "<id>",
+        "at": "2026-09-10T08:01:55+00:00",
+        "result": {
+          "job_id": "<id>",
+          "output": "<work>\\verify",
+          "receipt": "<work>\\verify\\receipt.json",
+          "artifact_count": 0,
+          "build_receipt": "<work>\\build\\receipt.json",
+          "outputs": {
+            "verified": true,
+            "changed": [],
+            "missing": [],
+            "count": 13
+          },
+          "inputs": {
+            "verified": true,
+            "changed": [],
+            "missing": [],
+            "count": 4
+          },
+          "verification": "recorded hashes match; says nothing about gameplay"
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "project verify --inputs",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "ff",
+        "inspect",
+        "<work>\\build\\packages\\mod.ff",
+        "--output",
+        "<work>\\inspect",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.281,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0a1",
+        "command": "ff inspect",
+        "request_id": "<id>",
+        "at": "2026-09-10T08:01:56+00:00",
+        "result": {
+          "job_id": "<id>",
+          "output": "<work>\\inspect",
+          "receipt": "<work>\\inspect\\receipt.json",
+          "artifact_count": 1,
+          "input": "<work>\\build\\packages\\mod.ff",
+          "inventory_log": "step-01.log",
+          "listing": "Loaded zone \"mod\" (T6)\r\nLoaded search path \"<work>/build/packages\"\r\nZone 'mod' (T6)\r\nContent:\r\nrawfile, scripts/zm/hello_zm.gsc\r\n\r\nUnloaded zone \"mod\"\r\nUnloaded search path \"<work>/build/packages\"\r\nFinished with 0 warnings, 0 errors\r\n",
+          "listing_truncated": false,
+          "verification": "OpenAssetTools readback; not gameplay acceptance"
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "ff inspect mod.ff",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "ff",
+        "extract",
+        "<work>\\build\\packages\\mod.ff",
+        "--types",
+        "rawfile",
+        "--output",
+        "<work>\\extract",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.297,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0a1",
+        "command": "ff extract",
+        "request_id": "<id>",
+        "at": "2026-09-10T08:01:56+00:00",
+        "result": {
+          "job_id": "<id>",
+          "output": "<work>\\extract",
+          "receipt": "<work>\\extract\\receipt.json",
+          "artifact_count": 3,
+          "input": "<work>\\build\\packages\\mod.ff",
+          "inventory_log": "step-01.log",
+          "listing": "Loaded zone \"mod\" (T6)\r\nLoaded search path \"<work>/build/packages\"\r\nDumping zone mod into folder \"<work>\\extract\\assets\"\r\nDumped rawfile \"scripts/zm/hello_zm.gsc\"\r\nUnloaded zone \"mod\"\r\nUnloaded search path \"<work>/build/packages\"\r\nFinished with 0 warnings, 0 errors\r\n",
+          "listing_truncated": false,
+          "verification": "OpenAssetTools readback; not gameplay acceptance"
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "ff extract rawfiles",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "name": "stage mod.ff for tier 3",
+      "passed": true,
+      "expected": "built file named mod.ff"
+    },
+    {
+      "argv": [
+        "gsc",
+        "compile",
+        "<work>\\bad.gsc",
+        "--output",
+        "<work>\\bad-compile",
+        "--json"
+      ],
+      "exit_code": 1,
+      "elapsed_seconds": 0.297,
+      "json": {
+        "ok": false,
+        "error_code": "backend_failed",
+        "message": "Backend exited with status 1",
+        "details": {
+          "log": "step-01.log",
+          "exit_code": 1
+        },
+        "schema_version": 1,
+        "toolkit_version": "0.1.0a1",
+        "command": "gsc compile",
+        "request_id": "<id>",
+        "at": "2026-09-10T08:01:56+00:00",
+        "receipt": "<work>\\bad-compile\\receipt.json"
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "gsc compile broken script fails structurally",
+      "passed": true,
+      "expected": "structured failure"
+    },
+    {
+      "argv": [
+        "gsc",
+        "compile",
+        "<work>\\good.gsc",
+        "--output",
+        "<work>\\good-compile",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.313,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0a1",
+        "command": "gsc compile",
+        "request_id": "<id>",
+        "at": "2026-09-10T08:01:56+00:00",
+        "result": {
+          "job_id": "<id>",
+          "output": "<work>\\good-compile",
+          "receipt": "<work>\\good-compile\\receipt.json",
+          "artifact_count": 3,
+          "files": [
+            "compiled/t6/good.gsc"
+          ],
+          "instance": "server",
+          "verification": "compiler exit and log checked; script behavior in game untested"
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "gsc compile minimal script",
+      "passed": true,
+      "expected": "success"
+    }
+  ],
+  "notes": [
+    "work directory <work>",
+    {
+      "mod_ff_sha256": "0ed41cc5f5ce9faae086e3dcf4a019f67ffc2b040f0975d73b5d9d698ac87701",
+      "mod_ff_bytes": 384,
+      "rawfiles_verified": 1
+    },
+    {
+      "tier3_mod_ff": "<pat-home>/qualify/hello_zm/mod.ff"
+    },
+    {
+      "superseded": "tier2-backends.superseded-20260910T080157Z.json"
+    }
+  ],
+  "passed": true,
+  "summary": {
+    "steps": 11,
+    "passed": 11,
+    "failed": []
+  }
+}

@@ -282,6 +282,20 @@ class GameControlTests(GameFixture):
         self.assertEqual(result["zombies"]["error_lines"], 1)
         self.assertNotIn("PRIVATE", json.dumps(result))
 
+    def test_realistic_map_load_sized_log_is_still_checked(self):
+        # Native Tier 3 finding: a real Town load writes hundreds of KiB of benign lines plus
+        # occasional errors. The gate must count them, not give up as "too large".
+        log = self.storage / "main" / "console_zm.log"
+        log.parent.mkdir()
+        log.write_bytes(b"preload\n")
+        cursors = {"zombies": control._log_cursor(log)}
+        with log.open("ab") as stream:
+            stream.write(b"Loading fastfile zm_transit\n" * 12000)  # ~330 KiB, over the old 128 KiB cap
+            stream.write(b"script runtime error: fixture\n")
+        result = control.inspect_logs(self.storage, cursors)["zombies"]
+        self.assertTrue(result["checked"])
+        self.assertEqual(result["error_lines"], 1)
+
     def test_rotated_and_oversized_logs_are_unverified(self):
         log = self.storage / "main" / "console_zm.log"
         log.parent.mkdir()

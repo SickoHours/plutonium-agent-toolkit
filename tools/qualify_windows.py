@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """Run the native Windows qualification tiers and write sanitized receipts.
 
-    python tools/qualify_windows.py --tier offline  --output docs/receipts/qualify
-    python tools/qualify_windows.py --tier backends --output docs/receipts/qualify
-    python tools/qualify_windows.py --tier game     --output docs/receipts/qualify --collect
+    python tools/qualify_windows.py --tier offline  --output docs/receipts
+    python tools/qualify_windows.py --tier backends --output docs/receipts
+    python tools/qualify_windows.py --tier game     --output docs/receipts --collect
+    python tools/qualify_windows.py --redact-existing docs/receipts/<version>/<receipt>.json
 
 Tiers 1 and 2 run commands themselves. Tier 3 never touches the game; with --collect it
 reads the toolkit's state files after the human-authorized commands were run by hand and
-folds them into a receipt. Every receipt is redacted: the Windows username, machine name
-and absolute paths under the user profile are replaced before writing.
+folds them into a receipt. Every receipt is redacted before writing: any drive-letter Users
+path for any account, the Windows username, machine name, toolkit home, work directory and
+32-hex request/load/job IDs are replaced, and private-scan hit excerpts are dropped.
+--redact-existing reapplies the current rules to a committed receipt in place.
 """
 from __future__ import annotations
 
@@ -38,6 +41,15 @@ PAT = [sys.executable, "-m", "plutonium_agent_toolkit"]
 
 # ----- redaction --------------------------------------------------------------------------
 
+# Any drive letter, any account, either slash style, single or JSON-escaped separators. This
+# does not depend on USERPROFILE, so a truncated excerpt such as C:\Users\m, another account's
+# profile or another drive's Users folder cannot survive (maintainer finding on the first
+# qualification pull request). The account segment runs to the next separator, quote or line
+# end, so names containing spaces ("Jane Doe") are covered too; over-redacting prose that
+# follows a bare path is the safe direction.
+USERS_PATH = re.compile(r"(?i)[A-Za-z]:[\\/]{1,2}Users[\\/]{1,2}[^\\/\"\r\n\t]*")
+
+
 def redactor(extra_paths=()):
     user = getpass.getuser()
     host = socket.gethostname()
@@ -48,6 +60,7 @@ def redactor(extra_paths=()):
         for variant in {raw, raw.replace("\\", "/"), raw.replace("\\", "\\\\")}:
             if variant:
                 patterns.append((re.compile(re.escape(variant), re.I), f"<{label}>"))
+    patterns.append((USERS_PATH, "<userprofile>"))
     if profile:
         patterns.append((re.compile(re.escape(profile), re.I), "<userprofile>"))
         patterns.append((re.compile(re.escape(profile.replace("\\", "\\\\")), re.I), "<userprofile>"))
@@ -140,13 +153,66 @@ def new_receipt(tier):
     return {"schema_version": 1, "tier": tier, "environment": environment(), "steps": [], "notes": []}
 
 
+def supersede(path: Path) -> Path | None:
+    """Move an existing receipt aside instead of overwriting it.
+
+    A rerun after a fix must keep the failed attempt (docs/contributors/RECORDING-A-RECEIPT.md)."""
+    if not path.exists():
+        return None
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    aside = path.with_name(f"{path.stem}.superseded-{stamp}{path.suffix}")
+    n = 1
+    while aside.exists():
+        n += 1
+        aside = path.with_name(f"{path.stem}.superseded-{stamp}-{n}{path.suffix}")
+    path.rename(aside)
+    return aside
+
+
+def strip_excerpts(value):
+    """Drop ``excerpt`` from embedded private_scan hits: it quotes the offending text itself.
+
+    ``file``, ``line`` and ``pattern`` are enough for a receipt."""
+    if isinstance(value, list):
+        return [strip_excerpts(v) for v in value]
+    if isinstance(value, dict):
+        if "excerpt" in value and "pattern" in value and "file" in value:
+            value = {k: v for k, v in value.items() if k != "excerpt"}
+        return {k: strip_excerpts(v) for k, v in value.items()}
+    return value
+
+
+def sanitize(receipt, redact):
+    """Everything a receipt goes through before it is written or rewritten."""
+    return redact(strip_excerpts(receipt))
+
+
+def redact_existing(path: Path, redact) -> bool:
+    """Reapply the current redaction rules to a committed receipt in place.
+
+    Returns True if the file changed. A note records the rewrite; an already-clean file is left
+    untouched so the operation is idempotent."""
+    original = path.read_text(encoding="utf-8")
+    data = json.loads(original)
+    cleaned = sanitize(data, redact)
+    if cleaned == data:
+        return False
+    cleaned.setdefault("notes", []).append({"re_redacted": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                                            "by": "tools/qualify_windows.py --redact-existing"})
+    path.write_text(json.dumps(cleaned, indent=2) + "\n", encoding="utf-8")
+    return True
+
+
 def finish(receipt, output: Path, name: str, redact):
     receipt["passed"] = all(s["passed"] for s in receipt["steps"])
     receipt["summary"] = {"steps": len(receipt["steps"]), "passed": sum(s["passed"] for s in receipt["steps"]),
                           "failed": [s["name"] for s in receipt["steps"] if not s["passed"]]}
     output.mkdir(parents=True, exist_ok=True)
     path = output / name
-    path.write_text(json.dumps(redact(receipt), indent=2) + "\n", encoding="utf-8")
+    previous = supersede(path)
+    if previous:
+        receipt["notes"].append({"superseded": previous.name})
+    path.write_text(json.dumps(sanitize(receipt, redact), indent=2) + "\n", encoding="utf-8")
     print(f"\n{'PASSED' if receipt['passed'] else 'FAILED'}: {receipt['summary']['passed']}/{receipt['summary']['steps']} steps -> {path}")
     return receipt["passed"]
 
@@ -179,6 +245,21 @@ def tier_offline(receipt, home: Path, work: Path):
     step(receipt, "release check", [sys.executable, str(ROOT / "tools/release_check.py")])
 
 
+def stage_for_tier3(mod_ff: Path, home: Path) -> Path | None:
+    """Copy the built mod.ff to <home>/qualify/hello_zm/mod.ff without renaming it.
+
+    A T6 fastfile is bound to its file name (the zone name keys its compressed streams), so a
+    build that did not produce mod.ff cannot be staged by renaming: OpenAssetTools cannot read
+    the copy and the Plutonium client hung loading one. Refuse instead of corrupting it."""
+    if mod_ff.name != "mod.ff":
+        return None
+    staged_dir = home / "qualify" / "hello_zm"
+    staged_dir.mkdir(parents=True, exist_ok=True)
+    staged = staged_dir / "mod.ff"
+    shutil.copyfile(mod_ff, staged)
+    return staged
+
+
 def tier_backends(receipt, home: Path, work: Path):
     step(receipt, "dev setup gsc oat", PAT + ["dev", "setup", "--only", "gsc", "oat", "--json"], timeout=1800)
     step(receipt, "doctor after setup", PAT + ["doctor", "--json"])
@@ -196,13 +277,17 @@ def tier_backends(receipt, home: Path, work: Path):
         step(receipt, "ff inspect mod.ff", PAT + ["ff", "inspect", str(mod_ff), "--output", str(work / "inspect"), "--json"])
         step(receipt, "ff extract rawfiles", PAT + ["ff", "extract", str(mod_ff), "--types", "rawfile",
                                                     "--output", str(work / "extract"), "--json"])
-        # Stage the built mod at a durable, documented location for Tier 3 step 3h.
-        staged_dir = home / "qualify" / "hello_zm"
-        staged_dir.mkdir(parents=True, exist_ok=True)
-        staged = staged_dir / "mod.ff"
-        shutil.copyfile(mod_ff, staged)
-        receipt["notes"].append({"tier3_mod_ff": "<pat-home>/qualify/hello_zm/mod.ff"})
-        print(f"\nTier 3 step 3h uses this file:\n  pat game install-mod \"{staged}\" hello_zm --json", flush=True)
+        # Stage the built mod at a durable, documented location for Tier 3 step 3h, never renaming it.
+        staged = stage_for_tier3(mod_ff, home)
+        stage_row = {"name": "stage mod.ff for tier 3", "passed": staged is not None, "expected": "built file named mod.ff"}
+        if staged is None:
+            stage_row["stderr_head"] = (f"project build produced {mod_ff.name}; a T6 fastfile is bound to its file name, "
+                                        "so it cannot be renamed to mod.ff for install")
+        receipt["steps"].append(stage_row)
+        print(("PASS " if staged else "FAIL ") + "stage mod.ff for tier 3", flush=True)
+        if staged is not None:
+            receipt["notes"].append({"tier3_mod_ff": "<pat-home>/qualify/hello_zm/mod.ff"})
+            print(f"\nTier 3 step 3h uses this file:\n  pat game install-mod \"{staged}\" hello_zm --json", flush=True)
     bad = work / "bad.gsc"
     bad.write_text("main()\n{\n    this is not gsc ;;; \n}\n", encoding="utf-8")
     step(receipt, "gsc compile broken script fails structurally", PAT + ["gsc", "compile", str(bad), "--output", str(work / "bad-compile"), "--json"], expect_ok=False)
@@ -275,17 +360,29 @@ def tier_game_collect(receipt, home: Path, notes: str | None):
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--tier", choices=["offline", "backends", "game"], required=True)
-    ap.add_argument("--output", type=Path, required=True, help="Directory for receipts, e.g. docs/receipts/qualify")
+    ap.add_argument("--tier", choices=["offline", "backends", "game"])
+    ap.add_argument("--output", type=Path, help="Directory for receipts, e.g. docs/receipts")
     ap.add_argument("--begin", action="store_true", help="Tier game: write the begin marker before the human-authorized commands")
     ap.add_argument("--collect", action="store_true", help="Tier game: fold saved state into a receipt; runs nothing")
     ap.add_argument("--notes", help="Tier game: free-text human observations to include")
     ap.add_argument("--allow-non-windows", action="store_true", help="For testing this script only; receipts are marked non-native")
+    ap.add_argument("--redact-existing", type=Path, metavar="FILE",
+                    help="Reapply the current redaction rules to a committed receipt in place; runs nothing, works on any platform")
     args = ap.parse_args()
+    home = Path(os.environ.get("PAT_HOME") or (Path(os.environ.get("LOCALAPPDATA", tempfile.gettempdir())) / "PlutoniumAgentToolkit"))
+    if args.redact_existing:
+        changed = redact_existing(args.redact_existing, redactor(extra_paths=[("pat-home", str(home)), ("repo", str(ROOT))]))
+        print(f"{'re-redacted' if changed else 'already clean'}: {args.redact_existing}")
+        return 0
+    if not args.tier:
+        ap.error("--tier is required unless --redact-existing is given")
+    if not args.output and not (args.begin and args.tier == "game"):
+        # Only `--tier game --begin` writes nothing but the marker under PAT_HOME
+        # (docs/WINDOWS-QUALIFICATION.md); every other tier writes a receipt and needs --output.
+        ap.error("--output is required unless `--tier game --begin` or --redact-existing is given")
     if os.name != "nt" and not args.allow_non_windows:
         print("This script qualifies native Windows. Run it there.", file=sys.stderr)
         return 2
-    home = Path(os.environ.get("PAT_HOME") or (Path(os.environ.get("LOCALAPPDATA", tempfile.gettempdir())) / "PlutoniumAgentToolkit"))
     os.environ["PAT_HOME"] = str(home)
     work = Path(tempfile.mkdtemp(prefix=f"pat-qualify-{args.tier}-"))
     redact = redactor(extra_paths=[("pat-home", str(home)), ("work", str(work)), ("repo", str(ROOT))])

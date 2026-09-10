@@ -216,23 +216,31 @@ def _run_posix(job: Job, argv: list[str], cwd: Path, timeout: float, log: Path) 
 def _run_windows(job: Job, argv: list[str], cwd: Path, timeout: float, log: Path) -> int:
     from . import _winjob
 
-    with log.open("xb") as output:
-        handle = _winjob.create_job()
-        process = None
-        try:
-            process = subprocess.Popen([sys.executable, str(Path(__file__).with_name("_child.py"))],
-                                       stdin=subprocess.PIPE, stdout=output, stderr=subprocess.STDOUT, cwd=cwd,
-                                       creationflags=subprocess.CREATE_NO_WINDOW)
-            _winjob.assign(handle, process)
-            process.stdin.write((json.dumps(argv) + "\n").encode("utf-8"))
-            process.stdin.close()
-            return _wait(job, process, timeout, log)
-        finally:
-            _winjob.terminate(handle)
-            if process is not None:
-                if process.poll() is None:
-                    process.kill()
-                process.wait()
+    try:
+        with log.open("xb") as output:
+            handle = _winjob.create_job()
+            process = None
+            try:
+                process = subprocess.Popen([sys.executable, str(Path(__file__).with_name("_child.py"))],
+                                           stdin=subprocess.PIPE, stdout=output, stderr=subprocess.STDOUT, cwd=cwd,
+                                           creationflags=subprocess.CREATE_NO_WINDOW)
+                _winjob.assign(handle, process)
+                process.stdin.write((json.dumps(argv) + "\n").encode("utf-8"))
+                process.stdin.close()
+                return _wait(job, process, timeout, log)
+            finally:
+                _winjob.terminate(handle)
+                if process is not None:
+                    if process.poll() is None:
+                        process.kill()
+                    process.wait()
+    finally:
+        # Our handle is closed now. A terminated backend tree's inherited handle to the log can
+        # outlive process.wait() by a scheduler tick; wait so the caller can delete the job directory.
+        waited = time.monotonic()
+        if not _winjob.wait_until_released(log):
+            job.steps[-1]["log_still_open"] = True
+            job.steps[-1]["log_release_wait_seconds"] = round(time.monotonic() - waited, 3)
 
 
 def _wait(job: Job, process: subprocess.Popen, timeout: float, log: Path) -> int:

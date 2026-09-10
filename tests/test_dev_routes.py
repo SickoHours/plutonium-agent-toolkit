@@ -70,6 +70,11 @@ class DevRouteTests(DevRouteFixture):
         build = Path(row["result"]["output"])
         self.assertEqual(row["result"]["rawfiles_verified"], 2)
         self.assertTrue((build / row["result"]["mod_ff"]).is_file())
+        # Plutonium loads mods/<folder>/mod.ff and a T6 fastfile is bound to its file name, so the
+        # zone must be linked as "mod" itself. Native Tier 3 finding: a hello_zm.ff renamed to
+        # mod.ff could not be inflated and hung the client.
+        self.assertEqual(row["result"]["mod_ff"], "packages/mod.ff")
+        self.assertEqual(json.loads((build / "packages" / "mod.ff").read_text())["zone"], "mod")
         receipt = json.loads((build / "receipt.json").read_text())
         self.assertEqual(receipt["status"], "succeeded")
         self.assertIn("packages/mod.ff", receipt["outputs"])
@@ -86,6 +91,21 @@ class DevRouteTests(DevRouteFixture):
         self.assertEqual(code, 1)
         self.assertEqual(row["error_code"], "artifact_changed")
         self.assertEqual(row["details"]["outputs"]["changed"], ["packages/mod.ff"])
+
+    def test_renamed_fastfile_is_refused_by_the_unlinker(self):
+        # Documents the property the fakes now model: a fastfile copied under another name is not
+        # readable, so nothing in the toolkit may rename one (native Tier 3 finding).
+        code, row = invoke(["project", "init", "--name", "hello_test", "--output", self.out()])
+        project = Path(row["result"]["output"])
+        code, row = invoke(["project", "build", str(project / "project.json"), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        built = Path(row["result"]["output"]) / row["result"]["mod_ff"]
+        renamed = self.root / "renamed" / "other.ff"  # any stem other than the zone name inside
+        renamed.parent.mkdir()
+        renamed.write_bytes(built.read_bytes())
+        code, row = invoke(["ff", "inspect", str(renamed), "--output", self.out()])
+        self.assertEqual(code, 1)
+        self.assertEqual(row["error_code"], "backend_failed", row)
 
     def test_compile_error_in_log_fails_even_with_exit_zero(self):
         src = self.root / "bad.gsc"
@@ -137,7 +157,7 @@ class DevRouteTests(DevRouteFixture):
     def test_ff_inspect_and_extract(self):
         ff = self.root / "sample.ff"
         import base64
-        ff.write_text(json.dumps({"zone": "s", "rawfiles": {"scripts/zm/a.gsc": base64.b64encode(b"X").decode()}}))
+        ff.write_text(json.dumps({"zone": "sample", "rawfiles": {"scripts/zm/a.gsc": base64.b64encode(b"X").decode()}}))
         code, row = invoke(["ff", "inspect", str(ff), "--output", self.out()])
         self.assertEqual(code, 0, row)
         self.assertIn("rawfile scripts/zm/a.gsc", row["result"]["listing"])
@@ -161,10 +181,14 @@ class DevRouteTests(DevRouteFixture):
         self.assertEqual(row["error_code"], "unsupported_platform")
         self.assertFalse(Path(self.root / "job-001").exists(), "no output directory before the gate")
 
-    def test_manifest_marks_dev_routes_implemented(self):
+    def test_manifest_marks_dev_routes_by_native_evidence(self):
         code, row = invoke(["manifest"])
         by_id = {r["id"]: r for r in row["result"]["routes"]}
-        for rid in ("gsc.compile", "ff.link", "project.build", "project.verify"):
+        # available only with a native receipt in docs/SUPPORT.md (tier2-backends.json).
+        for rid in ("gsc.compile", "ff.inspect", "ff.extract", "project.plan", "project.build", "project.verify"):
+            self.assertEqual(by_id[rid]["status"], "available", rid)
+        # No native step ran these: decompile, the standalone link route, init.
+        for rid in ("gsc.decompile", "ff.link", "project.init"):
             self.assertEqual(by_id[rid]["status"], "implemented", rid)
         for rid in ("model.convert", "weapon.plan", "audio.convert", "image.convert", "lua.decompile", "game.install-mod"):
             self.assertEqual(by_id[rid]["status"], "implemented", rid)
@@ -337,7 +361,7 @@ class ThirdReviewRegressionTests(DevRouteFixture):
     def test_extract_accepts_zero_byte_assets(self):
         import base64
         ff = self.root / "empty.ff"
-        ff.write_text(json.dumps({"zone": "e", "rawfiles": {"scripts/zm/empty.gsc": base64.b64encode(b"").decode()}}))
+        ff.write_text(json.dumps({"zone": "empty", "rawfiles": {"scripts/zm/empty.gsc": base64.b64encode(b"").decode()}}))
         code, row = invoke(["ff", "extract", str(ff), "--output", self.out()])
         self.assertEqual(code, 0, row)
         self.assertTrue((Path(row["result"]["output"]) / "assets/scripts/zm/empty.gsc").is_file())
@@ -346,7 +370,7 @@ class ThirdReviewRegressionTests(DevRouteFixture):
         import base64
         ff = self.root / "named.ff"
         names = {"scripts/fatal error.gsc": "A", "failed to load.txt": "B", "x/error loading.csv": "C"}
-        ff.write_text(json.dumps({"zone": "n", "rawfiles": {k: base64.b64encode(v.encode()).decode() for k, v in names.items()}}))
+        ff.write_text(json.dumps({"zone": "named", "rawfiles": {k: base64.b64encode(v.encode()).decode() for k, v in names.items()}}))
         code, row = invoke(["ff", "inspect", str(ff), "--output", self.out()])
         self.assertEqual(code, 0, row)
         self.assertIn("rawfile scripts/fatal error.gsc", row["result"]["listing"])
