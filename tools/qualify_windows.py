@@ -295,7 +295,7 @@ def tier_game_collect(receipt, home: Path, notes: str | None):
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--tier", choices=["offline", "backends", "game"], required=True)
-    ap.add_argument("--output", type=Path, required=True, help="Directory for receipts, e.g. docs/receipts/qualify")
+    ap.add_argument("--output", type=Path, required=True, help="Directory for receipts, e.g. docs/receipts")
     ap.add_argument("--begin", action="store_true", help="Tier game: write the begin marker before the human-authorized commands")
     ap.add_argument("--collect", action="store_true", help="Tier game: fold saved state into a receipt; runs nothing")
     ap.add_argument("--notes", help="Tier game: free-text human observations to include")

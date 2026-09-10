@@ -86,10 +86,20 @@ Every entry states what shipped, on which platform it was verified, and what rem
   move to level `native` in `docs/SUPPORT.md`. The failed first attempt is kept alongside as
   `tier1-offline.superseded-*.json`.
 
+- Native Windows Tier 2 (backends) receipt `docs/receipts/0.1.0a1/tier2-backends.json`: same host,
+  clean tree, 10/10 steps on the first attempt. gsc-tool 1.4.10 and OpenAssetTools 0.33.0
+  downloaded, SHA-256 verified and re-verified on rerun; `examples/hello-zm` compiled, linked,
+  read back, byte-compared and verified with `--inputs` (`mod.ff` 384 bytes, SHA-256 in the
+  receipt); `ff inspect` and `ff extract` on the result; a broken script fails with
+  `backend_failed`; a minimal script compiles. `gsc compile`, `ff inspect`, `ff extract` and
+  `project plan|build|verify` become `available` and move to level `native`; `dev setup` moves to
+  `native` for `gsc` and `oat`.
+
 ### Not verified
 
-- Tiers 2 (real backends) and 3 (running game) have not run yet; every route they cover stays
-  at `offline`.
+- Tier 3 (running game) has not run yet; every `game` route stays at `offline`.
+- `gsc decompile`, `project init` and the standalone `ff link` route did not run natively and stay
+  `implemented`. The seven other pinned backends were not downloaded.
 
 ## [0.1.0a1] - 2026-09-09
 

@@ -161,10 +161,14 @@ class DevRouteTests(DevRouteFixture):
         self.assertEqual(row["error_code"], "unsupported_platform")
         self.assertFalse(Path(self.root / "job-001").exists(), "no output directory before the gate")
 
-    def test_manifest_marks_dev_routes_implemented(self):
+    def test_manifest_marks_dev_routes_by_native_evidence(self):
         code, row = invoke(["manifest"])
         by_id = {r["id"]: r for r in row["result"]["routes"]}
-        for rid in ("gsc.compile", "ff.link", "project.build", "project.verify"):
+        # available only with a native receipt in docs/SUPPORT.md (tier2-backends.json).
+        for rid in ("gsc.compile", "ff.inspect", "ff.extract", "project.plan", "project.build", "project.verify"):
+            self.assertEqual(by_id[rid]["status"], "available", rid)
+        # No native step ran these: decompile, the standalone link route, init.
+        for rid in ("gsc.decompile", "ff.link", "project.init"):
             self.assertEqual(by_id[rid]["status"], "implemented", rid)
         for rid in ("model.convert", "weapon.plan", "audio.convert", "image.convert", "lua.decompile", "game.install-mod"):
             self.assertEqual(by_id[rid]["status"], "implemented", rid)

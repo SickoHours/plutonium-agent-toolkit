@@ -20,7 +20,7 @@ A level applies only to the exact scope in the receipt. "Loaded Town once" is no
 
 | Item | Status |
 | --- | --- |
-| Windows 11 x64, native Python 3.11+ | Tier 1 (offline) passed on Windows 11 25H2, build 26200, Python 3.12.0: [receipts/0.1.0a1/tier1-offline.json](receipts/0.1.0a1/tier1-offline.json). Tiers 2 and 3 not yet run. |
+| Windows 11 x64, native Python 3.11+ | Tiers 1 (offline) and 2 (real backends) passed on Windows 11 25H2, build 26200, Python 3.12.0: [receipts/0.1.0a1/tier1-offline.json](receipts/0.1.0a1/tier1-offline.json), [receipts/0.1.0a1/tier2-backends.json](receipts/0.1.0a1/tier2-backends.json). Tier 3 not yet run. |
 | Windows 10 | untested |
 | Windows on ARM64 | unsupported |
 | Wine / Proton / WSL | unsupported for execution; discovery and unit tests only |
@@ -31,13 +31,16 @@ A level applies only to the exact scope in the receipt. "Loaded Town once" is no
 | Route | Effect | Level | Owner | Receipt / notes |
 | --- | --- | --- | --- | --- |
 | `version`, `manifest`, `describe` | inert | native | core | [receipts/0.1.0a1/tier1-offline.json](receipts/0.1.0a1/tier1-offline.json) steps `version`, `manifest`, `describe game load-map`; tests/test_cli.py |
-| `doctor` | inert | native | core | presence and configuration only; [receipts/0.1.0a1/tier1-offline.json](receipts/0.1.0a1/tier1-offline.json) step `doctor before configure` |
+| `doctor` | inert | native | core | presence and configuration only; [receipts/0.1.0a1/tier1-offline.json](receipts/0.1.0a1/tier1-offline.json) step `doctor before configure`, [receipts/0.1.0a1/tier2-backends.json](receipts/0.1.0a1/tier2-backends.json) step `doctor after setup` |
 | `configure` | writes-config | native | core | absolute paths, unknown keys rejected; [receipts/0.1.0a1/tier1-offline.json](receipts/0.1.0a1/tier1-offline.json) step `configure fake storage` (isolated `PAT_HOME`, fake storage path) |
 | `dev backends` | inert | offline | core | pins validated |
-| `dev setup` | downloads-backends | offline | core | archive safety and reinstall verification tested with synthetic zips; all nine backends pinned including C2Mv3; `--plan` ran natively ([receipts/0.1.0a1/tier1-offline.json](receipts/0.1.0a1/tier1-offline.json)); **no native download yet** |
-| `gsc compile`, `gsc decompile` | writes-output | offline | thread-1 | fake gsc-tool covers log-error-with-exit-zero, crash, missing input; **real gsc-tool untested** |
-| `ff inspect`, `ff link`, `ff extract` | writes-output | offline | thread-1 | fake Linker/Unlinker; **real OpenAssetTools untested** |
-| `project init/plan/build/verify` | writes-output | offline | thread-1 | hello-zm round-trips through fakes: compile, stage, link, read back, byte-compare, verify with --inputs. `plan` of `examples/hello-zm` and the `output_exists` refusal ran natively ([receipts/0.1.0a1/tier1-offline.json](receipts/0.1.0a1/tier1-offline.json)) |
+| `dev setup` | downloads-backends | native | core | `--only gsc oat`: gsc-tool 1.4.10 and OpenAssetTools 0.33.0 downloaded over HTTPS, SHA-256 verified, extracted, and re-verified on rerun ([receipts/0.1.0a1/tier2-backends.json](receipts/0.1.0a1/tier2-backends.json) steps `dev setup gsc oat`, `dev setup rerun verifies`); `--plan` in [receipts/0.1.0a1/tier1-offline.json](receipts/0.1.0a1/tier1-offline.json). Archive safety tested with synthetic zips. **The other seven pinned backends have no native download** |
+| `gsc compile` | writes-output | native | thread-1 | real gsc-tool 1.4.10: minimal script compiles, broken script fails with `backend_failed` exit 1, and every hello-zm build compile ([receipts/0.1.0a1/tier2-backends.json](receipts/0.1.0a1/tier2-backends.json) steps `gsc compile minimal script`, `gsc compile broken script fails structurally`, `project build hello-zm`). Fake covers log-error-with-exit-zero, crash, missing input |
+| `gsc decompile` | writes-output | offline | thread-1 | fake gsc-tool only; **no native run** |
+| `ff inspect`, `ff extract` | writes-output | native | thread-1 | real OpenAssetTools 0.33.0 Unlinker on the hello-zm `mod.ff` ([receipts/0.1.0a1/tier2-backends.json](receipts/0.1.0a1/tier2-backends.json) steps `ff inspect mod.ff`, `ff extract rawfiles`) |
+| `ff link` | writes-output | offline | thread-1 | Linker plus Unlinker readback ran natively inside `project build` ([receipts/0.1.0a1/tier2-backends.json](receipts/0.1.0a1/tier2-backends.json) step `project build hello-zm`), but **the standalone route did not run** |
+| `project plan/build/verify` | writes-output | native | thread-1 | `examples/hello-zm` with real gsc-tool and OpenAssetTools: compile, stage, link, read back, byte-compare one rawfile, verify with `--inputs` ([receipts/0.1.0a1/tier2-backends.json](receipts/0.1.0a1/tier2-backends.json) steps `project plan hello-zm`, `project build hello-zm`, `project verify --inputs`); `plan` and the `output_exists` refusal also in [receipts/0.1.0a1/tier1-offline.json](receipts/0.1.0a1/tier1-offline.json). One script, no assets, no loads |
+| `project init` | writes-output | offline | thread-1 | unit tests only; **no native run** |
 | `model inspect/convert/transform/rename-bones/retime/preview` | writes-output | offline | thread-1 | background Blender with the bundled worker; fake Blender in tests. **Real Blender and Cast untested** |
 | `audio inspect/convert` | writes-output | offline | thread-1 | fake ffmpeg/ffprobe cover parameter mismatch and no-stream input |
 | `image convert` | writes-output | offline | thread-1 | fake ImageConverter |
