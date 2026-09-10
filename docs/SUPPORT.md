@@ -1,7 +1,13 @@
-# Support matrix for `0.1.0b1`
+# Packaged route qualification for `0.1.0b1`
 
-This file is the single source of truth for what each route has earned. Update it in the same
-pull request that changes a route. `tools/release_check.py` verifies the version in the first line.
+This file is the single source of truth for what each packaged `pat` route has earned. Update it
+in the same pull request that changes a route. `tools/release_check.py` verifies the version in
+the first line.
+
+It grades the standardized routes and nothing else. It is not a ceiling on what an agent can do
+with this environment: agents research, drive upstream tools directly and extend the toolkit
+(`docs/FOR-AGENTS.md`). What that has produced, including workflows that have no packaged route
+yet, is in [TRACK-RECORD.md](TRACK-RECORD.md).
 
 ## Evidence levels
 
@@ -64,15 +70,28 @@ on Windows only; the Cast add-on anywhere. Where a platform has no pin, `dev set
 | `game select-mod/reload-mod/load-map/fast-restart/map-restart/disconnect/quit` | changes-game | offline | thread-2 | `load-map town` ran natively ([receipts/0.1.0a1/tier3-game.json](receipts/0.1.0a1/tier3-game.json)) and set the UI/gametype dvars, but the match does not survive: the level loads (Town gump loaded) and the client then drops it with `SV_Shutdown: hostquit`, returning to the menu, with or without a mod. Menu-started matches on the same install play to completion (`EXE_MATCHENDED`). The gametype configs exec at frontend init in both paths and the weapon and `common_zm` not-found lines are identical in the playable session, so neither is the cause; the console `map` path differs in connecting the local client through the mod-download check where the menu uses its party lobby. Root cause open in issue #8; no allowlist change made. `select-mod zm_gobblegums` and `select-mod base` ran natively with verified `fs_game` changes, and `quit` stopped the client through the engine's own `quit` (same receipt); restarts and `disconnect` were not exercised. All stay `offline`: a `game` flip needs a playable spawn (issue #8). |
 | `capture *`, `test *` | mixed | **deferred** | thread-2 | Not in this release by product decision (2026-09-10). Contracts stay registered; every route answers `not_implemented`. Research notes for a later release are in the project history. |
 
-## Explicitly out of scope for this release
+## Beyond the packaged routes
 
-- Screen recording, screenshots and the autonomous test runner (`capture`, `test`). Deferred.
-- Native gameplay input (fire, ADS, reload, Use). Refused rather than simulated.
-- The in-game typed feature receiver.
-- Greyhound, Husky and C2M live extraction through the toolkit. The GUIs can be downloaded; their
-  use is manual.
-- BO3 live asset capture and generic weapon conversion.
-- Multiplayer, co-op, other Call of Duty titles, macOS (untested), Stream Deck, desktop GUIs, MCP wrapper.
+Each item below has no packaged route in this release. That is a statement about `pat`'s
+interfaces, not about what an agent can do; the agent path is named with each.
+
+- Screen recording, screenshots and the autonomous test runner (`capture`, `test`): deferred by
+  product decision. An agent keeps the evidence the playbook `diagnose-a-crash.md` asks for with
+  the platform's own tools, and the human playtests (TRACK-RECORD.md, workflow step 4).
+- Native gameplay input (fire, ADS, reload, Use): refused by the packaged routes rather than
+  simulated. The human plays; the agent prepares, installs, launches and reads the evidence.
+- The in-game typed feature receiver: not in this release. The agent uses the mod's own menu route
+  per the playbook `port-a-feature.md`.
+- Greyhound, Husky and C2M extraction: no packaged route; the GUIs can be downloaded and an agent
+  has driven all three, including a Linux IPAK adapter and live map capture
+  (TRACK-RECORD.md, "Beyond the packaged routes").
+- BO3 live asset capture and generic weapon conversion: no packaged route. `weapon catalog` and
+  `weapon plan` consume a sealed donor that an agent-driven capture produced (TRACK-RECORD.md);
+  the donor and manifest format is in `docs/WEAPONS.md`. Conversion stays with the owning port's
+  adapter until a generic one is written.
+- Multiplayer, co-op, other Call of Duty titles, macOS (untested, not claimed), Stream Deck,
+  desktop GUIs, MCP wrapper: not packaged and not on the track record. An agent that needs one
+  adds it per `docs/FOR-AGENTS.md` and registers it with an honest status.
 
 ## Release bars
 

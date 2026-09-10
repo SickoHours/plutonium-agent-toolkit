@@ -1,7 +1,45 @@
 # Engineering history
 
-Why the rules in this toolkit exist. Each note names the problem, what exposed it and what the
-toolkit does about it now. No transcripts, assets or personal data; summaries only.
+Why the rules in this toolkit exist, and which practices earned their place. Each note names the
+problem or the practice, what exposed it and what the toolkit does about it now. No transcripts,
+assets or personal data; summaries only. The outcomes these practices produced are on
+[TRACK-RECORD.md](../TRACK-RECORD.md).
+
+## What worked
+
+### A lesson run as a checklist step
+
+Rig failures kept reaching players after clean conversions and passing suites, because the
+lesson lived in prose that nobody re-read. The first melee weapon built after that lesson became
+a mandatory pre-package rig check went from offline build to five accepted revisions with no
+repair records. **Now:** the four preflight playbooks (`docs/playbooks/preflight-*.md`) are
+numbered steps with a proof per item, run before the first install, not after the first crash.
+
+### One module on a named base
+
+A test profile that carried a whole composition gave verdicts about more than the feature under
+test, and one feature's failure blocked the others. Rebuilding one module alone on a named,
+hash-verified base produced the first playable build on the new base after a base change, with a
+verdict that names exactly what it covers. **Now:** `docs/knowledge/foundations.md` and the
+playbook `port-a-feature.md` start every module from a foundation, and a verdict never carries
+over to another base.
+
+### A verdict bound to one build
+
+Eleven firearm ports were accepted in one session because the verdict was recorded against the
+loaded profile, the map, the running server and the package hash read from fresh engine state,
+not against "the latest build". Later repairs could then say exactly what changed. **Now:**
+`check-load` binds a load to process identity, and every receipt carries input and output hashes
+so a verdict can name its build.
+
+### Sealed donors
+
+A weapon captured live from another title became a hashed, replayable input. When its first
+install failed in game, the rig was repaired and rebuilt from the same sealed bytes without a
+second capture. **Now:** `weapon catalog` re-hashes every donor file and refuses stale or edited
+catalogs, so a plan proves it used the same bytes as the accepted port.
+
+## What broke, and the rule it left
 
 ## Rigs that compile but break
 

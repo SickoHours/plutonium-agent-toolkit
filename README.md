@@ -1,27 +1,28 @@
 # Plutonium Agent Toolkit
 
-**Agent-native tools for building, controlling and testing Plutonium T6 Zombies mods.**
-You describe the result. Your coding agent installs the tools, builds the mod, loads the game and
-shows you the evidence. If your setup is unusual, the agent adapts the toolkit to it.
+**Agent-native tools, knowledge and playbooks for building, controlling and testing Plutonium
+T6 Zombies mods.** You describe the result. Your coding agent researches the donor, extracts or
+recovers the assets, adapts the tools, builds and verifies the package, installs it and launches
+the game. You playtest and give the verdict. If your setup is unusual, the agent adapts the toolkit.
+
+This is how the authoring workspace built its own library: over one hundred player-accepted
+modules across wonder weapons, firearms, melee, perks, GobbleGums, bosses and power-ups, including
+a weapon recovered live from a running Black Ops III match. The counts, the workflow and the exact
+scope of each verdict are in [docs/TRACK-RECORD.md](docs/TRACK-RECORD.md). That page is the wide
+view of what an agent can do with this environment. [docs/SUPPORT.md](docs/SUPPORT.md) is the
+narrow one: it grades the packaged `pat` routes one at a time and is deliberately strict.
 
 **This is meant to be modified.** It is open source and malleable by design. The person using it
 already has a coding agent; the agent reads the docs, configures the toolkit to that machine, and
 edits or extends it when the defaults do not fit. Every doc here is written for that agent to read.
 See [AGENTS.md](AGENTS.md) and [docs/FOR-AGENTS.md](docs/FOR-AGENTS.md).
 
-> **Status: public beta. The development (file) tools run on Windows and Linux; game control is
-> Windows-only.** The build toolchain is `available` with native receipts from Windows 11 and from
-> Arch Linux (Omarchy): `dev setup`, `gsc compile`, `ff inspect|extract`,
-> `project plan|build|verify`, and discovery/`configure`/`doctor`. You can build and package a T6
-> Zombies mod with the real tools on either OS. Backends are pinned per platform (gsc-tool,
-> OpenAssetTools, FFmpeg and Blender on both; CoDLuaDecompiler and the extraction GUIs on Windows
-> only); where a platform has no pinned download, supply the tool yourself and point the toolkit at
-> it with `PAT_BACKEND_<NAME>`. macOS is untested, has no pinned backends and is not claimed. Game
-> control uses the Win32 console, so it needs a native Windows host; it is `implemented` and not yet
-> qualified ([issue #8](https://github.com/SickoHours/plutonium-agent-toolkit/issues/8)), so no
-> `game` route has earned level `game`. Screen recording and the autonomous test runner are
-> deferred. Read [docs/SUPPORT.md](docs/SUPPORT.md) before trusting any capability claim, and
-> [CHANGELOG.md](CHANGELOG.md) for what each version actually ships.
+> **Status: public beta, `0.1.0b1`.** The development (file) tools run natively on Windows 11 and
+> Arch Linux with receipts. Game control is implemented for native Windows and not yet qualified
+> ([issue #8](https://github.com/SickoHours/plutonium-agent-toolkit/issues/8)). Screen capture
+> and the autonomous test runner are a later release. macOS is untested and not claimed. Read
+> [docs/SUPPORT.md](docs/SUPPORT.md) before trusting a route claim, and
+> [CHANGELOG.md](CHANGELOG.md) for what each version ships.
 
 ## What "agent-native" means here
 
@@ -91,6 +92,8 @@ building (client layout, fastfiles, scripts, engine limits, foundations, crashes
 words are defined once in [CONTEXT.md](CONTEXT.md).
 [docs/playbooks/](docs/playbooks/README.md) holds finite recipes for the common tasks: first build,
 add a script, port a feature, four preflights, diagnose a crash, package and install.
+[docs/TRACK-RECORD.md](docs/TRACK-RECORD.md) records what that workflow has produced, and the
+workflows that went beyond the packaged routes.
 
 ## Benchmark
 
@@ -119,7 +122,8 @@ python tools/release_check.py
 | `src/plutonium_agent_toolkit/game/` | Game control routes |
 | `src/plutonium_agent_toolkit/testing/` | Capture and test routes |
 | `examples/hello-zm/` | The bundled first-run mod used by the qualification loop |
-| `docs/` | User guide, support matrix, contributor docs, engineering history |
+| `docs/` | User guide, packaged route qualification, contributor docs, engineering history |
+| `docs/TRACK-RECORD.md`, `docs/track-record.json` | Generated track record: accepted modules by category, milestones with the scope of each verdict, workflows completed without a packaged route |
 | `CONTEXT.md` | The vocabulary every doc, receipt and skill uses, one definition each |
 | `docs/knowledge/` | Facts an agent reads once per task: client layout, fastfiles, scripts, contracts, foundations, crashes, limits |
 | `docs/playbooks/` | Finite recipes with the receipt field that proves each step, including four preflight gate lists |

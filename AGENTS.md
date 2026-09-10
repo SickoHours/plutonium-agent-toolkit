@@ -35,7 +35,8 @@ Treat "make it work for this person's setup" as the job, not an exception to it.
 
 ## Read first
 
-1. `README.md` for the product and its current status.
+1. `README.md` for the product and its current status, then `docs/TRACK-RECORD.md` for what this
+   workflow has produced and how far past the packaged routes you are expected to go.
 2. `docs/FOR-AGENTS.md` for how to operate and adapt the toolkit, and the modding behaviours
    (foundation-first modular building, mod organization, the lessons that shaped the safety rules).
    Then `CONTEXT.md` for the words, `docs/knowledge/README.md` (T6 and Plutonium facts, once
