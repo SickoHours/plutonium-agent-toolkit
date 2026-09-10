@@ -81,6 +81,20 @@ Respect both in what you tell the user, and keep offline verified, installed, la
 captured and player-accepted as separate statements. A mod that compiles and links is not a mod
 that plays. Say which one you have.
 
+## Knowledge and playbooks
+
+`docs/knowledge/` holds the T6 and Plutonium facts an agent otherwise rediscovers by trial: the
+client's storage layout and console, fastfiles and zones, the two script VMs and their traps,
+the engine contracts a Zombies feature must meet (bone cap, font scale, field budgets, sound
+reservation, normal plus PAP), foundations, crash classes, other titles, and one glossary for
+the evidence ladder. Read `docs/knowledge/README.md` once per session.
+
+`docs/playbooks/` turns those facts into finite recipes with the same five sections each:
+preconditions, numbered steps with the receipt field that proves each, the commands that are
+wasted, stop conditions, and the separate facts to report. The two preflight playbooks (weapon
+rig, HUD text) exist because every failure of that class reached a player after a clean
+conversion and a passing suite; run them before the first package, not after the first crash.
+
 ## Modding behaviours worth carrying
 
 These are how mods built with this toolkit stay maintainable. They are conventions, not enforced

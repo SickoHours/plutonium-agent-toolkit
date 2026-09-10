@@ -14,9 +14,20 @@ Read the repository's `AGENTS.md` and `docs/FOR-AGENTS.md` for the full contract
 Linux, `implemented` = runs but no receipt, `offline` = unit-tested only, `deferred` = out of scope).
 macOS is untested and not claimed; say so if the user is on one.
 
+## Know before you build
+
+Read `docs/knowledge/README.md` once per session for the T6 and Plutonium facts (client layout,
+fastfiles, scripts, engine limits, foundations, crash classes, one glossary), then open the
+playbook in `docs/playbooks/` that matches the task: first build, add a script, port a feature,
+the weapon-rig and HUD-text preflights, diagnose a crash, package and install. Each playbook is
+finite: exact commands, the receipt field that proves each step, the commands that are wasted,
+and the stop conditions. Follow its "Do not" list.
+
 ## Discover
 
 - Unknown route: `pat manifest --json` once per session. Reuse it while the version is unchanged.
+  A `status: succeeded` receipt is the fact; do not re-run a job to confirm it, and rebuild only
+  after an input hash changed.
 - Known route: `pat describe <group> <action> --json`. Use the returned `argv`.
 - Installation state: `pat doctor --json`. Backend inventory: `pat dev backends --json`.
 - Discovery never executes anything and needs no authorization.

@@ -46,6 +46,20 @@ Every entry states what shipped, on which platform it was verified, and what rem
   separately. Tests fail if the page is stale or the usage table names a binary the code does not
   resolve. Names and links only; logos are a later per-project follow-up.
 
+- **`docs/knowledge/`**: eight short pages of T6 and Plutonium facts for agents (glossary for the
+  evidence ladder, client storage and console, fastfiles and zones, GSC/CSC and their traps, the
+  engine contracts a Zombies feature must meet with the measured limits marked, foundations,
+  crash classes, other titles), each under 150 lines, facts only, no private material.
+- **`docs/playbooks/`**: seven finite recipes with the same five sections (preconditions, steps
+  with the proving receipt field, do-not list, stop conditions, report): first build, add a
+  script, port a feature, weapon-rig preflight, HUD-text preflight, diagnose a crash, package and
+  install. Tests enforce the sections, that every `pat` route named is registered, and that the
+  indexes match the files.
+- **"Work efficiently"** section in `AGENTS.md` and matching guidance in the skill and
+  `docs/FOR-AGENTS.md`: manifest once per session, a succeeded receipt is the fact, rebuild only
+  on a changed input hash, never replay `delivery_uncertain`, read the playbook first, state
+  unverified facts instead of inventing checks.
+
 ### Changed
 
 - **Platform claims corrected.** The development tools are supported on Windows and Linux; the

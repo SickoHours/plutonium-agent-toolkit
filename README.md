@@ -84,6 +84,13 @@ Two acceptance tests gate 1.0: an unfamiliar user's agent installs and loads the
 ([docs/PILOT-CONTRIBUTOR.md](docs/PILOT-CONTRIBUTOR.md)). Both use a different agent harness than
 the one that built the toolkit.
 
+## Knowledge and playbooks
+
+[docs/knowledge/](docs/knowledge/README.md) holds the T6 and Plutonium facts an agent needs before
+building (client layout, fastfiles, scripts, engine limits, foundations, crashes, a glossary).
+[docs/playbooks/](docs/playbooks/README.md) holds finite recipes for the common tasks: first build,
+add a script, port a feature, two preflights, diagnose a crash, package and install.
+
 ## For contributors and their agents
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md), then [AGENTS.md](AGENTS.md). Development agents get
