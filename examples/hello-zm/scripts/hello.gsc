@@ -1,14 +1,23 @@
-// hello-zm: prints once when the map starts. Used by the toolkit's first-run qualification.
-#include maps\mp\_utility;
-#include common_scripts\utility;
+// hello-zm: prints to each player once they spawn. Used by the toolkit's
+// first-run qualification. Uses only engine builtins (waittill, thread,
+// iprintln) so gsc-tool compiles it offline without any T6 include files.
 
 main()
 {
-    level thread hello_on_start();
+    level thread on_player_connect();
 }
 
-hello_on_start()
+on_player_connect()
 {
-    flag_wait( "initial_blackscreen_passed" );
-    iprintln( "^2hello-zm loaded through the Plutonium Agent Toolkit" );
+    for ( ;; )
+    {
+        level waittill( "connected", player );
+        player thread on_player_spawned();
+    }
+}
+
+on_player_spawned()
+{
+    self waittill( "spawned_player" );
+    self iprintln( "^2hello-zm loaded through the Plutonium Agent Toolkit" );
 }

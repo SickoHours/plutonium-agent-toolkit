@@ -8,4 +8,8 @@ line = sys.stdin.buffer.readline(1024 * 1024)
 argv = json.loads(line)
 if not isinstance(argv, list) or not argv or any(not isinstance(item, str) for item in argv):
     sys.exit(2)
-sys.exit(subprocess.call(argv, stdin=subprocess.DEVNULL))
+try:
+    sys.exit(subprocess.call(argv, stdin=subprocess.DEVNULL))
+except OSError as error:
+    print("backend could not start:", argv[0], "-", error, flush=True)
+    sys.exit(127)

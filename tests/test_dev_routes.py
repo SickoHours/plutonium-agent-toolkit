@@ -167,3 +167,94 @@ class DevRouteTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReviewRegressionTests(DevRouteTests):
+    """Regressions for the findings raised on the first review of these routes."""
+
+    def test_names_with_trailing_newline_are_rejected(self):
+        base = self.root / "nl"
+        base.mkdir()
+        (base / "a.gsc").write_text("main(){}\n")
+        for label, recipe in {
+            "name": {"schema": 1, "game": "t6", "name": "ok\n", "scripts": [], "assets": [], "loads": []},
+            "type": {"schema": 1, "game": "t6", "name": "ok", "scripts": [],
+                     "assets": [{"source": "a.gsc", "target": "a.txt", "type": "rawfile\n", "name": "a.txt"}], "loads": []},
+            "target": {"schema": 1, "game": "t6", "name": "ok",
+                       "scripts": [{"source": "a.gsc", "target": "scripts/zm/a.gsc\n"}], "assets": [], "loads": []},
+        }.items():
+            (base / "project.json").write_text(json.dumps(recipe))
+            code, row = invoke(["project", "plan", str(base / "project.json"), "--output", self.out()])
+            self.assertEqual(row.get("error_code"), "input_invalid", label)
+
+    def test_symlinked_source_directory_is_rejected(self):
+        base = self.root / "linked"
+        (base / "real").mkdir(parents=True)
+        (base / "real" / "a.gsc").write_text("main(){}\n")
+        outside = self.root / "outside"
+        outside.mkdir()
+        (outside / "secret.gsc").write_text("main(){}\n")
+        try:
+            (base / "real" / "link").symlink_to(outside, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("symlinks unavailable")
+        code, row = invoke(["gsc", "compile", str(base / "real" / "a.gsc"), "--includes", str(base / "real"), "--output", self.out()])
+        self.assertEqual(code, 1)
+        self.assertEqual(row["error_code"], "input_invalid")
+        self.assertIn("Linked source directories", row["message"])
+
+    def test_non_executable_override_is_backend_unavailable_not_a_traceback(self):
+        bogus = self.root / "not-a-program.bin"
+        bogus.write_bytes(b"\x00\x01 not executable")
+        os.environ["PAT_BACKEND_GSC"] = str(bogus)
+        src = self.root / "a.gsc"
+        src.write_text("main(){}\n")
+        code, row = invoke(["gsc", "compile", str(src), "--output", self.out()])
+        self.assertEqual(code, 1)
+        self.assertEqual(row["error_code"], "backend_unavailable", row)
+        receipt = json.loads(Path(row["receipt"]).read_text())
+        self.assertEqual(receipt["status"], "failed")
+
+    def test_malformed_receipt_is_input_invalid(self):
+        bad = self.root / "b" / "receipt.json"
+        bad.parent.mkdir()
+        bad.write_text("{not json")
+        code, row = invoke(["project", "verify", str(bad), "--output", self.out()])
+        self.assertEqual(code, 1)
+        self.assertEqual(row["error_code"], "input_invalid")
+        bad.write_text(json.dumps({"schema_version": 1}))
+        code, row = invoke(["project", "verify", str(bad), "--inputs", "--output", self.out()])
+        self.assertEqual(row["error_code"], "input_invalid")
+
+    def test_finish_rechecks_output_bound(self):
+        from unittest.mock import patch
+
+        from plutonium_agent_toolkit.core import jobs
+
+        src = self.root / "a.gsc"
+        src.write_text("main(){}\n")
+        with patch.object(jobs, "MAX_OUTPUT", 8):
+            code, row = invoke(["gsc", "compile", str(src), "--output", self.out()])
+        self.assertEqual(code, 1)
+        self.assertEqual(row["error_code"], "output_limit")
+
+    def test_wine_is_refused_as_not_native(self):
+        from unittest.mock import patch
+
+        from plutonium_agent_toolkit.core import platform as plat
+
+        os.environ.pop("PAT_DEV_UNGATED")
+        src = self.root / "a.gsc"
+        src.write_text("main(){}\n")
+        with patch.object(plat, "is_windows", return_value=True), patch.object(plat, "is_wine", return_value=True):
+            code, row = invoke(["gsc", "compile", str(src), "--output", self.out()])
+        self.assertEqual(code, 1)
+        self.assertEqual(row["error_code"], "unsupported_platform")
+        self.assertIn("Wine", row["message"])
+
+    def test_init_template_and_example_have_no_includes(self):
+        code, row = invoke(["project", "init", "--name", "plain", "--output", self.out()])
+        text = (Path(row["result"]["output"]) / "scripts" / "plain.gsc").read_text()
+        self.assertNotIn("#include", text)
+        example = Path(__file__).resolve().parents[1] / "examples" / "hello-zm" / "scripts" / "hello.gsc"
+        self.assertNotIn("#include", example.read_text())

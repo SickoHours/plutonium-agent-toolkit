@@ -14,7 +14,7 @@ from ..core.jobs import Job
 from ..core.receipts import sha256_file
 from .backends import executable
 
-IDENTIFIER = re.compile(r"^[A-Za-z0-9_]{1,64}$")
+IDENTIFIER = re.compile(r"^[A-Za-z0-9_]{1,64}\Z")
 LOAD_FAILURE = re.compile(r"(?im)^.*(?:failed to load|error loading|fatal error)")
 
 

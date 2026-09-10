@@ -28,22 +28,31 @@ from ..core.receipts import sha256_file, verify_outputs
 from . import fastfiles, scripts
 from .backends import executable
 
-NAME = re.compile(r"^[a-z0-9_]{1,64}$")
-ZONE_PART = re.compile(r"^[A-Za-z0-9_.-]{1,255}$")
+NAME = re.compile(r"^[a-z0-9_]{1,64}\Z")
+ZONE_PART = re.compile(r"^[A-Za-z0-9_.-]{1,255}\Z")
 MAX_SCRIPTS, MAX_ASSETS, MAX_LOADS = 128, 4096, 32
 
-INIT_SCRIPT = '''// Created by pat project init. Prints once when the map starts.
-#include maps\\mp\\_utility;
+INIT_SCRIPT = '''// Created by pat project init. Prints to each player once they spawn.
+// Uses only engine builtins so it compiles offline without T6 include files.
 
 main()
 {
-    level thread on_start();
+    level thread on_player_connect();
 }
 
-on_start()
+on_player_connect()
 {
-    flag_wait( "initial_blackscreen_passed" );
-    iprintln( "^2{name} loaded" );
+    for ( ;; )
+    {
+        level waittill( "connected", player );
+        player thread on_player_spawned();
+    }
+}
+
+on_player_spawned()
+{
+    self waittill( "spawned_player" );
+    self iprintln( "^2{name} loaded" );
 }
 '''
 
@@ -224,7 +233,12 @@ def _verify(args, job: Job) -> dict:
     report = verify_outputs(receipt_path)
     result = {"build_receipt": str(receipt_path), "outputs": report}
     if args.inputs:
-        data = json.loads(receipt_path.read_text(encoding="utf-8"))
+        try:
+            data = json.loads(receipt_path.read_text(encoding="utf-8"))
+        except ValueError as exc:
+            raise Failure(INPUT_INVALID, f"Receipt is not valid JSON: {receipt_path}") from exc
+        if not isinstance(data.get("inputs"), dict):
+            raise Failure(INPUT_INVALID, "Receipt lacks an inputs map")
         changed, missing = [], []
         for path, digest in data.get("inputs", {}).items():
             p = Path(path)

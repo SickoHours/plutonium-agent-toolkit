@@ -1,7 +1,8 @@
 # hello-zm
 
-The smallest T6 Zombies mod the toolkit can build, install and load. It prints a message to the
-console when the map starts and nothing else. The qualification loop in `docs/SUPPORT.md` uses it
+The smallest T6 Zombies mod the toolkit can build, install and load. It prints one line to each
+player when they spawn and nothing else. It uses only engine builtins, so gsc-tool compiles it
+offline without T6 include files. The qualification loop in `docs/SUPPORT.md` uses it
 because success or failure is unambiguous and it depends on no assets.
 
 ```text
@@ -20,5 +21,6 @@ pat project verify ..\jobs\hello-build-001\receipt.json --inputs --output ..\job
 ```
 
 Build compiles `hello.gsc`, links `mod.ff`, reads it back and compares the raw file. That is
-offline evidence. Loading the mod in the game and seeing the console line is a separate step that
-needs the user's go-ahead.
+offline evidence, and in this version it has only been exercised against fake backends (see
+`docs/SUPPORT.md`). Loading the mod in the game and seeing the line on screen is a separate step
+that needs the user's go-ahead and a native Windows host.

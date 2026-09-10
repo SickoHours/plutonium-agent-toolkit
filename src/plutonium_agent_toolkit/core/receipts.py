@@ -14,7 +14,7 @@ import uuid
 from pathlib import Path
 
 from .envelope import now
-from .errors import INPUT_LIMIT, INPUT_MISSING, OUTPUT_EXISTS, OUTPUT_LIMIT, Failure
+from .errors import INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, OUTPUT_EXISTS, OUTPUT_LIMIT, Failure
 
 MAX_HASH_BYTES = 8 * 1024**3
 MAX_FILES = 20000
@@ -90,7 +90,12 @@ def write(output_dir: Path, *, command: str, argv: list[str], status: str, exit_
 
 def verify_outputs(receipt_path: Path) -> dict:
     """Re-hash every recorded output and report what changed."""
-    receipt = json.loads(Path(receipt_path).read_text(encoding="utf-8"))
+    try:
+        receipt = json.loads(Path(receipt_path).read_text(encoding="utf-8"))
+    except (ValueError, OSError) as exc:
+        raise Failure(INPUT_INVALID, f"Receipt is not readable JSON: {receipt_path}") from exc
+    if not isinstance(receipt, dict) or not isinstance(receipt.get("outputs"), dict):
+        raise Failure(INPUT_INVALID, f"Receipt lacks an outputs map: {receipt_path}")
     base = Path(receipt_path).parent
     changed, missing = [], []
     for rel, digest in receipt.get("outputs", {}).items():

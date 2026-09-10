@@ -27,6 +27,7 @@ MAX_OUTPUT = 8 * 1024**3
 MAX_TREE_FILES = 4096
 MAX_TREE_BYTES = 2 * 1024**3
 MAX_TREES = 64
+CHILD_LAUNCH_FAILED = 127  # returned by _child.py when the backend itself cannot start
 
 
 def _write(path: Path, data: dict) -> None:
@@ -100,6 +101,10 @@ class Job:
         for directory, dirs, files in os.walk(root, followlinks=False):
             self.check_deadline()
             dirs.sort()
+            for name in dirs:
+                linked = Path(directory) / name
+                if linked.is_symlink() or (os.name == "nt" and linked.lstat().st_file_attributes & 0x400):
+                    raise Failure(INPUT_INVALID, f"Linked source directories are not supported: {linked}")
             for name in sorted(files):
                 p = Path(directory) / name
                 if p.is_symlink():
@@ -124,13 +129,17 @@ class Job:
         try:
             code = (_run_windows if os.name == "nt" else _run_posix)(self, argv, cwd or self.root, timeout, log)
             step["exit_code"] = code
+            if code == CHILD_LAUNCH_FAILED:
+                raise Failure(BACKEND_UNAVAILABLE, f"Cannot execute {argv[0]}; see {log.name}", "Run: pat dev setup",
+                              log=log.name)
             if code:
                 raise Failure(BACKEND_FAILED, f"Backend exited with status {code}", log=log.name, exit_code=code)
             return log
-        except FileNotFoundError as exc:
+        except OSError as exc:
+            # FileNotFoundError, PermissionError and "not a valid Win32 application" all land here.
             step["exit_code"] = None
-            raise Failure(BACKEND_UNAVAILABLE, f"Cannot execute {argv[0]}: {exc.strerror}",
-                          "Run: pat dev setup") from exc
+            raise Failure(BACKEND_UNAVAILABLE, f"Cannot execute {argv[0]}: {exc.strerror or exc}",
+                          "Run: pat dev setup, or check the PAT_BACKEND_* override") from exc
         finally:
             step["elapsed_seconds"] = round(time.monotonic() - started, 3)
             if log.exists() and log.stat().st_size > MAX_LOG:
@@ -158,6 +167,8 @@ class Job:
         for key, digest in self.inputs.items():
             if sha256_file(Path(key)) != digest:
                 raise Failure(INPUT_CHANGED, f"Input changed while the job ran: {key}")
+        # The periodic scan during run() can miss a final burst; recheck before declaring success.
+        self._watch_output()
         outputs = {rel: digest for rel, digest in inventory(self.root).items() if rel != "receipt.json"}
         self._save("succeeded", exit_code=0, ok=True, result=result, outputs=outputs, finished=now())
         return {"job_id": self.id, "output": str(self.root), "receipt": str(self.receipt_path),

@@ -26,7 +26,7 @@ from . import __version__
 from .core import config, platform
 from .core.discovery import find, manifest, routes
 from .core.envelope import emit, failure, success
-from .core.errors import INVALID_ARGUMENTS, NOT_IMPLEMENTED, Failure
+from .core.errors import INVALID_ARGUMENTS, NOT_IMPLEMENTED, OPERATION_FAILED, Failure
 
 # Importing the route modules registers their contracts.
 from .dev import routes as _dev_routes  # noqa: F401
@@ -118,6 +118,14 @@ def run_job(args, argv: list[str]) -> dict:
         return row
     except KeyboardInterrupt:
         exc = Failure("cancelled", "Job cancelled; owned backend processes stopped")
+        job.fail(exc)
+        row = failure(f"{args.group} {args.action}", exc)
+        row["receipt"] = str(job.receipt_path)
+        return row
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError) as unexpected:
+        # Never let a traceback replace the JSON contract; the receipt must not stay "running".
+        exc = Failure(OPERATION_FAILED, f"{type(unexpected).__name__}: {str(unexpected)[:400]}",
+                      "This is a toolkit defect. Keep the receipt and report it with the command you ran.")
         job.fail(exc)
         row = failure(f"{args.group} {args.action}", exc)
         row["receipt"] = str(job.receipt_path)
