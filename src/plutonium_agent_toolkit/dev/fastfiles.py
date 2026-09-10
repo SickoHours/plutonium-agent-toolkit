@@ -40,6 +40,14 @@ def add_parser(sub, common):
     common(q)
 
 
+def check_readback_log(log: Path) -> str:
+    """Unlinker can exit zero after reporting a load failure; the log is authoritative."""
+    text = log.read_bytes()[:4 * 1024 * 1024].decode("utf-8", errors="replace")
+    if LOAD_FAILURE.search(text):
+        raise Failure(BACKEND_FAILED, "OpenAssetTools reported a loading failure", log=log.name)
+    return text
+
+
 def _link(args, job: Job) -> dict:
     base = Path(args.project).expanduser().resolve()
     if not base.is_dir():
@@ -68,6 +76,7 @@ def _link(args, job: Job) -> dict:
     verified = []
     for p in packages:
         log = job.run([*executable("unlinker"), "--no-color", "--skip-obj", "--list", str(p)], timeout=args.timeout)
+        check_readback_log(log)
         verified.append({"path": p.relative_to(job.root).as_posix(), "sha256": sha256_file(p), "inventory_log": log.name})
     return {"packages": verified, "verification": "linked and read back by OpenAssetTools; gameplay untested"}
 
@@ -91,9 +100,7 @@ def execute(args, job: Job) -> dict:
     for zone in args.load:
         argv += ["-l", str(job.input(zone))]
     log = job.run([*argv, str(src)], timeout=args.timeout)
-    text = log.read_bytes()[:4 * 1024 * 1024].decode("utf-8", errors="replace")
-    if LOAD_FAILURE.search(text):
-        raise Failure(BACKEND_FAILED, "OpenAssetTools reported a loading failure", log=log.name)
+    text = check_readback_log(log)
     if args.action == "extract" and not any(p.is_file() and p.stat().st_size for p in (job.root / "assets").rglob("*")):
         raise Failure(BACKEND_FAILED, "No assets were extracted", log=log.name)
     return {"input": str(src), "inventory_log": log.name, "listing": text[:65536], "listing_truncated": len(text) > 65536,

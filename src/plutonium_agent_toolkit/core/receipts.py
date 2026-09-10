@@ -99,7 +99,13 @@ def verify_outputs(receipt_path: Path) -> dict:
     base = Path(receipt_path).parent
     changed, missing = [], []
     for rel, digest in receipt.get("outputs", {}).items():
-        p = base / rel
+        rel_path = Path(rel) if isinstance(rel, str) and rel else None
+        if (rel_path is None or rel_path.is_absolute() or ".." in rel_path.parts or "\\" in rel
+                or not isinstance(digest, str) or len(digest) != 64):
+            raise Failure(INPUT_INVALID, f"Receipt output entry is invalid: {rel!r}")
+        p = base / rel_path
+        if p.is_symlink() or not p.resolve().is_relative_to(base.resolve()):
+            raise Failure(INPUT_INVALID, f"Receipt output escapes the receipt directory: {rel}")
         if not p.is_file():
             missing.append(rel)
         elif sha256_file(p) != digest:

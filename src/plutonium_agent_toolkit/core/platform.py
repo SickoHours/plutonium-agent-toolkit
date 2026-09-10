@@ -45,7 +45,7 @@ def describe() -> dict:
         "python": sys.version.split()[0],
         "native_windows": is_windows() and not is_wine(),
         "compatibility_layer": "wine" if is_wine() else None,
-        "supported": is_windows(),
+        "supported": is_windows() and not is_wine(),
     }
 
 

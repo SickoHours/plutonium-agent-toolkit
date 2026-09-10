@@ -1,6 +1,6 @@
 # hello-zm
 
-The smallest T6 Zombies mod the toolkit can build, install and load. It prints one line to each
+The smallest T6 Zombies mod the toolkit can build. Installing it into Plutonium storage and loading it in the game are separate routes that do not exist yet. It prints one line to each
 player when they spawn and nothing else. It uses only engine builtins, so gsc-tool compiles it
 offline without T6 include files. The qualification loop in `docs/SUPPORT.md` uses it
 because success or failure is unambiguous and it depends on no assets.

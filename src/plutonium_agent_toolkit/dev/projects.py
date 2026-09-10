@@ -216,8 +216,9 @@ def _build(data, compiled, loose, loads, plan, args, job: Job) -> dict:
     if len(link["packages"]) != 1:
         raise Failure(BACKEND_FAILED, "A recipe must produce exactly one fastfile")
     package = job.root / link["packages"][0]["path"]
-    job.run([*executable("unlinker"), "--no-color", "--include-assets", "rawfile", "--output-folder",
-             str(job.root / "readback"), str(package)], timeout=args.timeout)
+    readback_log = job.run([*executable("unlinker"), "--no-color", "--include-assets", "rawfile", "--output-folder",
+                            str(job.root / "readback"), str(package)], timeout=args.timeout)
+    fastfiles.check_readback_log(readback_log)
     for rel in rawfiles:
         restored = job.root / "readback" / rel
         if not restored.is_file() or sha256_file(raw / rel) != sha256_file(restored):

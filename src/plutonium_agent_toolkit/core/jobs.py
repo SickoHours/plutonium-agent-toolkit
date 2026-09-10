@@ -48,6 +48,7 @@ class Job:
         self.inputs: dict[str, str] = {}
         self.trees: dict[str, dict[str, str]] = {}
         self.steps: list[dict] = []
+        self.repairs: list[str] = []
         self._save("running")
 
     # ----- receipt -----------------------------------------------------------------
@@ -56,11 +57,19 @@ class Job:
             "schema_version": 1, "job_id": self.id, "command": self.command, "argv": self.argv,
             "status": status, "started": self.started, "updated": now(),
             "elapsed_seconds": round(time.monotonic() - self._t0, 3), "output": str(self.root),
-            "inputs": self.inputs, "input_trees": self.trees, "steps": self.steps, **extra,
+            "inputs": self.inputs, "input_trees": self.trees, "steps": self.steps,
+            **({"receipt_path_repaired": list(self.repairs)} if self.repairs else {}), **extra,
         }
 
     def _save(self, status: str, **extra) -> None:
-        _write(self.root / "receipt.json", self._receipt(status, **extra))
+        """A backend that replaced receipt.json with a directory or link gets that entry
+        moved aside (never deleted) so the receipt is always a regular file here."""
+        path = self.root / "receipt.json"
+        if path.is_symlink() or (path.exists() and not path.is_file()):
+            aside = path.with_name(path.name + ".replaced-by-backend." + uuid.uuid4().hex)
+            path.rename(aside)
+            self.repairs.append(aside.name)
+        _write(path, self._receipt(status, **extra))
 
     @property
     def receipt_path(self) -> Path:
@@ -128,6 +137,9 @@ class Job:
         self.steps.append(step)
         try:
             code = (_run_windows if os.name == "nt" else _run_posix)(self, argv, cwd or self.root, timeout, log)
+            if log.exists() and log.stat().st_size > MAX_LOG:
+                step["exit_code"] = code
+                raise Failure(OUTPUT_LIMIT, "Backend diagnostic output exceeded its bound", log=log.name)
             step["exit_code"] = code
             if code == CHILD_LAUNCH_FAILED:
                 raise Failure(BACKEND_UNAVAILABLE, f"Cannot execute {argv[0]}; see {log.name}", "Run: pat dev setup",
@@ -178,8 +190,9 @@ class Job:
         status = "cancelled" if error.code == CANCELLED else "failed"
         try:
             self._save(status, exit_code=error.exit_status(), ok=False, error=error.to_dict(), finished=now())
-        except OSError:
-            pass
+        except OSError as exc:
+            # Storage is gone or unwritable. The stdout JSON is still the caller's receipt.
+            print(f"warning: receipt could not be saved ({exc})", file=sys.stderr)
 
 
 # ----- platform runners --------------------------------------------------------------

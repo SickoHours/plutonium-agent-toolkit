@@ -16,5 +16,8 @@ for line in lines:
         rel = line.split(",", 1)[1]
         raw[rel] = base64.b64encode((base / "raw" / rel).read_bytes()).decode()
 out.mkdir(parents=True, exist_ok=True)
-(out / f"{zone}.ff").write_text(json.dumps({"zone": zone, "rawfiles": raw}))
+payload = {"zone": zone, "rawfiles": raw}
+if any(line.strip() == "> fixture_readback_fail" for line in lines):
+    payload["readback_fail"] = True
+(out / f"{zone}.ff").write_text(json.dumps(payload))
 print("Linked", zone, len(raw), "rawfiles")

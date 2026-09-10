@@ -258,3 +258,68 @@ class ReviewRegressionTests(DevRouteTests):
         self.assertNotIn("#include", text)
         example = Path(__file__).resolve().parents[1] / "examples" / "hello-zm" / "scripts" / "hello.gsc"
         self.assertNotIn("#include", example.read_text())
+
+
+class SecondReviewRegressionTests(DevRouteTests):
+    """Regressions for the second review round."""
+
+    def test_log_over_bound_at_exit_is_output_limit(self):
+        from unittest.mock import patch
+
+        from plutonium_agent_toolkit.core import jobs
+
+        src = self.root / "spam.gsc"
+        src.write_text("main() { SPAM_LOG }\n")
+        with patch.object(jobs, "MAX_LOG", 4096):
+            code, row = invoke(["gsc", "compile", str(src), "--output", self.out()])
+        self.assertEqual(code, 1)
+        self.assertEqual(row["error_code"], "output_limit")
+        receipt = json.loads(Path(row["receipt"]).read_text())
+        self.assertEqual(receipt["status"], "failed")
+        self.assertTrue(receipt["steps"][0].get("log_truncated"))
+
+    def test_wine_discovery_matches_execution_gate(self):
+        from unittest.mock import patch
+
+        from plutonium_agent_toolkit.core import platform as plat
+
+        with patch.object(plat, "is_windows", return_value=True), patch.object(plat, "is_wine", return_value=True):
+            code, row = invoke(["manifest"])
+        self.assertFalse(row["result"]["platform"]["supported"])
+        gated = [r for r in row["result"]["routes"] if r["requires_windows"]]
+        self.assertTrue(gated)
+        self.assertTrue(all(r["available_here"] is False for r in gated))
+
+    def test_backend_replacing_receipt_with_directory_still_yields_a_receipt_file(self):
+        src = self.root / "hijack.gsc"
+        src.write_text("main() { HIJACK_RECEIPT }\n")
+        code, row = invoke(["gsc", "compile", str(src), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        receipt_path = Path(row["result"]["receipt"])
+        self.assertTrue(receipt_path.is_file())
+        receipt = json.loads(receipt_path.read_text())
+        self.assertIn("receipt_path_repaired", receipt)
+        self.assertTrue((receipt_path.parent / receipt["receipt_path_repaired"][0]).is_dir(), "moved aside, not deleted")
+
+    def test_verify_rejects_escaping_output_keys(self):
+        build = self.root / "b"
+        build.mkdir()
+        outside = self.root / "outside.bin"
+        outside.write_bytes(b"external")
+        import hashlib
+        digest = hashlib.sha256(b"external").hexdigest()
+        for key in ("../outside.bin", str(outside), "", "a\\b"):
+            (build / "receipt.json").write_text(json.dumps({"schema_version": 1, "outputs": {key: digest}, "inputs": {}}))
+            code, row = invoke(["project", "verify", str(build / "receipt.json"), "--output", self.out()])
+            self.assertEqual(row.get("error_code"), "input_invalid", key)
+
+    def test_link_readback_failure_with_exit_zero_fails(self):
+        project = self.root / "proj"
+        (project / "zone_source").mkdir(parents=True)
+        (project / "raw").mkdir()
+        (project / "raw" / "a.txt").write_text("A")
+        (project / "zone_source" / "bad.zone").write_text("> game,T6\n> fixture_readback_fail\nrawfile,a.txt\n")
+        code, row = invoke(["ff", "link", str(project), "--zone", "bad", "--output", self.out()])
+        self.assertEqual(code, 1)
+        self.assertEqual(row["error_code"], "backend_failed")
+        self.assertIn("loading failure", row["message"])

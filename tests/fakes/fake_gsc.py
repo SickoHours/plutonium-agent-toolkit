@@ -15,6 +15,13 @@ if "FAIL_COMPILE" in text:
 if "CRASH" in text:
     print("segfault fixture")
     sys.exit(3)
+if "SPAM_LOG" in text:
+    for _ in range(2000):
+        print("x" * 80)
+if "HIJACK_RECEIPT" in text:
+    receipt = Path("receipt.json")
+    receipt.unlink(missing_ok=True)
+    receipt.mkdir()
 out = Path("compiled" if mode == "comp" else "decompiled") / src.name
 out.parent.mkdir(parents=True, exist_ok=True)
 out.write_bytes(b"COMPILED:" + hashlib.sha256(text.encode()).hexdigest().encode())

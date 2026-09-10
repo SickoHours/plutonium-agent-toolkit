@@ -11,6 +11,9 @@ try:
 except ValueError:
     print("Failed to load fastfile", ff)
     sys.exit(1)
+if data.get("readback_fail"):
+    print("error loading fixture asset; continuing")
+    sys.exit(0)
 if "--list" in args:
     for rel in data["rawfiles"]:
         print("rawfile", rel)
