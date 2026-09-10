@@ -9,10 +9,10 @@ outcome; it says nothing about gameplay, and it gates no release.
 
 | ID | Prompt asks for | Scored on |
 | --- | --- | --- |
-| `bench-01-compile-error` | Compile a script with a syntax error | one `gsc compile`, final status `failed` with `backend_failed`, at most 3 invocations |
-| `bench-02-build-hello` | Plan, build and verify `examples/hello-zm` | `project plan`, `project build`, `project verify` in that order, `packages/mod.ff` in the build's outputs, at most 6 |
-| `bench-03-extract-rawfile` | Extract the rawfiles from a built `mod.ff` | one `ff extract` whose outputs match `assets/**/*.gsc`, at most 4 |
-| `bench-04-port-feature` | Port `announce_round` from `examples/hello-zm-two` into a copy of `hello-zm`, build, verify | `project build` then `project verify`, `mod.ff` produced, the build's readback contains both `announce_round` and `on_player_spawned`, at most 10 |
+| `bench-01-compile-error` | Compile a script with a syntax error | one `gsc compile` of the fixture `broken.gsc`, final status `failed` with `backend_failed`, at most 3 invocations |
+| `bench-02-build-hello` | Plan, build and verify `examples/hello-zm` | `project plan`, `project build`, `project verify` in that order, the build declares `examples/hello-zm`'s recipe and script as inputs, `packages/mod.ff` in its outputs, at most 6 |
+| `bench-03-extract-rawfile` | Extract the rawfiles from a built `mod.ff` | one `ff extract` whose input `mod.ff` hash equals the bench-02 build's output hash and whose outputs match `assets/**/*.gsc`, at most 4 |
+| `bench-04-port-feature` | Port `announce_round` from `examples/hello-zm-two` into a copy of `hello-zm`, build, verify | `project build` then `project verify`, a recipe and `scripts/hello.gsc` declared as inputs, `mod.ff` produced, the build's readback contains both `announce_round` and `on_player_spawned`, at most 10 |
 
 Task definitions are `tools/benchmark/tasks.json`; prompts are `tools/benchmark/prompts/`;
 the broken script is a fixture. `examples/hello-zm-two` exists so the port task has a real
@@ -48,8 +48,13 @@ Keep the run directory private (it holds paths from your machine); commit only t
 - Invocations are top-level receipts under the task directory: every `pat` job the agent ran,
   including retries and rebuilds. Fewer, within a correct result, is better; the budget is a
   ceiling, not a target.
-- Wall time is first job start to last job end, so it includes the agent's thinking between
-  jobs. It is comparable only between runs on the same machine.
+- Wall time is, per task, first job start to last job end, and the total is the sum over tasks;
+  it includes the agent's thinking between jobs inside a task and excludes time between tasks.
+  It is comparable only between runs on the same machine.
+- Inputs are checked: the scored job's receipt must declare the task's own source files
+  (`inputs_contain`), and for the extract task the `mod.ff` it read must carry the hash the build
+  task's receipt recorded (`input_hash_from`). A job run against an unrelated project scores as
+  missing inputs.
 - `failed_invocations` lists jobs that did not succeed; a wasted rebuild shows up here and in the
   count.
 
@@ -61,7 +66,7 @@ the same toolkit version and the same machine.
 
 | Model | Harness | Date | bench-01 | bench-02 | bench-03 | bench-04 | Total |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| claude-fable-5-1 | Claude Code in T3 Code | 2026-09-10 | 5/5 (1 call) | 5/5 (3 calls) | 5/5 (1 call) | 6/6 (3 calls) | 21/21 (8 calls, 0.8 s) |
+| claude-fable-5-1 | Claude Code in T3 Code | 2026-09-10 | 6/6 (1 call) | 6/6 (3 calls) | 6/6 (1 call) | 7/7 (3 calls) | 25/25 (8 calls, 0.8 s) |
 
 The baseline row was produced by the agent that wrote the benchmark, in the same session, on
 Arch Linux (Omarchy) with the real backends, following each prompt verbatim. It is a floor for

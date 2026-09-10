@@ -12,11 +12,11 @@ spec.loader.exec_module(bench)
 
 
 def receipt(directory: Path, command: str, status="succeeded", started="2026-09-10T10:00:00+00:00",
-            finished="2026-09-10T10:00:01+00:00", outputs=None, error=None, readback=None):
+            finished="2026-09-10T10:00:01+00:00", outputs=None, error=None, readback=None, inputs=None):
     directory.mkdir(parents=True, exist_ok=True)
     data = {"schema_version": 1, "job_id": "x", "command": command, "argv": ["pat", *command.split()],
             "status": status, "started": started, "updated": finished, "finished": finished,
-            "outputs": outputs or {}, "steps": []}
+            "outputs": outputs or {}, "inputs": inputs or {}, "steps": []}
     if error:
         data["error"] = {"error_code": error, "message": "fake"}
     (directory / "receipt.json").write_text(json.dumps(data), encoding="utf-8")
@@ -56,9 +56,14 @@ class BenchmarkTests(unittest.TestCase):
 
     def test_compile_error_task_requires_a_structural_failure(self):
         task = self.by_id["bench-01-compile-error"]
-        receipt(self.run / task["id"] / "job-1", "gsc compile", status="failed", error="backend_failed")
+        receipt(self.run / task["id"] / "job-1", "gsc compile", status="failed", error="backend_failed",
+                inputs={"/repo/tools/benchmark/fixtures/bench-01/broken.gsc": "a" * 64})
         row = bench.score_task(task, self.run)
         self.assertTrue(all(row["checks"].values()), row)
+        # Compiling some other broken script is not the task.
+        receipt(self.run / task["id"] / "job-1", "gsc compile", status="failed", error="backend_failed",
+                inputs={"/elsewhere/other.gsc": "a" * 64})
+        self.assertFalse(bench.score_task(task, self.run)["checks"]["inputs"])
         self.assertEqual(row["score"], 1.0)
         # A "success" on a broken script is wrong, and so is the wrong error code.
         receipt(self.run / task["id"] / "job-1", "gsc compile", status="succeeded")
@@ -71,7 +76,8 @@ class BenchmarkTests(unittest.TestCase):
         base = self.run / task["id"]
         receipt(base / "01-plan", "project plan", started="2026-09-10T10:00:00+00:00", finished="2026-09-10T10:00:01+00:00")
         receipt(base / "02-build", "project build", started="2026-09-10T10:00:02+00:00", finished="2026-09-10T10:00:03+00:00",
-                outputs={"packages/mod.ff": "abc", "plan.json": "def"})
+                outputs={"packages/mod.ff": "abc", "plan.json": "def"},
+                inputs={"/repo/examples/hello-zm/project.json": "1" * 64, "/repo/examples/hello-zm/scripts/hello.gsc": "2" * 64})
         # The child compile job project build starts must not count as an invocation.
         receipt(base / "02-build" / "script-000", "gsc compile", started="2026-09-10T10:00:02+00:00")
         receipt(base / "03-verify", "project verify", started="2026-09-10T10:00:04+00:00", finished="2026-09-10T10:00:05+00:00")
@@ -90,10 +96,21 @@ class BenchmarkTests(unittest.TestCase):
         row = bench.score_task(task, self.run)
         self.assertFalse(row["checks"]["within_budget"])
 
-    def test_extract_task_matches_output_patterns(self):
+    def test_extract_task_matches_output_patterns_and_input_hash(self):
         task = self.by_id["bench-03-extract-rawfile"]
-        receipt(self.run / task["id"] / "job", "ff extract", outputs={"assets/scripts/zm/hello_zm.gsc": "x", "step-01.log": "y"})
-        self.assertTrue(bench.score_task(task, self.run)["checks"]["outputs"])
+        build = self.run / "bench-02-build-hello" / "build"
+        receipt(build, "project build", outputs={"packages/mod.ff": "f" * 64})
+        receipt(self.run / task["id"] / "job", "ff extract", outputs={"assets/scripts/zm/hello_zm.gsc": "x", "step-01.log": "y"},
+                inputs={str(build / "packages" / "mod.ff"): "f" * 64})
+        row = bench.score_task(task, self.run)
+        self.assertTrue(row["checks"]["outputs"])
+        self.assertTrue(row["checks"]["input_hash"], row["detail"])
+        # Extracting a different fastfile than the one bench-02 built is not the task.
+        receipt(self.run / task["id"] / "job", "ff extract", outputs={"assets/scripts/zm/hello_zm.gsc": "x"},
+                inputs={"/elsewhere/packages/mod.ff": "0" * 64})
+        row = bench.score_task(task, self.run)
+        self.assertFalse(row["checks"]["input_hash"])
+        self.assertIn("!=", row["detail"]["input_hash"])
         receipt(self.run / task["id"] / "job", "ff extract", outputs={"step-01.log": "y"})
         row = bench.score_task(task, self.run)
         self.assertFalse(row["checks"]["outputs"])
@@ -102,11 +119,13 @@ class BenchmarkTests(unittest.TestCase):
     def test_port_task_reads_the_readback_not_the_prose(self):
         task = self.by_id["bench-04-port-feature"]
         base = self.run / task["id"]
-        receipt(base / "build", "project build", outputs={"packages/mod.ff": "x"},
+        ported = {"/run/bench-04/hello-zm-ported/project.json": "1" * 64, "/run/bench-04/hello-zm-ported/scripts/hello.gsc": "2" * 64}
+        receipt(base / "build", "project build", outputs={"packages/mod.ff": "x"}, inputs=ported,
                 readback={"scripts/zm/hello_zm.gsc": "on_player_spawned announce_round"})
         receipt(base / "verify", "project verify", started="2026-09-10T10:00:05+00:00")
         row = bench.score_task(task, self.run)
         self.assertTrue(row["checks"]["readback"], row)
+        self.assertTrue(row["checks"]["inputs"], row)
         receipt(base / "build", "project build", outputs={"packages/mod.ff": "x"},
                 readback={"scripts/zm/hello_zm.gsc": "on_player_spawned only"})
         row = bench.score_task(task, self.run)
