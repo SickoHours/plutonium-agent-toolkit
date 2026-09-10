@@ -66,6 +66,11 @@ def redactor(extra_paths=()):
         for variant in {raw, raw.replace("\\", "/"), raw.replace("\\", "\\\\")}:
             if variant:
                 patterns.append((re.compile(re.escape(variant), re.I), f"<{label}>"))
+    # Any qualification work directory, not only this run's: Tier 1's configure step stores the
+    # fake storage path in config.json, and Tier 2 reads it back through doctor.
+    temp = tempfile.gettempdir()
+    for variant in {temp, temp.replace("\\", "/"), temp.replace("\\", "\\\\")}:
+        patterns.append((re.compile(re.escape(variant) + r"[\\/]{1,2}pat-qualify-[^\\/\"\r\n\t]*", re.I), "<work>"))
     patterns.append((USERS_PATH, "<userprofile>"))
     patterns.append((HOME_PATH, "<userprofile>"))
     if profile:

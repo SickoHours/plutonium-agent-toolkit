@@ -209,6 +209,15 @@ class QualifyToolUnitTests(unittest.TestCase):
         self.assertEqual(redact("data" + home + "x"), "data" + home + "x")
         self.assertEqual(redact("/homer/x"), "/homer/x")
 
+    def test_redactor_covers_any_qualification_work_directory(self):
+        # The first native Linux Tier 2 receipt leaked Tier 1's work directory: configure had
+        # stored the fake storage path and doctor read it back under a different run.
+        redact = self.q.redactor()
+        temp = tempfile.gettempdir()
+        raw = os.path.join(temp, "pat-qualify-offline-abc123", "fake-storage", "t6")
+        self.assertEqual(redact(raw), os.path.join("<work>", "fake-storage", "t6"))
+        self.assertEqual(redact(os.path.join(temp, "unrelated", "x")), os.path.join(temp, "unrelated", "x").replace(str(Path.home()), "<userprofile>"))
+
     def test_environment_names_the_os_and_native_flags(self):
         info = self.q.environment()
         self.assertIn(info["platform_token"], ("windows", "linux", "darwin"))

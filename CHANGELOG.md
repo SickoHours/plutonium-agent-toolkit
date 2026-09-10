@@ -31,6 +31,14 @@ Every entry states what shipped, on which platform it was verified, and what rem
   untested, and checks that `docs/SUPPORT.md` names both verified hosts and links only receipts
   that exist.
 
+- **Native Arch Linux (Omarchy) receipts**: `docs/receipts/0.1.0b1/linux-tier1-offline.json` and
+  `linux-tier2-backends.json`, produced by `tools/qualify.py` on Omarchy 4.0.2 with Python 3.14.7.
+  Tier 2 downloaded and verified the four Linux pins plus Cast, built `examples/hello-zm` with the
+  real gsc-tool and OpenAssetTools (the `mod.ff` SHA-256 equals the Windows receipt's), and ran
+  `audio inspect|convert` on a generated tone and `model inspect|convert` on an OBJ cube through
+  real FFmpeg and Blender. `audio inspect`, `audio convert`, `model inspect` and `model convert`
+  move to `available`; their Windows native run is still owed.
+
 ### Changed
 
 - **Platform claims corrected.** The development tools are supported on Windows and Linux; the
