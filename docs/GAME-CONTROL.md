@@ -80,4 +80,6 @@ multiplayer, no other titles.
 | `game_not_found` with the game visibly open | The window title must be exactly `Plutonium T6 Zombies` (optionally with a build in parentheses). Check the agent runs as the same user without elevation. |
 | Cannot attach external console | The console must be the classic console host attached to the bootstrapper. See Microsoft's [AttachConsole](https://learn.microsoft.com/en-us/windows/console/attachconsole) notes. Do not change terminal defaults automatically. |
 | `busy: console is busy or contains typed text` | Someone typed in the console. Let them finish; the toolkit preserved their text. |
-| `check-load` reports `checked: false` for logs | The log was missing, rotated or grew past 128 KiB. State may still match; the log gate is simply unverified. |
+| `check-load` reports `checked: false` for logs | The log was missing, rotated or grew past 4 MiB. State may still match; the log gate is simply unverified. |
+| `check-load` reports `delivery_uncertain` right after `load-map` | The engine does not answer console queries while a map is loading. Let the load settle, then run the check once. Never replay a gameplay verb. |
+| Launch took focus | Expected on Windows 11 with Plutonium r5346: the external console comes to the front within a second and the game window at about 5 s. The toolkit reports it (`focus_preserved`) and never fights it; see issue #9 for an opt-in restore. |

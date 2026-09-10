@@ -7,9 +7,9 @@
     "platform": "Windows-11-10.0.26200-SP0",
     "machine": "AMD64",
     "native_windows": true,
-    "at": "2026-09-10T07:01:56+00:00",
+    "at": "2026-09-10T06:40:07+00:00",
     "windows_build": "10.0.26200",
-    "git_head": "b202a9edc66105f893c323bfe7ec01ff4bcdb3cf",
+    "git_head": "face6087d7c0c1a105fcdf4ccc974b2176b81277",
     "git_dirty": false,
     "pat_home_isolated": true
   },
@@ -75,39 +75,41 @@
       "json": {
         "schema_version": 1,
         "id": "<id>",
-        "created": 1789023685.1131995,
-        "action": "select-mod",
-        "argument": "base",
+        "created": 1789020942.0125494,
+        "action": "load-map",
+        "argument": "town",
         "process": {
           "pid": 28524,
           "created": 134334936745116763
         },
         "before": {
-          "fs_game": "mods/zm_gobblegums",
-          "mapname": "zm_transit",
+          "fs_game": "",
+          "mapname": "",
           "sv_running": "0",
           "sv_cheats": "0",
-          "g_gametype": "zstandard"
+          "g_gametype": "zclassic"
         },
         "expected": {
           "fs_game": "",
-          "sv_running": "0"
+          "sv_running": "1",
+          "mapname": "zm_transit",
+          "g_gametype": "zstandard"
         },
         "status": "engine-state-verified",
         "logs": {
           "zombies": {
-            "size": 1003805,
+            "size": 33325,
             "device": 9836587407776159154,
             "inode": 4785074604284910,
-            "anchor": "485d3ec610fe2edf8723f3d9545b92904f0d2d00a709586c7e5820b5842413a1"
+            "anchor": "8df3d2a58c83d27dfa2a7c28fd986ce1791eb2c73404dfe680c0c4bc1f9e7c89"
           }
         },
         "after": {
           "fs_game": "",
           "mapname": "zm_transit",
-          "sv_running": "0",
+          "sv_running": "1",
           "sv_cheats": "0",
-          "g_gametype": "zclassic"
+          "g_gametype": "zstandard"
         }
       },
       "expected": "fresh, successful state"
@@ -115,42 +117,26 @@
     {
       "name": "last-load-check.json",
       "passed": false,
-      "json": {
-        "load_id": "<id>",
-        "verified": false,
-        "state": {
-          "fs_game": "mods/zm_gobblegums",
-          "mapname": "zm_transit",
-          "sv_running": "0",
-          "sv_cheats": "0",
-          "g_gametype": "zstandard"
-        },
-        "state_matches": false,
-        "logs": {
-          "zombies": {
-            "checked": true,
-            "bytes": 163827,
-            "error_lines": 0
-          }
-        },
-        "original_status": "engine-state-verified",
-        "ready_for_handoff": false,
-        "visual_checkpoint": "Inspect the actual game image for the expected menu or playable spawn and for delayed errors"
-      },
       "expected": "fresh, successful state",
-      "stderr_head": "state file present but does not record success"
+      "stderr_head": "missing"
     },
     {
       "name": "last-result.json",
       "passed": true,
       "json": {
         "ok": true,
+        "state": {
+          "fs_game": "",
+          "mapname": "zm_transit",
+          "sv_running": "0",
+          "sv_cheats": "0",
+          "g_gametype": "zstandard"
+        },
         "process": {
           "pid": 28524,
           "created": 134334936745116763
         },
-        "stopped": true,
-        "method": "engine quit",
+        "engine_queried": true,
         "request_id": "<id>"
       },
       "expected": "fresh, successful state"
@@ -168,10 +154,7 @@
     {
       "tier3_began_unix": 1789019689.7037735
     },
-    "Tier 3 commands were run by hand with per-command human authorization. Only state files written after the begin marker count, and each must record success. The human observations are required for level `game`; automated state alone is not a playable spawn.",
-    {
-      "superseded": "tier3-game.superseded-20260910T070156Z.json"
-    }
+    "Tier 3 commands were run by hand with per-command human authorization. Only state files written after the begin marker count, and each must record success. The human observations are required for level `game`; automated state alone is not a playable spawn."
   ],
   "human_observations": {
     "launcher_prompt_shown": null,
@@ -181,7 +164,7 @@
     "hello_zm_line_visible_after_spawn": null,
     "quit_exited_cleanly": null,
     "plutonium_build": null,
-    "notes": "Sequence run with per-command human authorization on r5346: launch (no launcher prompt; focus not preserved, console then game window took focus ~5s after the request), status, info, load-map town (engine reported sv_running 1 then the match returned to the main menu), check-load (delivery_uncertain while still loading; a later check on a second load read the log gate cleanly at 160 KB with 0 error lines but state_matches false), select-mod zm_gobblegums (verified fs_game change), load-map town under the mod (same return to menu), select-mod base (verified), quit (stopped via engine quit, window gone). Human observation: Town started from the Plutonium menu by hand is a playable spawn; the toolkit's load-map never produced one because it does not run the survival gametype config the menu execs (zm/gamesettings_zstandard.cfg). hello-zm was not installed or seen. No game route qualifies at level game. Remote control through the external console is demonstrated for loadmod, map, disconnect and quit."
+    "notes": "Manual menu start of Town produced a playable spawn (user-confirmed). The toolkit load-map town did NOT: it set the ui/g_gametype dvars and sent 'map zm_transit' but never ran the survival gametype config the menu execs (zm/gamesettings_zstandard.cfg), so every zombies weapon and common_zm failed to load and the engine returned to the main menu. check-load returned delivery_uncertain (engine query timed out while the map was still loading). launch: no launcher prompt shown, game window took focus about 5s after the request. No game route qualifies at level game. The load-map fix (running the gametype settings config before map) needs the survival config exec and likely a revised readiness check, and it extends what commands the toolkit may send, so it is a maintainer design decision."
   },
   "passed": false,
   "summary": {

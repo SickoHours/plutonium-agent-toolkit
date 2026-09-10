@@ -4,8 +4,11 @@
 You describe the result. Your coding agent installs the tools, builds the mod, loads the game,
 records the test and shows you the evidence.
 
-> **Status: public pre-alpha.** Contracts and the Windows foundation are committed. No route has
-> passed native Windows qualification yet. The repository is public so contributors can follow
+> **Status: public pre-alpha.** Contracts and the Windows foundation are committed. The first native
+> Windows run passed Tiers 1 and 2: discovery, `configure`, `doctor`, `dev setup` (gsc, oat), `gsc compile`,
+> `ff inspect|extract` and `project plan|build|verify` have native receipts. The `game` routes talk to a
+> running client natively but `load-map` does not yet start a survival match (issue #8), so none has
+> earned level `game`. The repository is public so contributors can follow
 > along from the first commit; do not mistake visibility for readiness. Read [docs/SUPPORT.md](docs/SUPPORT.md) before trusting
 > any capability claim, and [CHANGELOG.md](CHANGELOG.md) for what each version actually ships.
 

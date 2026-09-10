@@ -120,8 +120,9 @@ Every entry states what shipped, on which platform it was verified, and what rem
   (3/5 collector checks): `game launch` started T6 Zombies through the `plutonium://play/t6zm`
   handler with no launcher prompt (`focus_preserved` false, ~5 s); `game status` and `game info`
   attached to the live external console and returned correct window and dvar state. `load-map town`
-  set the dvars and sent `map` but did not start a survival match, so `check-load` could not verify
-  and no mod steps ran. No `game` route earned level `game`; all stay `offline`.
+  set the dvars and sent `map` but did not start a survival match, so `check-load` could not verify.
+  `select-mod zm_gobblegums`, `select-mod base` (verified `fs_game` changes) and `quit` (stopped through
+  the engine) ran natively. No `game` route earned level `game`; all stay `offline`.
 
 ### Not verified
 
@@ -131,7 +132,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
   started from the menu by hand). The fix runs that config before `map` and revises the readiness
   check, and it widens what commands the toolkit may send, so it is a maintainer design decision, not
   applied here. `select-mod`, `reload-mod`, restarts, `disconnect`, `quit` and `install-mod` in game
-  were not exercised because the base load never became playable.
+  were not exercised because the base load never became playable. Tracked as issues #8 (`load-map`
+  survival config) and #9 (opt-in focus restore after launch).
 - `gsc decompile`, `project init` and the standalone `ff link` route did not run natively and stay
   `implemented`. The seven other pinned backends were not downloaded.
 
