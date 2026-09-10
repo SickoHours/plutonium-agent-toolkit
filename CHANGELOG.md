@@ -49,6 +49,30 @@ Every entry states what shipped, on which platform it was verified, and what rem
   secret scanning and private vulnerability reporting. Readiness is unchanged: see docs/SUPPORT.md.
 - CI uses actions/checkout v7, setup-python v7 and upload-artifact v7 (Node 24 runtime).
 
+### Fixed
+
+- Findings of the first native Windows run (Windows 11 25H2 build 26200, Python 3.12.0), Tier 1 of
+  `docs/WINDOWS-QUALIFICATION.md`:
+  - The documented `PAT_HOME` at `<repo>/.qualify-home` was not ignored by git, so `configure` put
+    the user's absolute storage path where `tools/private_scan.py` lists untracked files and the
+    Tier 1 private scan failed. `.gitignore` ignores it; `tests/test_release_tools.py` checks that
+    the documented location stays ignored.
+  - `src/plutonium_agent_toolkit.egg-info/` was tracked, so `pip install -e .` dirtied the tree and
+    every receipt recorded `git_dirty: true`. Untracked and ignored, with a test that refuses
+    tracked egg-info.
+  - Windows job runner: a backend tree terminated through the Job Object (timeout, output bound,
+    cancellation) kept its inherited handle to the step log for up to a scheduler tick after
+    `process.wait()` returned, so deleting the job directory immediately failed with
+    `ERROR_SHARING_VIOLATION` about one time in ten and made `test_finish_rechecks_output_bound`
+    flaky. `_run_windows` now waits, bounded, for the log to be released after closing its own
+    handle and records `log_still_open` on the step if it is not. `tests/test_jobs_windows.py`
+    (native Windows only) covers the wait and the timeout path.
+  - `tools/qualify_windows.py` overwrote an earlier receipt on rerun. It now moves the previous
+    file to `<name>.superseded-<utc stamp>.json` and notes it, so a failed attempt survives the fix
+    as `docs/contributors/RECORDING-A-RECEIPT.md` requires.
+  - The tier commands said `--output docs/receipts/qualify`, contradicting `docs/receipts/README.md`
+    and this changelog; they say `--output docs/receipts` now.
+
 ## [0.1.0a1] - 2026-09-09
 
 First private foundation commit. Nothing in this version has run on a native Windows host.

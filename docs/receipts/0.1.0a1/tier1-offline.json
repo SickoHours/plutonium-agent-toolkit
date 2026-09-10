@@ -1,0 +1,1553 @@
+{
+  "schema_version": 1,
+  "tier": "offline",
+  "environment": {
+    "toolkit_version": "0.1.0a1",
+    "python": "3.12.0",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "machine": "AMD64",
+    "native_windows": true,
+    "at": "2026-09-10T05:08:20+00:00",
+    "windows_build": "10.0.26200",
+    "git_head": "642e326c6aaf97633d2060adf870ebedab91478f",
+    "git_dirty": true,
+    "pat_home_isolated": true
+  },
+  "steps": [
+    {
+      "name": "unit tests",
+      "argv": [
+        "python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests"
+      ],
+      "exit_code": 1,
+      "passed": false,
+      "stderr_head": "rs\\\\<user>\\\\AppData\\\\Local\\\\Temp\\\\tmpodqjtrlx\\\\job-001\\\\step-01.log'\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"<userprofile>\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\tempfile.py\", line 923, in cleanup\n    self._rmtree(self.name, ignore_errors=self._ignore_cleanup_errors)\n  File \"<userprofile>\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\tempfile.py\", line 903, in _rmtree\n    _shutil.rmtree(name, onexc=onexc)\n  File \"<userprofile>\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\shutil.py\", line 796, in rmtree\n    return _rmtree_unsafe(path, onexc)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<userprofile>\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\shutil.py\", line 631, in _rmtree_unsafe\n    _rmtree_unsafe(fullname, onexc)\n  File \"<userprofile>\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\shutil.py\", line 636, in _rmtree_unsafe\n    onexc(os.unlink, fullname, err)\n  File \"<userprofile>\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\tempfile.py\", line 894, in onexc\n    cls._rmtree(path, ignore_errors=ignore_errors)\n  File \"<userprofile>\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\tempfile.py\", line 903, in _rmtree\n    _shutil.rmtree(name, onexc=onexc)\n  File \"<userprofile>\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\shutil.py\", line 796, in rmtree\n    return _rmtree_unsafe(path, onexc)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<userprofile>\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\shutil.py\", line 612, in _rmtree_unsafe\n    onexc(os.scandir, path, err)\n  File \"<userprofile>\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\shutil.py\", line 609, in _rmtree_unsafe\n    with os.scandir(path) as scandir_it:\n         ^^^^^^^^^^^^^^^^\nNotADirectoryError: [WinError 267] The directory name is invalid: '<userprofile>\\\\AppData\\\\Local\\\\Temp\\\\tmpodqjtrlx\\\\job-001\\\\step-01.log'\n\n----------------------------------------------------------------------\nRan 125 tests in 16.600s\n\nFAILED (errors=1, skipped=7)\n",
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "version",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.391,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0a1",
+        "command": "version",
+        "request_id": "<id>",
+        "at": "2026-09-10T05:08:37+00:00",
+        "result": {
+          "version": "0.1.0a1",
+          "platform": {
+            "system": "Windows",
+            "release": "11",
+            "machine": "AMD64",
+            "python": "3.12.0",
+            "native_windows": true,
+            "compatibility_layer": null,
+            "supported": true
+          }
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "version",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "manifest",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.406,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0a1",
+        "command": "manifest",
+        "request_id": "<id>",
+        "at": "2026-09-10T05:08:38+00:00",
+        "result": {
+          "platform": {
+            "system": "Windows",
+            "release": "11",
+            "machine": "AMD64",
+            "python": "3.12.0",
+            "native_windows": true,
+            "compatibility_layer": null,
+            "supported": true
+          },
+          "effects": [
+            "inert",
+            "writes-config",
+            "downloads-backends",
+            "writes-output",
+            "query-engine",
+            "changes-game",
+            "captures-display"
+          ],
+          "statuses": [
+            "available",
+            "implemented",
+            "planned",
+            "deferred",
+            "unsupported"
+          ],
+          "routes": [
+            {
+              "group": "audio",
+              "action": "convert",
+              "summary": "Convert and verify audio streams with FFmpeg",
+              "effect": "writes-output",
+              "status": "implemented",
+              "owner": "thread-1-development",
+              "requires_config": [],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "audio.convert",
+              "argv": [
+                "pat",
+                "audio",
+                "convert"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "audio",
+              "action": "inspect",
+              "summary": "Probe format, streams and duration with ffprobe",
+              "effect": "writes-output",
+              "status": "implemented",
+              "owner": "thread-1-development",
+              "requires_config": [],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "audio.inspect",
+              "argv": [
+                "pat",
+                "audio",
+                "inspect"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "capture",
+              "action": "mark",
+              "summary": "Protect recent footage and record a labelled marker with a screenshot attempt",
+              "effect": "captures-display",
+              "status": "deferred",
+              "owner": "thread-2-testing",
+              "requires_config": [],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "capture.mark",
+              "argv": [
+                "pat",
+                "capture",
+                "mark"
+              ],
+              "available_here": false,
+              "availability_reason": "deferred"
+            },
+            {
+              "group": "capture",
+              "action": "save-clip",
+              "summary": "Copy the last N seconds into a standalone clip without re-encoding",
+              "effect": "writes-output",
+              "status": "deferred",
+              "owner": "thread-2-testing",
+              "requires_config": [],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "capture.save-clip",
+              "argv": [
+                "pat",
+                "capture",
+                "save-clip"
+              ],
+              "available_here": false,
+              "availability_reason": "deferred"
+            },
+            {
+              "group": "capture",
+              "action": "screenshot",
+              "summary": "Save one fresh frame of the game window without focusing it",
+              "effect": "captures-display",
+              "status": "deferred",
+              "owner": "thread-2-testing",
+              "requires_config": [],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "capture.screenshot",
+              "argv": [
+                "pat",
+                "capture",
+                "screenshot"
+              ],
+              "available_here": false,
+              "availability_reason": "deferred"
+            },
+            {
+              "group": "capture",
+              "action": "start",
+              "summary": "Begin recording the T6 window with game-only audio into a new evidence directory",
+              "effect": "captures-display",
+              "status": "deferred",
+              "owner": "thread-2-testing",
+              "requires_config": [],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "capture.start",
+              "argv": [
+                "pat",
+                "capture",
+                "start"
+              ],
+              "available_here": false,
+              "availability_reason": "deferred"
+            },
+            {
+              "group": "capture",
+              "action": "status",
+              "summary": "Report recorder health, elapsed time, storage reserve and last fresh frame time",
+              "effect": "inert",
+              "status": "deferred",
+              "owner": "thread-2-testing",
+              "requires_config": [],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "capture.status",
+              "argv": [
+                "pat",
+                "capture",
+                "status"
+              ],
+              "available_here": false,
+              "availability_reason": "deferred"
+            },
+            {
+              "group": "capture",
+              "action": "stop",
+              "summary": "Stop and finalize the recording; probe the file and decode one frame",
+              "effect": "captures-display",
+              "status": "deferred",
+              "owner": "thread-2-testing",
+              "requires_config": [],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "capture.stop",
+              "argv": [
+                "pat",
+                "capture",
+                "stop"
+              ],
+              "available_here": false,
+              "availability_reason": "deferred"
+            },
+            {
+              "group": "dev",
+              "action": "backends",
+              "summary": "List pinned backend programs, licenses and whether each is installed",
+              "effect": "inert",
+              "status": "available",
+              "owner": "core",
+              "requires_config": [],
+              "requires_windows": false,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "dev.backends",
+              "argv": [
+                "pat",
+                "dev",
+                "backends"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "dev",
+              "action": "setup",
+              "summary": "Download pinned backends over HTTPS, verify SHA-256 and extract into the backends directory",
+              "effect": "downloads-backends",
+              "status": "available",
+              "owner": "core",
+              "requires_config": [],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "Use --plan to list without downloading; --only to select IDs. Runs no vendor installer.",
+              "id": "dev.setup",
+              "argv": [
+                "pat",
+                "dev",
+                "setup"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "ff",
+              "action": "extract",
+              "summary": "Extract selected assets from a fastfile",
+              "effect": "writes-output",
+              "status": "implemented",
+              "owner": "thread-1-development",
+              "requires_config": [],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "ff.extract",
+              "argv": [
+                "pat",
+                "ff",
+                "extract"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "ff",
+              "action": "inspect",
+              "summary": "List a fastfile's assets with OpenAssetTools Unlinker",
+              "effect": "writes-output",
+              "status": "implemented",
+              "owner": "thread-1-development",
+              "requires_config": [],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "ff.inspect",
+              "argv": [
+                "pat",
+                "ff",
+                "inspect"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "ff",
+              "action": "link",
+              "summary": "Link a mod fastfile from a zone source with OpenAssetTools Linker",
+              "effect": "writes-output",
+              "status": "implemented",
+              "owner": "thread-1-development",
+              "requires_config": [],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "ff.link",
+              "argv": [
+                "pat",
+                "ff",
+                "link"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "game",
+              "action": "check-load",
+              "summary": "Check a load ID against original process identity, fresh state and bounded new log lines",
+              "effect": "query-engine",
+              "status": "implemented",
+              "owner": "thread-2-game-control",
+              "requires_config": [
+                "plutonium_storage_t6"
+              ],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "Argument: the load_id from the original response; valid for ten minutes.",
+              "id": "game.check-load",
+              "argv": [
+                "pat",
+                "game",
+                "check-load"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "game",
+              "action": "disconnect",
+              "summary": "Leave the current match once",
+              "effect": "changes-game",
+              "status": "implemented",
+              "owner": "thread-2-game-control",
+              "requires_config": [
+                "plutonium_storage_t6"
+              ],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "game.disconnect",
+              "argv": [
+                "pat",
+                "game",
+                "disconnect"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "game",
+              "action": "fast-restart",
+              "summary": "Send fast_restart once in a running local match",
+              "effect": "changes-game",
+              "status": "implemented",
+              "owner": "thread-2-game-control",
+              "requires_config": [
+                "plutonium_storage_t6"
+              ],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "game.fast-restart",
+              "argv": [
+                "pat",
+                "game",
+                "fast-restart"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "game",
+              "action": "info",
+              "summary": "Read fresh map, mod, local-server and cheat state through the external console",
+              "effect": "query-engine",
+              "status": "implemented",
+              "owner": "thread-2-game-control",
+              "requires_config": [
+                "plutonium_storage_t6"
+              ],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "game.info",
+              "argv": [
+                "pat",
+                "game",
+                "info"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "game",
+              "action": "install-mod",
+              "summary": "Copy a built mod.ff into storage/t6/mods/<folder>; file-only, never overwrites silently",
+              "effect": "writes-output",
+              "status": "implemented",
+              "owner": "thread-2-game-control",
+              "requires_config": [
+                "plutonium_storage_t6"
+              ],
+              "requires_windows": false,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "Arguments: <path to mod.ff> <folder-id> [--replace]. Loading it is a separate select-mod.",
+              "id": "game.install-mod",
+              "argv": [
+                "pat",
+                "game",
+                "install-mod"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "game",
+              "action": "launch",
+              "summary": "Start T6 Zombies through the registered plutonium://play/t6zm handler and log foreground changes",
+              "effect": "changes-game",
+              "status": "implemented",
+              "owner": "thread-2-game-control",
+              "requires_config": [
+                "plutonium_launcher"
+              ],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "Reports launch_requested, game_detected and focus_preserved separately. Never answers launcher prompts.",
+              "id": "game.launch",
+              "argv": [
+                "pat",
+                "game",
+                "launch"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "game",
+              "action": "load-map",
+              "summary": "Verify map settings, then load a catalogued map once; keeps the selected mod",
+              "effect": "changes-game",
+              "status": "implemented",
+              "owner": "thread-2-game-control",
+              "requires_config": [
+                "plutonium_storage_t6"
+              ],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "Argument: a map ID from maps.json. DLC5 maps require a selected mod that ships zone/<map>.ff.",
+              "id": "game.load-map",
+              "argv": [
+                "pat",
+                "game",
+                "load-map"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "game",
+              "action": "map-restart",
+              "summary": "Send map_restart once in a running local match",
+              "effect": "changes-game",
+              "status": "implemented",
+              "owner": "thread-2-game-control",
+              "requires_config": [
+                "plutonium_storage_t6"
+              ],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "game.map-restart",
+              "argv": [
+                "pat",
+                "game",
+                "map-restart"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "game",
+              "action": "mods",
+              "summary": "List installed mod folders from storage; disk inventory only",
+              "effect": "inert",
+              "status": "implemented",
+              "owner": "thread-2-game-control",
+              "requires_config": [
+                "plutonium_storage_t6"
+              ],
+              "requires_windows": false,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "game.mods",
+              "argv": [
+                "pat",
+                "game",
+                "mods"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "game",
+              "action": "quit",
+              "summary": "Ask the engine to quit once and wait up to 20 s; never force-kills",
+              "effect": "changes-game",
+              "status": "implemented",
+              "owner": "thread-2-game-control",
+              "requires_config": [],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "game.quit",
+              "argv": [
+                "pat",
+                "game",
+                "quit"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "game",
+              "action": "reload-mod",
+              "summary": "Leave the match, unload and reload the currently selected mod",
+              "effect": "changes-game",
+              "status": "implemented",
+              "owner": "thread-2-game-control",
+              "requires_config": [
+                "plutonium_storage_t6"
+              ],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "game.reload-mod",
+              "argv": [
+                "pat",
+                "game",
+                "reload-mod"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "game",
+              "action": "select-mod",
+              "summary": "Select an installed mod folder (or 'base'); leaves the match, unloads, then loads",
+              "effect": "changes-game",
+              "status": "implemented",
+              "owner": "thread-2-game-control",
+              "requires_config": [
+                "plutonium_storage_t6"
+              ],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "Argument: <folder-id> from `game mods`, or base.",
+              "id": "game.select-mod",
+              "argv": [
+                "pat",
+                "game",
+                "select-mod"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "game",
+              "action": "status",
+              "summary": "List visible T6 Zombies windows and the foreground window; no engine input",
+              "effect": "inert",
+              "status": "implemented",
+              "owner": "thread-2-game-control",
+              "requires_config": [],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "game.status",
+              "argv": [
+                "pat",
+                "game",
+                "status"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "gsc",
+              "action": "compile",
+              "summary": "Compile a T6 GSC/CSC script with gsc-tool into a new output directory",
+              "effect": "writes-output",
+              "status": "implemented",
+              "owner": "thread-1-development",
+              "requires_config": [],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "gsc.compile",
+              "argv": [
+                "pat",
+                "gsc",
+                "compile"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "gsc",
+              "action": "decompile",
+              "summary": "Decompile a compiled script with gsc-tool",
+              "effect": "writes-output",
+              "status": "implemented",
+              "owner": "thread-1-development",
+              "requires_config": [],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "gsc.decompile",
+              "argv": [
+                "pat",
+                "gsc",
+                "decompile"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "image",
+              "action": "convert",
+              "summary": "Convert DDS/IWI textures with OpenAssetTools ImageConverter",
+              "effect": "writes-output",
+              "status": "implemented",
+              "owner": "thread-1-development",
+              "requires_config": [],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "image.convert",
+              "argv": [
+                "pat",
+                "image",
+                "convert"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "lua",
+              "action": "decompile",
+              "summary": "Decompile LUI bytecode with CoDLuaDecompiler",
+              "effect": "writes-output",
+              "status": "implemented",
+              "owner": "thread-1-development",
+              "requires_config": [],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "lua.decompile",
+              "argv": [
+                "pat",
+                "lua",
+                "decompile"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "model",
+              "action": "convert",
+              "summary": "Convert a model/rig/animation through Blender and the Cast add-on",
+              "effect": "writes-output",
+              "status": "implemented",
+              "owner": "thread-1-development",
+              "requires_config": [],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "model.convert",
+              "argv": [
+                "pat",
+                "model",
+                "convert"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "model",
+              "action": "inspect",
+              "summary": "Report bones, meshes, materials and animation ranges",
+              "effect": "writes-output",
+              "status": "implemented",
+              "owner": "thread-1-development",
+              "requires_config": [],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "model.inspect",
+              "argv": [
+                "pat",
+                "model",
+                "inspect"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "model",
+              "action": "preview",
+              "summary": "Render a 640px studio-lit PNG of the mesh",
+              "effect": "writes-output",
+              "status": "implemented",
+              "owner": "thread-1-development",
+              "requires_config": [],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "model.preview",
+              "argv": [
+                "pat",
+                "model",
+                "preview"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "model",
+              "action": "rename-bones",
+              "summary": "Rename bones from a JSON mapping without .001 collisions, then export",
+              "effect": "writes-output",
+              "status": "implemented",
+              "owner": "thread-1-development",
+              "requires_config": [],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "model.rename-bones",
+              "argv": [
+                "pat",
+                "model",
+                "rename-bones"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "model",
+              "action": "retime",
+              "summary": "Rescale keyframes to a new FPS, then export",
+              "effect": "writes-output",
+              "status": "implemented",
+              "owner": "thread-1-development",
+              "requires_config": [],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "model.retime",
+              "argv": [
+                "pat",
+                "model",
+                "retime"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "model",
+              "action": "transform",
+              "summary": "Scale and rotate root objects, then export",
+              "effect": "writes-output",
+              "status": "implemented",
+              "owner": "thread-1-development",
+              "requires_config": [],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "model.transform",
+              "argv": [
+                "pat",
+                "model",
+                "transform"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "project",
+              "action": "build",
+              "summary": "Compile, link, read back and compare a recipe into a new job directory",
+              "effect": "writes-output",
+              "status": "implemented",
+              "owner": "thread-1-development",
+              "requires_config": [],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "project.build",
+              "argv": [
+                "pat",
+                "project",
+                "build"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "project",
+              "action": "init",
+              "summary": "Create a minimal T6 Zombies mod project and build recipe",
+              "effect": "writes-output",
+              "status": "implemented",
+              "owner": "thread-1-development",
+              "requires_config": [],
+              "requires_windows": false,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "project.init",
+              "argv": [
+                "pat",
+                "project",
+                "init"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "project",
+              "action": "plan",
+              "summary": "Validate a recipe and hash its declared inputs without running backends",
+              "effect": "writes-output",
+              "status": "implemented",
+              "owner": "thread-1-development",
+              "requires_config": [],
+              "requires_windows": false,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "project.plan",
+              "argv": [
+                "pat",
+                "project",
+                "plan"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "project",
+              "action": "verify",
+              "summary": "Re-hash a receipt's outputs and optionally its inputs",
+              "effect": "writes-output",
+              "status": "implemented",
+              "owner": "thread-1-development",
+              "requires_config": [],
+              "requires_windows": false,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "project.verify",
+              "argv": [
+                "pat",
+                "project",
+                "verify"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "test",
+              "action": "cancel",
+              "summary": "Stop automated play and hand the game to the human; recording may continue",
+              "effect": "changes-game",
+              "status": "deferred",
+              "owner": "thread-2-testing",
+              "requires_config": [],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "test.cancel",
+              "argv": [
+                "pat",
+                "test",
+                "cancel"
+              ],
+              "available_here": false,
+              "availability_reason": "deferred"
+            },
+            {
+              "group": "test",
+              "action": "plan",
+              "summary": "Validate a test plan offline: package hashes, map recipe, capture profile and limits",
+              "effect": "inert",
+              "status": "deferred",
+              "owner": "thread-2-testing",
+              "requires_config": [],
+              "requires_windows": false,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "test.plan",
+              "argv": [
+                "pat",
+                "test",
+                "plan"
+              ],
+              "available_here": false,
+              "availability_reason": "deferred"
+            },
+            {
+              "group": "test",
+              "action": "report",
+              "summary": "Write the run's sanitized JSON report with verdict, evidence and remaining gates",
+              "effect": "writes-output",
+              "status": "deferred",
+              "owner": "thread-2-testing",
+              "requires_config": [],
+              "requires_windows": false,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "test.report",
+              "argv": [
+                "pat",
+                "test",
+                "report"
+              ],
+              "available_here": false,
+              "availability_reason": "deferred"
+            },
+            {
+              "group": "test",
+              "action": "start",
+              "summary": "Admit one finite plan, arm capture, launch or load and run the recipe",
+              "effect": "changes-game",
+              "status": "deferred",
+              "owner": "thread-2-testing",
+              "requires_config": [],
+              "requires_windows": true,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "test.start",
+              "argv": [
+                "pat",
+                "test",
+                "start"
+              ],
+              "available_here": false,
+              "availability_reason": "deferred"
+            },
+            {
+              "group": "test",
+              "action": "status",
+              "summary": "Read saved run state, artifacts and recent events; not a fresh engine query",
+              "effect": "inert",
+              "status": "deferred",
+              "owner": "thread-2-testing",
+              "requires_config": [],
+              "requires_windows": false,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "test.status",
+              "argv": [
+                "pat",
+                "test",
+                "status"
+              ],
+              "available_here": false,
+              "availability_reason": "deferred"
+            },
+            {
+              "group": "weapon",
+              "action": "catalog",
+              "summary": "Inventory a saved BO3 weapon asset library with provenance",
+              "effect": "writes-output",
+              "status": "implemented",
+              "owner": "thread-1-development",
+              "requires_config": [],
+              "requires_windows": false,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "weapon.catalog",
+              "argv": [
+                "pat",
+                "weapon",
+                "catalog"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            },
+            {
+              "group": "weapon",
+              "action": "plan",
+              "summary": "Validate a normal/PAP weapon recipe against a catalog",
+              "effect": "writes-output",
+              "status": "implemented",
+              "owner": "thread-1-development",
+              "requires_config": [],
+              "requires_windows": false,
+              "evidence": "Keep this invocation's stdout JSON and exit status.",
+              "notes": "",
+              "id": "weapon.plan",
+              "argv": [
+                "pat",
+                "weapon",
+                "plan"
+              ],
+              "available_here": true,
+              "availability_reason": ""
+            }
+          ],
+          "counts": {
+            "available": 2,
+            "implemented": 34,
+            "planned": 0,
+            "deferred": 11,
+            "unsupported": 0
+          }
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "manifest",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "describe",
+        "game",
+        "load-map",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.187,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0a1",
+        "command": "describe",
+        "request_id": "<id>",
+        "at": "2026-09-10T05:08:38+00:00",
+        "result": {
+          "group": "game",
+          "action": "load-map",
+          "summary": "Verify map settings, then load a catalogued map once; keeps the selected mod",
+          "effect": "changes-game",
+          "status": "implemented",
+          "owner": "thread-2-game-control",
+          "requires_config": [
+            "plutonium_storage_t6"
+          ],
+          "requires_windows": true,
+          "evidence": "Keep this invocation's stdout JSON and exit status.",
+          "notes": "Argument: a map ID from maps.json. DLC5 maps require a selected mod that ships zone/<map>.ff.",
+          "id": "game.load-map",
+          "argv": [
+            "pat",
+            "game",
+            "load-map"
+          ]
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "describe game load-map",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "doctor",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.344,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0a1",
+        "command": "doctor",
+        "request_id": "<id>",
+        "at": "2026-09-10T05:08:38+00:00",
+        "result": {
+          "platform": {
+            "system": "Windows",
+            "release": "11",
+            "machine": "AMD64",
+            "python": "3.12.0",
+            "native_windows": true,
+            "compatibility_layer": null,
+            "supported": true
+          },
+          "configuration": {
+            "home": "<pat-home>",
+            "config": {
+              "backends_dir": "<pat-home>\\backends",
+              "evidence_dir": "<pat-home>\\evidence"
+            },
+            "ok": true
+          },
+          "backends": {
+            "ok": false,
+            "backends_dir": "<pat-home>\\backends",
+            "backends": [
+              {
+                "id": "oat",
+                "name": "OpenAssetTools 0.33.0",
+                "optional": false,
+                "present": false,
+                "path": "<pat-home>\\backends\\oat",
+                "pinned": true
+              },
+              {
+                "id": "gsc",
+                "name": "gsc-tool 1.4.10",
+                "optional": false,
+                "present": false,
+                "path": "<pat-home>\\backends\\gsc",
+                "pinned": true
+              },
+              {
+                "id": "lua",
+                "name": "CoDLuaDecompiler 2.4.2",
+                "optional": true,
+                "present": false,
+                "path": "<pat-home>\\backends\\lua",
+                "pinned": true
+              },
+              {
+                "id": "ffmpeg",
+                "name": "FFmpeg 9.0 (BtbN gpl-shared build)",
+                "optional": true,
+                "present": false,
+                "path": "<pat-home>\\backends\\ffmpeg",
+                "pinned": true
+              },
+              {
+                "id": "blender",
+                "name": "Blender 5.2.1",
+                "optional": true,
+                "present": false,
+                "path": "<pat-home>\\backends\\blender",
+                "pinned": true
+              },
+              {
+                "id": "cast",
+                "name": "Cast Blender add-on 2.00",
+                "optional": true,
+                "present": false,
+                "path": "<pat-home>\\backends\\cast",
+                "pinned": true
+              },
+              {
+                "id": "greyhound",
+                "name": "Greyhound 1.46.3.2",
+                "optional": true,
+                "present": false,
+                "path": "<pat-home>\\backends\\greyhound",
+                "pinned": true
+              },
+              {
+                "id": "husky",
+                "name": "Husky 0.8.0.0",
+                "optional": true,
+                "present": false,
+                "path": "<pat-home>\\backends\\husky",
+                "pinned": true
+              },
+              {
+                "id": "c2m",
+                "name": "C2Mv3 3.0.5",
+                "optional": true,
+                "present": false,
+                "path": "<pat-home>\\backends\\c2m",
+                "pinned": true
+              }
+            ],
+            "verification": "filesystem presence only; execution and gameplay are separate facts"
+          },
+          "ok": false,
+          "verification": "Presence and configuration only. Native Windows execution, game control and capture are separate facts."
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "doctor before configure",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "configure",
+        "--plutonium-storage-t6",
+        "<work>\\fake-storage\\t6",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.172,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0a1",
+        "command": "configure",
+        "request_id": "<id>",
+        "at": "2026-09-10T05:08:38+00:00",
+        "result": {
+          "path": "<pat-home>\\config.json",
+          "saved": [
+            "plutonium_storage_t6"
+          ]
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "configure fake storage",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "game",
+        "mods",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.187,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0a1",
+        "command": "game mods",
+        "request_id": "<id>",
+        "at": "2026-09-10T05:08:38+00:00",
+        "result": {
+          "storage": "<work>\\fake-storage\\t6",
+          "mods": [],
+          "game_queried": false
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "game mods on empty storage",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "dev",
+        "setup",
+        "--plan",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.157,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0a1",
+        "command": "dev setup",
+        "request_id": "<id>",
+        "at": "2026-09-10T05:08:39+00:00",
+        "result": {
+          "plan": true,
+          "destination": "<pat-home>\\backends",
+          "programs": [
+            {
+              "id": "oat",
+              "name": "OpenAssetTools 0.33.0",
+              "license": "GPL-3.0",
+              "url": "https://github.com/Laupetin/OpenAssetTools/releases/download/v0.33.0/oat-windows.zip",
+              "bytes": 3636251,
+              "sha256": "4bf366cec03558a4b0f20bc8f197a51f4b9dad0aa3edc52b0e40fef2dd95a4f5",
+              "strip_root": false,
+              "optional": false,
+              "provides": [
+                "Linker.exe",
+                "Unlinker.exe",
+                "ImageConverter.exe"
+              ]
+            },
+            {
+              "id": "gsc",
+              "name": "gsc-tool 1.4.10",
+              "license": "GPL-3.0",
+              "url": "https://github.com/xensik/gsc-tool/releases/download/1.4.10/windows-x64-release.zip",
+              "bytes": 6622894,
+              "sha256": "ef7d7c86e2356f3e4d2b75b53d28dabb4df8b2a804cf3f6be179273f0fcada20",
+              "strip_root": false,
+              "optional": false,
+              "provides": [
+                "gsc-tool.exe"
+              ]
+            }
+          ],
+          "executes_installers": false
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "dev setup --plan",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "project",
+        "plan",
+        "<repo>\\examples\\hello-zm\\project.json",
+        "--output",
+        "<work>\\plan-hello",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.218,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0a1",
+        "command": "project plan",
+        "request_id": "<id>",
+        "at": "2026-09-10T05:08:39+00:00",
+        "result": {
+          "job_id": "<id>",
+          "output": "<work>\\plan-hello",
+          "receipt": "<work>\\plan-hello\\receipt.json",
+          "artifact_count": 1,
+          "plan": "plan.json",
+          "name": "hello_zm",
+          "backends": [
+            {
+              "id": "gsc",
+              "available": false,
+              "message": "Backend gsc is not installed at <pat-home>\\backends\\gsc\\gsc-tool.exe"
+            },
+            {
+              "id": "linker",
+              "available": false,
+              "message": "Backend linker is not installed at <pat-home>\\backends\\oat\\Linker.exe"
+            },
+            {
+              "id": "unlinker",
+              "available": false,
+              "message": "Backend unlinker is not installed at <pat-home>\\backends\\oat\\Unlinker.exe"
+            }
+          ],
+          "backends_available": false,
+          "input_files": 2,
+          "verification": "recipe and declared inputs validated and hashed; backend presence checked; nothing compiled",
+          "scripts": 1,
+          "assets": 0,
+          "loads": 0
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "project plan hello-zm",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "project",
+        "plan",
+        "<repo>\\examples\\hello-zm\\project.json",
+        "--output",
+        "<work>\\plan-hello",
+        "--json"
+      ],
+      "exit_code": 1,
+      "elapsed_seconds": 0.172,
+      "json": {
+        "ok": false,
+        "error_code": "output_exists",
+        "message": "Output path already exists (file, directory or link): <work>\\plan-hello",
+        "hint": "Choose a new directory for every job; the toolkit never overwrites results.",
+        "schema_version": 1,
+        "toolkit_version": "0.1.0a1",
+        "command": "project plan",
+        "request_id": "<id>",
+        "at": "2026-09-10T05:08:39+00:00"
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "output_exists refusal",
+      "passed": true,
+      "expected": "structured failure"
+    },
+    {
+      "argv": [
+        "capture",
+        "start"
+      ],
+      "exit_code": 1,
+      "elapsed_seconds": 0.172,
+      "json": {
+        "ok": false,
+        "error_code": "not_implemented",
+        "message": "Route capture.start is deferred in 0.1.0a1; nothing was executed.",
+        "hint": "Deferred by product decision; not part of this release. See docs/SUPPORT.md.",
+        "details": {
+          "route": {
+            "group": "capture",
+            "action": "start",
+            "summary": "Begin recording the T6 window with game-only audio into a new evidence directory",
+            "effect": "captures-display",
+            "status": "deferred",
+            "owner": "thread-2-testing",
+            "requires_config": [],
+            "requires_windows": true,
+            "evidence": "Keep this invocation's stdout JSON and exit status.",
+            "notes": "",
+            "id": "capture.start",
+            "argv": [
+              "pat",
+              "capture",
+              "start"
+            ]
+          }
+        },
+        "schema_version": 1,
+        "toolkit_version": "0.1.0a1",
+        "command": "capture start",
+        "request_id": "<id>",
+        "at": "2026-09-10T05:08:39+00:00"
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "planned route refuses",
+      "passed": true,
+      "expected": "structured failure"
+    },
+    {
+      "argv": [
+        "<repo>\\.venv\\Scripts\\python.exe",
+        "<repo>\\tools\\private_scan.py"
+      ],
+      "exit_code": 1,
+      "elapsed_seconds": 0.25,
+      "json": {
+        "ok": false,
+        "hits": [
+          {
+            "file": ".qualify-home/config.json",
+            "line": 2,
+            "pattern": "personal_home",
+            "excerpt": "C:\\\\Users\\\\m"
+          }
+        ],
+        "allow": {
+          "tools/private_scan.py": "defines the patterns",
+          "PROVENANCE.md": "records upstream private commit SHAs (40-hex, not UUIDs) and old command names for lineage"
+        },
+        "files_scanned": 101
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "private scan",
+      "passed": false,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "<repo>\\.venv\\Scripts\\python.exe",
+        "<repo>\\tools\\release_check.py"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.094,
+      "json": {
+        "ok": true,
+        "version": "0.1.0a1",
+        "expected_tag": "v0.1.0-alpha.1",
+        "changelog_top": "0.1.0a1",
+        "problems": []
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "release check",
+      "passed": true,
+      "expected": "success"
+    }
+  ],
+  "notes": [
+    "work directory <work>",
+    "PAT_HOME=<pat-home>"
+  ],
+  "passed": false,
+  "summary": {
+    "steps": 13,
+    "passed": 11,
+    "failed": [
+      "unit tests",
+      "private scan"
+    ]
+  }
+}

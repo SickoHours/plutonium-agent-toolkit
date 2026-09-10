@@ -75,3 +75,20 @@ class QualifyToolUnitTests(unittest.TestCase):
         self.assertTrue(by_name["last-load.json"]["passed"])
         self.assertTrue(by_name["last-result.json"]["passed"])
         self.assertFalse(by_name["install-mod hello_zm receipt"]["passed"])
+
+    def test_finish_moves_an_existing_receipt_aside_instead_of_overwriting(self):
+        # A rerun after a fix must not erase the failed attempt: RECORDING-A-RECEIPT.md keeps it.
+        out = Path(self.temp.name) / "out"
+        first = self.q.new_receipt("offline")
+        first["steps"].append({"name": "x", "passed": False})
+        self.q.finish(first, out, "tier1-offline.json", lambda value: value)
+        second = self.q.new_receipt("offline")
+        second["steps"].append({"name": "x", "passed": True})
+        self.q.finish(second, out, "tier1-offline.json", lambda value: value)
+        names = sorted(p.name for p in out.iterdir())
+        superseded = [n for n in names if n.startswith("tier1-offline.superseded-") and n.endswith(".json")]
+        self.assertEqual(len(superseded), 1, names)
+        self.assertFalse(json.loads((out / superseded[0]).read_text(encoding="utf-8"))["passed"])
+        latest = json.loads((out / "tier1-offline.json").read_text(encoding="utf-8"))
+        self.assertTrue(latest["passed"])
+        self.assertIn(superseded[0], json.dumps(latest["notes"]))

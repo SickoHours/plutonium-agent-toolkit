@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Run the native Windows qualification tiers and write sanitized receipts.
 
-    python tools/qualify_windows.py --tier offline  --output docs/receipts/qualify
-    python tools/qualify_windows.py --tier backends --output docs/receipts/qualify
-    python tools/qualify_windows.py --tier game     --output docs/receipts/qualify --collect
+    python tools/qualify_windows.py --tier offline  --output docs/receipts
+    python tools/qualify_windows.py --tier backends --output docs/receipts
+    python tools/qualify_windows.py --tier game     --output docs/receipts --collect
 
 Tiers 1 and 2 run commands themselves. Tier 3 never touches the game; with --collect it
 reads the toolkit's state files after the human-authorized commands were run by hand and
@@ -140,12 +140,31 @@ def new_receipt(tier):
     return {"schema_version": 1, "tier": tier, "environment": environment(), "steps": [], "notes": []}
 
 
+def supersede(path: Path) -> Path | None:
+    """Move an existing receipt aside instead of overwriting it.
+
+    A rerun after a fix must keep the failed attempt (docs/contributors/RECORDING-A-RECEIPT.md)."""
+    if not path.exists():
+        return None
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    aside = path.with_name(f"{path.stem}.superseded-{stamp}{path.suffix}")
+    n = 1
+    while aside.exists():
+        n += 1
+        aside = path.with_name(f"{path.stem}.superseded-{stamp}-{n}{path.suffix}")
+    path.rename(aside)
+    return aside
+
+
 def finish(receipt, output: Path, name: str, redact):
     receipt["passed"] = all(s["passed"] for s in receipt["steps"])
     receipt["summary"] = {"steps": len(receipt["steps"]), "passed": sum(s["passed"] for s in receipt["steps"]),
                           "failed": [s["name"] for s in receipt["steps"] if not s["passed"]]}
     output.mkdir(parents=True, exist_ok=True)
     path = output / name
+    previous = supersede(path)
+    if previous:
+        receipt["notes"].append({"superseded": previous.name})
     path.write_text(json.dumps(redact(receipt), indent=2) + "\n", encoding="utf-8")
     print(f"\n{'PASSED' if receipt['passed'] else 'FAILED'}: {receipt['summary']['passed']}/{receipt['summary']['steps']} steps -> {path}")
     return receipt["passed"]

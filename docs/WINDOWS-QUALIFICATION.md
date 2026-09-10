@@ -35,7 +35,7 @@ pat version --json
 ## Tier 1: offline (no downloads, no game)
 
 ```powershell
-python tools/qualify_windows.py --tier offline --output docs/receipts/qualify
+python tools/qualify_windows.py --tier offline --output docs/receipts
 ```
 
 The script runs the unit tests, `manifest`, `describe`, `doctor`, `configure`, `dev setup --plan`
@@ -47,7 +47,7 @@ Commit: `git add docs/receipts && git commit -m "qualify(windows): tier 1 offlin
 ## Tier 2: backends (downloads, real gsc-tool and OpenAssetTools, no game)
 
 ```powershell
-python tools/qualify_windows.py --tier backends --output docs/receipts/qualify
+python tools/qualify_windows.py --tier backends --output docs/receipts
 ```
 
 The script runs `dev setup --only gsc oat` (about 10 MB), `doctor`, then builds
@@ -97,7 +97,7 @@ Then, with the game **not** running, ask for permission and run:
 After the run:
 
 ```powershell
-python tools/qualify_windows.py --tier game --output docs/receipts/qualify --collect
+python tools/qualify_windows.py --tier game --output docs/receipts --collect
 ```
 
 The script reads the toolkit's state files (`last-launch.json`, `last-load.json`,
