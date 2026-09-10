@@ -7,9 +7,9 @@
     "platform": "Windows-11-10.0.26200-SP0",
     "machine": "AMD64",
     "native_windows": true,
-    "at": "2026-09-10T07:35:03+00:00",
+    "at": "2026-09-10T07:01:56+00:00",
     "windows_build": "10.0.26200",
-    "git_head": "dd2242c1504ca0ab7d92247622eeff022d657740",
+    "git_head": "b202a9edc66105f893c323bfe7ec01ff4bcdb3cf",
     "git_dirty": false,
     "pat_home_isolated": true
   },
@@ -170,7 +170,7 @@
     },
     "Tier 3 commands were run by hand with per-command human authorization. Only state files written after the begin marker count, and each must record success. The human observations are required for level `game`; automated state alone is not a playable spawn.",
     {
-      "superseded": "tier3-game.superseded-20260910T073503Z.json"
+      "superseded": "tier3-game.superseded-20260910T070156Z.json"
     }
   ],
   "human_observations": {
@@ -181,7 +181,7 @@
     "hello_zm_line_visible_after_spawn": null,
     "quit_exited_cleanly": null,
     "plutonium_build": null,
-    "notes": "Sequence run with per-command human authorization on r5346 (Plutonium launcher and bootstrapper binaries updated 04:53Z the same day; BO2 zone files unchanged since 2025-10): launch (no launcher prompt; console then game window took focus about 5 s after the request), status, info, load-map town, check-load (delivery_uncertain while still loading; a later check on a second load read 160 KB of new log with 0 error lines and state_matches false), select-mod zm_gobblegums (verified fs_game change), load-map town under the mod, select-mod base (verified), quit (stopped through the engine, window gone). Human observation: Town started from the Plutonium menu by hand is a playable spawn. Console-log diff: every toolkit-started load reached Initializing game and loaded the Town gump, then the client dropped the match with SV_Shutdown: hostquit and returned to the menu; menu-started matches on the same install end with EXE_MATCHENDED. The gametype settings configs exec at frontend init in both paths, and the weapon and common_zm not-found lines are identical in the playable session, so neither is the cause; root cause is open in issue #8 and no command allowlist change was made. hello-zm was not installed or seen. No game route qualifies at level game. Remote control through the external console is demonstrated for loadmod, map, disconnect and quit."
+    "notes": "Sequence run with per-command human authorization on r5346: launch (no launcher prompt; focus not preserved, console then game window took focus ~5s after the request), status, info, load-map town (engine reported sv_running 1 then the match returned to the main menu), check-load (delivery_uncertain while still loading; a later check on a second load read the log gate cleanly at 160 KB with 0 error lines but state_matches false), select-mod zm_gobblegums (verified fs_game change), load-map town under the mod (same return to menu), select-mod base (verified), quit (stopped via engine quit, window gone). Human observation: Town started from the Plutonium menu by hand is a playable spawn; the toolkit's load-map never produced one because it does not run the survival gametype config the menu execs (zm/gamesettings_zstandard.cfg). hello-zm was not installed or seen. No game route qualifies at level game. Remote control through the external console is demonstrated for loadmod, map, disconnect and quit."
   },
   "passed": false,
   "summary": {
