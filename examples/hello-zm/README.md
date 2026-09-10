@@ -7,11 +7,11 @@ because success or failure is unambiguous and it depends on no assets.
 ```text
 examples/hello-zm/
 ├── project.json          build recipe consumed by `pat project plan|build`
-├── scripts/hello.gsc     the script
+├── scripts/hello.gsc     the script (target scripts/zm/hello_zm.gsc inside mod.ff)
 └── README.md
 ```
 
-When `project build` lands, the expected sequence is:
+The build sequence is:
 
 ```powershell
 pat project plan  examples\hello-zm\project.json --output ..\jobs\hello-plan-001 --json

@@ -8,7 +8,7 @@ pull request that changes a route. `tools/release_check.py` verifies the version
 | Level | Meaning |
 | --- | --- |
 | contract | Route is registered with name, effect and owner. Answers `not_implemented`. |
-| offline | Unit tests pass with synthetic fixtures on any platform. |
+| offline | Implemented; unit tests pass with synthetic fixtures and fake backends on any platform. Executes on Windows but has no native receipt. |
 | native | Ran on a native Windows 11 x64 host with a sanitized receipt linked below. Wine, WSL and CI runners do not count. |
 | game | Produced a verified effect in a running Plutonium T6 Zombies instance with a fresh engine reply and a decoded non-black frame where applicable. |
 | accepted | A human played the result and recorded a scoped verdict. |
@@ -33,10 +33,10 @@ A level applies only to the exact scope in the receipt. "Loaded Town once" is no
 | `doctor` | inert | offline | core | presence and configuration only |
 | `configure` | writes-config | offline | core | absolute paths, unknown keys rejected |
 | `dev backends` | inert | offline | core | pins validated |
-| `dev setup` | downloads-backends | offline | core | archive safety and reinstall verification tested with synthetic zips; **no native download yet** |
-| `gsc compile`, `gsc decompile` | writes-output | contract | thread-1 | |
-| `ff inspect`, `ff link`, `ff extract` | writes-output | contract | thread-1 | |
-| `project init/plan/build/verify` | writes-output | contract | thread-1 | |
+| `dev setup` | downloads-backends | offline | core | archive safety and reinstall verification tested with synthetic zips; all nine backends pinned including C2Mv3; **no native download yet** |
+| `gsc compile`, `gsc decompile` | writes-output | offline | thread-1 | fake gsc-tool covers log-error-with-exit-zero, crash, missing input; **real gsc-tool untested** |
+| `ff inspect`, `ff link`, `ff extract` | writes-output | offline | thread-1 | fake Linker/Unlinker; **real OpenAssetTools untested** |
+| `project init/plan/build/verify` | writes-output | offline | thread-1 | hello-zm round-trips through fakes: compile, stage, link, read back, byte-compare, verify with --inputs |
 | `model convert/inspect` | writes-output | contract | thread-1 | Blender + Cast |
 | `audio convert` | writes-output | contract | thread-1 | |
 | `image convert` | writes-output | contract | thread-1 | |

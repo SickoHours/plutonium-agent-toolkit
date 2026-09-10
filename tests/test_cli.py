@@ -51,7 +51,7 @@ class DiscoveryTests(IsolatedHome):
         self.assertEqual(len(ids), len(routes()))
         for r in row["result"]["routes"]:
             self.assertIn(r["effect"], EFFECTS)
-            self.assertIn(r["status"], ("available", "planned", "unsupported"))
+            self.assertIn(r["status"], ("available", "implemented", "planned", "unsupported"))
             self.assertEqual(r["argv"][:1], ["pat"])
 
     def test_describe_known_and_unknown_routes(self):
@@ -63,7 +63,7 @@ class DiscoveryTests(IsolatedHome):
         self.assertEqual(row["error_code"], "unknown_route")
 
     def test_planned_routes_refuse_with_not_implemented_and_run_nothing(self):
-        for argv in (["gsc", "compile", "x.gsc"], ["game", "launch"], ["capture", "start"], ["test", "start"]):
+        for argv in (["model", "convert", "x.cast"], ["game", "launch"], ["capture", "start"], ["test", "start"]):
             code, row = invoke(argv)
             self.assertEqual(code, 1, argv)
             self.assertEqual(row["error_code"], "not_implemented", argv)

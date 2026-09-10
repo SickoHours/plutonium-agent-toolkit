@@ -11,7 +11,11 @@
       "sha256": "4bf366cec03558a4b0f20bc8f197a51f4b9dad0aa3edc52b0e40fef2dd95a4f5",
       "strip_root": false,
       "optional": false,
-      "provides": ["Linker.exe", "Unlinker.exe", "ImageConverter.exe"]
+      "provides": [
+        "Linker.exe",
+        "Unlinker.exe",
+        "ImageConverter.exe"
+      ]
     },
     {
       "id": "gsc",
@@ -22,7 +26,9 @@
       "sha256": "ef7d7c86e2356f3e4d2b75b53d28dabb4df8b2a804cf3f6be179273f0fcada20",
       "strip_root": false,
       "optional": false,
-      "provides": ["gsc-tool.exe"]
+      "provides": [
+        "gsc-tool.exe"
+      ]
     },
     {
       "id": "lua",
@@ -33,7 +39,9 @@
       "sha256": "ea86f6c2f2a1413043d8ec61e7276d40e2e3eb7596f14f6017f5b0a825f0ee14",
       "strip_root": false,
       "optional": true,
-      "provides": ["CoDLuaDecompiler.exe"]
+      "provides": [
+        "CoDLuaDecompiler.exe"
+      ]
     },
     {
       "id": "ffmpeg",
@@ -44,7 +52,10 @@
       "sha256": "b70908fc22ad3723ea53d4bee901fbf6e7a3dde4a9612dfde8c1d089bfadfcc0",
       "strip_root": true,
       "optional": true,
-      "provides": ["bin/ffmpeg.exe", "bin/ffprobe.exe"]
+      "provides": [
+        "bin/ffmpeg.exe",
+        "bin/ffprobe.exe"
+      ]
     },
     {
       "id": "blender",
@@ -55,7 +66,9 @@
       "sha256": "0e631dad7d0cad6d5d18abdd2e2550f6c0213215334eda00ddbd3d22b96ecb2c",
       "strip_root": true,
       "optional": true,
-      "provides": ["blender.exe"]
+      "provides": [
+        "blender.exe"
+      ]
     },
     {
       "id": "cast",
@@ -66,7 +79,9 @@
       "sha256": "c80039cd8cfbe8b0b468aa1547f3ea4fb796c50cfbde6efe0bce5526269a0f81",
       "strip_root": false,
       "optional": true,
-      "provides": ["io_scene_cast/__init__.py"]
+      "provides": [
+        "io_scene_cast/__init__.py"
+      ]
     },
     {
       "id": "greyhound",
@@ -77,7 +92,9 @@
       "sha256": "a051251e0101d26dd92a163bda385247f5302f8ef2be853b586d587885735f3d",
       "strip_root": false,
       "optional": true,
-      "provides": ["Greyhound.exe"],
+      "provides": [
+        "Greyhound.exe"
+      ],
       "note": "Original GUI. No agent-controlled live extraction is claimed by this toolkit."
     },
     {
@@ -89,7 +106,9 @@
       "sha256": "691fadd6d90a0408b94233e3184c2586f3c86a7270b9d23038ffc5be3d184e79",
       "strip_root": false,
       "optional": true,
-      "provides": ["Husky.exe"],
+      "provides": [
+        "Husky.exe"
+      ],
       "note": "Original GUI. Windows live capture through this toolkit is not implemented."
     },
     {
@@ -97,12 +116,14 @@
       "name": "C2Mv3 3.0.5",
       "license": "unspecified upstream; binary only",
       "url": "https://github.com/o-Astral-o/C2Mv3/releases/download/v3.0.5/C2Mv3.zip",
-      "bytes": 0,
-      "sha256": "",
+      "bytes": 3609725,
+      "sha256": "65c177e96f1a457f644d36e6c1c8f8602603b742f0ce4f063bf7b727d462498f",
       "strip_root": false,
       "optional": true,
-      "provides": ["C2M.exe"],
-      "note": "Hash to be pinned by Thread 1 after native download; never redistributed. Remains an explicit optional external dependency."
+      "provides": [
+        "C2M.exe"
+      ],
+      "note": "Optional. Upstream publishes a binary without a license; the toolkit downloads it only on explicit request and never redistributes it. Hash pinned from a 2026-09-10 download."
     }
   ]
 }

@@ -21,7 +21,9 @@ EFFECTS = (
     "captures-display",    # records or screenshots the game window
 )
 
-STATUS = ("available", "planned", "unsupported")
+STATUS = ("available", "implemented", "planned", "unsupported")
+# available: native Windows receipt in docs/SUPPORT.md. implemented: code and offline
+# tests exist; executes on Windows but has no native receipt yet. planned: contract only.
 
 
 @dataclass
@@ -84,7 +86,7 @@ def manifest(platform_info: dict) -> dict:
             row["available_here"] = False
             row["availability_reason"] = "requires native Windows"
         else:
-            row["available_here"] = row["status"] == "available"
+            row["available_here"] = row["status"] in ("available", "implemented")
             row["availability_reason"] = "" if row["available_here"] else row["status"]
     return {
         "platform": platform_info,
