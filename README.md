@@ -92,6 +92,11 @@ words are defined once in [CONTEXT.md](CONTEXT.md).
 [docs/playbooks/](docs/playbooks/README.md) holds finite recipes for the common tasks: first build,
 add a script, port a feature, four preflights, diagnose a crash, package and install.
 
+## Benchmark
+
+[docs/BENCHMARK.md](docs/BENCHMARK.md): four repeatable offline modding tasks scored only from
+receipts, to compare models and harnesses driving the toolkit. It gates nothing.
+
 ## For contributors and their agents
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md), then [AGENTS.md](AGENTS.md). Development agents get

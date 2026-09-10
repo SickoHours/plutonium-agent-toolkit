@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "note": "Repeatable offline modding tasks scored only from receipts and the files they inventory. The prompt is handed to the agent under test verbatim after substituting <REPO>, <RUN>, <FIXTURE> and <MOD_FF>. See docs/BENCHMARK.md.",
+  "tasks": [
+    {
+      "id": "bench-01-compile-error",
+      "prompt": "prompts/bench-01.md",
+      "inputs": ["fixtures/bench-01/broken.gsc"],
+      "expect": {
+        "routes": ["gsc compile"],
+        "final_status": "failed",
+        "final_error_code": "backend_failed",
+        "max_invocations": 3
+      }
+    },
+    {
+      "id": "bench-02-build-hello",
+      "prompt": "prompts/bench-02.md",
+      "inputs": ["examples/hello-zm"],
+      "expect": {
+        "routes": ["project plan", "project build", "project verify"],
+        "final_status": "succeeded",
+        "outputs_contain": ["packages/mod.ff"],
+        "max_invocations": 6
+      }
+    },
+    {
+      "id": "bench-03-extract-rawfile",
+      "prompt": "prompts/bench-03.md",
+      "inputs": ["<MOD_FF>"],
+      "expect": {
+        "routes": ["ff extract"],
+        "final_status": "succeeded",
+        "outputs_match": ["assets/**/*.gsc"],
+        "max_invocations": 4
+      }
+    },
+    {
+      "id": "bench-04-port-feature",
+      "prompt": "prompts/bench-04.md",
+      "inputs": ["examples/hello-zm", "examples/hello-zm-two"],
+      "expect": {
+        "routes": ["project build", "project verify"],
+        "final_status": "succeeded",
+        "outputs_contain": ["packages/mod.ff"],
+        "readback_contains": ["announce_round", "on_player_spawned"],
+        "max_invocations": 10
+      }
+    }
+  ]
+}
