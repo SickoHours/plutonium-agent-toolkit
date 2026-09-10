@@ -35,6 +35,18 @@ class QualifyToolTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 2)
         self.assertIn("runs nothing", proc.stderr)
 
+    def test_game_tier_begin_needs_no_output_directory(self):
+        # docs/WINDOWS-QUALIFICATION.md runs `--tier game --begin` without --output; it writes only
+        # the marker under PAT_HOME. Found on the first native Tier 3 attempt: argparse refused it.
+        with tempfile.TemporaryDirectory() as temp:
+            env = dict(os.environ, PAT_HOME=str(Path(temp) / "home"))
+            proc = subprocess.run([sys.executable, str(ROOT / "tools/qualify_windows.py"), "--tier", "game", "--begin",
+                                   "--allow-non-windows"], capture_output=True, text=True, cwd=ROOT, env=env)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            marker = Path(temp) / "home" / "game" / "qualify-tier3-begin.json"
+            self.assertTrue(marker.is_file())
+            self.assertIn("began_unix", json.loads(marker.read_text(encoding="utf-8")))
+
 
 class QualifyToolUnitTests(unittest.TestCase):
     def setUp(self):

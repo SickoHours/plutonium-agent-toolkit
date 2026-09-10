@@ -353,8 +353,11 @@ def main() -> int:
         changed = redact_existing(args.redact_existing, redactor(extra_paths=[("pat-home", str(home)), ("repo", str(ROOT))]))
         print(f"{'re-redacted' if changed else 'already clean'}: {args.redact_existing}")
         return 0
-    if not args.tier or not args.output:
-        ap.error("--tier and --output are required unless --redact-existing is given")
+    if not args.tier:
+        ap.error("--tier is required unless --redact-existing is given")
+    if not args.output and not args.begin:
+        # `--tier game --begin` writes only the marker under PAT_HOME (docs/WINDOWS-QUALIFICATION.md).
+        ap.error("--output is required unless --begin or --redact-existing is given")
     if os.name != "nt" and not args.allow_non_windows:
         print("This script qualifies native Windows. Run it there.", file=sys.stderr)
         return 2

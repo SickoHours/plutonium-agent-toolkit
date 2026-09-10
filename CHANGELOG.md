@@ -87,6 +87,10 @@ Every entry states what shipped, on which platform it was verified, and what rem
   reviewer's five inputs plus the JSON-escaped form.
 - Windows job runner: when the step log is still held after the bounded wait, the step records
   `log_release_wait_seconds` next to `log_still_open`.
+- `tools/qualify_windows.py --tier game --begin`, exactly as `docs/WINDOWS-QUALIFICATION.md` writes it
+  (no `--output`), was refused by argparse because `--output` was unconditionally required, so the
+  Tier 3 marker could never be written as documented. `--output` is now required only when a
+  receipt is written. Found on the first native Tier 3 attempt; regression test added.
 
 ### Verified
 
