@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "plutonium-agent-toolkit"
-version = "0.1.0a1"
+version = "0.1.0b1"
 description = "Agent-native tools for building, controlling and testing Plutonium T6 Zombies mods on Windows"
 readme = "README.md"
 requires-python = ">=3.11"
