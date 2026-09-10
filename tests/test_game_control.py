@@ -81,6 +81,17 @@ class GameControlTests(unittest.TestCase):
         return json.loads((control.state_dir() / "last-load.json").read_text())
 
     # ----- catalog and inventory -----
+    def test_bus_depot_uses_the_engine_transit_token_for_survival(self):
+        # T6 has no "busdepot" start location. Bus Depot survival is zstandard at location
+        # "transit": Plutonium's mapvote maps zm_busdepot to "execgts zm_standard_transit.cfg
+        # map zm_transit" and the cut-locations source registers
+        # add_map_location_gamemode("zstandard", "transit", ...standard_station...).
+        # TranZit classic is the same location with mode zclassic.
+        maps = control.maps()
+        self.assertEqual(maps["bus-depot"], {"label": "Bus Depot", "map": "zm_transit", "location": "transit",
+                                             "mode": "zstandard", "group": "zsurvival", "dlc5": False})
+        self.assertEqual((maps["tranzit"]["location"], maps["tranzit"]["mode"]), ("transit", "zclassic"))
+
     def test_map_catalog_is_complete_and_valid(self):
         maps = control.maps()
         self.assertEqual(len(maps), 18)

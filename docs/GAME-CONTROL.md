@@ -32,6 +32,8 @@ memory, inject anything, focus the game or press player keys.
 
 Map IDs: `tranzit town farm bus-depot nuketown die-rise mob buried origins` (base) and
 `nacht verruckt shi-no-numa der-riese kino five ascension shangri-la moon` (DLC5, mod required).
+`tranzit` and `bus-depot` share the engine start location `transit`; the mode differs
+(`zclassic` versus `zstandard`). There is no `busdepot` token in T6.
 
 ## Reading results
 
