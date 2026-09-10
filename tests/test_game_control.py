@@ -607,11 +607,12 @@ class FourthReviewRegressionTests(unittest.TestCase):
                 Native.wi += 1
                 return windows_seq[min(Native.wi - 1, len(windows_seq) - 1)]
 
-        ticks = iter([0.0] + [i * 0.01 for i in range(1, 2000)] + [5.0] * 20)
+        import itertools
+        ticks = (i * 0.01 for i in itertools.count())
         with patch.object(control.os, "startfile", lambda uri: None, create=True), \
              patch.object(control.time, "sleep", lambda *_: None), \
              patch.object(control.time, "monotonic", lambda: next(ticks)):
-            result = control.launch(Native, None, observe_seconds=90)
+            result = control.launch(Native, None, observe_seconds=90, settle_seconds=1)
         self.assertTrue(result["focus_events_truncated"])
         self.assertEqual(len(result["focus_events"]), 200)
         self.assertGreater(result["focus_event_count"], 200)
@@ -686,17 +687,20 @@ class LaunchSettleTests(unittest.TestCase):
         # Game visible from the first poll; the launcher steals focus 5 s after detection.
         class Native:
             calls = 0
+            window_calls = 0
 
             @staticmethod
             def windows():
-                return {7: "Plutonium T6 Zombies"}
+                Native.window_calls += 1
+                return {} if Native.window_calls == 1 else {7: "Plutonium T6 Zombies"}
 
             @staticmethod
             def foreground():
                 Native.calls += 1
-                return {"pid": 9, "title": "Plutonium Launcher"} if Native.calls > 40 else {"pid": 1, "title": "agent"}
+                return {"pid": 9, "title": "Plutonium Launcher"} if Native.calls > 20 else {"pid": 1, "title": "agent"}
 
-        clock = iter([0.0] + [0.25 * i for i in range(1, 1000)])
+        import itertools
+        clock = (0.25 * i for i in itertools.count())
         with patch.object(control.os, "startfile", lambda uri: None, create=True), \
              patch.object(control.time, "sleep", lambda *_: None), \
              patch.object(control.time, "monotonic", lambda: next(clock)):
@@ -720,7 +724,8 @@ class LaunchSettleTests(unittest.TestCase):
             def foreground():
                 return {"pid": 1, "title": "agent"}
 
-        clock = iter([0.0] + [0.5 * i for i in range(1, 1000)])
+        import itertools
+        clock = (0.5 * i for i in itertools.count())
         with patch.object(control.os, "startfile", lambda uri: None, create=True), \
              patch.object(control.time, "sleep", lambda *_: None), \
              patch.object(control.time, "monotonic", lambda: next(clock)):
