@@ -299,6 +299,35 @@ class ExtractTests(unittest.TestCase):
         self.assertEqual(backends.install(item, backends_dir, cache)["action"], "verified")
 
 
+class UsageTableTests(unittest.TestCase):
+    """dev/backend_usage.py is what docs/BACKENDS.md renders; it must agree with the code."""
+
+    def test_every_usage_executable_is_resolvable(self):
+        from plutonium_agent_toolkit.dev.backend_usage import ADDONS, MANUAL, USAGE
+        from plutonium_agent_toolkit.core.discovery import routes
+        registered = {f"{r.group} {r.action}" for r in routes()}
+        for u in USAGE:
+            self.assertIn(u["executable"], backends.EXECUTABLES, u["routes"])
+            self.assertTrue(u["argv"], u["routes"])
+            self.assertEqual(u["argv"][0], backends.relative(u["executable"], "linux").split("/")[-1], u["routes"])
+            for route in u["routes"]:
+                self.assertIn(route, registered, route)
+        ids = {p["id"] for p in backends.pins()["programs"]}
+        self.assertTrue(set(MANUAL) <= ids and set(ADDONS) <= ids)
+        used = {u["executable"] for u in USAGE}
+        for name, (pid, _rel) in backends.EXECUTABLES.items():
+            if pid in MANUAL:
+                self.assertNotIn(name, used, f"{name} is a manual GUI; no route runs it")
+            else:
+                self.assertIn(name, used, f"{name} is resolvable but no route documents running it")
+
+    def test_every_pinned_program_is_documented_once(self):
+        from plutonium_agent_toolkit.dev.backend_usage import ADDONS, MANUAL
+        for p in backends.pins()["programs"]:
+            runnable = p["id"] in backends.PROGRAM_EXECUTABLES and p["id"] not in MANUAL
+            self.assertEqual(runnable + (p["id"] in MANUAL) + (p["id"] in ADDONS), 1, p["id"])
+
+
 class CrossPlatformTests(unittest.TestCase):
     def test_override_hint_names_each_binary_not_the_program_id(self):
         hint = backends.override_hint(backends.program("oat"))

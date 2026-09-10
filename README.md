@@ -45,7 +45,8 @@ See [AGENTS.md](AGENTS.md) and [docs/FOR-AGENTS.md](docs/FOR-AGENTS.md).
 
 Backends (OpenAssetTools, gsc-tool, Blender, Cast, FFmpeg and others) are downloaded from their
 upstream releases at setup and verified by SHA-256. This repository redistributes none of them.
-See [NOTICE](NOTICE) for licenses.
+[docs/BACKENDS.md](docs/BACKENDS.md) lists which program each route runs, with its command line,
+version, license and pinned platforms; see [NOTICE](NOTICE) for licenses.
 
 ## For users: hand this to your agent
 
@@ -107,7 +108,7 @@ python tools/release_check.py
 | `examples/hello-zm/` | The bundled first-run mod used by the qualification loop |
 | `docs/` | User guide, support matrix, contributor docs, engineering history |
 | `skills/` | Installable agent skill |
-| `tools/` | Qualification runner, private-material scanner and release check used by CI |
+| `tools/` | Qualification runner, backends-page generator, private-material scanner and release check used by CI |
 
 ## License
 
