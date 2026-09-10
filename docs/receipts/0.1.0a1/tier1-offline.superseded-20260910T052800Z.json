@@ -7,10 +7,10 @@
     "platform": "Windows-11-10.0.26200-SP0",
     "machine": "AMD64",
     "native_windows": true,
-    "at": "2026-09-10T05:27:43+00:00",
+    "at": "2026-09-10T05:08:20+00:00",
     "windows_build": "10.0.26200",
-    "git_head": "23080507d92c73380915fa9726ca069271af1b31",
-    "git_dirty": false,
+    "git_head": "642e326c6aaf97633d2060adf870ebedab91478f",
+    "git_dirty": true,
     "pat_home_isolated": true
   },
   "steps": [
@@ -24,9 +24,9 @@
         "-s",
         "tests"
       ],
-      "exit_code": 0,
-      "passed": true,
-      "stderr_head": "................s..........s.......s.....s..................................................s...........ss........................\n----------------------------------------------------------------------\nRan 130 tests in 14.732s\n\nOK (skipped=7)\n",
+      "exit_code": 1,
+      "passed": false,
+      "stderr_head": "rs\\\\<user>\\\\AppData\\\\Local\\\\Temp\\\\tmpodqjtrlx\\\\job-001\\\\step-01.log'\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"<userprofile>\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\tempfile.py\", line 923, in cleanup\n    self._rmtree(self.name, ignore_errors=self._ignore_cleanup_errors)\n  File \"<userprofile>\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\tempfile.py\", line 903, in _rmtree\n    _shutil.rmtree(name, onexc=onexc)\n  File \"<userprofile>\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\shutil.py\", line 796, in rmtree\n    return _rmtree_unsafe(path, onexc)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<userprofile>\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\shutil.py\", line 631, in _rmtree_unsafe\n    _rmtree_unsafe(fullname, onexc)\n  File \"<userprofile>\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\shutil.py\", line 636, in _rmtree_unsafe\n    onexc(os.unlink, fullname, err)\n  File \"<userprofile>\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\tempfile.py\", line 894, in onexc\n    cls._rmtree(path, ignore_errors=ignore_errors)\n  File \"<userprofile>\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\tempfile.py\", line 903, in _rmtree\n    _shutil.rmtree(name, onexc=onexc)\n  File \"<userprofile>\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\shutil.py\", line 796, in rmtree\n    return _rmtree_unsafe(path, onexc)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<userprofile>\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\shutil.py\", line 612, in _rmtree_unsafe\n    onexc(os.scandir, path, err)\n  File \"<userprofile>\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\shutil.py\", line 609, in _rmtree_unsafe\n    with os.scandir(path) as scandir_it:\n         ^^^^^^^^^^^^^^^^\nNotADirectoryError: [WinError 267] The directory name is invalid: '<userprofile>\\\\AppData\\\\Local\\\\Temp\\\\tmpodqjtrlx\\\\job-001\\\\step-01.log'\n\n----------------------------------------------------------------------\nRan 125 tests in 16.600s\n\nFAILED (errors=1, skipped=7)\n",
       "expected": "success"
     },
     {
@@ -35,14 +35,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.203,
+      "elapsed_seconds": 0.391,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0a1",
         "command": "version",
         "request_id": "<id>",
-        "at": "2026-09-10T05:27:58+00:00",
+        "at": "2026-09-10T05:08:37+00:00",
         "result": {
           "version": "0.1.0a1",
           "platform": {
@@ -68,14 +68,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.187,
+      "elapsed_seconds": 0.406,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0a1",
         "command": "manifest",
         "request_id": "<id>",
-        "at": "2026-09-10T05:27:58+00:00",
+        "at": "2026-09-10T05:08:38+00:00",
         "result": {
           "platform": {
             "system": "Windows",
@@ -1089,14 +1089,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.157,
+      "elapsed_seconds": 0.187,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0a1",
         "command": "describe",
         "request_id": "<id>",
-        "at": "2026-09-10T05:27:58+00:00",
+        "at": "2026-09-10T05:08:38+00:00",
         "result": {
           "group": "game",
           "action": "load-map",
@@ -1130,14 +1130,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.172,
+      "elapsed_seconds": 0.344,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0a1",
         "command": "doctor",
         "request_id": "<id>",
-        "at": "2026-09-10T05:27:59+00:00",
+        "at": "2026-09-10T05:08:38+00:00",
         "result": {
           "platform": {
             "system": "Windows",
@@ -1151,7 +1151,6 @@
           "configuration": {
             "home": "<pat-home>",
             "config": {
-              "plutonium_storage_t6": "<userprofile>\\AppData\\Local\\Temp\\pat-qualify-offline-y7w1agzk\\fake-storage\\t6",
               "backends_dir": "<pat-home>\\backends",
               "evidence_dir": "<pat-home>\\evidence"
             },
@@ -1254,14 +1253,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.156,
+      "elapsed_seconds": 0.172,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0a1",
         "command": "configure",
         "request_id": "<id>",
-        "at": "2026-09-10T05:27:59+00:00",
+        "at": "2026-09-10T05:08:38+00:00",
         "result": {
           "path": "<pat-home>\\config.json",
           "saved": [
@@ -1282,14 +1281,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.156,
+      "elapsed_seconds": 0.187,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0a1",
         "command": "game mods",
         "request_id": "<id>",
-        "at": "2026-09-10T05:27:59+00:00",
+        "at": "2026-09-10T05:08:38+00:00",
         "result": {
           "storage": "<work>\\fake-storage\\t6",
           "mods": [],
@@ -1310,14 +1309,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.156,
+      "elapsed_seconds": 0.157,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0a1",
         "command": "dev setup",
         "request_id": "<id>",
-        "at": "2026-09-10T05:27:59+00:00",
+        "at": "2026-09-10T05:08:39+00:00",
         "result": {
           "plan": true,
           "destination": "<pat-home>\\backends",
@@ -1370,14 +1369,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.157,
+      "elapsed_seconds": 0.218,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0a1",
         "command": "project plan",
         "request_id": "<id>",
-        "at": "2026-09-10T05:27:59+00:00",
+        "at": "2026-09-10T05:08:39+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>\\plan-hello",
@@ -1426,7 +1425,7 @@
         "--json"
       ],
       "exit_code": 1,
-      "elapsed_seconds": 0.14,
+      "elapsed_seconds": 0.172,
       "json": {
         "ok": false,
         "error_code": "output_exists",
@@ -1436,7 +1435,7 @@
         "toolkit_version": "0.1.0a1",
         "command": "project plan",
         "request_id": "<id>",
-        "at": "2026-09-10T05:27:59+00:00"
+        "at": "2026-09-10T05:08:39+00:00"
       },
       "stdout_head": null,
       "stderr_head": "",
@@ -1450,7 +1449,7 @@
         "start"
       ],
       "exit_code": 1,
-      "elapsed_seconds": 0.141,
+      "elapsed_seconds": 0.172,
       "json": {
         "ok": false,
         "error_code": "not_implemented",
@@ -1480,7 +1479,7 @@
         "toolkit_version": "0.1.0a1",
         "command": "capture start",
         "request_id": "<id>",
-        "at": "2026-09-10T05:28:00+00:00"
+        "at": "2026-09-10T05:08:39+00:00"
       },
       "stdout_head": null,
       "stderr_head": "",
@@ -1493,21 +1492,28 @@
         "<repo>\\.venv\\Scripts\\python.exe",
         "<repo>\\tools\\private_scan.py"
       ],
-      "exit_code": 0,
-      "elapsed_seconds": 0.203,
+      "exit_code": 1,
+      "elapsed_seconds": 0.25,
       "json": {
-        "ok": true,
-        "hits": [],
+        "ok": false,
+        "hits": [
+          {
+            "file": ".qualify-home/config.json",
+            "line": 2,
+            "pattern": "personal_home",
+            "excerpt": "C:\\\\Users\\\\m"
+          }
+        ],
         "allow": {
           "tools/private_scan.py": "defines the patterns",
           "PROVENANCE.md": "records upstream private commit SHAs (40-hex, not UUIDs) and old command names for lineage"
         },
-        "files_scanned": 97
+        "files_scanned": 101
       },
       "stdout_head": null,
       "stderr_head": "",
       "name": "private scan",
-      "passed": true,
+      "passed": false,
       "expected": "success"
     },
     {
@@ -1533,15 +1539,15 @@
   ],
   "notes": [
     "work directory <work>",
-    "PAT_HOME=<pat-home>",
-    {
-      "superseded": "tier1-offline.superseded-20260910T052800Z.json"
-    }
+    "PAT_HOME=<pat-home>"
   ],
-  "passed": true,
+  "passed": false,
   "summary": {
     "steps": 13,
-    "passed": 13,
-    "failed": []
+    "passed": 11,
+    "failed": [
+      "unit tests",
+      "private scan"
+    ]
   }
 }
