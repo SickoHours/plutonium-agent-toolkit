@@ -203,13 +203,12 @@ class DevRouteTests(DevRouteFixture):
         code, row = invoke(["manifest"])
         by_id = {r["id"]: r for r in row["result"]["routes"]}
         # available only with a native receipt in docs/SUPPORT.md (a *-tier2-backends.json).
-        for rid in ("gsc.compile", "ff.inspect", "ff.extract", "project.plan", "project.build", "project.verify",
-                    "audio.inspect", "audio.convert", "model.inspect", "model.convert"):
+        for rid in ("gsc.compile", "gsc.decompile", "ff.inspect", "ff.extract", "project.init", "project.plan",
+                    "project.build", "project.verify", "audio.inspect", "audio.convert", "model.inspect", "model.convert",
+                    "model.transform", "model.rename-bones", "model.retime", "model.preview"):
             self.assertEqual(by_id[rid]["status"], "available", rid)
-        # No native step ran these: decompile, the standalone link route, init, the other model
-        # actions, image, lua, weapon, install-mod.
-        for rid in ("gsc.decompile", "ff.link", "project.init", "model.transform", "model.rename-bones",
-                    "model.retime", "model.preview", "weapon.plan", "image.convert", "lua.decompile", "game.install-mod"):
+        # No native step ran these: the standalone link route, image, lua, weapon, install-mod.
+        for rid in ("ff.link", "weapon.plan", "image.convert", "lua.decompile", "game.install-mod"):
             self.assertEqual(by_id[rid]["status"], "implemented", rid)
         for rid in ("capture.start", "test.start"):
             self.assertEqual(by_id[rid]["status"], "deferred", rid)
