@@ -7,9 +7,9 @@
     "platform": "Windows-11-10.0.26200-SP0",
     "machine": "AMD64",
     "native_windows": true,
-    "at": "2026-09-10T05:32:14+00:00",
+    "at": "2026-09-10T05:27:43+00:00",
     "windows_build": "10.0.26200",
-    "git_head": "9f16fd87021f539ee62ffa51419c88af33f3825c",
+    "git_head": "23080507d92c73380915fa9726ca069271af1b31",
     "git_dirty": false,
     "pat_home_isolated": true
   },
@@ -26,7 +26,7 @@
       ],
       "exit_code": 0,
       "passed": true,
-      "stderr_head": "es it\nwarning: in the working copy of 'src/plutonium_agent_toolkit/__init__.py', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'tools/bump_version.py', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'tools/release_check.py', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'tools/release_notes.py', LF will be replaced by CRLF the next time Git touches it\n.warning: in the working copy of 'CHANGELOG.md', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'docs/SUPPORT.md', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'pyproject.toml', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'src/plutonium_agent_toolkit/__init__.py', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'tools/bump_version.py', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'tools/release_check.py', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'tools/release_notes.py', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'docs/SUPPORT.md', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'src/plutonium_agent_toolkit/__init__.py', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'tools/bump_version.py', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'tools/release_check.py', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'tools/release_notes.py', LF will be replaced by CRLF the next time Git touches it\n........................\n----------------------------------------------------------------------\nRan 138 tests in 15.811s\n\nOK (skipped=7)\n",
+      "stderr_head": "................s..........s.......s.....s..................................................s...........ss........................\n----------------------------------------------------------------------\nRan 130 tests in 14.732s\n\nOK (skipped=7)\n",
       "expected": "success"
     },
     {
@@ -35,14 +35,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.187,
+      "elapsed_seconds": 0.203,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0a1",
         "command": "version",
         "request_id": "<id>",
-        "at": "2026-09-10T05:32:30+00:00",
+        "at": "2026-09-10T05:27:58+00:00",
         "result": {
           "version": "0.1.0a1",
           "platform": {
@@ -68,14 +68,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.172,
+      "elapsed_seconds": 0.187,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0a1",
         "command": "manifest",
         "request_id": "<id>",
-        "at": "2026-09-10T05:32:31+00:00",
+        "at": "2026-09-10T05:27:58+00:00",
         "result": {
           "platform": {
             "system": "Windows",
@@ -1089,14 +1089,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.125,
+      "elapsed_seconds": 0.157,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0a1",
         "command": "describe",
         "request_id": "<id>",
-        "at": "2026-09-10T05:32:31+00:00",
+        "at": "2026-09-10T05:27:58+00:00",
         "result": {
           "group": "game",
           "action": "load-map",
@@ -1137,7 +1137,7 @@
         "toolkit_version": "0.1.0a1",
         "command": "doctor",
         "request_id": "<id>",
-        "at": "2026-09-10T05:32:31+00:00",
+        "at": "2026-09-10T05:27:59+00:00",
         "result": {
           "platform": {
             "system": "Windows",
@@ -1151,7 +1151,7 @@
           "configuration": {
             "home": "<pat-home>",
             "config": {
-              "plutonium_storage_t6": "<userprofile>\\AppData\\Local\\Temp\\pat-qualify-offline-1m4k4hb1\\fake-storage\\t6",
+              "plutonium_storage_t6": "<userprofile>\\AppData\\Local\\Temp\\pat-qualify-offline-y7w1agzk\\fake-storage\\t6",
               "backends_dir": "<pat-home>\\backends",
               "evidence_dir": "<pat-home>\\evidence"
             },
@@ -1261,7 +1261,7 @@
         "toolkit_version": "0.1.0a1",
         "command": "configure",
         "request_id": "<id>",
-        "at": "2026-09-10T05:32:31+00:00",
+        "at": "2026-09-10T05:27:59+00:00",
         "result": {
           "path": "<pat-home>\\config.json",
           "saved": [
@@ -1282,14 +1282,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.141,
+      "elapsed_seconds": 0.156,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0a1",
         "command": "game mods",
         "request_id": "<id>",
-        "at": "2026-09-10T05:32:31+00:00",
+        "at": "2026-09-10T05:27:59+00:00",
         "result": {
           "storage": "<work>\\fake-storage\\t6",
           "mods": [],
@@ -1310,14 +1310,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.14,
+      "elapsed_seconds": 0.156,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0a1",
         "command": "dev setup",
         "request_id": "<id>",
-        "at": "2026-09-10T05:32:31+00:00",
+        "at": "2026-09-10T05:27:59+00:00",
         "result": {
           "plan": true,
           "destination": "<pat-home>\\backends",
@@ -1377,7 +1377,7 @@
         "toolkit_version": "0.1.0a1",
         "command": "project plan",
         "request_id": "<id>",
-        "at": "2026-09-10T05:32:32+00:00",
+        "at": "2026-09-10T05:27:59+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>\\plan-hello",
@@ -1436,7 +1436,7 @@
         "toolkit_version": "0.1.0a1",
         "command": "project plan",
         "request_id": "<id>",
-        "at": "2026-09-10T05:32:32+00:00"
+        "at": "2026-09-10T05:27:59+00:00"
       },
       "stdout_head": null,
       "stderr_head": "",
@@ -1450,7 +1450,7 @@
         "start"
       ],
       "exit_code": 1,
-      "elapsed_seconds": 0.125,
+      "elapsed_seconds": 0.141,
       "json": {
         "ok": false,
         "error_code": "not_implemented",
@@ -1480,7 +1480,7 @@
         "toolkit_version": "0.1.0a1",
         "command": "capture start",
         "request_id": "<id>",
-        "at": "2026-09-10T05:32:32+00:00"
+        "at": "2026-09-10T05:28:00+00:00"
       },
       "stdout_head": null,
       "stderr_head": "",
@@ -1494,7 +1494,7 @@
         "<repo>\\tools\\private_scan.py"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.188,
+      "elapsed_seconds": 0.203,
       "json": {
         "ok": true,
         "hits": [],
@@ -1502,7 +1502,7 @@
           "tools/private_scan.py": "defines the patterns",
           "PROVENANCE.md": "records upstream private commit SHAs (40-hex, not UUIDs) and old command names for lineage"
         },
-        "files_scanned": 108
+        "files_scanned": 97
       },
       "stdout_head": null,
       "stderr_head": "",
@@ -1516,7 +1516,7 @@
         "<repo>\\tools\\release_check.py"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.093,
+      "elapsed_seconds": 0.094,
       "json": {
         "ok": true,
         "version": "0.1.0a1",
@@ -1535,7 +1535,7 @@
     "work directory <work>",
     "PAT_HOME=<pat-home>",
     {
-      "superseded": "tier1-offline.superseded-20260910T053232Z.json"
+      "superseded": "tier1-offline.superseded-20260910T052800Z.json"
     }
   ],
   "passed": true,
