@@ -422,26 +422,33 @@ bpy.ops.wm.save_as_mainfile(filepath=out)
 """
 
 
-def make_rig(work: Path) -> Path | None:
+def make_rig(work: Path) -> tuple[Path | None, str]:
     """A two-bone rigged, skinned, animated .blend made by the installed Blender itself.
 
     A .blend is the one input on which every model action is legal: glTF import adds NLA tracks
-    and root animation, which transform and retime refuse by design."""
+    and root animation, which transform and retime refuse by design. Returns the fixture path
+    and a diagnostic; on failure the path is None and the diagnostic says why (kept in the
+    receipt so a host failure can be classified)."""
     script = work / "make_rig.py"
     script.write_text(MAKE_RIG, encoding="utf-8")
     rig = work / "rig.blend"
     try:
         from plutonium_agent_toolkit.dev.backends import executable
         argv = executable("blender")
-    except Exception:  # noqa: BLE001  (backend_unavailable surfaces as a failed step below)
-        return None
+    except Exception as exc:  # noqa: BLE001  (backend_unavailable surfaces as a failed step)
+        return None, f"blender is not resolvable: {exc}"[:2000]
     try:
         proc = subprocess.run([*argv, "--background", "--factory-startup", "--python", str(script), "--", str(rig)],
                               capture_output=True, text=True, timeout=600, env=child_env())
-    except (subprocess.TimeoutExpired, OSError):
-        # A hung or unlaunchable Blender is a failed fixture step, not a crashed qualification.
-        return None
-    return rig if proc.returncode == 0 and rig.is_file() else None
+    except subprocess.TimeoutExpired as exc:
+        return None, ("timed out after 600s; " + str(exc.stdout or "")[-1000:] + str(exc.stderr or "")[-800:])[:2000]
+    except OSError as exc:
+        return None, f"could not start blender: {exc}"[:2000]
+    (work / "make_rig.log").write_text(proc.stdout + proc.stderr, encoding="utf-8")
+    if proc.returncode != 0 or not rig.is_file():
+        return None, (f"exit {proc.returncode}; rig.blend {'present' if rig.is_file() else 'absent'}; "
+                      + (proc.stdout + proc.stderr)[-1800:])[:2000]
+    return rig, f"exit 0; {rig.stat().st_size} bytes"
 
 
 def tier_media(receipt, work: Path):
@@ -460,9 +467,9 @@ def tier_media(receipt, work: Path):
     step(receipt, "model inspect cube.obj", PAT + ["model", "inspect", str(cube), "--output", str(work / "model-inspect"), "--timeout", "600", "--json"], timeout=900)
     step(receipt, "model convert cube.obj to cast", PAT + ["model", "convert", str(cube), "--format", "cast", "--output", str(work / "model-convert"),
                                                        "--timeout", "600", "--json"], timeout=900)
-    rig = make_rig(work)
+    rig, diagnostic = make_rig(work)
     receipt["steps"].append({"name": "make rigged fixture with the installed Blender", "passed": rig is not None,
-                             "expected": "rig.blend written", **({} if rig else {"stderr_head": "Blender did not write the fixture"})})
+                             "expected": "rig.blend written", "stderr_head": diagnostic})
     print(("PASS " if rig else "FAIL ") + "make rigged fixture with the installed Blender", flush=True)
     if rig is None:
         return
@@ -477,7 +484,7 @@ def tier_media(receipt, work: Path):
     if retime["passed"]:
         after = retime["json"]["result"]["after"]
         frames = [a["frame_range"] for a in after.get("animations", [])]
-        ok = after.get("fps") == 60 and frames and all(r[1] == 20 for r in frames)
+        ok = after.get("fps") == 60 and frames and all(list(r) == [2, 20] for r in frames)
         receipt["steps"].append({"name": "retime doubled the frame range", "passed": bool(ok), "expected": "fps 60, swing 2..20",
                                  **({} if ok else {"stderr_head": f"fps {after.get('fps')}, ranges {frames}"})})
         print(("PASS " if ok else "FAIL ") + "retime doubled the frame range", flush=True)

@@ -26,8 +26,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
   every "not run natively" row in the matrix now names that next action, and a test keeps it so.
 - `tools/qualify.py` covers more routes: Tier 1 runs `project init` and plans the result; Tier 2
   decompiles the script it compiled; `--media` generates a two-bone rigged, skinned, animated
-  `.blend` with the installed Blender and runs `model rename-bones`, `retime` (frame range
-  verified to double), `transform` and `preview` on it. It refuses hosted CI runners (`CI`,
+  `.blend` with the installed Blender and runs `model rename-bones`, `retime` (the 1..10 frame range
+  verified to become 2..20), `transform` and `preview` on it. It refuses hosted CI runners (`CI`,
   `GITHUB_ACTIONS` and similar) like Wine and WSL. The Linux receipts are regenerated (15 and 23
   steps) and `gsc decompile`, `project init` and the four remaining `model` actions move to
   `available` on Linux; their Windows run is the playbook's job.
