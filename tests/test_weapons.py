@@ -190,3 +190,28 @@ class WeaponBoundsTests(unittest.TestCase):
 
         self.assertLess(weapons.MAX_PAGES + 64, weapons.MAX_INDEX_FILES, "pages plus manifest and media must fit the index")
         self.assertLessEqual(weapons.MAX_INDEX_FILES, MAX_FILES, "index must fit the Job declared-input cap")
+
+
+class WeaponElementTypeTests(WeaponFixture):
+    def test_unhashable_elements_are_input_invalid_not_operation_failed(self):
+        manifest_path = self.donor / "capture-01" / "manifest.json"
+        m = json.loads(manifest_path.read_text())
+        m["models"][0]["tags"] = [[]]
+        text = json.dumps(m)
+        manifest_path.write_text(text)
+        index = json.loads((self.donor / "index.json").read_text())
+        index["files"]["capture-01/manifest.json"] = sha(text.encode())
+        index_bytes = json.dumps(index).encode()
+        (self.donor / "index.json").write_bytes(index_bytes)
+        r = json.loads(self.receipt.read_text())
+        r["index_sha256"] = sha(index_bytes)
+        self.receipt.write_text(json.dumps(r))
+        code, row = invoke(["weapon", "catalog", str(self.receipt), "--capture", "capture-01/manifest.json", "--output", self.out()])
+        self.assertEqual(row["error_code"], "input_invalid")
+        # Recipe side: unhashable prefixes and required_files
+        self.build_donor()
+        code, row = invoke(["weapon", "catalog", str(self.receipt), "--capture", "capture-01/manifest.json", "--output", self.out()])
+        library = Path(row["result"]["output"]) / "library.json"
+        for field, value in (("keep_loaded_prefixes", [[]]), ("required_files", [{}])):
+            code, row = invoke(["weapon", "plan", str(self.recipe(**{field: value})), "--library", str(library), "--output", self.out()])
+            self.assertEqual(row["error_code"], "input_invalid", field)

@@ -82,7 +82,7 @@ Then, with the game **not** running, ask for permission and run:
 | --- | --- | --- |
 | 3a | `pat game status --json` | `windows` is empty, `foreground` is your terminal |
 | 3b | `pat game launch --json` | `launch_requested: true`. Watch what happens on screen. Record whether the launcher showed a login or update prompt, whether the game window took focus, and what `focus_preserved` reported. If `config_missing` names the URI handler, that is a finding: record it and launch from the Plutonium launcher by hand instead. |
-| 3c | wait for the main menu, then `pat game status --json` | exactly one window, title `Plutonium T6 Zombies (rNNNN)` |
+| 3c | wait for the main menu, then `pat game status --json` | exactly one window, title `Plutonium T6 Zombies` or `Plutonium T6 Zombies (rNNNN)` |
 | 3d | `pat game info --json` | fresh `state` with `mapname`, `fs_game`, `sv_running` |
 | 3e | `pat game load-map town --json` | `load_id` returned; the game loads Town |
 | 3f | `pat game check-load <load_id> --json` | `verified: true`, `state_matches: true`, logs `checked: true` |

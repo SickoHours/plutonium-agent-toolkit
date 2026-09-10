@@ -150,8 +150,8 @@ def catalog(job: Job, receipt_path: Path, capture_rel: str) -> dict:
             item = {"name": _name(row.get("name"))}
             if kind == "models":
                 tags = row.get("tags")
-                _require(isinstance(tags, list) and 0 < len(tags) <= 255 and len(set(tags)) == len(tags)
-                         and all(isinstance(t, str) for t in tags), "Invalid model bone names")
+                _require(isinstance(tags, list) and 0 < len(tags) <= 255 and all(isinstance(t, str) for t in tags)
+                         and len(set(tags)) == len(tags), "Invalid model bone names")
                 lods = row.get("lods", [])
                 _require(isinstance(lods, list) and all(isinstance(lod, dict) and isinstance(lod.get("materials", []), list) for lod in lods),
                          "Model lods must be objects with material lists")
@@ -187,11 +187,13 @@ def read_recipe(path: Path) -> dict:
     _require(isinstance(recipe["menu_route"], str) and 0 < len(recipe["menu_route"]) <= 512, "menu_route required")
     _require(type(recipe["resident_cap_bytes"]) is int and 0 < recipe["resident_cap_bytes"] <= 16 * 1024**2, "resident_cap_bytes must be within 16 MiB")
     prefixes = recipe["keep_loaded_prefixes"]
-    _require(isinstance(prefixes, list) and 0 < len(prefixes) <= 16 and len(set(prefixes)) == len(prefixes), "Invalid resident prefixes")
+    _require(isinstance(prefixes, list) and 0 < len(prefixes) <= 16 and all(isinstance(p, str) for p in prefixes)
+             and len(set(prefixes)) == len(prefixes), "Invalid resident prefixes")
     for prefix in prefixes:
-        _require(isinstance(prefix, str) and PREFIX.match(prefix), f"Resident prefix {prefix!r} must be a bounded family namespace ending in _")
+        _require(PREFIX.match(prefix), f"Resident prefix {prefix!r} must be a bounded family namespace ending in _")
     required = recipe["required_files"]
-    _require(isinstance(required, list) and len(required) <= MAX_INDEX_FILES and len(set(required)) == len(required), "Invalid required_files")
+    _require(isinstance(required, list) and len(required) <= MAX_INDEX_FILES and all(isinstance(f, str) for f in required)
+             and len(set(required)) == len(required), "Invalid required_files")
     for f in required:
         _rel(Path("/donor"), f)
     variants = recipe["variants"]
