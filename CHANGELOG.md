@@ -9,6 +9,22 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Added
 
+- Windows-gated development routes implemented: `model
+  inspect|convert|transform|rename-bones|retime|preview` (background Blender with the bundled
+  worker and pinned Cast add-on), `audio inspect|convert`, `image convert`, `lua decompile`.
+- `weapon catalog|plan` implemented (any platform): sealed BO3 donor verification and recipe
+  planning; `docs/WEAPONS.md`.
+- `game install-mod <mod.ff> <folder>`: file-only install into storage with hash verification;
+  refuses to overwrite without `--replace`, which moves the old folder aside.
+- Windows qualification procedure: `WINDOWS-QUALIFY-PROMPT.md` for the agent on the Windows PC,
+  `docs/WINDOWS-QUALIFICATION.md` (three tiers, human-authorized game tier),
+  `tools/qualify_windows.py` producing redacted receipts under `docs/receipts/<version>/`.
+- Fake ffmpeg/ffprobe, ImageConverter, CoDLuaDecompiler and Blender under `tests/fakes/`.
+
+### Changed
+
+- `capture` and `test` routes are now `deferred` (product decision 2026-09-10): registered, refuse
+  with `not_implemented`, and excluded from the beta and 1.0 bars in `docs/SUPPORT.md`.
 - `game` group implemented behind the Windows gate: `status`, `mods`, `info`, `launch`,
   `select-mod`, `reload-mod`, `load-map`, `fast-restart`, `map-restart`, `disconnect`,
   `check-load`, `quit`. Native Win32 console transport (attach, screen read, one bounded input

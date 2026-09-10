@@ -51,7 +51,7 @@ class DiscoveryTests(IsolatedHome):
         self.assertEqual(len(ids), len(routes()))
         for r in row["result"]["routes"]:
             self.assertIn(r["effect"], EFFECTS)
-            self.assertIn(r["status"], ("available", "implemented", "planned", "unsupported"))
+            self.assertIn(r["status"], ("available", "implemented", "planned", "deferred", "unsupported"))
             self.assertEqual(r["argv"][:1], ["pat"])
 
     def test_describe_known_and_unknown_routes(self):
@@ -62,12 +62,13 @@ class DiscoveryTests(IsolatedHome):
         self.assertEqual(code, 2)
         self.assertEqual(row["error_code"], "unknown_route")
 
-    def test_planned_routes_refuse_with_not_implemented_and_run_nothing(self):
-        for argv in (["model", "convert", "x.cast"], ["capture", "start"], ["test", "start"], ["weapon", "catalog"]):
+    def test_deferred_routes_refuse_with_not_implemented_and_run_nothing(self):
+        for argv in (["capture", "start"], ["test", "start"], ["capture", "screenshot"], ["test", "report"]):
             code, row = invoke(argv)
             self.assertEqual(code, 1, argv)
             self.assertEqual(row["error_code"], "not_implemented", argv)
-            self.assertEqual(row["details"]["route"]["status"], "planned")
+            self.assertEqual(row["details"]["route"]["status"], "deferred")
+            self.assertIn("Deferred by product decision", row["hint"])
 
     def test_usage_errors_exit_two(self):
         code, row = invoke(["definitely-not-a-group"])

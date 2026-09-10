@@ -42,7 +42,8 @@ unverified. A failed original attempt stays failed even if a later attempt recov
 - Run `python -m unittest discover -s tests -v`, `python tools/private_scan.py` and
   `python tools/release_check.py` before opening a pull request.
 - New routes register in the owning `routes.py` with an honest `status`. A route becomes
-  `available` only with a native Windows receipt recorded in `docs/SUPPORT.md`.
+  `available` only with a native Windows receipt recorded in `docs/SUPPORT.md`, produced by
+  `tools/qualify_windows.py` per `docs/WINDOWS-QUALIFICATION.md`.
 - Never add a generic console-string, memory-write or arbitrary-function escape hatch.
 - Never commit game assets, recordings, logs, credentials or personal paths. `tools/private_scan.py`
   runs in CI and blocks them.

@@ -47,10 +47,19 @@ No vendor installer runs, PATH and registry are untouched, and the game is never
 
 ## What next
 
-Read [SUPPORT.md](SUPPORT.md). In this version the development, game and capture routes are
-contracts only; they answer `not_implemented`. When they land, the first thing to ask your agent
-for is the `examples/hello-zm` build. Game operations always need your explicit go-ahead for the
-specific test.
+Read [SUPPORT.md](SUPPORT.md) for what each route has earned. Development and game routes are
+implemented and tested offline; none has a native Windows receipt yet, which is exactly what
+[WINDOWS-QUALIFICATION.md](WINDOWS-QUALIFICATION.md) produces. The first thing to ask your agent
+for is the `examples/hello-zm` build:
+
+```powershell
+pat project build examples\hello-zm\project.json --output ..\jobs\hello-001 --json
+pat game install-mod ..\jobs\hello-001\packages\mod.ff hello_zm --json
+```
+
+Game operations (`launch`, `select-mod`, `load-map`, restarts, `quit`) always need your explicit
+go-ahead for the specific test. Screen recording and the autonomous test runner are deferred to a
+later release.
 
 ## Troubleshooting
 
