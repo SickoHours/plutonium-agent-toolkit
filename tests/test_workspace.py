@@ -23,7 +23,7 @@ class WorkspaceInitTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()  # Windows temp paths carry a short 8.3 form
 
     def test_creates_layout_record_and_agents_file_pointing_at_the_checkout(self):
         target = self.root / "my-mods"
