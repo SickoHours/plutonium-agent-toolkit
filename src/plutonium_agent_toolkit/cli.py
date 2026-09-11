@@ -16,6 +16,7 @@
     pat module fetch <owner/id@commit | https://github.com/o/r@commit> --output <new dir>
     pat registry add <file|url> | list | search [words] [--category ...] | show <owner/id>
     pat agent probe|hosts|models|dispatch|status|send|interrupt ...   T3 Code (protocol 1) as an agent host
+    pat plane actions | serve --library <dir> --jobs <dir>   a local control plane over these routes
     pat <group> <action> ...          planned routes answer not_implemented
 
 Exit statuses: 0 ok, 1 failure, 2 usage, 130 cancelled. See core/errors.py.
@@ -37,6 +38,7 @@ from .core.errors import INVALID_ARGUMENTS, NOT_IMPLEMENTED, OPERATION_FAILED, F
 from .agent import routes as _agent_routes  # noqa: F401
 from .dev import routes as _dev_routes  # noqa: F401
 from .game import routes as _game_routes  # noqa: F401
+from .plane import routes as _plane_routes  # noqa: F401
 from .testing import routes as _testing_routes  # noqa: F401
 
 
@@ -99,6 +101,9 @@ def build_parser() -> Parser:
     from .agent import cli as _agent_cli
 
     _agent_cli.add_parser(sub)
+    from .plane import cli as _plane_cli
+
+    _plane_cli.add_parser(sub)
 
     g = sub.add_parser("game", help="Plutonium T6 Zombies control through the external console")
     g.add_argument("action", choices=sorted(r.action for r in routes() if r.group == "game"))
@@ -108,7 +113,7 @@ def build_parser() -> Parser:
     g.add_argument("--json", action="store_true")
 
     # Planned/deferred groups accept any action so they can answer with a structured refusal.
-    for group in sorted({r.group for r in routes()} - {"dev", "gsc", "ff", "project", "module", "registry", "game", "agent", "audio", "image", "lua", "model", "weapon"}):
+    for group in sorted({r.group for r in routes()} - {"dev", "gsc", "ff", "project", "module", "registry", "game", "agent", "plane", "audio", "image", "lua", "model", "weapon"}):
         g = sub.add_parser(group)
         g.add_argument("action")
         g.add_argument("rest", nargs=argparse.REMAINDER)
@@ -240,6 +245,10 @@ def run(argv: list[str]) -> dict:
         from .agent import cli as agent_cli
 
         return agent_cli.run(args, command)
+    if group == "plane":
+        from .plane import cli as plane_cli
+
+        return plane_cli.run(args, command)
 
     route = find(group, args.action)
     hint = ("Deferred by product decision; not part of this release. See docs/SUPPORT.md." if route.status == "deferred"

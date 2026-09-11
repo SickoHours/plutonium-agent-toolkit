@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>pat control plane</title>
+<link rel="stylesheet" href="/plane.css">
+</head>
+<body>
+<header>
+  <h1>pat control plane</h1>
+  <nav aria-label="Screens">
+    <button data-screen="library" class="selected">Library</button>
+    <button data-screen="pack">Pack</button>
+    <button data-screen="install">Install</button>
+    <button data-screen="agent">Agent</button>
+    <button data-screen="registry">Registry</button>
+    <button data-screen="runs">Runs</button>
+  </nav>
+  <div id="state" class="muted" aria-live="polite">connecting…</div>
+</header>
+<main>
+  <section id="screen-library" data-screen="library">
+    <h2>Library</h2>
+    <p class="muted">Declarations and compositions found under the library roots, read from their files. A declaration is not evidence; its bases and maps are what was tested.</p>
+    <div id="library"></div>
+  </section>
+  <section id="screen-pack" data-screen="pack" hidden>
+    <h2>Pack</h2>
+    <p class="muted">Plan a composition (no backend runs; collisions come back as decisions), then build it into one <code>mod.ff</code>. Every job writes its own receipt under the jobs directory.</p>
+    <div id="pack"></div>
+  </section>
+  <section id="screen-install" data-screen="install" hidden>
+    <h2>Install</h2>
+    <p class="muted">Installed mod folders from storage, file-only install of a built package, and the live game routes (native Windows; each needs your go).</p>
+    <div id="install"></div>
+  </section>
+  <section id="screen-agent" data-screen="agent" hidden>
+    <h2>Agent</h2>
+    <p class="muted">Hand a playbook to a T3 Code thread. The instance, model and reasoning choice are yours; the page never fills them in.</p>
+    <div id="agent"></div>
+  </section>
+  <section id="screen-registry" data-screen="registry" hidden>
+    <h2>Registry</h2>
+    <p class="muted">Registries recorded on this machine, search, and fetch at an exact commit.</p>
+    <div id="registry"></div>
+  </section>
+  <section id="screen-runs" data-screen="runs" hidden>
+    <h2>Runs</h2>
+    <p class="muted">Every action this plane started, newest first, and every receipt under the jobs directory.</p>
+    <div id="runs"></div>
+  </section>
+</main>
+<dialog id="confirm">
+  <form method="dialog">
+    <h3 id="confirm-title">Confirm</h3>
+    <p id="confirm-text"></p>
+    <pre id="confirm-argv"></pre>
+    <menu>
+      <button value="cancel">Cancel</button>
+      <button value="ok" class="primary">Run it</button>
+    </menu>
+  </form>
+</dialog>
+<script src="/plane.js"></script>
+</body>
+</html>

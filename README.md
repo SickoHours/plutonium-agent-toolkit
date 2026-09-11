@@ -97,6 +97,8 @@ add a script, port a feature, four preflights, diagnose a crash, compose a pack,
 let an agent compose several mods, from local directories or fetched repositories, into one pack;
 [docs/REGISTRY.md](docs/REGISTRY.md) specifies the registry file that lists them by name at exact
 commits, with `pat registry` and `pat module fetch`. `examples/registry.json` lists the examples.
+[docs/CONTROL-PLANE.md](docs/CONTROL-PLANE.md) describes `pat plane serve`, a local page over those routes
+and the agent-host routes, where the person picks the model and an agent thread does the work.
 [docs/TRACK-RECORD.md](docs/TRACK-RECORD.md) records what that workflow has produced, and the
 workflows that went beyond the packaged routes.
 
@@ -126,6 +128,7 @@ python tools/release_check.py
 | `src/plutonium_agent_toolkit/dev/` | Backend pins and setup; development routes |
 | `src/plutonium_agent_toolkit/game/` | Game control routes |
 | `src/plutonium_agent_toolkit/agent/` | Agent-host routes: T3 Code as a thread dispatcher |
+| `src/plutonium_agent_toolkit/plane/` | The control plane: a loopback page whose every control is one route (`docs/CONTROL-PLANE.md`) |
 | `src/plutonium_agent_toolkit/testing/` | Capture and test routes |
 | `examples/hello-zm/` | The bundled first-run mod used by the qualification loop |
 | `examples/hello-pack/` | The smallest composition: both example modules on the stock game as one `mod.ff`; formats in `docs/MODULES.md` |

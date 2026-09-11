@@ -180,6 +180,11 @@ _Avoid_: orchestrator, backend, IDE
 carry sequence numbers; what the thread then did is read from its status and the receipts it wrote.
 _Avoid_: launch (reserved for the game), send (a follow-up turn), trigger
 
+**Control plane**: The local page `pat plane serve` puts over the routes: every control is one
+registered route with typed parameters, run as a `pat` child with its own receipt; it holds no logic
+and picks no model.
+_Avoid_: dashboard, GUI runtime, launcher
+
 **Run**: One admitted test with explicit owner, plan, display mode, bounded events and receipts.
 _Avoid_: session, job, test case
 

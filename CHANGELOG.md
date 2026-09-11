@@ -24,6 +24,18 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Added
 
+- **Control plane.** `pat plane serve --library <dir> --jobs <dir>` serves a page on 127.0.0.1 with a
+  per-start token whose every control is one registered route with typed parameters: Library (declarations
+  and compositions read from their files, declare a seed), Pack (`module plan|build`, `project verify`),
+  Install (`game mods`, `game install-mod`, the Windows-only game routes shown and disabled elsewhere),
+  Agent (`agent probe|hosts|models|dispatch|status|send|interrupt`, with the instance, model and reasoning
+  choice always the person's), Registry (`registry list|search|show|add`, `module fetch`) and Runs (every
+  action's argv, exit status and JSON, every receipt under the jobs directory). The server validates each
+  parameter (files confined to the named roots and file names, ids by the routes' own patterns), adds
+  `--output` for job routes, runs `pat` as a child process, one at a time, and records each run; it never
+  builds argv, names an output directory, picks a model or reads the bearer. `pat plane actions` prints the
+  table. New effect `serves-local`. Twenty-nine tests drive the server against the fake backends.
+  `docs/CONTROL-PLANE.md`; glossary term control plane.
 - **Registries and fetch by name.** `docs/REGISTRY.md` specifies `registry.json`: a file anyone can
   host that lists module and composition repositories at exact commits and holds no bytes; entries
   are `<github-owner>/<id>` and ownership is the repository living under that owner. New routes
