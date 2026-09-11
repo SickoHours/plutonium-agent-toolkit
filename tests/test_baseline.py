@@ -1043,7 +1043,8 @@ class RouteTests(BaselineFixture):
         self.assertEqual(json.loads(Path(row["receipt"]).read_text(encoding="utf-8"))["status"], "failed")
         code, row = invoke(["registry", "list"])
         self.assertEqual(code, 0, row)
-        self.assertEqual(row["result"]["registries"], [])
+        # The non-job action still answers without --output; only the toolkit's own built-in registry is listed here.
+        self.assertEqual([r["name"] for r in row["result"]["registries"] if r.get("origin") != "builtin"], [])
 
     def test_manifest_registers_the_route_honestly(self):
         code, row = invoke(["manifest"])
