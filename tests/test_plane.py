@@ -634,7 +634,7 @@ class ShutdownTests(unittest.TestCase):
             process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], stdin=subprocess.DEVNULL,
                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **server_module._group_flags())
             plane.job_lock.acquire()
-            plane.active = (process, server_module._job_for(process))
+            plane.active = (process, server_module._job_for(process), "run-under-test")
             started = time.monotonic()
             summary = plane.shutdown(grace=2)
             self.assertTrue(summary["child_stopped"])

@@ -72,7 +72,14 @@ def _schema_for(param) -> dict:
                            "properties": {"root": {"type": "integer", "minimum": 0},
                                           "path": {"type": "string"}},
                            "required": ["root", "path"], "additionalProperties": False}]}
-    return {"type": "string", "description": param.help}
+    schema = {"type": "string", "description": param.help}
+    if param.pattern is not None:
+        # The validator's regex, written for JSON Schema: \Z is Python's end-of-string, $ is the
+        # same thing in the ECMA-262 dialect a schema is read in.
+        schema["pattern"] = param.pattern.pattern.replace("\\Z", "$")
+    if param.limit:
+        schema["maxLength"] = param.limit
+    return schema
 
 
 def tool_definitions(platform_info: dict) -> list[dict]:
@@ -126,10 +133,14 @@ class Bridge:
     def tools(self) -> list[dict]:
         return tool_definitions(self.plane.platform)
 
-    def call(self, name: str, arguments: dict, deadline: float | None = None) -> tuple[dict, bool]:
+    def call(self, name: str, arguments: dict, deadline: float | None = None, poll=None) -> tuple[dict, bool]:
         """(payload, is_error). The payload is the route's own JSON document, or a structured refusal.
+
         ``deadline`` is the serve deadline: when it passes while a child is still running, the wait
-        ends and ``serve`` stops the child through ``Plane.shutdown``, rather than outliving it."""
+        ends and ``serve`` stops the child through ``Plane.shutdown``, rather than outliving it.
+        ``poll`` is called while waiting and reads whatever the client sent meanwhile: it answers
+        those messages and returns True when one of them withdrew this request, which stops the
+        child and raises ``_Cancelled``."""
         if name in LOCAL_TOOLS:
             if arguments:
                 raise Failure("invalid_arguments", f"{name} takes no arguments")
@@ -151,6 +162,11 @@ class Bridge:
                                "stdout_head": row.get("stdout_head"), "stderr_head": row.get("stderr_head")}
                 return ({"run": {k: v for k, v in row.items() if k != "result"}, "result": payload},
                         not (isinstance(payload, dict) and payload.get("ok") is True))
+            if poll is not None and poll():
+                # The client withdrew the request. Stop the child before returning, so a cancelled
+                # build or install is not still running with nobody waiting for it.
+                self.plane.stop_run(started["run_id"])
+                raise _Cancelled(started["run_id"])
             time.sleep(RUN_POLL)
         # The child is still running. Either its own deadline passed (the plane's drain stops it) or
         # the bridge's did, and the shutdown that follows this call stops it and records it.
@@ -163,8 +179,10 @@ class Bridge:
                             "hint": "The run record under the jobs directory holds what the child finally did."}}, True)
 
     # ----- JSON-RPC -----
-    def handle(self, message: dict, deadline: float | None = None) -> dict | None:
-        """One request or notification to one response, or None for a notification."""
+    def handle(self, message: dict, deadline: float | None = None, interject=None) -> dict | None:
+        """One request or notification to one response, or None for a notification or a request the
+        client withdrew. ``interject`` is how a long call hears the client: it is given this
+        request's id and answers anything else that arrives meanwhile."""
         if message.get("jsonrpc") != "2.0":
             return _error(message.get("id"), -32600, "every message carries jsonrpc: \"2.0\"")
         method, request_id = message.get("method"), message.get("id")
@@ -200,16 +218,25 @@ class Bridge:
             if not isinstance(name, str) or not isinstance(arguments, dict):
                 return _error(request_id, -32602, "tools/call takes name and an arguments object")
             try:
-                payload, is_error = self.call(name, arguments, deadline)
+                payload, is_error = self.call(name, arguments, deadline,
+                                              poll=None if interject is None else (lambda: interject(request_id)))
+            except _Cancelled:
+                return None     # the protocol: a withdrawn request gets no response
             except Failure as exc:
                 payload, is_error = exc.to_dict(), True
             except (OSError, ValueError, RuntimeError) as exc:  # never let a traceback replace the protocol
                 payload, is_error = {"ok": False, "error_code": "operation_failed",
                                      "message": f"{type(exc).__name__}: {str(exc)[:400]}"}, True
-            text = _render(payload, MAX_RESULT)
+            try:
+                text = _render(payload, MAX_RESULT)
+            except ValueError as exc:   # a number JSON cannot carry (inf, nan) reached the encoder
+                text, is_error = json.dumps({"ok": False, "error_code": "operation_failed",
+                                             "message": f"{name} produced a result JSON cannot represent: {exc}"}, indent=2), True
             if text is None:
+                where = ("it is read from the library files, so narrow the roots you gave `mcp serve` or read them directly"
+                         if name in LOCAL_TOOLS else "read its receipt under the jobs directory, or run it in a terminal")
                 text = json.dumps({"ok": False, "error_code": "output_limit",
-                                   "message": f"{name} produced more than {MAX_RESULT} bytes; read its receipt or run it in a terminal"}, indent=2)
+                                   "message": f"{name} produced more than {MAX_RESULT} bytes; {where}"}, indent=2)
                 is_error = True
             return _result(request_id, {"content": [{"type": "text", "text": text}], "isError": is_error})
         return _error(request_id, -32601, f"Unknown method {method!r}")
@@ -241,6 +268,11 @@ def _error(request_id, code: int, message: str) -> dict | None:
 # ----- stdio loop -------------------------------------------------------------------------
 
 _OVERSIZED = object()   # a message past the bound: its bytes are never kept, only the fact
+
+
+class _Cancelled(Exception):
+    """The client withdrew the request this call is answering. The protocol says the request gets
+    no response, so this leaves ``handle`` with nothing to send."""
 
 
 class _Lines(threading.Thread):
@@ -348,7 +380,62 @@ def pump(bridge: Bridge, source, sink, deadline: float | None = None, stop: thre
 
 def _loop(bridge: Bridge, reader, answer, deadline, stop) -> dict:
     handled, errors = 0, 0
+    state = {"eof": False, "undeliverable": False}
+
+    def interject(request_id) -> bool:
+        """Read whatever arrived while a call is running and answer it. True when the client
+        withdrew *request_id*, or when an answer could not be delivered -- both mean stop now.
+
+        This is what makes the one-at-a-time rule visible: a second ``tools/call`` sent during a
+        run reaches ``Plane.start``, which refuses it with ``busy`` straight away rather than
+        letting it wait its turn unseen."""
+        nonlocal handled, errors
+        while True:
+            try:
+                line = reader.lines.get_nowait()
+            except queue.Empty:
+                return False
+            if line is None:
+                state["eof"] = True             # the loop ends after this call, with its answer sent
+                return False
+            if line is _OVERSIZED:
+                errors += 1
+                if not answer({"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": f"message exceeds {MAX_LINE} bytes"}}):
+                    state["undeliverable"] = True
+                    return True
+                continue
+            text = line.strip()
+            if not text:
+                continue
+            try:
+                message = strict_loads(text)
+                if not isinstance(message, dict):
+                    raise ValueError("not an object")
+            except (ValueError, RecursionError):
+                errors += 1
+                if not answer({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "parse error"}}):
+                    state["undeliverable"] = True
+                    return True
+                continue
+            if (message.get("method") == "notifications/cancelled"
+                    and isinstance(message.get("params"), dict)
+                    and message["params"].get("requestId") == request_id and request_id is not None):
+                handled += 1
+                return True
+            handled += 1
+            response = _answer_for(bridge, message, deadline, interject=None)   # never nests further
+            if response is not None:
+                if response.get("error"):
+                    errors += 1
+                if not answer(response):
+                    state["undeliverable"] = True
+                    return True
+
     while True:
+        if state["undeliverable"]:
+            return {"stopped": "undeliverable", "messages": handled, "errors": errors}
+        if state["eof"]:
+            return {"stopped": "client", "messages": handled, "errors": errors}
         if stop is not None and stop.is_set():
             return {"stopped": "signal", "messages": handled, "errors": errors}
         if deadline is not None and time.monotonic() >= deadline:
@@ -377,12 +464,7 @@ def _loop(bridge: Bridge, reader, answer, deadline, stop) -> dict:
                 return {"stopped": "undeliverable", "messages": handled, "errors": errors}
             continue
         handled += 1
-        try:
-            response = bridge.handle(message, deadline)
-        except Failure as exc:
-            response = _error(message.get("id"), -32603, exc.message)
-        except RecursionError:
-            response = _error(message.get("id"), -32603, "the request nests too deeply to answer")
+        response = _answer_for(bridge, message, deadline, interject)
         if response is not None:
             if response.get("error"):
                 errors += 1
@@ -390,6 +472,16 @@ def _loop(bridge: Bridge, reader, answer, deadline, stop) -> dict:
             # either, and a queued call must not run with nowhere to report.
             if not answer(response):
                 return {"stopped": "undeliverable", "messages": handled, "errors": errors}
+
+
+def _answer_for(bridge: Bridge, message: dict, deadline, interject) -> dict | None:
+    """One message answered, with every failure that is not the protocol's turned into one."""
+    try:
+        return bridge.handle(message, deadline, interject)
+    except Failure as exc:
+        return _error(message.get("id"), -32603, exc.message)
+    except (RecursionError, ValueError) as exc:   # deep nesting, or a value JSON cannot represent
+        return _error(message.get("id"), -32603, f"the request could not be answered: {type(exc).__name__}")
 
 
 def _write(sink, message: dict) -> None:

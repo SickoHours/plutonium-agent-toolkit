@@ -72,9 +72,13 @@ it calls. Three things the schemas make explicit:
   routes need native Windows; the bridge does not hide them, because a hidden route looks like a
   missing feature.
 
-The result of a call is the child's own JSON document, with the run record beside it
+The result of a route call is the child's own JSON document, with the run record beside it
 (`{"run": {...}, "result": {...}}`), and `isError` set when the document is not `ok`. Keep it as
-you would keep the command's stdout: that pair is the receipt.
+you would keep the command's stdout: that pair is the receipt. The two local reads answer with
+their own object instead (`{"library": ...}`, `{"runs": ...}`); they start no child, so there is
+no run record and no receipt to keep. A result of either kind is capped at 1 MiB: a library too
+large for one message is refused with `output_limit`, and the way to read it is narrower roots or
+the files themselves, not a receipt it never wrote.
 
 ## What the bridge cannot do, on purpose
 
@@ -82,8 +86,9 @@ you would keep the command's stdout: that pair is the receipt.
   console string. The action table is the whole surface; adding a capability means adding a
   typed route, with tests and a support row, the same as everywhere else.
 - **No second runtime.** Every call becomes `pat <route> … --json` as a child process, one at a
-  time, with the route's own timeout, bounded output, and its receipt on disk. A second call
-  while one runs is refused with `busy` rather than queued silently.
+  time, with the route's own timeout, bounded output, and its receipt on disk. A second call sent
+  while one runs is read straight away and refused with `busy`, rather than waiting unseen for its
+  turn and running when the client has moved on.
 - **No credential handling.** `agent dispatch` sends the bearer the user configured, through
   `pat agent`, exactly as the command line does. The bridge never reads, prints or forwards it.
 - **No game beyond the routes.** The same rule as everywhere: `game` routes need the user's
@@ -108,7 +113,11 @@ request before `initialize` is refused.
 
 Lines are read off the stream by a reader thread, so `--seconds` is reached even while a
 connected harness sits idle, and a tool call that is still running when the deadline passes stops
-waiting and says so rather than outliving it. The reader holds one message at a time: a harness
+waiting and says so rather than outliving it. A call in progress keeps reading the client: a
+`notifications/cancelled` naming that request stops the child and sends no response for it, as the
+protocol requires, and the plane accepts the next call normally afterwards. Anything else that
+arrives is answered while the call runs, which is why a second `tools/call` comes back `busy`
+immediately. The reader holds one message at a time: a harness
 that keeps sending while a call runs waits in the pipe rather than filling this process's memory.
 Answers are written by a second thread for the same reason in reverse: a harness that stops
 reading stdout blocks that thread, not the loop, and after 30 seconds the session ends

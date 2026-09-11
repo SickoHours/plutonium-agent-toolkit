@@ -249,6 +249,7 @@ class Plane:
         self.settled.set()
         self.stopping = False
         self.stop_requested = False
+        self.stopped_runs: set = set()   # runs a caller stopped on purpose: their record says stopped, not failed
         self.prompt_dir = jobs / "plane-prompts"
         (jobs / "plane-runs").mkdir(parents=True, exist_ok=True)
         self.platform = platform.describe()
@@ -405,7 +406,7 @@ class Plane:
                     run.update(status="failed", exit_code=127, finished=now(), result=None, stderr_head=f"could not start: {exc}")
                     return
                 job = _job_for(process)
-                self.active = (process, job)
+                self.active = (process, job, run["run_id"])
             try:
                 stdout, stderr, overflow, stdout_size = _drain(process, timeout, self.jobs)
                 stopped = False
@@ -417,7 +418,7 @@ class Plane:
             finally:
                 with self.lock:
                     self.active = None
-                    stopped = self.stopping
+                    stopped = self.stopping or run["run_id"] in self.stopped_runs
                 _close_job(job)  # on Windows this also ends anything the child left behind
             if overflow:
                 _stop_process(process, STOP_GRACE, None)
@@ -441,6 +442,21 @@ class Plane:
                 print(f"warning: run record could not be saved ({exc})", file=sys.stderr)
             finally:
                 self.settled.set()
+
+    def stop_run(self, run_id: str, grace: float = STOP_GRACE) -> bool:
+        """Stop one run's child and wait for its record; True when that run was the one running.
+
+        Unlike ``shutdown`` this does not close the plane: a caller that cancels one action (an MCP
+        client withdrawing a request, say) expects the next one to start normally."""
+        with self.lock:
+            active = self.active if self.active is not None and self.active[2] == run_id else None
+            if active is not None:
+                self.stopped_runs.add(run_id)
+        if active is None:
+            return False
+        _stop_process(active[0], grace, active[1])
+        self.settled.wait(grace + 5)
+        return True
 
     def shutdown(self, grace: float = STOP_GRACE) -> dict:
         """Refuse new runs, stop the running child (interrupt, then kill) and wait for its record."""

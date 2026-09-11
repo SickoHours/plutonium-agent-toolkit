@@ -356,7 +356,104 @@ class UndeliverableAnswerTests(BridgeFixture):
                                       "params": {"name": "manifest", "arguments": {}}}) for n in (1, 2)) + "\n"
         summary = mcp.pump(self.bridge, io.StringIO(lines), Closed())
         self.assertEqual(summary["stopped"], "undeliverable")
-        self.assertEqual(summary["messages"], 1, "the second call never ran")
+        # The second call was read while the first was running and refused with busy, so it never
+        # became a child; the first one's child was stopped rather than left to finish unheard.
+        self.assertEqual(len(self.plane.run_rows()), 1, "only the first call ever started a child")
+
+
+class CancellationTests(BridgeFixture):
+    def slow_call(self, request_id=7):
+        """A tools/call message for a route that takes long enough to be cancelled mid-run."""
+        return {"jsonrpc": "2.0", "id": request_id, "method": "tools/call",
+                "params": {"name": "module-build", "arguments": {"composition": {"root": 0, "path": "hello-pack/composition.json"}}}}
+
+    def test_a_withdrawn_request_stops_its_child_and_is_not_answered(self):
+        # Review finding: notifications/cancelled could not reach a call, because the call held the
+        # loop until the route's own timeout -- up to half an hour with a state-changing child still
+        # running. The wait reads the client now, so the withdrawal arrives while it matters.
+        self.start()
+        lines = "\n".join([json.dumps(self.slow_call()),
+                            json.dumps({"jsonrpc": "2.0", "method": "notifications/cancelled",
+                                        "params": {"requestId": 7, "reason": "the person changed their mind"}})]) + "\n"
+        sink = io.StringIO()
+        summary = mcp.pump(self.bridge, io.StringIO(lines), sink, deadline=time.monotonic() + 120)
+        self.assertEqual(sink.getvalue(), "", "the protocol says a withdrawn request gets no response")
+        self.assertEqual(summary["stopped"], "client")
+        row = self.plane.run_rows()[0]
+        self.assertEqual(row["action"], "module-build")
+        self.assertEqual(row["status"], "stopped", "the child was stopped, not left running")
+        self.assertFalse(self.plane.job_lock.locked(), "and the next call can start")
+
+    def test_a_cancellation_for_another_request_is_ignored(self):
+        # The protocol's rule: a notification naming a request this call is not answering changes
+        # nothing. Here it arrives during a run that then finishes normally.
+        self.start()
+        lines = "\n".join([json.dumps({"jsonrpc": "2.0", "id": 7, "method": "tools/call",
+                                        "params": {"name": "manifest", "arguments": {}}}),
+                            json.dumps({"jsonrpc": "2.0", "method": "notifications/cancelled",
+                                        "params": {"requestId": 999}})]) + "\n"
+        sink = io.StringIO()
+        mcp.pump(self.bridge, io.StringIO(lines), sink, deadline=time.monotonic() + 120)
+        answers = [json.loads(line) for line in sink.getvalue().splitlines()]
+        self.assertEqual([a["id"] for a in answers], [7])
+        self.assertFalse(answers[0]["result"]["isError"], answers)
+
+    def test_a_second_call_during_a_run_is_refused_with_busy(self):
+        # Review finding: the docs said a second call is refused rather than queued, but the loop
+        # could not read it until the first finished, so it ran late instead. It is read now.
+        self.start()
+        lines = "\n".join([json.dumps(self.slow_call(1)),
+                            json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                                        "params": {"name": "manifest", "arguments": {}}})]) + "\n"
+        sink = io.StringIO()
+        mcp.pump(self.bridge, io.StringIO(lines), sink, deadline=time.monotonic() + 180)
+        answers = {a["id"]: a for a in (json.loads(line) for line in sink.getvalue().splitlines())}
+        second = json.loads(answers[2]["result"]["content"][0]["text"])
+        self.assertTrue(answers[2]["result"]["isError"])
+        self.assertEqual(second["error_code"], "busy", second)
+        self.assertEqual([r["action"] for r in self.plane.run_rows()], ["module-build"], "the refusal started nothing")
+
+
+class RenderingTests(BridgeFixture):
+    def test_a_result_json_cannot_represent_is_an_error_not_the_end_of_the_session(self):
+        # Review finding: a number outside JSON's range (1e999 read from a library file) made the
+        # encoder raise, and the exception escaped the loop instead of becoming an error.
+        self.start()
+        with unittest.mock.patch.object(type(self.plane), "catalog", lambda _self: {"rows": [float("inf")]}):
+            is_error, payload = self.call_tool("library")
+        self.assertTrue(is_error)
+        self.assertEqual(payload["error_code"], "operation_failed")
+        self.assertIn("JSON cannot represent", payload["message"])
+        self.assertFalse(self.rpc("ping")["result"], "the session carries on")
+
+    def test_an_oversized_local_read_does_not_promise_a_receipt_it_has_none_of(self):
+        # Review finding: the refusal told the client to read a receipt, but a local read starts no
+        # child and writes none.
+        self.start()
+        with unittest.mock.patch.object(mcp, "MAX_RESULT", 200):
+            is_error, payload = self.call_tool("library")
+        self.assertTrue(is_error)
+        self.assertEqual(payload["error_code"], "output_limit")
+        self.assertNotIn("receipt", payload["message"])
+        self.assertIn("library files", payload["message"])
+
+
+class SchemaConstraintTests(BridgeFixture):
+    def test_a_string_parameter_advertises_the_shape_its_validator_demands(self):
+        # Review finding: the schemas said "string" for every text-like parameter, so a harness that
+        # validated against them still had calls refused by the action table's own patterns.
+        by_name = {tool["name"]: tool for tool in self.bridge.tools()}
+        folder = by_name["game-install-mod"]["inputSchema"]["properties"]["folder"]
+        self.assertEqual(folder["pattern"], BY_ID["game-install-mod"].params[1].pattern.pattern.replace("\\Z", "$"))
+        self.assertNotIn("\\Z", folder["pattern"], "a schema pattern is read in the ECMA-262 dialect")
+        self.assertTrue(folder["pattern"].startswith("^") and folder["pattern"].endswith("$"), folder["pattern"])
+        self.assertEqual(by_name["registry-show"]["inputSchema"]["properties"]["name"]["maxLength"],
+                         BY_ID["registry-show"].params[0].limit)
+        for tool in by_name.values():
+            for name, schema in tool["inputSchema"]["properties"].items():
+                if schema.get("type") == "string" and name != "confirmed":
+                    self.assertTrue("pattern" in schema or "maxLength" in schema or "enum" in schema,
+                                    f"{tool['name']}.{name} advertises no bound at all")
 
 
 class DeadlineDuringACallTests(BridgeFixture):

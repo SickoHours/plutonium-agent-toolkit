@@ -26,7 +26,11 @@ Every entry states what shipped, on which platform it was verified, and what rem
   carry back is refused while it is being encoded rather than after, and a client that stops
   reading stdout blocks the writer thread instead of the loop -- the session then ends with the
   child stopped, and no message still in hand is run. New effect `serves-stdio`; `docs/MCP.md` has
-  the harness configuration, the tool table and the stdio contract.
+  the harness configuration, the tool table and the stdio contract. A call in progress keeps
+  reading its client, so `notifications/cancelled` stops the child at once instead of after the
+  route's own timeout, a second call is refused with `busy` while the first is still running
+  rather than waiting unseen for its turn, and a string parameter's schema carries the pattern and
+  length its validator enforces.
 
 - **Black Ops III Workshop maps as donors.** `docs/knowledge/bo3-workshop-formats.md` records
   what a Workshop item's fastfile, XPAK and sound banks are and how much of each reads offline on
@@ -43,6 +47,10 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Fixed
 
+- **Control plane: one run can be stopped without closing the plane.** `Plane.stop_run(run_id)`
+  interrupts and kills that run's child, waits for its record and marks it `stopped`, while
+  `shutdown` keeps meaning "stop everything and refuse what comes next". The MCP bridge uses it
+  for a withdrawn request; the page's own shutdown path is unchanged.
 - **Control plane: `module fetch` confirms.** It reaches the network and writes a snapshot of
   someone else's repository into the library, which is exactly the kind of step the page and the
   bridge gate behind the person's confirmation, and `docs/MCP.md` already said it was gated -- but
