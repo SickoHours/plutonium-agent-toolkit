@@ -7,6 +7,7 @@
     pat configure --plutonium-storage-t6 <abs path> [--plutonium-launcher <abs path>] ...
     pat dev backends
     pat dev setup [--plan] [--only ID ...]
+    pat dev install-skills [--plan] [--only HARNESS ...] [--home DIR] [--source CHECKOUT]
     pat gsc compile|decompile <script> --output <new dir>
     pat ff inspect|extract <file.ff> --output <new dir>
     pat ff link <project dir> --zone <name> --output <new dir>
@@ -74,6 +75,12 @@ def build_parser() -> Parser:
     s.add_argument("--plan", action="store_true", help="List pinned downloads without downloading")
     s.add_argument("--only", nargs="+", metavar="ID", help="Install only these backend IDs")
     s.add_argument("--json", action="store_true")
+    k = dev.add_parser("install-skills", help="Copy skills/ into the harnesses' skills directories under your home, with a receipt")
+    k.add_argument("--plan", action="store_true", help="Report what would be written, updated, left or refused; write nothing")
+    k.add_argument("--only", nargs="+", metavar="HARNESS", help="Only these harness ids (claude, codex, gemini, opencode, cursor, hermes, agents)")
+    k.add_argument("--home", help="Home directory to detect harnesses under (default: the current user's)")
+    k.add_argument("--source", help="Toolkit checkout holding skills/ (default: the checkout this installation runs from)")
+    k.add_argument("--json", action="store_true")
 
     # Implemented job groups get real parsers; every job takes --output and --timeout.
     def common(q):
@@ -199,6 +206,9 @@ def run(argv: list[str]) -> dict:
         except Failure as exc:
             result["backends"] = {"ok": False, "error": exc.to_dict()}
         result["ok"] = cfg_state.get("ok", False) and result["backends"].get("ok", False)
+        from .dev import skills
+
+        result["skills"] = skills.status()
         result["game_control"] = {
             "supported_here": bool(info["game_control_supported"]),
             "note": "Game control and capture use the Win32 console and need a native Windows host. "
@@ -223,6 +233,11 @@ def run(argv: list[str]) -> dict:
         from .dev import backends
 
         return success(command, backends.setup(only=args.only, plan=args.plan))
+
+    if group == "dev" and args.action == "install-skills":
+        from .dev import skills
+
+        return success(command, skills.install(plan=args.plan, only=args.only, home=args.home, source=args.source))
 
     if group in JOB_GROUPS:
         return run_job(args, argv)

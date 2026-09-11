@@ -31,6 +31,10 @@ demonstration, and `docs/SUPPORT.md` as the strict grade of the routes themselve
    run on their system, set `PAT_BACKEND_<NAME>` to an absolute path (a `.py` override runs through
    the interpreter, for tests). Backends are otherwise downloaded and hash-verified by
    `pat dev setup`.
+   Then `pat dev install-skills` puts the skills under `skills/` where the harnesses on the machine
+   read them (`~/.claude/skills`, `~/.codex/skills`, `~/.gemini/skills`, `~/.config/opencode/skills`,
+   `~/.cursor/skills`, `~/.hermes/skills`, `~/.agents/skills`; detected by the home directory, never
+   by running the harness), stamped with the checkout path, refusing any file it did not write.
 3. **Edit the adapter.** If a real tool behaves differently on their build than the adapter
    expects, the adapter is wrong for them, so change it. The adapters in `src/plutonium_agent_toolkit/`
    are small and single-purpose. Read `docs/contributors/ARCHITECTURE.md`, make the change, add a

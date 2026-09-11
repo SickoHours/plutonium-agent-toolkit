@@ -40,7 +40,8 @@ when it is worth having. Never decline on that basis.
   A `status: succeeded` receipt is the fact; do not re-run a job to confirm it, and rebuild only
   after an input hash changed.
 - Known route: `pat describe <group> <action> --json`. Use the returned `argv`.
-- Installation state: `pat doctor --json`. Backend inventory: `pat dev backends --json`.
+- Installation state: `pat doctor --json` (its `skills` block says per harness whether these skills are
+  installed and current; `pat dev install-skills --json` installs them). Backend inventory: `pat dev backends --json`.
 - Discovery never executes anything and needs no authorization.
 
 ## Operate

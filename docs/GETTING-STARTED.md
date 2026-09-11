@@ -75,6 +75,21 @@ Where a backend has no pinned build for your OS, setup reports it as `override-r
 tool and set `PAT_BACKEND_<NAME>`. No vendor installer runs, PATH and registry are untouched, and the
 game is never started.
 
+## Install the skills
+
+```sh
+pat dev install-skills --plan --json     # which harnesses were found and what would be written
+pat dev install-skills --json            # copy skills/ into each found harness's skills directory
+```
+
+The route detects a harness by its home directory (`~/.claude`, `~/.codex`, `~/.gemini`,
+`~/.config/opencode`, `~/.cursor`, `~/.hermes`, and the shared `~/.agents`) and copies the seven
+skills under `skills/` into that harness's user-level skills directory, each `SKILL.md` stamped with
+the checkout its `docs/` paths point at. It writes absent files and files it wrote before, refuses
+any other existing file and says which, never follows a linked destination, and launches nothing.
+`doctor` then reports, per harness, whether the installed skills are current. Open a new session in
+the harness for it to list them. Run it again after pulling a newer checkout.
+
 ## What next
 
 Read [SUPPORT.md](SUPPORT.md) for what each route has earned. The development routes have native

@@ -22,10 +22,14 @@ Handle the routine work yourself:
    Where a pinned download exists for my OS, run `pat dev setup --json` to fetch and verify it. Where
    it reports `override-required` (no pinned build for my OS), find or install the tool and point the
    toolkit at it with an absolute path in `PAT_BACKEND_<NAME>` (for example `PAT_BACKEND_GSC`).
-4. If I am on Windows and want game control later, find my Plutonium T6 storage folder (usually
+4. Install the skills so any agent I open on this machine knows this toolkit: run
+   `pat dev install-skills --plan --json`, show me which harnesses it found, then run it without
+   `--plan`. It copies `skills/` into each found harness's skills directory, writes nothing over a
+   file it did not write, and launches nothing.
+5. If I am on Windows and want game control later, find my Plutonium T6 storage folder (usually
    `%LOCALAPPDATA%\Plutonium\storage\t6`) and my `plutonium.exe`, and save them with `pat configure`.
    On Linux, game control is out of scope; configure only what the build tools need.
-5. Run `pat doctor --json` and explain, in plain language, what is ready and what is not. `doctor`
+6. Run `pat doctor --json` and explain, in plain language, what is ready and what is not. `doctor`
    reports development-tool readiness separately from whether game control is supported on this host.
 
 Keep this scoped to installation. Do not launch, attach to, query or change the game. Do not install
