@@ -6,6 +6,20 @@ BO3 containers and a running BO3 process; the general playbook's gates still app
 `CONTEXT.md`. Formats: `docs/knowledge/bo3-workshop-formats.md`. Contracts:
 `docs/knowledge/zombies-contracts.md`, `docs/knowledge/foundations.md`.
 
+Four knowledge pages gate the steps where this playbook's ports have failed.
+`docs/knowledge/bo3-sab-audio.md` gates step 4: carve the recordings by name from the bank and
+read the alias chain from the donor's own bytes; where a live alias row was never captured, a
+native prototype row is a recorded adaptation, not donor data.
+`docs/knowledge/weapon-attachments.md` gates the models bullet of step 5 and the aim work that
+follows it: a BO3 weapon's sights can be a separate runtime-mounted attachment model, so list and
+capture it with the weapon held before any aim clip is authored.
+`docs/knowledge/weapon-aim.md` gates the weapon-definition bullet of step 5: no `ads*` field comes
+from the donor, and an inherited block is diffed against the field's distribution across
+same-class weapons before it is trusted.
+`docs/knowledge/weapon-camo.md` gates the Pack-a-Punch form in step 5 and its readback in step 7:
+a camo table only repaints the gun it was authored for, tiling is per gun, and the accepted
+design is one weapon per camo.
+
 ## Preconditions
 
 - `inspect-a-bo3-map.md` ran: the feature inventory names the weapon, its scripts, models,

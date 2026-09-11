@@ -9,6 +9,28 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Added
 
+- **Weapon-camo, weapon-aim, attachment and BO3 audio knowledge.** Four pages distilled from an
+  authoring workspace's T6 port cycle. `docs/knowledge/weapon-camo.md` records how a `weaponCamo`
+  asset renders (`materialOverrides`, per-gun `shaderConsts[0..1]` UV tiling scaled by measured UV
+  density, `useColorMap`, animated technique sets), why runtime camo switching cleared a held gun,
+  the one-weapon-per-camo design that avoided the unresolved option-index rule, and the four ways
+  a ported gun gets the camo wrong with the player symptom and the offline check for each.
+  `docs/knowledge/weapon-aim.md` records that donor `ads*` tuning does not transfer, that a native
+  template of the right class can still be an outlier (the M1911's aim depth of field and its zoom
+  field of view equal to the default), the rule to diff an inherited field block against the
+  field's distribution across same-class weapons, the `tag_sights` against viewhands `tag_ads`
+  geometry failure, and the rule not to derive the view model camera offline.
+  `docs/knowledge/weapon-attachments.md` records that a BO3 weapon's sights or optic can be a
+  separate runtime-mounted attachment model, how to list it from the WeaponDef/attachment rows
+  and the name convention, how to capture it with the weapon held and fuse it at the donor bone's
+  bind transform weighted to the gun root, and the native reticle and lens substitutions.
+  `docs/knowledge/bo3-sab-audio.md` records the SAB v15 name table (`count`, `name_size`,
+  `name_offset`), the `fLaC` carve at each entry's offset, the zone's sound-alias namespace and
+  secondary chain, and the native-prototype-row fallback with the rule that a prototype row is a
+  recorded adaptation rather than donor data. `docs/knowledge/README.md` indexes the four pages
+  and `docs/playbooks/port-a-bo3-weapon.md` names the step each one gates. Docs only; no route,
+  receipt or evidence level changed.
+
 - **The routes as MCP tools in any harness.** `pat mcp serve --library <dir> --jobs <dir>` speaks
   Model Context Protocol on stdin and stdout, exposing the control plane's typed actions as tools
   with JSON Schemas generated from their parameters, plus two local reads (`library`, `runs`). It is
