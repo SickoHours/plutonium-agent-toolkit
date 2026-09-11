@@ -223,10 +223,10 @@ def pump(bridge: Bridge, source, sink, deadline: float | None = None) -> dict:
         line = source.readline(MAX_LINE + 1)
         if not line:
             return {"stopped": "client", "messages": handled, "errors": errors}
-        if len(line) > MAX_LINE and not line.endswith("\n"):
-            while True:
-                more = source.readline(MAX_LINE + 1)
-                if not more or more.endswith("\n"):
+        if len(line) > MAX_LINE:
+            while not line.endswith("\n"):       # drain the tail so the stream stays in frame
+                line = source.readline(MAX_LINE + 1)
+                if not line:
                     break
             errors += 1
             _write(sink, {"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": f"message exceeds {MAX_LINE} bytes"}})

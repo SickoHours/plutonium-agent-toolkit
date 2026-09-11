@@ -215,16 +215,21 @@ class PumpTests(BridgeFixture):
                  "{not json}",
                  json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}),
                  "x" * (mcp.MAX_LINE + 10),
-                 json.dumps({"jsonrpc": "2.0", "id": 3, "method": "ping"})]
+                 json.dumps({"jsonrpc": "2.0", "id": 3, "method": "ping"}),
+                 json.dumps({"jsonrpc": "2.0", "id": 4, "method": "ping", "params": {"pad": "y" * mcp.MAX_LINE}}),
+                 json.dumps({"jsonrpc": "2.0", "id": 5, "method": "ping"})]
         sink = io.StringIO()
         summary = mcp.pump(self.bridge, io.StringIO("\n".join(lines) + "\n"), sink)
         self.assertEqual(summary["stopped"], "client")
         answers = [json.loads(line) for line in sink.getvalue().splitlines()]
-        self.assertEqual([a.get("id") for a in answers], [1, None, 2, None, 3])
+        # The oversized line whose tail is drained and the oversized line that ends in a newline are
+        # both refused by size, and the requests on either side of them are answered in order.
+        self.assertEqual([a.get("id") for a in answers], [1, None, 2, None, 3, None, 5])
         self.assertEqual(answers[1]["error"]["code"], -32700, "a parse error is reported, the stream continues")
         self.assertEqual(answers[3]["error"]["code"], -32600, "an oversized message is refused and its tail drained")
+        self.assertEqual(answers[5]["error"]["code"], -32600, "an oversized message that ends in a newline is refused too")
         self.assertEqual(len(answers[2]["result"]["tools"]), len(BY_ID) + len(mcp.LOCAL_TOOLS))
-        self.assertEqual(summary["errors"], 2)
+        self.assertEqual(summary["errors"], 3)
 
     def test_a_deadline_stops_the_loop(self):
         summary = mcp.pump(self.bridge, io.StringIO(""), io.StringIO(), deadline=0)
