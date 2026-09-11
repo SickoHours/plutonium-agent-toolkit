@@ -34,6 +34,10 @@ verified, installed, launched, playable, captured, accepted. Words are defined i
   composition. A hit with `origin: builtin` is one the toolkit ships: `pat dev builtin` puts it on
   the machine and the hit's `builtin_dir` is the member path. `docs/REGISTRY.md`; publishing your
   own: `docs/playbooks/publish-a-module.md`.
+- **The donor is a Black Ops III Workshop map** ("port the pistol from that map"):
+  `docs/playbooks/inspect-a-bo3-map.md` reads the map from its own compiled data on Linux and,
+  when a structured asset is needed, captures once read-only from the user's running BO3; then
+  `docs/playbooks/port-a-bo3-weapon.md`. Formats: `docs/knowledge/bo3-workshop-formats.md`.
 - **The user names a feature and no donor is on disk**: `docs/playbooks/find-prior-art.md`
   before `pat-grill`. Someone has usually ported or extracted it for some game; a lead found,
   fetched, hashed and inspected is a donor, and a search not run is a port built from nothing.

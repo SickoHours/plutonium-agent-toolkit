@@ -10,7 +10,7 @@ says what differs so you do not port a T6 assumption to another engine by accide
 | Black Ops (T5) | GSC, a different VM; script compilation is not supported by the pinned tools | OpenAssetTools reads T5 fastfiles and can package precompiled assets | A T5 script cannot be compiled here; donor assets can be inspected and extracted |
 | World at War (T4) | GSC, older VM | Different fastfile format; not covered by the pinned tools | Out of scope |
 | Modern Warfare 3 (IW5) | GSC, IW engine | Different tools and formats | Out of scope; no Zombies |
-| Black Ops III (T7) | GSC with a different compiler and asset model | Not a Plutonium title; separate modding tools | Used only as an asset *donor* for T6 ports; `pat weapon catalog` inventories a saved capture of BO3 weapon assets |
+| Black Ops III (T7) | GSC with a different compiler and asset model | Not a Plutonium title; separate modding tools | Used only as an asset *donor* for T6 ports; a Workshop map reads offline per `bo3-workshop-formats.md`, a running BO3 under Proton is read once read-only per `docs/playbooks/inspect-a-bo3-map.md`, and `pat weapon catalog` inventories the saved capture |
 
 ## Porting from a donor title
 

@@ -10,6 +10,8 @@ command, then run it. Read `docs/knowledge/` once for the facts behind the steps
 | [add-a-script.md](add-a-script.md) | A mod needs a new or changed server or client script |
 | [find-prior-art.md](find-prior-art.md) | The user names a feature and no donor or source is on disk |
 | [port-a-feature.md](port-a-feature.md) | A feature from another mod or title is wanted in a T6 mod |
+| [inspect-a-bo3-map.md](inspect-a-bo3-map.md) | A Black Ops III Workshop map should be understood from its own compiled data before a port is chosen; one read-only capture when a structured asset is needed |
+| [port-a-bo3-weapon.md](port-a-bo3-weapon.md) | A weapon from a BO3 Workshop map should reach a T6 map that loads first time: native templates from the target map's own zones, per-kind readback, refuse-on-gap build |
 | [preflight-weapon-rig.md](preflight-weapon-rig.md) | A weapon's first-person model or animations are about to be packaged for the first time |
 | [preflight-hud-text.md](preflight-hud-text.md) | A mod draws text or icons on the HUD |
 | [preflight-scripts.md](preflight-scripts.md) | Any build with new or changed scripts is about to be installed for the first time |

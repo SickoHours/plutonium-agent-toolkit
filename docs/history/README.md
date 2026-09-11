@@ -52,6 +52,20 @@ Workshop item that inspection showed to be hateful content was declined before a
 **Now:** `docs/playbooks/find-prior-art.md` runs before `port-a-feature.md` whenever the user
 names a feature without a donor; `docs/knowledge/prior-art.md` records where ports live.
 
+### A Workshop map read from its own data, then a pistol in one load
+
+Asked what a large Black Ops III Workshop map contained, the agent read it offline on Linux: the
+unencrypted fastfile decompressed with a bounded block reader, its hundred-odd compiled scripts
+carved and decompiled, the XPAK index parsed for every mesh and image name, the language fastfile
+for strings and sound aliases. The feature inventory came from the scripts, not from videos.
+When the person loaded the map under Proton and offered it, one read-only capture of the process
+(pinned by PID and start ticks, map verified before and after, byte and time budgets, every page
+hashed) supplied the structured assets. The map's starting pistol then reached a stock T6 map
+with a playable spawn on the first load: native templates taken from the target map's own zone
+listings, every asset kind converted and read back equal, a loose registration script, and a
+build that refused on any unresolved reference. **Now:** `docs/playbooks/inspect-a-bo3-map.md`
+and `docs/playbooks/port-a-bo3-weapon.md`; `docs/knowledge/bo3-workshop-formats.md`.
+
 ## What broke, and the rule it left
 
 ## Rigs that compile but break

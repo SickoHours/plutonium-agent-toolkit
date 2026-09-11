@@ -7,6 +7,21 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+### Added
+
+- **Black Ops III Workshop maps as donors.** `docs/knowledge/bo3-workshop-formats.md` records
+  what a Workshop item's fastfile, XPAK and sound banks are and how much of each reads offline on
+  Linux (an unencrypted fastfile's scripts, asset names and strings; the XPAK index; bank name
+  tables), what only the running game holds, and the sizes to expect. Two playbooks:
+  `inspect-a-bo3-map.md` (containers first, bounded decompression and script recovery, the roster
+  and feature inventory from the mod's own data, then at most one read-only capture of the user's
+  running BO3 under a pinned, budgeted, hashed contract that sends nothing to the game) and
+  `port-a-bo3-weapon.md` (native templates from the target map's own zone listings, per-kind
+  conversion with readback equality, a loose registration script, a build that refuses on any
+  unresolved reference, install and load evidence). Distilled from a port that reached a playable
+  spawn on a stock map on its first load; `prior-art.md`, `other-titles.md`, `port-a-feature.md`,
+  the `pat-port` and `pat-help` skills and the history page point at them.
+
 ### Fixed
 
 - **`provides.rawfiles` is a declared kind.** `module declare` writes a `rawfiles` list into a seed

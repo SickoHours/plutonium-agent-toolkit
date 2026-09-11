@@ -15,7 +15,8 @@ recipe-based T6 mod, on a clean base, with every offline gate before the first l
   lists what it ships; `pat ff extract <source.ff> --types <types> --output <out> --json` writes
   the assets out. For a saved BO3 capture,
   `pat weapon catalog <sealed-donor-receipt> --capture <capture-manifest> --output <out> --json`
-  inventories it.
+  inventories it. A donor that is a Black Ops III Workshop map has its own two playbooks:
+  `inspect-a-bo3-map.md` to learn what it holds, `port-a-bo3-weapon.md` for the weapon route.
 
 ## Steps
 
