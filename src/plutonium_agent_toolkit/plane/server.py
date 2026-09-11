@@ -18,6 +18,7 @@ import secrets
 import signal
 import subprocess
 import sys
+import socket
 import threading
 import time
 import urllib.parse
@@ -500,6 +501,14 @@ class PlaneServer(ThreadingHTTPServer):
         if not self._slots.acquire(blocking=False):
             try:
                 request.sendall(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                # Closing a socket that still holds unread request bytes makes the kernel send a
+                # reset, and on Windows the client then sees the connection aborted instead of the
+                # 503 it was sent. Stop sending, then drain briefly so the close is orderly.
+                request.shutdown(socket.SHUT_WR)
+                request.settimeout(0.2)
+                for _ in range(64):
+                    if not request.recv(4096):
+                        break
             except OSError:
                 pass
             self.shutdown_request(request)
