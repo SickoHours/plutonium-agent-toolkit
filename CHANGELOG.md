@@ -365,6 +365,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Changed
 
+- The composition examples in `docs/MODULES.md` and `docs/playbooks/attach-to-a-pack.md` name a neutral `my_base_pack` base member instead of a private pack's repository name.
+
 - **Receipts are per host; the routes are not.** `docs/SUPPORT.md` no longer tags rows
   "Unverified on Windows" or "Linux only". A row states which host its receipt came from, and the
   section above the table states the expectation and its asymmetry: one code path on both OSes,

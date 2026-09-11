@@ -22,8 +22,8 @@ read back. The pack stays untouched; the result is a new composition and a new p
 1. Write the composition, named `<base>_<feature>_pack`, with the pack as the base member and
    the module (and its dependencies) as members:
    ```json
-   {"schema": 1, "name": "b2_enhanced_penetrator_pack", "base": "b2", "map": "zm_factory",
-    "modules": [{"path": "../dlc5-enhanced", "role": "base"}, "../penetrator", "../penetrator_registration"],
+   {"schema": 1, "name": "b2_my_base_penetrator_pack", "base": "b2", "map": "zm_factory",
+    "modules": [{"path": "../my_base_pack", "role": "base"}, "../penetrator", "../penetrator_registration"],
     "loads": ["../base/common_zm.ff", "../base/zm_factory-inspect.ff"],
     "zone_header": [">level.ipak_read,common_zm", ">level.ipak_read,zm_factory"]}
    ```

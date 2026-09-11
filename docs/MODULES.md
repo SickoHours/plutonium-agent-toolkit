@@ -101,13 +101,13 @@ Localized strings cannot be copied out of a loaded fastfile, so `declare` extrac
 ```json
 {
   "schema": 1,
-  "name": "b2_enhanced_penetrator_pack",
-  "title": "DLC 5 Enhanced plus The Penetrator",
+  "name": "b2_my_base_penetrator_pack",
+  "title": "My base pack plus The Penetrator",
   "tags": ["saints-row"],
   "base": "b2",
   "map": "zm_factory",
   "modules": [
-    {"path": "../dlc5-enhanced", "role": "base"},
+    {"path": "../my_base_pack", "role": "base"},
     "../penetrator",
     "../penetrator_registration",
     {"name": "someone/round_announcer", "commit": "<40 hex>", "path": "../fetched/round_announcer"}
@@ -115,7 +115,7 @@ Localized strings cannot be copied out of a loaded fastfile, so `declare` extrac
   "loads": ["../base/common_zm.ff", "../base/zm_factory-inspect.ff"],
   "zone_header": [">level.ipak_read,common_zm", ">level.ipak_read,zm_factory"],
   "budget": {"threads": 4, "entities": 0, "hud": 0, "network_fields": 0},
-  "decisions": [{"collision": "scripts/zm/hud.gsc", "owner": "dlc5_enhanced", "reason": "the pack's HUD wins"}]
+  "decisions": [{"collision": "scripts/zm/hud.gsc", "owner": "my_base_pack", "reason": "the pack's HUD wins"}]
 }
 ```
 
