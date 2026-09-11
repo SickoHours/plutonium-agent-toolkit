@@ -526,15 +526,23 @@ def make_handler(plane: Plane):
             pass
 
         # ----- helpers -----
+        def _send(self, status: int, content_type: str, data: bytes, extra: dict | None = None) -> None:
+            """One response; a peer that closed early is not an error worth a traceback."""
+            try:
+                self.send_response(status)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                for key, value in (extra or {}).items():
+                    self.send_header(key, value)
+                self.end_headers()
+                self.wfile.write(data)
+            except OSError:
+                self.close_connection = True
+
         def _json(self, status: int, body: dict) -> None:
-            data = json.dumps(body, indent=2, ensure_ascii=True, allow_nan=False).encode("ascii")
-            self.send_response(status)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Content-Length", str(len(data)))
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("X-Content-Type-Options", "nosniff")
-            self.end_headers()
-            self.wfile.write(data)
+            self._send(status, "application/json; charset=utf-8", json.dumps(body, indent=2, ensure_ascii=True, allow_nan=False).encode("ascii"))
 
         def _fail(self, status: int, exc: Failure) -> None:
             self._json(status, exc.to_dict())
@@ -574,34 +582,18 @@ def make_handler(plane: Plane):
             if path in ("/", "/index.html"):
                 if not self._guard(need_token=False):
                     return
-                page = (STATIC / "index.html").read_text(encoding="utf-8")
-                data = page.encode("utf-8")
-                self.send_response(200)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.send_header("Content-Length", str(len(data)))
-                self.send_header("Cache-Control", "no-store")
-                self.send_header("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'")
-                self.send_header("X-Content-Type-Options", "nosniff")
-                self.send_header("Referrer-Policy", "no-referrer")
-                self.end_headers()
-                self.wfile.write(data)
+                self._send(200, "text/html; charset=utf-8", (STATIC / "index.html").read_bytes(),
+                           {"Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'",
+                            "Referrer-Policy": "no-referrer"})
                 return
             if path == "/favicon.ico":
-                self.send_response(204)
-                self.send_header("Cache-Control", "no-store")
-                self.end_headers()
+                self._send(204, "image/x-icon", b"")
                 return
             if path in ("/plane.js", "/plane.css"):
                 if not self._guard(need_token=False):
                     return
-                data = (STATIC / path.lstrip("/")).read_bytes()
-                self.send_response(200)
-                self.send_header("Content-Type", "text/javascript; charset=utf-8" if path.endswith(".js") else "text/css; charset=utf-8")
-                self.send_header("Content-Length", str(len(data)))
-                self.send_header("Cache-Control", "no-store")
-                self.send_header("X-Content-Type-Options", "nosniff")
-                self.end_headers()
-                self.wfile.write(data)
+                self._send(200, "text/javascript; charset=utf-8" if path.endswith(".js") else "text/css; charset=utf-8",
+                           (STATIC / path.lstrip("/")).read_bytes())
                 return
             if not self._guard():
                 return

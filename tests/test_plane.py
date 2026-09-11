@@ -365,12 +365,14 @@ class PlaneServerTests(PlaneServerFixture):
         self.assertTrue(run["output_overflow"], run)
         self.assertIsNone(run["result"])
         self.assertGreater(run["stdout_bytes"], 20_000)
-        # The bound and the count are bytes, not characters.
+        # The bound and the count are bytes, not characters. The reader starts before the write:
+        # an anonymous pipe on Windows holds 4 KiB, so writing first would block forever.
         r, w = os.pipe()
+        reader = server_module._Reader(os.fdopen(r, "rb"), 10_000)
         with os.fdopen(w, "wb") as writer:
             writer.write(("é" * 6000).encode("utf-8"))  # 12000 bytes
-        reader = server_module._Reader(os.fdopen(r, "rb"), 10_000)
         reader.join(5)
+        self.assertFalse(reader.is_alive())
         self.assertTrue(reader.overflow)
         self.assertEqual(reader.size, 12_000)
         self.assertLessEqual(len(run["stdout_head"]), server_module.MAX_HEAD)
