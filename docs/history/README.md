@@ -39,6 +39,19 @@ install failed in game, the rig was repaired and rebuilt from the same sealed by
 second capture. **Now:** `weapon catalog` re-hashes every donor file and refuses stale or edited
 catalogs, so a plan proves it used the same bytes as the accepted port.
 
+### Prior art found on another game's workshop
+
+A melee weapon from a non-CoD title had no T6 implementation and no donor on disk. Instead of
+modelling it, the agent searched: the feasibility pass found published ports for Left 4 Dead 2 and
+Dark Souls; the donor hunt fetched two Workshop packages through the public published-file API,
+verified their checksums, inspected them with an open Source-engine reader and chose the one with
+weighted flex bones. That donor became the first melee port with five accepted revisions. Native
+firearm ports likewise used a public community repository's per-weapon manifests as a checked
+reference. A
+Workshop item that inspection showed to be hateful content was declined before any port work.
+**Now:** `docs/playbooks/find-prior-art.md` runs before `port-a-feature.md` whenever the user
+names a feature without a donor; `docs/knowledge/prior-art.md` records where ports live.
+
 ## What broke, and the rule it left
 
 ## Rigs that compile but break

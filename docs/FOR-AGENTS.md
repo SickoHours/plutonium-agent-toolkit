@@ -135,6 +135,20 @@ modules are known good, compose them deliberately, keeping each module's own rec
 source, its recipe and its receipts together; a moving "latest" folder or a shared last-result file
 cannot tell you which bytes are which later.
 
+### Look for prior art before building from nothing
+
+When the user names a feature and hands over no files, the first job is a search, not a design.
+Popular things have been done: for this game by the T6 community, for other games by their
+modders, and by extractors written for the origin title. A port found for another engine ships
+the extracted models, textures and sounds in a readable container, which is most of a donor. The
+authoring workspace's first accepted melee port from a non-CoD title came from two community
+Left 4 Dead 2 ports found on the Steam Workshop and fetched from the public CDN; nothing was
+modelled from scratch. `docs/playbooks/find-prior-art.md` is the search, in tiers, with the
+acquisition rules (public bytes only, hash everything, inspect before trusting, decline hateful
+or unlicensed content), and `docs/knowledge/prior-art.md` says where ports usually live. Run it in
+every harness that can fetch a page; where yours cannot, hand the user the brief instead of
+inventing a result.
+
 ### Organize a mod so an agent can reason about it
 
 - One recipe (`project.json`) per mod, naming its scripts, assets and dependency loads explicitly.

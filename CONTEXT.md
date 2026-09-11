@@ -101,6 +101,14 @@ _Avoid_: snapshot, archive
 **Port**: A module whose assets or behaviour come from a donor and are adapted to T6.
 _Avoid_: conversion, import, remake
 
+**Prior art**: An existing port, extraction or implementation of the wanted feature, in this game
+or any other, found before anything is designed.
+_Avoid_: reference, inspiration, example
+
+**Lead**: A page or listing claiming that an asset or port exists. It becomes a donor only after
+the bytes are acquired, hashed and inspected.
+_Avoid_: source, download, find
+
 **Normal** and **PAP**: The two forms of a weapon: the ordinary definition and its Pack-a-Punch
 upgrade. Each is its own WeaponDef with its own acceptance.
 _Avoid_: base gun, upgraded gun, variant (say which form)

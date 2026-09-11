@@ -12,6 +12,8 @@ ports learned run before a person tests it. Words: `CONTEXT.md`. Facts:
 
 ## Before the first command
 
+- Prior art searched when no donor was handed over: `docs/playbooks/find-prior-art.md` ran, its
+  leads table sits in the module README, and the donor below came from it or from the user.
 - Decisions settled in one `pat-grill` round: base, maps, both forms or normal only, donor,
   menu route, acceptance scope.
 - Donor sealed: `pat weapon catalog` receipt or an equivalent hashed inventory.

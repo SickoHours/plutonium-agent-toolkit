@@ -22,7 +22,9 @@ with a recommendation so the user can answer "yes to all" in one line. Words: `C
 Before asking anything, fetch what can be fetched: `pat doctor --json` for backends and
 platform, `pat game mods --json` for installed profiles, the donor catalog receipt if one
 exists, `docs/knowledge/foundations.md` for the base rule. A question whose answer is on disk is
-not a question.
+not a question. For a port with no donor named, the leads table from
+`docs/playbooks/find-prior-art.md` is a fact too: whether the community already built or
+extracted the thing is fetched, not asked.
 
 ## The round
 
