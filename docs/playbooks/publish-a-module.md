@@ -21,9 +21,11 @@ Words: `CONTEXT.md` (registry, entry, reference). Formats: `docs/MODULES.md`, `d
 1. Make sure the snapshot is exactly what you tested: `git status` is clean and the commit is on
    the remote. Proof: `git rev-parse HEAD` equals the pushed commit.
 2. Run the baseline a registry will run, on the directory the entry will point at, with the
-   repository and commit the listing will name:
+   repository and commit the listing will name. A module is scanned from its own directory; a
+   pack from the directory that holds the pack and every member it names (the repository root),
+   because a member outside the scanned directory is a `path-escape`:
    ```sh
-   pat registry baseline <module or pack directory> --repository <https url> --commit <40 hex> --output ../jobs/baseline-001 --json
+   pat registry baseline <module directory, or the directory holding the pack and its members> --repository <https url> --commit <40 hex> --output ../jobs/baseline-001 --json
    ```
    Proof: `ok: true` and `result.outcome` is `passed` or `review-required`; `result.blocked` is
    false. Fix every row with `blocking: true` (`native-plugin`, `download-and-execute`,

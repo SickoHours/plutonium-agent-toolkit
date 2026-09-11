@@ -116,9 +116,9 @@ other finding, every capability and every warning is reported for a reviewer.
 | --- | --- | --- | --- |
 | `native-plugin` | finding | yes | A file whose first bytes are a PE (`MZ`), ELF or Mach-O executable, whatever its name; or text naming Plutonium's `plugins` folder or a `plugins/<name>.dll` path |
 | `download-and-execute` | finding | yes | `iex (iwr ...)`, `Invoke-Expression`, `curl ... \| sh`, `wget ... \| sh` (also `bash`, `zsh`); or a file a script downloads (`-o`, `--output`, `-OutFile`, `-Destination`, or the URL's file name on a `curl`, `wget`, `Invoke-WebRequest`, `Start-BitsTransfer` or `DownloadFile` line) and later starts in the same file with `Start-Process`, `&` or a `./` / `.\` prefix |
-| `path-escape` | finding | yes | A link anywhere in the tree; an absolute path in any `source`, `target`, `recipe`, `seed`, `path`, `modules[]` or `loads[]` value of `module.json`, `project.json` or `composition.json`; a `..` segment in a path the formats confine to their own directory (`recipe`, `seed`, and a recipe's `source`, `target` and `loads`). A composition names sibling directories with `..` by design (`docs/MODULES.md`), so its members and loads are required to exist and not be links instead |
+| `path-escape` | finding | yes | A link anywhere in the tree; an absolute path or a Windows drive (`C:x`, `D:\x`, `\\server\x`) in any `source`, `target`, `recipe`, `seed`, `path`, `modules[]` or `loads[]` value of `module.json`, `project.json` or `composition.json`; a `..` segment in a path the formats confine to their own directory (`recipe`, `seed`, and a recipe's `source`, `target` and `loads`); and any declared directory or file that resolves outside the scanned directory. A composition names sibling directories with `..` by design (`docs/MODULES.md`), so a pack is scanned from the directory that holds the pack and every member it names (the repository root, or the directory holding the pack and its members); scanned from its own directory, its siblings are outside the snapshot and are reported. Members and loads inside the tree must exist and not be links |
 | `unpinned-acquisition` | finding | no | An `http(s)` URL ending in `.zip`, `.tar.gz`, `.tgz`, `.7z`, `.rar`, `.ff`, `.ipak`, `.exe` or `.msi` with no 64-hex SHA-256 on the same line or the next five |
-| `declaration-mismatch` | finding | no | `source.repository` or `source.commit` present and different from `--repository` / `--commit`; a `recipe`, `seed` or member path missing on disk; `bases` or `maps` present but empty or not a list; a declaration that is not valid JSON. Without the options only the on-disk checks apply |
+| `declaration-mismatch` | finding | no | `source` not an object, or `source.repository` / `source.commit` present but not an https URL / a 40-hex commit (a number, a list, a short id); either present, well-formed and different from `--repository` / `--commit`; a `recipe`, `seed` or member path missing on disk; `bases` or `maps` present but empty or not a list; a declaration that is not valid JSON, not text, or above the text bound. Without the options the form and on-disk checks still apply, only the comparison is skipped |
 | `installer` | capability | no | A file named `install*`, `setup*` or `uninstall*` (any extension), or any `.bat`, `.cmd`, `.ps1`, `.sh`, `.exe` or `.msi` |
 | `bundled-package` | capability | no | A `.ff`, `.ipak`, `.sabl` or `.sabs` file, with its size. Seeds are legitimate; the reviewer sees them |
 | `lua-ui` | capability | no | A `.lua` file, or a path through a `ui/` or `ui_mp/` directory |
@@ -139,10 +139,15 @@ same shape: `id`, `kind` (`finding`, `capability`, `warning`), `blocking`, `file
 forward slashes), `line` (or null) and a short `evidence` excerpt of at most 160 characters.
 Rows are sorted by file, line and id. Findings keep at most 20 rows per file and rule and count
 the rest under `truncated`; nothing is skipped silently: links, `.git` and unreadable entries
-are all listed. Bounds: 20 000 files and 2 GiB per tree (`input_limit` above them), 4 MiB of
-text per file. The result and `baseline.json` carry `policy_version`, `enforcement`, `outcome`,
-the three row lists, `scanned` (files, bytes, text and binary counts), `unreadable`, `skipped`,
-and a `declaration` summary when `module.json` or `composition.json` is at the root.
+are all listed. Bounds: 20 000 files and 2 GiB per tree (`input_limit` above them, counted from
+the bytes actually read, so a file that grows during the scan cannot slip past), 4 MiB of text
+per file. Every file is opened without following links and without blocking, and the open
+descriptor must be the regular file the listing saw; an entry replaced under the scan (by a
+link, a pipe or another file) is `unreadable` and the outcome `incomplete`. The result and
+`baseline.json` carry `policy_version`, `enforcement`, `outcome`, the three row lists,
+`scanned` (files, bytes, text and binary counts), `unreadable`, `skipped`, a `declaration`
+summary when `module.json` or `composition.json` is at the root, and `nested_declarations` for
+every module or pack below it (a repository scanned from its root lists them all).
 
 Before listing, a submitter runs the baseline on the directory the entry will point at, at the
 commit it will name, and fixes every blocking row; `docs/playbooks/publish-a-module.md` is the

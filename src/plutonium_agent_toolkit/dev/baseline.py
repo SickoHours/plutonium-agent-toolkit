@@ -26,18 +26,27 @@ Rules, from files alone. Findings: ``native-plugin`` (a file whose first bytes a
 Mach-O executable, whatever its name; or text naming Plutonium's plugins folder or a
 ``plugins/<x>.dll`` path), ``download-and-execute`` (``iex (iwr ...)``, ``Invoke-Expression``,
 ``curl ... | sh``, ``wget ... | sh``, or a file a script downloads and later starts in the same
-file with ``Start-Process``, ``&`` or a dot-slash prefix), ``path-escape`` (a link anywhere in the tree; an
-absolute path in any declared path; a ``..`` segment in a path the formats confine to their own
-directory: ``recipe`` and ``seed`` in ``module.json``, ``source``, ``target`` and ``loads`` in
-``project.json``. A composition names sibling directories with ``..`` by design
-(``docs/MODULES.md``), so its ``modules[]`` and ``loads`` are instead required to exist and not
-be links), ``unpinned-acquisition`` (an http(s) URL to an archive, package or installer with no
-SHA-256 on the same or the next five lines) and ``declaration-mismatch`` (a declaration naming
-another repository or commit than the listing, a declared path missing on disk, ``bases`` or
-``maps`` empty or not lists, a declaration that is not valid JSON). Capabilities: ``installer``,
-``bundled-package``, ``lua-ui``, ``file-io``, ``client-dvar``, ``function-replacement``,
-``command-hook``, ``global-tooling``, ``bundled-assets`` and ``large-text``. Warning:
-``no-resource-contract``. ``docs/REGISTRY.md`` has the table.
+file with ``Start-Process``, ``&`` or a dot-slash prefix), ``path-escape`` (a link anywhere in
+the tree; an absolute path or a Windows drive in any declared path; a ``..`` segment in a path
+the formats confine to their own directory: ``recipe`` and ``seed`` in ``module.json``,
+``source``, ``target`` and ``loads`` in ``project.json``; and any declared directory or file
+that resolves outside the scanned directory. A composition names sibling directories with
+``..`` by design (``docs/MODULES.md``), so a pack is scanned from the directory that holds the
+pack and every member it names, such as the repository root; scanned alone, its siblings are
+outside the snapshot and are reported), ``unpinned-acquisition`` (an http(s) URL to an archive,
+package or installer with no SHA-256 on the same or the next five lines) and
+``declaration-mismatch`` (a declaration naming another repository or commit than the listing,
+or a ``source`` whose fields are not strings of the documented form; a declared path missing on
+disk; ``bases`` or ``maps`` empty or not lists; a declaration that is not valid JSON).
+Capabilities: ``installer``, ``bundled-package``, ``lua-ui``, ``file-io``, ``client-dvar``,
+``function-replacement``, ``command-hook``, ``global-tooling``, ``bundled-assets`` and
+``large-text``. Warning: ``no-resource-contract``. ``docs/REGISTRY.md`` has the table.
+
+Reading is careful about the tree changing under the scan: every file is opened without
+following links and without blocking, its open descriptor must describe the same regular file
+the listing saw (otherwise the entry is ``unreadable`` and the outcome ``incomplete``), and bytes
+are counted against the tree bound as they are read, so a file that grows after the listing
+cannot push the tree past ``MAX_BYTES`` (``input_limit``).
 """
 from __future__ import annotations
 
@@ -72,6 +81,8 @@ EVIDENCE = 160
 ROWS_PER_FILE_AND_RULE = 20
 MAX_DOWNLOADED_NAMES = 64
 DEADLINE_EVERY = 200
+# No link is followed, no pipe blocks, no text mode, no inheritance; flags absent on a platform are 0.
+OPEN_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0) | getattr(os, "O_CLOEXEC", 0)
 
 # PE, ELF, and Mach-O (32/64-bit in both byte orders, and the fat/universal header).
 EXECUTABLE_MAGIC = (
@@ -113,9 +124,13 @@ GLOBAL_PREFIX = "raw/scripts/"
 COMMIT = re.compile(r"^[0-9a-f]{40}\Z")
 
 
+class Replaced(OSError):
+    """The entry changed between the directory listing and the open; it is reported as unreadable."""
+
+
 def add_parser(actions, common):
     q = actions.add_parser("baseline", help="Static check of a module or composition directory before it is listed; runs nothing in the tree")
-    q.add_argument("directory", help="Module or composition directory to scan")
+    q.add_argument("directory", help="Module or composition directory to scan (for a pack: the directory holding the pack and every member it names)")
     q.add_argument("--repository", help="The https repository URL the listing will name; compared with module.json source.repository")
     q.add_argument("--commit", help="The 40-hex commit the listing will name; compared with module.json source.commit")
     common(q)
@@ -252,8 +267,11 @@ def _scan_text(rows: Rows, rel: str, suffix: str, text: str) -> None:
 
 # ----- declarations ---------------------------------------------------------------------
 
-def _absolute(value: str) -> bool:
-    return value.startswith(("/", "\\")) or PurePosixPath(value).is_absolute() or PureWindowsPath(value).is_absolute()
+def _absolute_or_drive(value: str) -> bool:
+    """Rooted on either OS, or carrying a Windows drive (``C:outside/x`` is drive-relative and
+    would resolve outside the tree on Windows)."""
+    windows = PureWindowsPath(value)
+    return value.startswith(("/", "\\")) or PurePosixPath(value).is_absolute() or windows.is_absolute() or bool(windows.drive)
 
 
 def _parts(value: str) -> list[str]:
@@ -269,10 +287,11 @@ def _global(value: str) -> bool:
 
 
 def _inside(full: Path, root: Path) -> bool:
+    """Lexical: nothing outside the tree is touched to answer this."""
     return Path(os.path.normpath(str(full))).is_relative_to(root)
 
 
-def _line_of(text: str, value: str) -> int | None:
+def _line_of(text: str, value) -> int | None:
     pos = text.find(json.dumps(value))
     return None if pos < 0 else text.count("\n", 0, pos) + 1
 
@@ -293,7 +312,8 @@ def _paths(data, kind: str):
     """Every path-like string in a declaration, as (field, value, confined).
 
     A confined path must stay inside its own directory. A composition's members and loads may
-    name siblings with ``..`` (docs/MODULES.md), so they are not confined; everything else is."""
+    name siblings with ``..`` (docs/MODULES.md), so they are not confined by ``..``; every path,
+    confined or not, must still resolve inside the scanned directory."""
     def walk(node, in_member: bool):
         if isinstance(node, dict):
             for key, value in node.items():
@@ -313,13 +333,13 @@ def _paths(data, kind: str):
     yield from walk(data, False)
 
 
-def _check_path(rows: Rows, rel: str, text: str, directory: Path, field: str, value: str, confined: bool) -> None:
+def _check_path(rows: Rows, rel: str, text: str, directory: Path, root: Path, field: str, value: str, confined: bool) -> None:
     line = _line_of(text, value)
     if not value.strip():
         rows.add("declaration-mismatch", rel, line, f"{field}: empty path")
         return
-    if _absolute(value):
-        rows.add("path-escape", rel, line, f"{field}: absolute path {value!r}")
+    if _absolute_or_drive(value):
+        rows.add("path-escape", rel, line, f"{field}: absolute path or Windows drive {value!r}")
         return
     parts = _parts(value)
     if ".." in parts and confined:
@@ -330,13 +350,42 @@ def _check_path(rows: Rows, rel: str, text: str, directory: Path, field: str, va
     if field == "target":
         return  # a zone target names a place inside the package, not a file on disk
     full = directory.joinpath(*parts) if parts else directory
+    if not _inside(full, root):
+        rows.add("path-escape", rel, line, f"{field}: {value!r} resolves outside the scanned directory; scan from the directory that holds every member")
+        return
     if full.is_symlink():
         rows.add("path-escape", rel, line, f"{field}: {value!r} is a link")
     elif not full.exists():
         rows.add("declaration-mismatch", rel, line, f"{field}: {value!r} is missing on disk")
 
 
-def _check_declaration(rows: Rows, rel: str, kind: str, text: str, directory: Path, expected: dict):
+def _check_source(rows: Rows, rel: str, text: str, source, expected: dict) -> None:
+    """``source`` must be an object whose present fields have the documented form; only then are
+    they compared with the listing's values. A number or a list where a string belongs is a
+    mismatch, whether or not ``--repository`` / ``--commit`` were given."""
+    if not isinstance(source, dict):
+        rows.add("declaration-mismatch", rel, _line_of(text, "source"), f"source is not an object: {source!r}")
+        return
+    forms = (("repository", lambda v: isinstance(v, str) and v.startswith("https://") and len(v) <= 512, "an https URL"),
+             ("commit", lambda v: isinstance(v, str) and bool(COMMIT.match(v)), "a 40-character lowercase hex commit id"))
+    valid = {}
+    for key, ok, what in forms:
+        if key not in source:
+            continue
+        value = source[key]
+        if not ok(value):
+            rows.add("declaration-mismatch", rel, _line_of(text, value) if isinstance(value, str) else _line_of(text, key),
+                     f"source.{key} is not {what}: {value!r}")
+            continue
+        valid[key] = value
+    repository, commit = valid.get("repository"), valid.get("commit")
+    if expected["repository"] and repository is not None and repository.rstrip("/").lower() != expected["repository"]:
+        rows.add("declaration-mismatch", rel, _line_of(text, repository), f"source.repository {repository} differs from --repository {expected['repository']}")
+    if expected["commit"] and commit is not None and commit != expected["commit"]:
+        rows.add("declaration-mismatch", rel, _line_of(text, commit), f"source.commit {commit[:12]} differs from --commit {expected['commit'][:12]}")
+
+
+def _check_declaration(rows: Rows, rel: str, kind: str, text: str, directory: Path, root: Path, expected: dict):
     data = _load_json(rows, rel, text)
     if data is None:
         return None
@@ -349,17 +398,10 @@ def _check_declaration(rows: Rows, rel: str, kind: str, text: str, directory: Pa
                 rows.add("declaration-mismatch", rel, _line_of(text, key), f"{key} is present but empty or not a list")
         if "resource_contract" not in data:
             rows.add("no-resource-contract", rel, None, "module.json declares no resource_contract (docs/MODULES.md)")
-        source = data.get("source")
-        if isinstance(source, dict):
-            repository, commit = source.get("repository"), source.get("commit")
-            if expected["repository"] and isinstance(repository, str) and repository.rstrip("/").lower() != expected["repository"]:
-                rows.add("declaration-mismatch", rel, _line_of(text, repository),
-                         f"source.repository {repository} differs from --repository {expected['repository']}")
-            if expected["commit"] and isinstance(commit, str) and commit.lower() != expected["commit"]:
-                rows.add("declaration-mismatch", rel, _line_of(text, commit),
-                         f"source.commit {commit[:12]} differs from --commit {expected['commit'][:12]}")
+        if "source" in data:
+            _check_source(rows, rel, text, data["source"], expected)
     for field, value, confined in _paths(data, kind):
-        _check_path(rows, rel, text, directory, field, value, confined)
+        _check_path(rows, rel, text, directory, root, field, value, confined)
     return data
 
 
@@ -389,11 +431,12 @@ def _composition_summary(rel: str, data, directory: Path, root: Path) -> dict:
         else:
             row = {"path": None}
         path = row["path"]
-        if isinstance(path, str) and path.strip() and not _absolute(path):
+        if isinstance(path, str) and path.strip() and not _absolute_or_drive(path):
             full = directory.joinpath(*_parts(path)) if _parts(path) else directory
-            row["exists"] = full.is_dir() and not full.is_symlink()
-            row["outside_directory"] = not _inside(full, root)
-            row["declares"] = next((n for n in ("module.json", "composition.json") if (full / n).is_file()), None) if row["exists"] else None
+            row["outside_scan_root"] = not _inside(full, root)
+            if not row["outside_scan_root"]:  # nothing outside the tree is touched
+                row["exists"] = full.is_dir() and not full.is_symlink()
+                row["declares"] = next((n for n in ("module.json", "composition.json") if (full / n).is_file()), None) if row["exists"] else None
         members.append(row)
     loads = data.get("loads") if isinstance(data.get("loads"), list) else []
     return {"file": rel, "kind": "composition", "valid": True, "name": data.get("name"), "title": data.get("title"),
@@ -426,24 +469,52 @@ def _expected(args) -> dict:
     return {"repository": repository.rstrip("/").lower() if repository else None, "commit": commit.lower() if commit else None}
 
 
-def _read(path: Path, size: int) -> tuple[str, bytes, int, bytes | None]:
-    """sha256, the first bytes, the byte count, and the whole content when it is small enough to scan."""
+def _lstat(entry: Path) -> os.stat_result:
+    """The listing's view of an entry; patched in tests that simulate a tree changing under the scan."""
+    return entry.lstat()
+
+
+def _read(path: Path, info: os.stat_result, budget: int) -> tuple[str, bytes, int, bytes | None]:
+    """sha256, the first bytes, the byte count, and the whole content when it is small enough to scan.
+
+    The descriptor is opened without following links and without blocking; its ``fstat`` must
+    describe a regular file and, on POSIX, the same inode the listing saw, otherwise the entry is
+    ``Replaced`` and reported as unreadable. Bytes count against ``budget`` (the tree bound less
+    what was already read) as they are read, so a file that grew after the listing cannot push the
+    tree past the bound: exceeding it is ``input_limit``, like an oversized tree at the listing."""
+    fd = os.open(path, OPEN_FLAGS)
+    try:
+        opened = os.fstat(fd)
+        if not stat.S_ISREG(opened.st_mode):
+            raise Replaced(None, "not a regular file when opened")
+        if os.name != "nt" and (opened.st_ino, opened.st_dev) != (info.st_ino, info.st_dev):
+            raise Replaced(None, "replaced between listing and reading")
+    except BaseException:
+        os.close(fd)
+        raise
     digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        if size <= MAX_TEXT:
+    total = 0
+
+    def take(block: bytes) -> None:
+        nonlocal total
+        total += len(block)
+        if total > budget:
+            raise Failure(INPUT_LIMIT, f"The tree exceeds {MAX_BYTES} bytes; nothing was judged",
+                          "A file grew while it was read; the bound applies to the bytes actually read.")
+        digest.update(block)
+
+    with os.fdopen(fd, "rb") as stream:
+        if info.st_size <= MAX_TEXT:
             data = stream.read(MAX_TEXT + 1)
-            digest.update(data)
-            total = len(data)
+            take(data)
             if total <= MAX_TEXT:
                 return digest.hexdigest(), data[:SNIFF], total, data
         else:
             data = stream.read(SNIFF)
-            digest.update(data)
-            total = len(data)
-        # Larger than the text bound (or grown since it was measured): hash the rest, scan nothing.
+            take(data)
+        # Larger than the text bound (or grown since it was listed): hash the rest, scan nothing.
         while block := stream.read(CHUNK):
-            digest.update(block)
-            total += len(block)
+            take(block)
         return digest.hexdigest(), data[:SNIFF], total, None
 
 
@@ -495,7 +566,7 @@ def execute(args, job: Job) -> dict:
                 skipped.append({"path": rel, "reason": "git metadata; never part of a snapshot, not scanned"})
                 continue
             try:
-                info = entry.lstat()
+                info = _lstat(entry)
             except OSError as exc:
                 unreadable.append({"path": rel, "reason": exc.strerror or str(exc)})
                 continue
@@ -512,7 +583,7 @@ def execute(args, job: Job) -> dict:
             if counts["bytes"] + info.st_size > MAX_BYTES:
                 raise Failure(INPUT_LIMIT, f"The tree exceeds {MAX_BYTES} bytes; nothing was judged")
             try:
-                digest, head, size, content = _read(entry, info.st_size)
+                digest, head, size, content = _read(entry, info, MAX_BYTES - counts["bytes"])
             except OSError as exc:
                 counts["files"] -= 1
                 unreadable.append({"path": rel, "reason": exc.strerror or str(exc)})
@@ -557,23 +628,23 @@ def execute(args, job: Job) -> dict:
     summary = None
     nested = []
     for rel, kind, directory, text in declarations:
-        data = _check_declaration(rows, rel, kind, text, directory, expected)
-        if directory == root and kind == "module":
-            summary = _module_summary(rel, data)
-        elif directory == root and kind == "composition" and summary is None:
-            summary = _composition_summary(rel, data, directory, root)
-        elif kind != "recipe":
-            nested.append(rel)
-        if directory == root and kind != "recipe":
+        data = _check_declaration(rows, rel, kind, text, directory, root, expected)
+        if kind == "recipe":
+            continue
+        row = _module_summary(rel, data) if kind == "module" else _composition_summary(rel, data, directory, root)
+        if directory == root and (kind == "module" or summary is None):
+            summary = row
+        else:
+            nested.append(row)
+        if directory == root:
             job.input(root / rel, limit=MAX_TEXT)  # the declaration's hash goes into the receipt
-    if summary is not None and summary["kind"] == "module" and (root / "composition.json").is_file():
-        nested.insert(0, "composition.json")
     if summary is None:
         # A root declaration that was binary, oversized or unreadable still names itself in the summary.
         for name, kind in (("module.json", "module"), ("composition.json", "composition")):
             if (root / name).is_file() and not (root / name).is_symlink():
                 summary = {"file": name, "kind": kind, "valid": False}
                 break
+    nested.sort(key=lambda r: r["file"])
 
     unreadable.sort(key=lambda r: r["path"])
     skipped.sort(key=lambda r: r["path"])
@@ -594,7 +665,7 @@ def execute(args, job: Job) -> dict:
         "outcome": outcome, "blocked": outcome in ("needs-fixes", "incomplete"),
         "findings": findings, "capabilities": capabilities, "warnings": warnings, "truncated": rows.omitted(),
         "scanned": counts, "tree_sha256": tree.hexdigest(), "unreadable": unreadable, "skipped": skipped,
-        "declaration": summary, "nested_declarations": sorted(nested),
+        "declaration": summary, "nested_declarations": nested,
         "expected": {"repository": expected["repository"], "commit": expected["commit"]},
         "bounds": {"max_files": MAX_FILES, "max_bytes": MAX_BYTES, "max_text_bytes": MAX_TEXT, "rows_per_file_and_rule": ROWS_PER_FILE_AND_RULE},
         "not_a_security_audit": True, "disclaimer": DISCLAIMER,

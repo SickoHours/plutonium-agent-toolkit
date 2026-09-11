@@ -92,7 +92,9 @@ Every entry states what shipped, on which platform it was verified, and what rem
   finding ids block (`native-plugin`: PE, ELF or Mach-O headers under any name, or text naming
   Plutonium's plugins folder; `download-and-execute`: `iex (iwr ...)`, `Invoke-Expression`,
   `curl`/`wget ... | sh`, or a downloaded file started later in the same script; `path-escape`:
-  a link anywhere in the tree, an absolute path or a `..` segment in a confined declared path).
+  a link anywhere in the tree, an absolute path or Windows drive, a `..` segment in a confined
+  declared path, or a member or load resolving outside the scanned directory; a pack is scanned
+  from the directory that holds it and every member it names).
   Non-blocking findings `unpinned-acquisition` (an archive, package or installer URL without a
   SHA-256 nearby) and `declaration-mismatch` (repository or commit different from the listing,
   a declared path missing, `bases`/`maps` empty, invalid JSON); capabilities `installer`,
@@ -108,7 +110,9 @@ Every entry states what shipped, on which platform it was verified, and what rem
   `passed`; the regenerated Arch Linux (Omarchy 4.0.3) Tier 1 receipt carries both steps (17
   steps; the previous receipt is kept as a superseded file), so the route is `available` on
   Linux. No Windows receipt yet; expected to pass there. Not measured: real community
-  repositories. Verified by 24 unit tests on synthetic trees on Linux; CI runs them on Windows.
+  repositories. Files are opened without following links and without blocking, the descriptor
+  must be the regular file the listing saw, and bytes count against the tree bound as they are
+  read. Verified by 29 unit tests on synthetic trees on Linux; CI runs them on Windows.
 - **Registries and fetch by name.** `docs/REGISTRY.md` specifies `registry.json`: a file anyone can
   host that lists module and composition repositories at exact commits and holds no bytes; entries
   are `<github-owner>/<id>` and ownership is the repository living under that owner. New routes

