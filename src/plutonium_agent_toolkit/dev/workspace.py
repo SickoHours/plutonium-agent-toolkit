@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 
@@ -72,6 +73,7 @@ A modding workspace for Plutonium Black Ops II Zombies, created by `pat workspac
 GITIGNORE = """# Created by pat workspace init. Packages, job outputs and donor bytes stay out of version control.
 /jobs/
 /donors/**
+!/donors/**/
 !/donors/**/*.json
 !/donors/**/*.md
 *.ff
@@ -88,6 +90,21 @@ GITIGNORE = """# Created by pat workspace init. Packages, job outputs and donor 
 
 def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+_OPEN_NEW = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+
+
+def _create(path: Path, data: bytes) -> None:
+    """Create the file exclusively: a file or link that appears after the emptiness check makes the
+    create fail instead of being truncated or followed. Nothing this route writes is ever overwritten."""
+    try:
+        fd = os.open(path, _OPEN_NEW, 0o644)
+    except FileExistsError:
+        raise Failure(OUTPUT_EXISTS, f"{path} appeared while the workspace was being created; it was not overwritten",
+                      "Choose a new directory, or remove what was added and run again.")
+    with os.fdopen(fd, "wb") as handle:
+        handle.write(data)
 
 
 def _checkout() -> Path | None:
@@ -125,17 +142,16 @@ def init(directory: str, name: str | None = None) -> dict:
                       ("README.md", README.format(name=label, version=__version__)),
                       (".gitignore", GITIGNORE)):
         data = text.encode("utf-8")
-        (target / rel).write_bytes(data)
+        _create(target / rel, data)
         files[rel] = _sha(data)
     for rel in LAYOUT:
         (target / rel).mkdir()
-        keep = target / rel / ".gitkeep"
-        keep.write_bytes(b"")
+        _create(target / rel / ".gitkeep", b"")
         files[f"{rel}/.gitkeep"] = _sha(b"")
     record = {"schema": 1, "name": label, "created": now(), "toolkit_version": __version__,
               "toolkit_checkout": str(checkout) if checkout else None, "files": files,
               "verification": "Directories and files written; nothing copied, downloaded, launched or installed."}
-    (target / "workspace.json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    _create(target / "workspace.json", (json.dumps(record, indent=2) + "\n").encode("utf-8"))
     return {"workspace": str(target), "name": label, "toolkit_checkout": record["toolkit_checkout"],
             "files": sorted(files), "record": str(target / "workspace.json"), "game_touched": False,
             "next": ["open the directory in your coding agent", "pat dev setup --json (backends, once per machine)",

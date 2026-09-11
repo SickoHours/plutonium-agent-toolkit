@@ -68,6 +68,36 @@ class WorkspaceInitTests(unittest.TestCase):
         code, row = invoke(["workspace", "init", str(target), "--json"])
         self.assertEqual(row["error_code"], "output_exists")
 
+    def test_a_file_that_appears_mid_run_is_never_overwritten(self):
+        from unittest import mock
+        from plutonium_agent_toolkit.dev import workspace
+        target = self.root / "racy"
+        real_mkdir = Path.mkdir
+
+        def mkdir_then_plant(self_path, *a, **k):
+            real_mkdir(self_path, *a, **k)
+            if self_path == target:
+                (target / "AGENTS.md").write_text("theirs")
+        with mock.patch.object(Path, "mkdir", mkdir_then_plant):
+            code, row = invoke(["workspace", "init", str(target), "--json"])
+        self.assertEqual(row["error_code"], "output_exists")
+        self.assertEqual((target / "AGENTS.md").read_text(), "theirs")
+
+    def test_gitignore_keeps_nested_donor_inventories(self):
+        import shutil, subprocess
+        if not shutil.which("git"):
+            self.skipTest("git not available")
+        target = self.root / "gi"
+        invoke(["workspace", "init", str(target), "--json"])
+        (target / "donors/source").mkdir(parents=True)
+        (target / "donors/source/index.json").write_text("{}")
+        (target / "donors/source/blob.ff").write_bytes(b"x")
+        subprocess.run(["git", "init", "-q", str(target)], check=True)
+        kept = subprocess.run(["git", "-C", str(target), "check-ignore", "donors/source/index.json"], capture_output=True, text=True)
+        self.assertEqual(kept.returncode, 1, "the nested inventory is not ignored")
+        dropped = subprocess.run(["git", "-C", str(target), "check-ignore", "donors/source/blob.ff"], capture_output=True, text=True)
+        self.assertEqual(dropped.returncode, 0, "the nested package is ignored")
+
     def test_manifest_lists_the_route_as_implemented_and_inert_to_the_game(self):
         code, row = invoke(["describe", "workspace", "init", "--json"])
         self.assertEqual(code, 0, row)
