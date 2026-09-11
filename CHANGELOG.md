@@ -85,8 +85,9 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 - **Registry baseline.** New route `registry baseline <directory> [--repository <url>]
   [--commit <40 hex>] --output <new dir>`: the deterministic, static check a registry runs on a
-  snapshot before listing it and a submitter's agent runs offline first. It reads every file
-  under the directory and nothing else: nothing in the tree is executed, no backend runs, no
+  snapshot before listing it and a submitter's agent runs offline first. It reads every eligible
+  file under the directory and nothing else; `.git`, links and other skipped entries are recorded
+  without reading their contents or targets: nothing in the tree is executed, no backend runs, no
   model and no network are used, and the same bytes always give the same `baseline.json`
   (`tree_sha256` compares two scans). Policy version `1`, enforcement `selective`: exactly three
   finding ids block (`native-plugin`: PE, ELF or Mach-O headers under any name, or text naming
@@ -110,9 +111,12 @@ Every entry states what shipped, on which platform it was verified, and what rem
   `passed`; the regenerated Arch Linux (Omarchy 4.0.3) Tier 1 receipt carries both steps (19
   steps; the previous receipts are kept as superseded files), so the route is `available` on
   Linux. No Windows receipt yet; expected to pass there. Not measured: real community
-  repositories. Files are opened without following links and without blocking, the descriptor
-  must be the regular file the listing saw, and bytes count against the tree bound as they are
-  read. Verified by 29 unit tests on synthetic trees on Linux; CI runs them on Windows.
+  repositories. On POSIX every directory and file is opened relative to its parent's descriptor
+  without following links and without blocking, and the descriptor must be what the listing saw;
+  Windows re-checks every path component for reparse points before each open. Bytes count
+  against the tree bound as they are read, every file read is an input of the job (a change
+  after the scan is `input_changed`), and file names that are not UTF-8 are hashed as bytes and
+  shown escaped. Verified by 34 unit tests on synthetic trees on Linux; CI runs them on Windows.
 - **Registries and fetch by name.** `docs/REGISTRY.md` specifies `registry.json`: a file anyone can
   host that lists module and composition repositories at exact commits and holds no bytes; entries
   are `<github-owner>/<id>` and ownership is the repository living under that owner. New routes

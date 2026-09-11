@@ -96,6 +96,21 @@ class Job:
             self.inputs[key] = sha256_file(p)
         return p
 
+    def record_input(self, path: Path, digest: str) -> None:
+        """Register an input the caller has already hashed through its own descriptor (a scan
+        that opened the file without following links). The receipt lists it and ``finish``
+        re-hashes it like any other input, so a change after the read fails the job."""
+        p = Path(path).absolute()
+        if p.is_relative_to(self.root):
+            raise Failure(INPUT_INVALID, "Inputs must live outside the job's output directory")
+        if not isinstance(digest, str) or len(digest) != 64:
+            raise Failure(INPUT_INVALID, f"Not a sha256 digest for {p}")
+        key = str(p)
+        if key not in self.inputs:
+            if len(self.inputs) >= MAX_FILES:
+                raise Failure(INPUT_LIMIT, "Too many declared inputs")
+            self.inputs[key] = digest
+
     def input_tree(self, root: Path) -> Path:
         root = Path(root).resolve()
         if not root.is_dir():

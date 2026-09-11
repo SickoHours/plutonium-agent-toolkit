@@ -94,8 +94,8 @@ PLANNED = [
           "executable headers, download-and-execute, links and path escapes, unpinned archives, declaration mismatches, "
           "and the capabilities a reviewer should know about", "writes-output",
           status="available", owner=OWNER,
-          notes="Argument: <directory> [--repository <https url>] [--commit <40 hex>]. Reads files only: nothing in the tree is "
-                "executed, no backend, no network, no model. Policy version 1, enforcement selective: native-plugin, "
+          notes="Argument: <directory> [--repository <https url>] [--commit <40 hex>]. Reads every eligible file and nothing else "
+                "(.git, links and unreadable entries are listed, not read): nothing in the tree is executed, no backend, no network, no model. Policy version 1, enforcement selective: native-plugin, "
                 "download-and-execute and path-escape block; everything else is reported for review. Outcomes passed, "
                 "review-required, needs-fixes, incomplete (unreadable files fail closed). Writes baseline.json. Not a security "
                 "audit, certification, warranty or endorsement. Rules: docs/REGISTRY.md."),

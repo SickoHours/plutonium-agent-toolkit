@@ -85,7 +85,7 @@ is planned and built like any other module (`pat module plan <builtin_dir>/compo
 | `pat registry show <owner/id>` | Every listing of one name, with its fetch command and snapshot URL | `listings[]` |
 | `pat module fetch <owner/id@commit> --output <new dir>` | Resolves the name through the recorded registries (the commit must equal the listed one), downloads the exact-commit tarball over HTTPS, hashes it, extracts it with the archive safety checks, and confirms `module.json` or `composition.json` is at the entry's path. The fetched declaration must name the same repository and commit when it names any | `module_dir`, `commit`, `archive_sha256`, `facts` |
 | `pat module fetch <https://github.com/owner/repo@commit> [--path <dir>] --output <new dir>` | The same for a repository no registry lists; say so in your report | same |
-| `pat registry baseline <directory> [--repository <url>] [--commit <40 hex>] --output <new dir>` | A static, deterministic check of a module or composition directory (below). Reads files only; executes nothing, runs no backend, uses no model | `outcome`, `findings[]`, `capabilities[]`, `warnings[]`, `unreadable[]`, `baseline.json` |
+| `pat registry baseline <directory> [--repository <url>] [--commit <40 hex>] --output <new dir>` | A static, deterministic check of a module or composition directory (below). Reads every eligible file and nothing else (`.git`, links and unreadable entries are listed, not read); executes nothing, runs no backend, uses no model | `outcome`, `findings[]`, `capabilities[]`, `warnings[]`, `unreadable[]`, `baseline.json` |
 
 A fetched module directory is named in a composition as a reference member, so the pack records
 what it was built from:
@@ -98,9 +98,10 @@ what it was built from:
 
 A **baseline** is the static check a registry runs on a snapshot before it lists the entry, and
 the check a submitter's agent runs offline first, on the same directory, so the listing holds no
-surprise. `pat registry baseline <directory> --output <new dir> --json` reads every file under
-the directory and nothing else: it executes nothing in the tree, runs no backend, uses no model
-and touches no network. The same bytes always give the same `baseline.json`; the report carries
+surprise. `pat registry baseline <directory> --output <new dir> --json` reads every eligible
+file under the directory and nothing else (`.git`, links and other skipped entries are recorded
+without reading their contents or targets): it executes nothing in the tree, runs no backend,
+uses no model and touches no network. The same bytes always give the same `baseline.json`; the report carries
 the tree's hash (`tree_sha256`) so two scans can be compared. Give `--repository` and `--commit`
 when the listing's values are known; the declaration's `source` is compared with them.
 
@@ -114,7 +115,7 @@ other finding, every capability and every warning is reported for a reviewer.
 
 | Row | Kind | Blocks | What the files showed |
 | --- | --- | --- | --- |
-| `native-plugin` | finding | yes | A file whose first bytes are a PE (`MZ`), ELF or Mach-O executable, whatever its name; or text naming Plutonium's `plugins` folder or a `plugins/<name>.dll` path |
+| `native-plugin` | finding | yes | A file whose first bytes are a PE (`MZ`), ELF or Mach-O executable (thin and universal headers, both byte orders), whatever its name; or text naming Plutonium's `plugins` folder or a `plugins/<name>.dll` path |
 | `download-and-execute` | finding | yes | `iex (iwr ...)`, `Invoke-Expression`, `curl ... \| sh`, `wget ... \| sh` (also `bash`, `zsh`); or a file a script downloads (`-o`, `--output`, `-OutFile`, `-Destination`, or the URL's file name on a `curl`, `wget`, `Invoke-WebRequest`, `Start-BitsTransfer` or `DownloadFile` line) and later starts in the same file with `Start-Process`, `&` or a `./` / `.\` prefix |
 | `path-escape` | finding | yes | A link anywhere in the tree; an absolute path or a Windows drive (`C:x`, `D:\x`, `\\server\x`) in any `source`, `target`, `recipe`, `seed`, `path`, `modules[]` or `loads[]` value of `module.json`, `project.json` or `composition.json`; a `..` segment in a path the formats confine to their own directory (`recipe`, `seed`, and a recipe's `source`, `target` and `loads`); and any declared directory or file that resolves outside the scanned directory. A composition names sibling directories with `..` by design (`docs/MODULES.md`), so a pack is scanned from the directory that holds the pack and every member it names (the repository root, or the directory holding the pack and its members); scanned from its own directory, its siblings are outside the snapshot and are reported. Members and loads inside the tree must exist and not be links |
 | `unpinned-acquisition` | finding | no | An `http(s)` URL ending in `.zip`, `.tar.gz`, `.tgz`, `.7z`, `.rar`, `.ff`, `.ipak`, `.exe` or `.msi` with no 64-hex SHA-256 on the same line or the next five |
@@ -141,9 +142,15 @@ Rows are sorted by file, line and id. Findings keep at most 20 rows per file and
 the rest under `truncated`; nothing is skipped silently: links, `.git` and unreadable entries
 are all listed. Bounds: 20 000 files and 2 GiB per tree (`input_limit` above them, counted from
 the bytes actually read, so a file that grows during the scan cannot slip past), 4 MiB of text
-per file. Every file is opened without following links and without blocking, and the open
-descriptor must be the regular file the listing saw; an entry replaced under the scan (by a
-link, a pipe or another file) is `unreadable` and the outcome `incomplete`. The result and
+per file, 64 directory levels. On POSIX every directory and file is opened relative to its
+parent's descriptor, without following links and without blocking, and the open descriptor must
+be the regular file or directory the listing saw; Windows has no descriptor-relative opens, so
+every path component is re-checked for reparse points by name just before each open. An entry
+replaced under the scan (by a link, a pipe, another file, or a swapped ancestor directory) is
+`unreadable` and the outcome `incomplete`. Every file read is an input of the job: the receipt
+lists its hash and the job re-hashes it before succeeding, so a file changed after the scan is
+`input_changed`, never a report for an older tree. File names that are not UTF-8 are hashed as
+their bytes and shown with backslash escapes. The result and
 `baseline.json` carry `policy_version`, `enforcement`, `outcome`, the three row lists,
 `scanned` (files, bytes, text and binary counts), `unreadable`, `skipped`, a `declaration`
 summary when `module.json` or `composition.json` is at the root, and `nested_declarations` for

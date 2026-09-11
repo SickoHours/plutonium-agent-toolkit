@@ -2,11 +2,12 @@
 
 A registry runs a baseline on a snapshot before it lists the entry, and a submitter's agent runs
 the same command offline first. The baseline reads files and does nothing else: it executes
-nothing in the tree, runs no backend, uses no model and touches no network. The same bytes always
-produce the same ``baseline.json`` (the report carries no path of the machine, no time and no
-job id, so two scans of one tree compare equal). It is not a security audit, certification,
-warranty or endorsement; it names what a static read of the files can see, so a person can
-review it.
+nothing in the tree, runs no backend, uses no model and touches no network. It reads every
+eligible file under the directory; ``.git``, links and other skipped entries are recorded
+without reading their contents or targets. The same bytes always produce the same
+``baseline.json`` (the report carries no path of the machine, no time and no job id, so two
+scans of one tree compare equal). It is not a security audit, certification, warranty or
+endorsement; it names what a static read of the files can see, so a person can review it.
 
 Policy version ``1``, enforcement ``selective``: three finding ids block a listing
 (``native-plugin``, ``download-and-execute``, ``path-escape``); every other finding, every
@@ -42,11 +43,17 @@ Capabilities: ``installer``, ``bundled-package``, ``lua-ui``, ``file-io``, ``cli
 ``function-replacement``, ``command-hook``, ``global-tooling``, ``bundled-assets`` and
 ``large-text``. Warning: ``no-resource-contract``. ``docs/REGISTRY.md`` has the table.
 
-Reading is careful about the tree changing under the scan: every file is opened without
-following links and without blocking, its open descriptor must describe the same regular file
-the listing saw (otherwise the entry is ``unreadable`` and the outcome ``incomplete``), and bytes
-are counted against the tree bound as they are read, so a file that grows after the listing
-cannot push the tree past ``MAX_BYTES`` (``input_limit``).
+The walk is careful about the tree changing under it. On POSIX every directory and file is
+opened relative to its validated parent's descriptor, without following links and without
+blocking, and the open descriptor must describe the same regular file or directory the listing
+saw; on Windows, which has no descriptor-relative opens, every path component is re-checked for
+reparse points by name immediately before each open. Anything that does not match is
+``unreadable`` and the outcome ``incomplete``. Bytes count against the tree bound as they are
+read, so a file that grows after the listing cannot push the tree past ``MAX_BYTES``
+(``input_limit``). Every file that was read is an input of the job: the receipt lists its hash
+and the job re-hashes every input before it succeeds, so a file changed after the scan fails
+the job (``input_changed``) instead of leaving a report for an older tree. File names that are
+not valid UTF-8 are hashed as their raw bytes and shown with backslash escapes.
 """
 from __future__ import annotations
 
@@ -74,6 +81,7 @@ DISCLAIMER = "A baseline is a static check of files; it is not a security audit,
 MAX_FILES = 20000
 MAX_BYTES = 2 * 1024**3
 MAX_TEXT = 4 * 1024 * 1024
+MAX_DEPTH = 64
 SNIFF = 8 * 1024
 CHUNK = 1024 * 1024
 ASSETS_THRESHOLD = 8 * 1024 * 1024
@@ -82,9 +90,13 @@ ROWS_PER_FILE_AND_RULE = 20
 MAX_DOWNLOADED_NAMES = 64
 DEADLINE_EVERY = 200
 # No link is followed, no pipe blocks, no text mode, no inheritance; flags absent on a platform are 0.
-OPEN_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0) | getattr(os, "O_CLOEXEC", 0)
+FILE_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0) | getattr(os, "O_CLOEXEC", 0)
+DIR_FLAGS = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+# POSIX walks through directory descriptors (openat semantics); Windows has none and re-checks paths by name.
+DESCRIPTOR_WALK = os.name != "nt" and os.open in os.supports_dir_fd and os.scandir in os.supports_fd and hasattr(os, "O_DIRECTORY")
+REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
 
-# PE, ELF, and Mach-O (32/64-bit in both byte orders, and the fat/universal header).
+# PE, ELF, and Mach-O (32/64-bit and the fat/universal header, each in both byte orders).
 EXECUTABLE_MAGIC = (
     (b"MZ", "PE executable header (MZ)"),
     (b"\x7fELF", "ELF executable header"),
@@ -93,6 +105,7 @@ EXECUTABLE_MAGIC = (
     (b"\xce\xfa\xed\xfe", "Mach-O executable header (cefaedfe)"),
     (b"\xcf\xfa\xed\xfe", "Mach-O executable header (cffaedfe)"),
     (b"\xca\xfe\xba\xbe", "Mach-O universal header (cafebabe)"),
+    (b"\xbe\xba\xfe\xca", "Mach-O universal header (bebafeca)"),
 )
 PLUGIN_TEXT = (re.compile(r"plutonium[\\/]+plugins", re.I), re.compile(r"\bplugins[\\/][^\s]+\.dll\b", re.I))
 DOWNLOAD_EXEC = (
@@ -469,31 +482,89 @@ def _expected(args) -> dict:
     return {"repository": repository.rstrip("/").lower() if repository else None, "commit": commit.lower() if commit else None}
 
 
-def _lstat(entry: Path) -> os.stat_result:
-    """The listing's view of an entry; patched in tests that simulate a tree changing under the scan."""
-    return entry.lstat()
+def _display(rel: str) -> str:
+    """A file name as UTF-8 text: bytes that are not UTF-8 show as backslash escapes."""
+    return rel.encode("utf-8", "surrogateescape").decode("utf-8", "backslashreplace")
 
 
-def _read(path: Path, info: os.stat_result, budget: int) -> tuple[str, bytes, int, bytes | None]:
-    """sha256, the first bytes, the byte count, and the whole content when it is small enough to scan.
+def _is_link(st) -> bool:
+    """A symbolic link on any OS, or a Windows reparse point (junction, mount point, symbolic link)
+    from the listing's ``lstat``; ``Path.is_junction`` is not available on every Python."""
+    return stat.S_ISLNK(st.st_mode) or bool(getattr(st, "st_file_attributes", 0) & REPARSE_POINT)
 
-    The descriptor is opened without following links and without blocking; its ``fstat`` must
-    describe a regular file and, on POSIX, the same inode the listing saw, otherwise the entry is
-    ``Replaced`` and reported as unreadable. Bytes count against ``budget`` (the tree bound less
-    what was already read) as they are read, so a file that grew after the listing cannot push the
-    tree past the bound: exceeding it is ``input_limit``, like an oversized tree at the listing."""
-    fd = os.open(path, OPEN_FLAGS)
+
+def _entry_stat(entry: os.DirEntry, path: Path) -> os.stat_result:
+    """The listing's view of an entry (never following links); patched in tests that simulate a
+    tree changing between the listing and the open. ``path`` names the entry for those tests."""
+    return entry.stat(follow_symlinks=False)
+
+
+def _same(opened: os.stat_result, listed) -> bool:
+    """Identity check on POSIX only: Windows lstat and fstat do not agree on st_ino/st_dev for one
+    file, and a filesystem that reports inode 0 has no identity to compare."""
+    return os.name == "nt" or not listed.st_ino or (opened.st_ino, opened.st_dev) == (listed.st_ino, listed.st_dev)
+
+
+def _revalidate(root: Path, parts: tuple[str, ...], directory: bool) -> None:
+    """Without descriptor-relative opens (Windows), re-check every component by name just before
+    the open: no reparse point anywhere on the path, directories still directories, the file still
+    a regular file. The window between this check and the open is what Windows leaves open."""
+    for i in range(1, len(parts) + 1):
+        st = os.lstat(root.joinpath(*parts[:i]))
+        if _is_link(st):
+            raise Replaced(None, "replaced by a link between listing and reading")
+        if i < len(parts) or directory:
+            if not stat.S_ISDIR(st.st_mode):
+                raise Replaced(None, "replaced between listing and reading")
+        elif not stat.S_ISREG(st.st_mode):
+            raise Replaced(None, "not a regular file when opened")
+
+
+def _open_dir(parent, root: Path, parts: tuple[str, ...], listed):
+    """A handle for a directory: its descriptor on POSIX (opened relative to the parent's, no link
+    followed, identity checked), its path on Windows (revalidated by name)."""
+    if not DESCRIPTOR_WALK:
+        _revalidate(root, parts, directory=True)
+        return root.joinpath(*parts)
+    fd = os.open(parts[-1], DIR_FLAGS, dir_fd=parent)
     try:
         opened = os.fstat(fd)
-        if not stat.S_ISREG(opened.st_mode):
-            raise Replaced(None, "not a regular file when opened")
-        # Identity check on POSIX only: Windows lstat and fstat do not agree on st_ino/st_dev for one
-        # file, and a filesystem that reports inode 0 has no identity to compare.
-        if os.name != "nt" and info.st_ino and (opened.st_ino, opened.st_dev) != (info.st_ino, info.st_dev):
+        if not stat.S_ISDIR(opened.st_mode):
+            raise Replaced(None, "not a directory when opened")
+        if not _same(opened, listed):
             raise Replaced(None, "replaced between listing and reading")
     except BaseException:
         os.close(fd)
         raise
+    return fd
+
+
+def _open_file(parent, root: Path, parts: tuple[str, ...], listed) -> int:
+    """A descriptor for a regular file, opened without following links and without blocking,
+    relative to the parent's descriptor on POSIX or by a revalidated path on Windows. The
+    descriptor must describe a regular file and, on POSIX, the one the listing saw."""
+    if DESCRIPTOR_WALK:
+        fd = os.open(parts[-1], FILE_FLAGS, dir_fd=parent)
+    else:
+        _revalidate(root, parts, directory=False)
+        fd = os.open(root.joinpath(*parts), FILE_FLAGS)
+    try:
+        opened = os.fstat(fd)
+        if not stat.S_ISREG(opened.st_mode):
+            raise Replaced(None, "not a regular file when opened")
+        if not _same(opened, listed):
+            raise Replaced(None, "replaced between listing and reading")
+    except BaseException:
+        os.close(fd)
+        raise
+    return fd
+
+
+def _read(fd: int, size: int, budget: int) -> tuple[str, bytes, int, bytes | None]:
+    """sha256, the first bytes, the byte count, and the whole content when it is small enough to
+    scan. Bytes count against ``budget`` (the tree bound less what was already read) as they are
+    read, so a file that grew after the listing cannot push the tree past the bound: exceeding it
+    is ``input_limit``, like an oversized tree at the listing."""
     digest = hashlib.sha256()
     total = 0
 
@@ -506,7 +577,7 @@ def _read(path: Path, info: os.stat_result, budget: int) -> tuple[str, bytes, in
         digest.update(block)
 
     with os.fdopen(fd, "rb") as stream:
-        if info.st_size <= MAX_TEXT:
+        if size <= MAX_TEXT:
             data = stream.read(MAX_TEXT + 1)
             take(data)
             if total <= MAX_TEXT:
@@ -520,116 +591,137 @@ def _read(path: Path, info: os.stat_result, budget: int) -> tuple[str, bytes, in
         return digest.hexdigest(), data[:SNIFF], total, None
 
 
-def _is_link(entry: Path) -> bool:
-    if entry.is_symlink():
-        return True
-    junction = getattr(entry, "is_junction", None)
-    return bool(os.name == "nt" and junction and junction())
+class Scan:
+    """One walk of one tree: the rows, counts, hashes and declarations it produced."""
+
+    def __init__(self, root: Path, job: Job, expected: dict):
+        self.root, self.job, self.expected = root, job, expected
+        self.rows = Rows()
+        self.unreadable: list[dict] = []
+        self.skipped: list[dict] = []
+        self.digests: list[tuple[bytes, str]] = []  # raw relative path, sha256
+        self.counts = {"files": 0, "bytes": 0, "text_files": 0, "binary_files": 0}
+        self.binary_total = 0
+        self.declarations: list[tuple[str, str, Path, str]] = []  # rel, kind, directory, text
+        self.seen = 0
+
+    def run(self) -> None:
+        if DESCRIPTOR_WALK:
+            fd = os.open(self.root, DIR_FLAGS)
+            try:
+                if not stat.S_ISDIR(os.fstat(fd).st_mode):
+                    raise Failure(INPUT_INVALID, f"Not a directory: {self.root}")
+                self.directory(fd, ())
+            finally:
+                os.close(fd)
+        else:
+            self.directory(self.root, ())
+
+    def directory(self, handle, parts: tuple[str, ...]) -> None:
+        self.job.check_deadline()
+        try:
+            with os.scandir(handle) as it:
+                entries = sorted(it, key=lambda e: e.name)
+        except OSError as exc:
+            self.unreadable.append({"path": _display("/".join(parts)) or ".", "reason": exc.strerror or str(exc)})
+            return
+        for entry in entries:
+            here = parts + (entry.name,)
+            rel = _display("/".join(here))
+            path = self.root.joinpath(*here)
+            self.seen += 1
+            if self.seen % DEADLINE_EVERY == 0:
+                self.job.check_deadline()
+            if entry.name == ".git":
+                self.skipped.append({"path": rel, "reason": "git metadata; never part of a snapshot, not scanned"})
+                continue
+            try:
+                listed = _entry_stat(entry, path)
+            except OSError as exc:
+                self.unreadable.append({"path": rel, "reason": exc.strerror or str(exc)})
+                continue
+            if _is_link(listed):
+                kind = "a link to a directory" if stat.S_ISDIR(listed.st_mode) else "a link"
+                self.rows.add("path-escape", rel, None, f"{kind}; not followed")
+                self.skipped.append({"path": rel, "reason": "link; not followed"})
+            elif stat.S_ISDIR(listed.st_mode):
+                if len(here) > MAX_DEPTH:
+                    self.unreadable.append({"path": rel, "reason": f"nested deeper than {MAX_DEPTH} directories; not scanned"})
+                    continue
+                try:
+                    child = _open_dir(handle, self.root, here, listed)
+                except OSError as exc:
+                    self.unreadable.append({"path": rel, "reason": exc.strerror or str(exc)})
+                    continue
+                try:
+                    self.directory(child, here)
+                finally:
+                    if DESCRIPTOR_WALK:
+                        os.close(child)
+            elif stat.S_ISREG(listed.st_mode):
+                self.file(handle, here, rel, path, listed)
+            else:
+                self.unreadable.append({"path": rel, "reason": "not a regular file"})
+
+    def file(self, handle, parts: tuple[str, ...], rel: str, path: Path, listed) -> None:
+        counts = self.counts
+        if counts["files"] + 1 > MAX_FILES:
+            raise Failure(INPUT_LIMIT, f"The tree holds more than {MAX_FILES} files; nothing was judged")
+        if counts["bytes"] + listed.st_size > MAX_BYTES:
+            raise Failure(INPUT_LIMIT, f"The tree exceeds {MAX_BYTES} bytes; nothing was judged")
+        try:
+            fd = _open_file(handle, self.root, parts, listed)
+            digest, head, size, content = _read(fd, listed.st_size, MAX_BYTES - counts["bytes"])
+        except OSError as exc:
+            self.unreadable.append({"path": rel, "reason": exc.strerror or str(exc)})
+            return
+        counts["files"] += 1
+        counts["bytes"] += size
+        self.digests.append((os.fsencode("/".join(parts)), digest))
+        self.job.record_input(path, digest)
+        name = parts[-1]
+        suffix = Path(name).suffix.lower()
+        stem = Path(name).stem.lower()
+        for magic, label in EXECUTABLE_MAGIC:
+            if head.startswith(magic):
+                self.rows.add("native-plugin", rel, None, label)
+                break
+        if stem.startswith(INSTALLER_STEMS) or suffix in INSTALLER_SUFFIXES:
+            self.rows.add("installer", rel, None, f"file name {_display(name)!r}")
+        if suffix in PACKAGE_SUFFIXES:
+            self.rows.add("bundled-package", rel, None, f"{suffix} package, {size} bytes")
+        if suffix == ".lua" or UI_DIRS & {part.lower() for part in parts[:-1]}:
+            self.rows.add("lua-ui", rel, None, "Lua file or ui/ui_mp path")
+        if b"\x00" in head:
+            counts["binary_files"] += 1
+            self.binary_total += size
+            if name in DECLARATIONS:
+                self.rows.add("declaration-mismatch", rel, None, "declaration is not a text file")
+            return
+        counts["text_files"] += 1
+        if content is None:
+            self.rows.add("large-text", rel, None, f"{size} bytes of text; larger than {MAX_TEXT} bytes, not pattern-scanned")
+            if name in DECLARATIONS:
+                self.rows.add("declaration-mismatch", rel, None, f"declaration larger than {MAX_TEXT} bytes; not checked")
+            return
+        text = content.decode("utf-8", errors="replace")
+        _scan_text(self.rows, rel, suffix, text)
+        if name in DECLARATIONS:
+            self.declarations.append((rel, DECLARATIONS[name], path.parent, text))
 
 
 def execute(args, job: Job) -> dict:
     root = _root(args.directory, job)
     expected = _expected(args)
-    rows = Rows()
-    unreadable: list[dict] = []
-    skipped: list[dict] = []
-    digests: list[tuple[str, str]] = []
-    counts = {"files": 0, "bytes": 0, "text_files": 0, "binary_files": 0}
-    binary_total = 0
-    declarations: list[tuple[str, str, Path, str]] = []  # rel, kind, directory, text
-    errors: list[OSError] = []
-    seen = 0
-
-    def rel_of(path: Path) -> str:
-        return path.relative_to(root).as_posix()
-
-    for directory, dirs, files in os.walk(root, onerror=errors.append, followlinks=False):
-        job.check_deadline()
-        base = Path(directory)
-        keep = []
-        for name in sorted(dirs):
-            entry = base / name
-            rel = rel_of(entry)
-            if name == ".git":
-                skipped.append({"path": rel, "reason": "git metadata; never part of a snapshot, not scanned"})
-            elif _is_link(entry):
-                rows.add("path-escape", rel, None, "a link to a directory; not followed")
-                skipped.append({"path": rel, "reason": "link; not followed"})
-            else:
-                keep.append(name)
-        dirs[:] = keep
-        for name in sorted(files):
-            entry = base / name
-            rel = rel_of(entry)
-            seen += 1
-            if seen % DEADLINE_EVERY == 0:
-                job.check_deadline()
-            if name == ".git":
-                skipped.append({"path": rel, "reason": "git metadata; never part of a snapshot, not scanned"})
-                continue
-            try:
-                info = _lstat(entry)
-            except OSError as exc:
-                unreadable.append({"path": rel, "reason": exc.strerror or str(exc)})
-                continue
-            if stat.S_ISLNK(info.st_mode) or _is_link(entry):
-                rows.add("path-escape", rel, None, "a link; not followed")
-                skipped.append({"path": rel, "reason": "link; not followed"})
-                continue
-            if not stat.S_ISREG(info.st_mode):
-                unreadable.append({"path": rel, "reason": "not a regular file"})
-                continue
-            counts["files"] += 1
-            if counts["files"] > MAX_FILES:
-                raise Failure(INPUT_LIMIT, f"The tree holds more than {MAX_FILES} files; nothing was judged")
-            if counts["bytes"] + info.st_size > MAX_BYTES:
-                raise Failure(INPUT_LIMIT, f"The tree exceeds {MAX_BYTES} bytes; nothing was judged")
-            try:
-                digest, head, size, content = _read(entry, info, MAX_BYTES - counts["bytes"])
-            except OSError as exc:
-                counts["files"] -= 1
-                unreadable.append({"path": rel, "reason": exc.strerror or str(exc)})
-                continue
-            counts["bytes"] += size
-            digests.append((rel, digest))
-            suffix = entry.suffix.lower()
-            stem = entry.stem.lower()
-            for magic, label in EXECUTABLE_MAGIC:
-                if head.startswith(magic):
-                    rows.add("native-plugin", rel, None, label)
-                    break
-            if stem.startswith(INSTALLER_STEMS) or suffix in INSTALLER_SUFFIXES:
-                rows.add("installer", rel, None, f"file name {name!r}")
-            if suffix in PACKAGE_SUFFIXES:
-                rows.add("bundled-package", rel, None, f"{suffix} package, {size} bytes")
-            if suffix == ".lua" or UI_DIRS & {part.lower() for part in Path(rel).parts[:-1]}:
-                rows.add("lua-ui", rel, None, "Lua file or ui/ui_mp path")
-            if b"\x00" in head:
-                counts["binary_files"] += 1
-                binary_total += size
-                if name in DECLARATIONS:
-                    rows.add("declaration-mismatch", rel, None, "declaration is not a text file")
-                continue
-            counts["text_files"] += 1
-            if content is None:
-                rows.add("large-text", rel, None, f"{size} bytes of text; larger than {MAX_TEXT} bytes, not pattern-scanned")
-                if name in DECLARATIONS:
-                    rows.add("declaration-mismatch", rel, None, f"declaration larger than {MAX_TEXT} bytes; not checked")
-                continue
-            text = content.decode("utf-8", errors="replace")
-            _scan_text(rows, rel, suffix, text)
-            if name in DECLARATIONS:
-                declarations.append((rel, DECLARATIONS[name], base, text))
-    for exc in errors:
-        path = getattr(exc, "filename", None)
-        rel = rel_of(Path(path)) if path and Path(path).is_relative_to(root) else str(path)
-        unreadable.append({"path": rel, "reason": exc.strerror or str(exc)})
-    if binary_total > ASSETS_THRESHOLD:
-        rows.add("bundled-assets", ".", None, f"{counts['binary_files']} binary files, {binary_total} bytes in total (above {ASSETS_THRESHOLD})")
+    scan = Scan(root, job, expected)
+    scan.run()
+    rows, counts = scan.rows, scan.counts
+    if scan.binary_total > ASSETS_THRESHOLD:
+        rows.add("bundled-assets", ".", None, f"{counts['binary_files']} binary files, {scan.binary_total} bytes in total (above {ASSETS_THRESHOLD})")
 
     summary = None
     nested = []
-    for rel, kind, directory, text in declarations:
+    for rel, kind, directory, text in scan.declarations:
         data = _check_declaration(rows, rel, kind, text, directory, root, expected)
         if kind == "recipe":
             continue
@@ -638,8 +730,6 @@ def execute(args, job: Job) -> dict:
             summary = row
         else:
             nested.append(row)
-        if directory == root:
-            job.input(root / rel, limit=MAX_TEXT)  # the declaration's hash goes into the receipt
     if summary is None:
         # A root declaration that was binary, oversized or unreadable still names itself in the summary.
         for name, kind in (("module.json", "module"), ("composition.json", "composition")):
@@ -648,8 +738,8 @@ def execute(args, job: Job) -> dict:
                 break
     nested.sort(key=lambda r: r["file"])
 
-    unreadable.sort(key=lambda r: r["path"])
-    skipped.sort(key=lambda r: r["path"])
+    unreadable = sorted(scan.unreadable, key=lambda r: r["path"])
+    skipped = sorted(scan.skipped, key=lambda r: r["path"])
     findings, capabilities, warnings = rows.sorted("finding"), rows.sorted("capability"), rows.sorted("warning")
     if unreadable:
         outcome = "incomplete"
@@ -659,9 +749,11 @@ def execute(args, job: Job) -> dict:
         outcome = "review-required"
     else:
         outcome = "passed"
+    # One record per file: the hash, the raw path's length and the raw path bytes, so names that
+    # are not UTF-8 hash as themselves and no separator can be forged by a file name.
     tree = hashlib.sha256()
-    for rel, digest in sorted(digests):
-        tree.update(f"{digest}  {rel}\n".encode("utf-8"))
+    for raw, digest in sorted(scan.digests):
+        tree.update(digest.encode("ascii") + len(raw).to_bytes(8, "big") + raw)
     report = {
         "schema_version": 1, "policy_version": POLICY_VERSION, "enforcement": ENFORCEMENT, "blocking_ids": list(BLOCKING),
         "outcome": outcome, "blocked": outcome in ("needs-fixes", "incomplete"),
@@ -669,9 +761,11 @@ def execute(args, job: Job) -> dict:
         "scanned": counts, "tree_sha256": tree.hexdigest(), "unreadable": unreadable, "skipped": skipped,
         "declaration": summary, "nested_declarations": nested,
         "expected": {"repository": expected["repository"], "commit": expected["commit"]},
-        "bounds": {"max_files": MAX_FILES, "max_bytes": MAX_BYTES, "max_text_bytes": MAX_TEXT, "rows_per_file_and_rule": ROWS_PER_FILE_AND_RULE},
+        "bounds": {"max_files": MAX_FILES, "max_bytes": MAX_BYTES, "max_text_bytes": MAX_TEXT, "max_depth": MAX_DEPTH,
+                   "rows_per_file_and_rule": ROWS_PER_FILE_AND_RULE},
         "not_a_security_audit": True, "disclaimer": DISCLAIMER,
-        "verification": "static read of every file under the directory; nothing executed, no backend, no network, no model",
+        "verification": "static read of every eligible file under the directory (.git, links and unreadable entries listed, not read); "
+                        "nothing executed, no backend, no network, no model; every file read is an input of the job",
     }
     (job.root / "baseline.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     return {**report, "report": "baseline.json", "directory": str(root),
