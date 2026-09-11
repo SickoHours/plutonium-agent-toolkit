@@ -24,7 +24,7 @@ CHUNK = 1024 * 1024
 
 # Hashing opens without following links where the OS allows (POSIX), so the bytes hashed are the
 # regular file at that name and never a link's target; Windows relies on the checks by name.
-FILE_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0) | getattr(os, "O_CLOEXEC", 0)
+FILE_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0) | getattr(os, "O_CLOEXEC", 0)
 
 
 def sha256_file(path: Path, limit: int = MAX_HASH_BYTES) -> str:

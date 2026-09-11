@@ -865,24 +865,123 @@ class IncompleteAndBoundsTests(BaselineFixture):
             code, row = self.scan(directory)
         self.assertEqual(code, 1, row)
         self.assertEqual(row["error_code"], "input_changed")
-        # The same swap with the directory recreated in place (a new inode, same names and kinds):
-        # the recorded identity differs, so it is input_changed as well.
+        # The scanned directory moved out of the tree and a fresh one with the same names, kinds
+        # and bytes put in its place: the old directory still exists, so the new one cannot reuse
+        # its inode (a recreated directory on ext4 can, which a GitHub runner showed), the recorded
+        # identity differs, and the job is input_changed.
         os.unlink(directory / "scripts")
         (directory / "scripts").mkdir()
         (directory / "scripts" / "round_announcer.gsc").write_text("main()\n{\n}\n")
 
-        def scan_then_recreate(args, job):
+        def scan_then_replace(args, job):
             result = real(args, job)
-            (directory / "scripts" / "round_announcer.gsc").unlink()
-            (directory / "scripts").rmdir()
+            (directory / "scripts").rename(self.root / "moved-scripts")
             (directory / "scripts").mkdir()
             (directory / "scripts" / "round_announcer.gsc").write_text("main()\n{\n}\n")
             return result
-        with mock.patch.object(baseline, "execute", side_effect=scan_then_recreate):
+        with mock.patch.object(baseline, "execute", side_effect=scan_then_replace):
             code, row = self.scan(directory)
         self.assertEqual(code, 1, row)
         self.assertEqual(row["error_code"], "input_changed")
         self.assertIn("replaced", row["message"])
+
+    def test_an_input_replaced_by_a_fifo_before_the_receipt_does_not_hang(self):
+        if os.name == "nt":
+            self.skipTest("FIFOs and alarms are POSIX")
+        import signal
+
+        def expired(*_):
+            raise AssertionError("the receipt's re-hash blocked on the FIFO")
+        previous = signal.signal(signal.SIGALRM, expired)
+        signal.alarm(30)
+        self.addCleanup(signal.alarm, 0)
+        self.addCleanup(signal.signal, signal.SIGALRM, previous)
+        directory = self.module()
+        real = baseline.execute
+
+        def scan_then_fifo(args, job):
+            result = real(args, job)
+            (directory / "scripts" / "round_announcer.gsc").unlink()
+            os.mkfifo(directory / "scripts" / "round_announcer.gsc")
+            return result
+        with mock.patch.object(baseline, "execute", side_effect=scan_then_fifo):
+            code, row = self.scan(directory)
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "input_changed")
+        # The hashing helper itself opens without blocking: a FIFO with no writer is refused, not waited for.
+        from plutonium_agent_toolkit.core import receipts
+        from plutonium_agent_toolkit.core.errors import Failure
+        with self.assertRaises(Failure):
+            receipts.sha256_file(directory / "scripts" / "round_announcer.gsc")
+
+    def test_non_finite_numbers_in_a_declaration_are_findings_and_the_report_is_written(self):
+        # 1e9999 parses to infinity in Python and NaN is a constant: a strict JSON consumer reads
+        # neither, so both are declaration-mismatch rows, and the report and receipt are written.
+        for label, text in (("overflow", '{"schema": 1, "id": "x", "version": "1", "title": 1e9999, "recipe": "project.json", "bases": ["stock"], "maps": ["*"]}'),
+                            ("nan", '{"schema": 1, "id": "x", "version": "1", "title": NaN, "recipe": "project.json", "bases": ["stock"], "maps": ["*"]}')):
+            directory = self.module(label)
+            (directory / "module.json").write_text(text)
+            code, row = self.scan(directory)
+            self.assertEqual(code, 0, (label, row))
+            rows = self.findings(row, "declaration-mismatch")
+            self.assertEqual(len(rows), 1, (label, rows))
+            self.assertIn("not valid JSON", rows[0]["evidence"])
+            self.assertTrue((Path(row["result"]["output"]) / "baseline.json").is_file())
+            self.assertEqual(json.loads(Path(row["result"]["receipt"]).read_text(encoding="utf-8"))["status"], "succeeded")
+        self.assertEqual(baseline._shallow(float("inf")), baseline.NESTED)
+        self.assertEqual(baseline._shallow([1.5, float("nan")]), baseline.NESTED)
+        self.assertEqual(baseline._shallow({"a": 1.5}), {"a": 1.5})
+
+    def test_a_link_at_the_root_after_the_check_is_refused_by_the_open(self):
+        # _root checks the name; Scan.run then opens it without following links. A link that
+        # appears between the two is refused by that open, never followed. The by-name check is
+        # bypassed here to reach the open.
+        directory = self.module()
+        try:
+            os.symlink(directory, self.root / "alias")
+        except (OSError, NotImplementedError):
+            self.skipTest("this host cannot create links")
+        with mock.patch.object(baseline, "_root", return_value=self.root / "alias"):
+            code, row = self.scan(directory)
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "input_invalid")
+        self.assertIn("link", row["message"])
+        self.assertEqual(row.get("hint"), baseline.NOT_A_LINK)
+        with mock.patch.object(baseline, "_root", return_value=self.root / "alias"), mock.patch.object(baseline, "DESCRIPTOR_WALK", False):
+            code, row = self.scan(directory)
+        self.assertEqual(row["error_code"], "input_invalid", "the by-name walk re-checks the root just before listing")
+
+    def test_a_link_named_git_is_a_path_escape_not_metadata(self):
+        directory = self.module()
+        outside = self.root / "outside-git"
+        outside.mkdir()
+        (outside / "config").write_text("[core]\n")
+        try:
+            os.symlink(outside, directory / ".git")
+        except (OSError, NotImplementedError):
+            self.skipTest("this host cannot create links")
+        code, row = self.scan(directory)
+        self.assertEqual(row["result"]["outcome"], "needs-fixes")
+        self.assertEqual([(r["file"], r["evidence"][:6]) for r in self.findings(row, "path-escape")], [(".git", "a link")])
+        self.assertEqual(row["result"]["skipped"], [{"path": ".git", "reason": "link; not followed"}])
+        os.unlink(directory / ".git")
+        (directory / ".git").mkdir()
+        (directory / ".git" / "HEAD").write_text("ref: refs/heads/main\n")
+        code, row = self.scan(directory)
+        self.assertEqual(row["result"]["outcome"], "passed", "a real .git directory is skipped metadata")
+
+    def test_a_declaration_that_is_not_utf8_is_a_finding_and_is_not_parsed(self):
+        directory = self.module()
+        (directory / "module.json").write_bytes(b'{"schema": 1, "id": "x", "version": "1", "title": "caf\xff", "recipe": "project.json", "bases": ["stock"], "maps": ["*"]}')
+        (directory / "README.md").write_bytes(b"prose with a stray byte \xff and a plain URL https://example.invalid/page\n")
+        code, row = self.scan(directory)
+        self.assertEqual(code, 0, row)
+        rows = self.findings(row, "declaration-mismatch")
+        self.assertEqual(len(rows), 1, rows)
+        self.assertIn("not valid UTF-8", rows[0]["evidence"])
+        self.assertEqual(row["result"]["declaration"], {"file": "module.json", "kind": "module", "valid": False})
+        self.assertEqual(row["result"]["outcome"], "review-required")
+        self.assertEqual(row["result"]["scanned"]["text_files"], 4, "the README with a stray byte is still text and still scanned")
 
     def test_entries_of_every_kind_count_against_the_file_bound_before_sorting(self):
         # Links are never read, but a directory of them is still listed entry by entry; the bound

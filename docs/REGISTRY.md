@@ -146,8 +146,12 @@ entries of every kind, links included, and the scanned directory itself count as
 listed; the same 20 000 is the job's cap on recorded inputs, so a tree the scan admits is never
 refused at the receipt), 4 MiB of text per file, 64 directory levels, 64 levels of nesting
 inside a declaration (deeper paths are reported as not checked; a declaration the parser
-cannot follow is `declaration-mismatch`, never a toolkit defect). The directory given must be
-a real directory, not a link (`input_invalid`).
+cannot follow, one that is not valid UTF-8, or one carrying a number no strict JSON reader
+accepts such as `1e9999` or `NaN`, is `declaration-mismatch`, never a toolkit defect). The
+directory given must be a real directory, not a link (`input_invalid`): it is checked by name
+and then opened without following links, so a link put there in between is refused, not
+followed. A link named `.git` is a link and blocks; only a real `.git` directory is skipped as
+metadata.
 On POSIX every directory and file is opened relative to its
 parent's descriptor, without following links and without blocking, and the open descriptor must
 be the regular file or directory the listing saw; Windows has no descriptor-relative opens, so
@@ -156,9 +160,10 @@ replaced under the scan (by a link, a pipe, another file, or a swapped ancestor 
 `unreadable` and the outcome `incomplete`. Every file read and every directory listing is an
 input of the job: the receipt lists their hashes (`inputs`, `input_listings`; a listing is every
 entry's name and kind) and the job re-hashes and re-lists them before succeeding, through
-no-follow descriptors whose identity must match what the scan walked on POSIX, so a file
-changed, added, removed or swapped for a link of the same name after the scan, or a directory
-replaced by a link to a look-alike, is `input_changed`, never a report for an older tree. The job deadline (`--timeout`) is checked
+no-follow, non-blocking descriptors whose identity must match what the scan walked on POSIX,
+so a file changed, added, removed or swapped for a link or a pipe of the same name after the
+scan, or a directory replaced by a link to a look-alike, is `input_changed`, never a report for
+an older tree. The job deadline (`--timeout`) is checked
 between chunks of every read. File names that are not UTF-8 are hashed as their bytes and
 shown with backslash escapes. The result and
 `baseline.json` carry `policy_version`, `enforcement`, `outcome`, the three row lists,

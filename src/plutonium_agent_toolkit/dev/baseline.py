@@ -329,9 +329,18 @@ def _reject_constant(name: str):
     raise ValueError(f"{name} is not valid JSON")
 
 
+def _finite(text: str) -> float:
+    """A number literal a strict JSON consumer can read: ``1e9999`` overflows to infinity in Python
+    and is refused here like the ``NaN`` and ``Infinity`` constants."""
+    value = float(text)
+    if value != value or value in (float("inf"), float("-inf")):
+        raise ValueError(f"{text} is not a finite number")
+    return value
+
+
 def _load_json(rows: Rows, rel: str, text: str):
     try:
-        return json.loads(text, parse_constant=_reject_constant)
+        return json.loads(text, parse_constant=_reject_constant, parse_float=_finite)
     except (ValueError, RecursionError) as exc:
         # RecursionError: nested past what the parser follows; a finding, never a toolkit defect.
         rows.add("declaration-mismatch", rel, getattr(exc, "lineno", None), f"not valid JSON: {getattr(exc, 'msg', exc)}")
@@ -342,14 +351,19 @@ SCALARS = (str, int, float, bool, type(None))
 NESTED = "<nested; see the declaration>"
 
 
+def _finite_scalar(value) -> bool:
+    return isinstance(value, SCALARS) and not (isinstance(value, float) and (value != value or value in (float("inf"), float("-inf"))))
+
+
 def _shallow(value):
-    """A value as the report carries it: a scalar, or a list or object of scalars. Anything deeper
-    is replaced by a marker, so a declaration cannot make the report arbitrarily deep."""
-    if isinstance(value, SCALARS):
+    """A value as the report carries it: a finite scalar, or a list or object of them. Anything
+    deeper, or a number the receipt could not serialize, is replaced by a marker, so a declaration
+    cannot make the report arbitrarily deep or unwritable."""
+    if _finite_scalar(value):
         return value
-    if isinstance(value, list) and all(isinstance(v, SCALARS) for v in value):
+    if isinstance(value, list) and all(_finite_scalar(v) for v in value):
         return list(value)
-    if isinstance(value, dict) and all(isinstance(k, str) and isinstance(v, SCALARS) for k, v in value.items()):
+    if isinstance(value, dict) and all(isinstance(k, str) and _finite_scalar(v) for k, v in value.items()):
         return dict(value)
     return NESTED
 
@@ -499,18 +513,25 @@ def _composition_summary(rel: str, data, directory: Path, root: Path) -> dict:
 
 # ----- the walk -------------------------------------------------------------------------
 
+NOT_A_LINK = "Scan the real directory. A link would be a path-escape inside a tree, and a listing must name the directory it points at."
+
+
 def _root(text: str, job: Job) -> Path:
+    """The directory to scan, by name: it must exist and not be a link. ``Scan.run`` then opens it
+    without following links and works from that descriptor, so a link put there after this check
+    is refused by the open rather than followed."""
     root = Path(text).expanduser().absolute()
     try:
         listed = os.lstat(root)
     except FileNotFoundError:
         raise Failure(INPUT_MISSING, f"Directory is missing: {root}") from None
     if _is_link(listed):
-        raise Failure(INPUT_INVALID, f"The directory to scan is a link: {root}",
-                      "Scan the real directory. A link would be a path-escape inside a tree, and a listing must name the directory it points at.")
+        raise Failure(INPUT_INVALID, f"The directory to scan is a link: {root}", NOT_A_LINK)
     if not stat.S_ISDIR(listed.st_mode):
         raise Failure(INPUT_INVALID, f"Not a directory: {root}", "Give the module or composition directory, not a file in it.")
-    root = root.resolve()
+    # Resolve the parent only: the root's own name is opened without following links, so a link
+    # put there after this check is refused by the open (ELOOP), never followed by resolve().
+    root = (root.parent.resolve() / root.name) if root.name else root.resolve()
     if job.root.is_relative_to(root):
         raise Failure(INPUT_INVALID, "The output directory must be outside the directory being scanned",
                       "Choose an --output beside the tree, never inside it; the scan would otherwise read its own receipt.")
@@ -660,7 +681,13 @@ class Scan:
     def run(self) -> None:
         self.seen = 1  # the scanned directory itself: its listing is recorded like every other
         if DESCRIPTOR_WALK:
-            fd = os.open(self.root, DIR_FLAGS)
+            # One open without following links; the descriptor is the root for the whole walk and its
+            # identity is what the receipt's re-listing must find again. A link put at the name after
+            # the by-name check fails this open (ELOOP) and is refused, never followed.
+            try:
+                fd = os.open(self.root, DIR_FLAGS)
+            except OSError as exc:
+                raise Failure(INPUT_INVALID, f"The directory to scan could not be opened without following links: {self.root} ({exc.strerror or exc})", NOT_A_LINK) from exc
             try:
                 if not stat.S_ISDIR(os.fstat(fd).st_mode):
                     raise Failure(INPUT_INVALID, f"Not a directory: {self.root}")
@@ -668,6 +695,11 @@ class Scan:
             finally:
                 os.close(fd)
         else:
+            # No descriptor-relative opens here (Windows): re-check the root by name immediately
+            # before the walk; the moment between this check and the first listing is the window left.
+            listed = os.lstat(self.root)
+            if _is_link(listed) or not stat.S_ISDIR(listed.st_mode):
+                raise Failure(INPUT_INVALID, f"The directory to scan is a link or not a directory: {self.root}", NOT_A_LINK)
             self.directory(self.root, ())
 
     def directory(self, handle, parts: tuple[str, ...]) -> None:
@@ -702,18 +734,18 @@ class Scan:
             here = parts + (entry.name,)
             rel = _display("/".join(here))
             path = self.root.joinpath(*here)
-            if entry.name == ".git":
-                self.skipped.append({"path": rel, "reason": "git metadata; never part of a snapshot, not scanned"})
-                continue
             try:
                 listed = _entry_stat(entry, path)
             except OSError as exc:
                 self.unreadable.append({"path": rel, "reason": exc.strerror or str(exc)})
                 continue
             if _is_link(listed):
+                # Before the .git exemption: a link under that name is a link, and it blocks.
                 kind = "a link to a directory" if stat.S_ISDIR(listed.st_mode) else "a link"
                 self.rows.add("path-escape", rel, None, f"{kind}; not followed")
                 self.skipped.append({"path": rel, "reason": "link; not followed"})
+            elif entry.name == ".git" and stat.S_ISDIR(listed.st_mode):
+                self.skipped.append({"path": rel, "reason": "git metadata; never part of a snapshot, not scanned"})
             elif stat.S_ISDIR(listed.st_mode):
                 if len(here) > MAX_DEPTH:
                     self.unreadable.append({"path": rel, "reason": f"nested deeper than {MAX_DEPTH} directories; not scanned"})
@@ -772,7 +804,16 @@ class Scan:
             if name in DECLARATIONS:
                 self.rows.add("declaration-mismatch", rel, None, f"declaration larger than {MAX_TEXT} bytes; not checked")
             return
-        text = content.decode("utf-8", errors="replace")
+        try:
+            text = content.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            # Prose and scripts are pattern-scanned with replacement characters; a declaration a
+            # strict JSON consumer cannot decode is a finding and is not parsed.
+            text = content.decode("utf-8", errors="replace")
+            if name in DECLARATIONS:
+                self.rows.add("declaration-mismatch", rel, None, f"declaration is not valid UTF-8 at byte {exc.start}")
+                _scan_text(self.rows, rel, suffix, text)
+                return
         _scan_text(self.rows, rel, suffix, text)
         if name in DECLARATIONS:
             self.declarations.append((rel, DECLARATIONS[name], path.parent, text))

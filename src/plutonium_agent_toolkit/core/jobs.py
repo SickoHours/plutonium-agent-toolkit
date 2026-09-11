@@ -271,7 +271,11 @@ class Job:
     def finish(self, result: dict) -> dict:
         self.check_deadline()
         for key, digest in self.inputs.items():
-            if sha256_file(Path(key)) != digest:
+            try:
+                current = sha256_file(Path(key))
+            except Failure as exc:
+                raise Failure(INPUT_CHANGED, f"Input changed while the job ran: {key} ({exc.message})") from exc
+            if current != digest:
                 raise Failure(INPUT_CHANGED, f"Input changed while the job ran: {key}")
         for key, digest in self.listings.items():
             try:
