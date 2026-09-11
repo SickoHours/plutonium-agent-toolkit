@@ -136,7 +136,7 @@ python tools/release_check.py
 | `src/plutonium_agent_toolkit/testing/` | Capture and test routes |
 | `examples/hello-zm/` | The bundled first-run mod used by the qualification loop |
 | `examples/hello-pack/` | The smallest composition: both example modules on the stock game as one `mod.ff`; formats in `docs/MODULES.md` |
-| `examples/registry.json` | The documented copy of the registry that ships inside the package (`dev/builtin.json`): the built-in modules and packs at an exact commit; format in `docs/REGISTRY.md` |
+| `examples/registry.json` | The same entries as the registry that ships inside the package (`dev/builtin.json`), under an addable name: the built-in modules and packs at an exact commit; format in `docs/REGISTRY.md` |
 | `docs/` | User guide, packaged route qualification, contributor docs, engineering history |
 | `docs/TRACK-RECORD.md`, `docs/track-record.json` | Generated track record: accepted modules by category, milestones with the scope of each verdict, workflows completed without a packaged route |
 | `CONTEXT.md` | The vocabulary every doc, receipt and skill uses, one definition each |

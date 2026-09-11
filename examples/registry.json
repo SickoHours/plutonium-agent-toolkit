@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "name": "plutonium-agent-toolkit-builtin",
-  "description": "The modules and packs that ship with the Plutonium Agent Toolkit, listed at the exact commit the release pins; `pat dev builtin` fetches them onto the machine and `pat registry search --origin builtin` lists them",
+  "name": "plutonium-agent-toolkit-examples",
+  "description": "The toolkit's own example modules and pack at an exact commit: the same entries the package ships as its built-in registry (src/plutonium_agent_toolkit/dev/builtin.json), kept here as an addable example for `pat registry add` and the playbooks",
   "entries": [
     {
       "name": "sickohours/hello_zm",

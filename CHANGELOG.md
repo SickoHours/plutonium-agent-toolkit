@@ -47,7 +47,7 @@ Every entry states what shipped, on which platform it was verified, and what rem
   missing. `SETUP-PROMPT.md`, `docs/GETTING-STARTED.md` and `docs/FOR-AGENTS.md` carry the step; the
   Linux Tier 1 receipt exercises it against a scratch home (issue #22).
 - **Built-in modules and packs, and where every registry comes from.** The toolkit ships its own
-  registry (`plutonium-agent-toolkit-builtin`, a copy at `examples/registry.json`) and lists it
+  registry (`plutonium-agent-toolkit-builtin`; `examples/registry.json` lists the same entries under an addable name) and lists it
   without `registry add`; `registry list`, `search` and `show` carry each registry's `origin`
   (`builtin` or `added`), `search --origin builtin` lists only the built-ins, and the built-in name is
   reserved. New route `pat dev builtin [--plan] [--only …]` fetches the built-in modules and packs at

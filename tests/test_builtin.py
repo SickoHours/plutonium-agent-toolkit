@@ -91,8 +91,9 @@ class BuiltinRegistryTests(BuiltinFixture):
     def test_shipped_registry_is_the_examples_registry_and_always_listed(self):
         shipped = json.loads(builtin.registry.BUILTIN_FILE.read_text(encoding="utf-8"))
         example = json.loads((ROOT / "examples" / "registry.json").read_text(encoding="utf-8"))
-        self.assertEqual(shipped, example, "examples/registry.json is the documented copy of the shipped registry; keep them equal")
+        self.assertEqual(shipped["entries"], example["entries"], "examples/registry.json lists the same entries as the shipped registry; keep them equal")
         self.assertEqual(shipped["name"], registry.BUILTIN_NAME)
+        self.assertNotEqual(example["name"], registry.BUILTIN_NAME, "the example stays addable with registry add; only the shipped copy carries the reserved name")
         for e in shipped["entries"]:
             self.assertEqual(e["listed"]["commit"], self.commit, "one snapshot serves every built-in")
             self.assertTrue((ROOT / e["path"]).is_dir(), e["path"])

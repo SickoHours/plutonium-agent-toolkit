@@ -53,7 +53,7 @@ and its verification workflows are described in issue #23 and follow the same fi
 ## The registry that ships with the toolkit
 
 One registry is always present without `registry add`: the toolkit's own, named
-`plutonium-agent-toolkit-builtin` (a copy is kept at `examples/registry.json`). It lists the
+`plutonium-agent-toolkit-builtin` (`examples/registry.json` lists the same entries under an addable name). It lists the
 modules and packs the release ships as **built-ins**, at the exact commit the release pins.
 `pat dev builtin` fetches them onto the machine: one HTTPS snapshot per repository and commit,
 hashed and extracted with the archive safety checks, laid out under
