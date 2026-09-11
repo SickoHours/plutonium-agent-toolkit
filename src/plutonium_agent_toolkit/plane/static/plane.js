@@ -75,7 +75,7 @@ async function pollRun(runId, statusNode) {
         el("details", {}, el("summary", { text: `run ${run.number}: ${run.route} (exit ${run.exit_code})` + (run.output ? `, receipt in ${run.output}` : "") }),
           el("pre", { text: JSON.stringify(run.result || run.stderr_head || run.stdout_head, null, 1) })));
       if (inner && Array.isArray(inner.undecided) && inner.undecided.length) statusNode.append(decisionList(inner.undecided));
-      if (inner && inner.thread_url) statusNode.append(" ", el("a", { href: inner.thread_url, target: "_blank", rel: "noreferrer noopener", text: "open the thread" }));
+      if (inner && inner.thread_url && inner.thread_id) statusNode.append(" ", el("a", { href: inner.thread_url, target: "_blank", rel: "noreferrer noopener", text: "open the thread" }));
       if (inner && Array.isArray(inner.instances)) rememberModels(inner);
       if (ok) refreshAll();
       return run;

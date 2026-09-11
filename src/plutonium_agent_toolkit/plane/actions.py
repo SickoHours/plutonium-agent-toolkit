@@ -188,7 +188,8 @@ def _reparse_point(path: Path) -> bool:
 
 
 def _regular_path(root: Path, relative: str, what: str) -> Path:
-    if not isinstance(relative, str) or not relative or len(relative) > 4096 or "\\" in relative or relative != relative.strip():
+    if not isinstance(relative, str) or not relative or len(relative) > 4096 or "\\" in relative or relative != relative.strip() \
+            or not PRINTABLE.match(relative):
         raise Failure(INPUT_INVALID, f"{what}: a forward-slash path relative to its root")
     parts = PurePosixPath(relative).parts
     if _is_absolute(relative) or not parts or any(p in ("..", ".") for p in parts):

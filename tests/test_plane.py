@@ -101,6 +101,9 @@ class ArgvTests(unittest.TestCase):
         with self.assertRaises(Failure) as ctx:
             self.argv("module-plan", {"composition": {"root": 0, "path": "missing/composition.json"}})
         self.assertEqual(ctx.exception.code, "input_missing")
+        with self.assertRaises(Failure) as ctx:  # a lone surrogate never reaches the filesystem
+            self.argv("module-plan", {"composition": {"root": 0, "path": "pack/\ud800/composition.json"}})
+        self.assertEqual(ctx.exception.code, "input_invalid")
         argv = self.argv("project-verify", {"receipt": {"root": "jobs", "path": "build-1/receipt.json"}, "inputs": True})
         self.assertEqual(argv, ["project", "verify", str(self.jobs / "build-1" / "receipt.json"), "--inputs"])
         with self.assertRaises(Failure):
@@ -337,8 +340,13 @@ class PlaneServerTests(PlaneServerFixture):
         (fetched / "receipt.json").write_text(json.dumps({"schema_version": 1, "command": "module fetch", "status": "succeeded",
                                                           "started": "2026-09-11T00:00:00+00:00",
                                                           "result": {"kind": "composition", "module_dir": str(fetched / "repository" / "pack")}}))
+        odd = self.jobs / "odd-receipt"
+        odd.mkdir()
+        (odd / "receipt.json").write_text(json.dumps({"command": "x", "status": "failed", "error": "failed", "started": "2026-09-11T00:00:00+00:00"}))
         status, body = self.call("/api/jobs")
+        self.assertEqual(status, 200, body)
         rows = {r["directory"]: r for r in body["runs"]}
+        self.assertEqual(rows["odd-receipt"]["error"], "failed", "a receipt whose error is not an object still lists")
         self.assertEqual(rows[build_dir.name]["status"], "succeeded")
         self.assertEqual(rows[build_dir.name]["mod_ff"], "packages/mod.ff")
         self.assertEqual(rows["module-plan-0001"]["command"], "module plan")
@@ -439,6 +447,21 @@ class PlaneServerTests(PlaneServerFixture):
         self.assertEqual(row["payload"], "seed")
         self.assertFalse(row["package_present"])
         self.assertEqual(row["distribution"], "private")
+
+
+class SequencingTests(PlaneServerFixture):
+    def test_a_finished_record_means_the_next_run_can_start(self):
+        # Windows CI finding: the record said finished a few milliseconds before the lock was released,
+        # so the next request got busy. The lock is released before the final record is written.
+        for _ in range(3):
+            status, body = self.call("/api/run", {"action": "manifest", "args": {}})
+            self.assertEqual(status, 202, body)
+            run = self.finish(body["run"]["run_id"])
+            self.assertEqual(run["status"], "finished")
+            status, body = self.call("/api/run", {"action": "manifest", "args": {}})
+            self.assertEqual(status, 202, body)
+            self.finish(body["run"]["run_id"])
+        self.assertTrue(self.plane.settled.wait(5))
 
 
 class ShutdownTests(unittest.TestCase):

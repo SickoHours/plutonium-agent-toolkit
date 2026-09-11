@@ -140,6 +140,8 @@ class Plane:
         self.job_lock = threading.Lock()
         self.counter = 0
         self.active: tuple | None = None   # (process, windows job handle or None) while a child runs
+        self.settled = threading.Event()   # set once the last run's record is written
+        self.settled.set()
         self.stopping = False
         self.stop_requested = False
         self.prompt_dir = jobs / "plane-prompts"
@@ -197,9 +199,11 @@ class Plane:
                 if not isinstance(data, dict):
                     continue
                 result = data.get("result") if isinstance(data.get("result"), dict) else {}
+                error = data.get("error")
                 row = {"directory": child.name, "command": data.get("command"), "status": data.get("status"),
                        "started": data.get("started"), "finished": data.get("finished"), "job_id": data.get("job_id"),
-                       "mod_ff": result.get("mod_ff"), "name": result.get("name"), "error": (data.get("error") or {}).get("message")}
+                       "mod_ff": result.get("mod_ff"), "name": result.get("name"),
+                       "error": error.get("message") if isinstance(error, dict) else (str(error)[:200] if error else None)}
                 fetched = result.get("module_dir")
                 if data.get("command") == "module fetch" and isinstance(fetched, str) and result.get("kind") in ("module", "composition"):
                     # A fetched snapshot's declaration or composition is selectable from the jobs root.
@@ -247,6 +251,7 @@ class Plane:
         if not self.job_lock.acquire(blocking=False):
             raise Failure(BUSY, "Another action is still running; the plane runs one at a time", "Poll /api/runs and retry after it finishes")
         try:
+            self.settled.clear()
             argv = argv_for(action, args, self.library, self.jobs, self.prompt_dir)
             with self.lock:
                 self.counter += 1
@@ -265,9 +270,11 @@ class Plane:
             threading.Thread(target=self._execute, args=(run, action.timeout), daemon=True).start()
         except Failure:
             self.job_lock.release()
+            self.settled.set()
             raise
         except (OSError, RuntimeError) as exc:
             self.job_lock.release()
+            self.settled.set()
             raise Failure("operation_failed", f"Could not start the run: {exc}") from exc
         return {k: v for k, v in run.items() if k != "result"}
 
@@ -314,12 +321,15 @@ class Plane:
                        finished=now(), result=payload, stdout_head=None if payload is not None else stdout[:MAX_HEAD],
                        stdout_bytes=len(stdout), stderr_head=(stderr or "")[:MAX_HEAD])
         finally:
+            # The lock goes first: a client that reads the finished record may start the next run at
+            # once. The record follows, and settled tells shutdown the run is fully written.
+            self.job_lock.release()
             try:
                 self._record(run)
             except OSError as exc:
                 print(f"warning: run record could not be saved ({exc})", file=sys.stderr)
             finally:
-                self.job_lock.release()
+                self.settled.set()
 
     def shutdown(self, grace: float = STOP_GRACE) -> dict:
         """Refuse new runs, stop the running child (interrupt, then kill) and wait for its record."""
@@ -328,9 +338,7 @@ class Plane:
             active = self.active
         if active is not None:
             _stop_process(active[0], grace, active[1])
-        deadline = time.monotonic() + grace + 5
-        while self.job_lock.locked() and time.monotonic() < deadline:
-            time.sleep(0.05)
+        self.settled.wait(grace + 5)
         return {"child_stopped": active is not None, "still_running": self.job_lock.locked()}
 
     def run_rows(self) -> list[dict]:
