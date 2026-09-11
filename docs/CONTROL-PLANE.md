@@ -47,8 +47,9 @@ The token is not written anywhere and dies with the process.
 `pat plane actions --json` prints the same table the page uses: each action's route, effect,
 status, whether it is available on this host, its typed parameters, and whether it asks for
 confirmation first. Actions whose route changes the game, queries the engine, writes to the
-agent host or writes the toolkit configuration (`registry add`) always confirm. Windows-only routes are shown but disabled on other hosts; the page
-says why.
+agent host, writes the toolkit configuration (`registry add`) or reaches the network
+(`module fetch`) always confirm. Windows-only routes are shown but disabled on other hosts; the
+page says why.
 
 ## What the page cannot do, on purpose
 
@@ -91,6 +92,13 @@ size bound; anything else is listed as unreadable, and nothing it returns contai
 that could not start a child (`stderr_head`), or exceeded the action's deadline (`status:
 timeout`), is recorded the same way. The plane's own summary at exit counts runs and says
 `game_touched: false`, because it touched nothing itself.
+
+## The same actions without a browser
+
+`pat mcp serve` speaks Model Context Protocol on stdin and stdout over this same runtime, so a
+harness that loads MCP servers gets every action here as a native tool with a generated JSON
+Schema. Same validation, same child processes, same receipts, same confirmation gate.
+`docs/MCP.md`.
 
 ## Not here
 

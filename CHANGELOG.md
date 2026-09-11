@@ -9,6 +9,34 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Added
 
+- **The routes as MCP tools in any harness.** `pat mcp serve --library <dir> --jobs <dir>` speaks
+  Model Context Protocol on stdin and stdout, exposing the control plane's typed actions as tools
+  with JSON Schemas generated from their parameters, plus two local reads (`library`, `runs`). It is
+  the plane's second transport, not a second runtime: the same validation by kind, the same
+  structured `{"root", "path"}` for every path on this machine (`module fetch`'s `path` is not one
+  of those: it names a directory inside the repository being fetched, and stays a relative string),
+  the same refusal of an action this host cannot run,
+  the same `confirmed: true` gate on a state-changing action, the same one-at-a-time `pat` child
+  with its own receipt under the jobs directory. There is no tool that takes argv, a shell string or
+  an absolute path. `pat mcp tools --json` prints the definitions and serves nothing. stdout carries
+  only the protocol (everything else goes to stderr) and the invocation's own JSON document is the
+  last line after the client disconnects; a reader thread keeps `--seconds` reachable while a
+  harness is idle, a call still running at the deadline stops waiting, and a termination signal
+  still stops the child and records it. The transport is bounded in both directions: a message is
+  measured in encoded bytes against the 4 MiB it advertises, the reader holds one message at a time
+  so a client that keeps sending waits in the pipe instead of in memory, a result too large to
+  carry back is refused while it is being encoded rather than after, and a client that stops
+  reading stdout blocks the writer thread instead of the loop -- the session then ends with the
+  child stopped, no message still in hand is run, and the invocation's own document goes to stderr
+  rather than blocking on the same full pipe. New effect `serves-stdio`; `docs/MCP.md` has
+  the harness configuration, the tool table and the stdio contract. A call in progress keeps
+  reading its client, so `notifications/cancelled` stops the child at once instead of after the
+  route's own timeout, a second call is refused with `busy` while the first is still running
+  rather than waiting unseen for its turn, a termination signal stops a running child instead of
+  waiting for the route's timeout, and a string parameter's schema carries the pattern and the
+  length its validator enforces (a prompt's is `MAX_PROMPT`, not the parameter default). Stdin
+  closing deliberately does not stop a running call: a batch pipeline is exactly that shape.
+
 - **Black Ops III Workshop maps as donors.** `docs/knowledge/bo3-workshop-formats.md` records
   what a Workshop item's fastfile, XPAK and sound banks are and how much of each reads offline on
   Linux (an unencrypted fastfile's scripts, asset names and strings; the XPAK index; bank name
@@ -24,6 +52,28 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Fixed
 
+- **Control plane: one run can be stopped without closing the plane.** `Plane.stop_run(run_id)`
+  interrupts and kills that run's child, waits for its record and marks it `stopped`, while
+  `shutdown` keeps meaning "stop everything and refuse what comes next". A stop that lands in the
+  window between `start` returning and the worker spawning still takes effect, because the worker
+  reads the request under the same lock it spawns under; and a stopped run is recorded as
+  `stopped` whatever its exit code, since a child that handles the interrupt cleanly exits 0 and
+  `finished` would read as if it had done the work. The MCP bridge uses it for a withdrawn
+  request; the page's own shutdown path is unchanged.
+- **Control plane: `module fetch` confirms.** It reaches the network and writes a snapshot of
+  someone else's repository into the library, which is exactly the kind of step the page and the
+  bridge gate behind the person's confirmation, and `docs/MCP.md` already said it was gated -- but
+  the action was not marked `confirm`, so a harness could fetch without one. It is marked now, and
+  the rule the action table is tested against covers every network effect rather than only the
+  game, the agent host and the configuration.
+- **Control plane: a stopped child's Job Object handle is closed once.** On Windows the thread
+  running a child and the shutdown stopping it both terminated and closed the same Job Object
+  handle. Windows recycles handle values, so the second close destroyed whatever kernel object had
+  taken the value over in between: on the 3.13 runner that was a thread's semaphore, and the
+  interpreter died with `_PySemaphore_Wakeup: ReleaseSemaphore failed` rather than the run ending.
+  The handle now has one owner that terminates and closes it exactly once, and a handle that is
+  created but never assigned to a child is closed instead of leaked. Found by the new MCP test that
+  stops a child the moment it starts, which is the only path that reached for the handle twice.
 - **The control plane's status colours barely showed on a light background.** Every badge was a
   tint at 13% alpha over whatever the browser happened to paint, so on a light scheme the
   difference between a result, a warning and a failure came out as three near-identical pale

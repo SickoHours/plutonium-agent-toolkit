@@ -1,0 +1,566 @@
+"""The Model Context Protocol bridge: the control plane's typed actions as MCP tools.
+
+One runtime, two transports. ``plane serve`` puts the actions in ``plane/actions.py`` behind a
+loopback page; this module puts the same actions behind MCP on stdin and stdout, so a harness
+that loads MCP servers reaches them natively. Both go through the same ``Plane``: the same
+parameter validation by kind, the same refusal of an action this host cannot run, the same
+confirmation gate on a state-changing action, the same one-at-a-time child process with its own
+receipt under the jobs directory. Nothing here can run argv, a shell string or an absolute path,
+and the bridge adds no route of its own.
+
+Transport: JSON-RPC 2.0, one message per line, UTF-8, on stdin and stdout. ``initialize``,
+``notifications/initialized``, ``ping``, ``tools/list`` and ``tools/call`` are answered; any other
+method is a JSON-RPC "method not found". stdout carries only protocol; every diagnostic goes to
+stderr. The server stops when the client closes stdin, when the deadline passes, or on a signal;
+it then stops a running child and waits for its record.
+"""
+from __future__ import annotations
+
+import json
+import queue
+import signal
+import sys
+import threading
+import time
+
+from .. import __version__
+from ..core.errors import Failure
+from ..plane.actions import BY_ID, MAX_PROMPT, table
+from ..plane.server import Plane, strict_loads, validate_roots
+
+# MCP protocol versions this bridge implements. The client's is echoed when it is one of these,
+# otherwise the newest is returned and the client decides whether to continue (the spec's rule).
+SUPPORTED_PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
+SERVER_NAME = "plutonium-agent-toolkit"
+MAX_LINE = 4 * 1024 * 1024      # one JSON-RPC message, in UTF-8 bytes
+MAX_RESULT = 1 * 1024 * 1024    # the text a tool result carries back (JSON escapes to ASCII, so bytes)
+RUN_POLL = 0.05
+RUN_SLACK = 30                  # seconds past an action's own timeout before the bridge gives up waiting
+WRITE_GRACE = 30                # seconds an answer may wait on a client that has stopped reading stdout
+
+# Two tools read the bridge's own state instead of starting a child.
+LOCAL_TOOLS = {
+    "library": "Modules, compositions, seed manifests and loose packages under the library roots, read as files. Starts nothing.",
+    "runs": "The runs this bridge has started, newest first, each with its action, argv, status, exit code and result. Starts nothing.",
+}
+
+
+# ----- tool definitions -------------------------------------------------------------------
+
+def _schema_for(param) -> dict:
+    """One parameter's JSON Schema, from the kind the control plane validates it by."""
+    kind = param.kind
+    if kind == "path":
+        # Only the roots this parameter's own validator accepts: advertising both when it takes one
+        # is an invitation to write a call that is refused (`resolve_path` checks `param.roots`).
+        choices, where = [], []
+        if "library" in param.roots:
+            choices.append({"type": "integer", "minimum": 0})
+            where.append("index of a library root")
+        if "jobs" in param.roots:
+            choices.append({"const": "jobs"})
+            where.append("\"jobs\" for the jobs directory")
+        root = (choices[0] if len(choices) == 1 else {"anyOf": choices}) | {"description": " or ".join(where).capitalize()}
+        return {"type": "object", "description": param.help,
+                "properties": {"root": root,
+                               "path": {"type": "string", "description": "Forward-slash path relative to that root; no .., no links, no absolute path"}},
+                "required": ["root", "path"], "additionalProperties": False}
+    if kind == "flag":
+        return {"type": "boolean", "description": param.help}
+    if kind == "int":
+        return {"type": "integer", "minimum": param.minimum, "maximum": param.maximum, "description": param.help}
+    if kind == "enum":
+        return {"type": "string", "enum": list(param.choices), "description": param.help}
+    if kind == "options":
+        return {"type": "array", "items": {"type": "string"}, "maxItems": 16,
+                "description": param.help + " (each row is id=value)"}
+    if kind == "registry_source":
+        return {"description": param.help,
+                "anyOf": [{"type": "string", "description": "An https URL"},
+                          {"type": "object", "description": "A registry.json under a library root (this parameter does not take the jobs directory)",
+                           "properties": {"root": {"type": "integer", "minimum": 0},
+                                          "path": {"type": "string"}},
+                           "required": ["root", "path"], "additionalProperties": False}]}
+    schema = {"type": "string", "description": param.help}
+    if param.pattern is not None:
+        # The validator's regex, written for JSON Schema: \Z is Python's end-of-string, $ is the
+        # same thing in the ECMA-262 dialect a schema is read in.
+        schema["pattern"] = param.pattern.pattern.replace("\\Z", "$")
+    # The bound the validator applies for this kind, which is not always the parameter's own: a
+    # prompt is measured against MAX_PROMPT, and advertising the dataclass default would refuse a
+    # long prompt the action accepts.
+    limit = MAX_PROMPT if kind == "prompt" else param.limit
+    if limit:
+        schema["maxLength"] = limit
+    return schema
+
+
+def tool_definitions(platform_info: dict) -> list[dict]:
+    """Every action as an MCP tool, plus the two local reads. Unavailable actions are listed with
+    the reason in their description: an agent that calls one gets the same refusal the page gets,
+    and hiding them would make a host's limits invisible."""
+    tools = [{"name": name, "description": description,
+              "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False}}
+             for name, description in LOCAL_TOOLS.items()]
+    for row in table(platform_info):
+        action = BY_ID[row["id"]]
+        properties, required = {}, []
+        for param in action.params:
+            properties[param.name] = _schema_for(param)
+            if param.required:
+                required.append(param.name)
+        if action.confirm:
+            properties["confirmed"] = {"type": "boolean", "const": True,
+                                       "description": "Must be true: this action changes state, and the person is expected to have seen it first"}
+            required.append("confirmed")
+        description = [f"{row['label']}. Runs `pat {row['route']}` as a child process"]
+        description.append("and writes a receipt into a new directory under the jobs directory" if row["job"]
+                           else "and returns its JSON document")
+        description.append(f"Effect: {row['effect']}.")
+        if row["requires_config"]:
+            description.append("Needs configuration: " + ", ".join(row["requires_config"]) + ".")
+        if not row["available_here"]:
+            description.append("NOT AVAILABLE on this host: " + ("requires native Windows." if row["requires_windows"]
+                                                                 else f"route status {row['status']}."))
+        if row["confirm"]:
+            description.append("Changes state: send confirmed: true.")
+        if row["note"]:
+            description.append(row["note"])
+        tools.append({"name": row["id"], "description": " ".join(description),
+                      "inputSchema": {"type": "object", "properties": properties,
+                                      "required": required, "additionalProperties": False}})
+    return tools
+
+
+# ----- the bridge -------------------------------------------------------------------------
+
+class Bridge:
+    """A Plane plus the MCP method handlers. One instance per ``mcp serve``."""
+
+    def __init__(self, plane: Plane):
+        self.plane = plane
+        self.initialized = False
+        self.client = None
+
+    # ----- tools -----
+    def tools(self) -> list[dict]:
+        return tool_definitions(self.plane.platform)
+
+    def call(self, name: str, arguments: dict, deadline: float | None = None, poll=None) -> tuple[dict, bool]:
+        """(payload, is_error). The payload is the route's own JSON document, or a structured refusal.
+
+        ``deadline`` is the serve deadline: when it passes while a child is still running, the wait
+        ends and ``serve`` stops the child through ``Plane.shutdown``, rather than outliving it.
+        ``poll`` is called while waiting and reads whatever the client sent meanwhile: it answers
+        those messages and returns True when one of them withdrew this request, which stops the
+        child and raises ``_Cancelled``."""
+        if name in LOCAL_TOOLS:
+            if arguments:
+                raise Failure("invalid_arguments", f"{name} takes no arguments")
+            return ({"library": self.plane.catalog, "runs": lambda: {"runs": self.plane.run_rows()}}[name](), False)
+        if name not in BY_ID:
+            raise Failure("unknown_route", f"Unknown tool {name!r}", "Call tools/list; the bridge exposes no other tool.")
+        args = dict(arguments)
+        confirmed = args.pop("confirmed", None)
+        started = self.plane.start(name, args, confirmed is True)
+        own = time.monotonic() + BY_ID[name].timeout + RUN_SLACK
+        limit = own if deadline is None else min(own, deadline)
+        while time.monotonic() < limit:
+            row = next((r for r in self.plane.run_rows() if r["run_id"] == started["run_id"]), None)
+            if row is not None and row["status"] != "running":
+                payload = row.get("result")
+                if payload is None:
+                    payload = {"ok": False, "error_code": "operation_failed",
+                               "message": f"{name} exited {row.get('exit_code')} without a JSON document",
+                               "stdout_head": row.get("stdout_head"), "stderr_head": row.get("stderr_head")}
+                return ({"run": {k: v for k, v in row.items() if k != "result"}, "result": payload},
+                        not (isinstance(payload, dict) and payload.get("ok") is True))
+            if poll is not None and poll():
+                # The client withdrew the request. Stop the child before returning, so a cancelled
+                # build or install is not still running with nobody waiting for it.
+                self.plane.stop_run(started["run_id"])
+                raise _Cancelled(started["run_id"])
+            time.sleep(RUN_POLL)
+        # The child is still running. Either its own deadline passed (the plane's drain stops it) or
+        # the bridge's did, and the shutdown that follows this call stops it and records it.
+        stopping = deadline is not None and time.monotonic() >= deadline
+        return ({"run": started,
+                 "result": {"ok": False, "error_code": "cancelled" if stopping else "backend_timeout",
+                            "message": (f"the bridge reached its deadline while {name} was running; it is being stopped"
+                                        if stopping else
+                                        f"{name} is still running after its deadline; read the runs tool for its record"),
+                            "hint": "The run record under the jobs directory holds what the child finally did."}}, True)
+
+    # ----- JSON-RPC -----
+    def handle(self, message: dict, deadline: float | None = None, interject=None) -> dict | None:
+        """One request or notification to one response, or None for a notification or a request the
+        client withdrew. ``interject`` is how a long call hears the client: it is given this
+        request's id and answers anything else that arrives meanwhile."""
+        if message.get("jsonrpc") != "2.0":
+            return _error(message.get("id"), -32600, "every message carries jsonrpc: \"2.0\"")
+        method, request_id = message.get("method"), message.get("id")
+        params = message.get("params") or {}
+        if not isinstance(params, dict):
+            return _error(request_id, -32602, "params must be an object")
+        if method == "initialize":
+            asked = params.get("protocolVersion")
+            self.client = params.get("clientInfo")
+            self.initialized = True
+            return _result(request_id, {
+                "protocolVersion": asked if asked in SUPPORTED_PROTOCOLS else SUPPORTED_PROTOCOLS[0],
+                "capabilities": {"tools": {"listChanged": False}},
+                "serverInfo": {"name": SERVER_NAME, "version": __version__},
+                "instructions": ("Every tool is one `pat` route with typed parameters. Paths are {\"root\": <library index or "
+                                 "\"jobs\">, \"path\": <relative path>}; there is no argv, shell string or absolute path. A tool that "
+                                 "changes state needs confirmed: true and the person's go for that specific run. A job tool writes a "
+                                 "receipt into a new directory under the jobs directory; keep the returned JSON document and its "
+                                 "receipt path. Offline verified, installed, launched, playable and accepted are separate facts."),
+            })
+        if method in ("notifications/initialized", "notifications/cancelled"):
+            return None
+        if method == "ping":
+            return _result(request_id, {})
+        if request_id is None:
+            return None  # an unknown notification is ignored, as the protocol requires
+        if not self.initialized:
+            return _error(request_id, -32002, "initialize first")
+        if method == "tools/list":
+            return _result(request_id, {"tools": self.tools()})
+        if method == "tools/call":
+            name, arguments = params.get("name"), params.get("arguments", {})   # an explicit non-object must reach the check below
+            if not isinstance(name, str) or not isinstance(arguments, dict):
+                return _error(request_id, -32602, "tools/call takes name and an arguments object")
+            try:
+                payload, is_error = self.call(name, arguments, deadline,
+                                              poll=None if interject is None else (lambda: interject(request_id)))
+            except _Cancelled:
+                return None     # the protocol: a withdrawn request gets no response
+            except Failure as exc:
+                payload, is_error = exc.to_dict(), True
+            except (OSError, ValueError, RuntimeError) as exc:  # never let a traceback replace the protocol
+                payload, is_error = {"ok": False, "error_code": "operation_failed",
+                                     "message": f"{type(exc).__name__}: {str(exc)[:400]}"}, True
+            try:
+                text = _render(payload, MAX_RESULT)
+            except ValueError as exc:   # a number JSON cannot carry (inf, nan) reached the encoder
+                text, is_error = json.dumps({"ok": False, "error_code": "operation_failed",
+                                             "message": f"{name} produced a result JSON cannot represent: {exc}"}, indent=2), True
+            if text is None:
+                where = ("it is read from the library files, so narrow the roots you gave `mcp serve` or read them directly"
+                         if name in LOCAL_TOOLS else "read its receipt under the jobs directory, or run it in a terminal")
+                text = json.dumps({"ok": False, "error_code": "output_limit",
+                                   "message": f"{name} produced more than {MAX_RESULT} bytes; {where}"}, indent=2)
+                is_error = True
+            return _result(request_id, {"content": [{"type": "text", "text": text}], "isError": is_error})
+        return _error(request_id, -32601, f"Unknown method {method!r}")
+
+
+def _render(payload, limit: int) -> str | None:
+    """The payload as JSON text, or None when it passes *limit*.
+
+    Encoded in chunks and abandoned at the bound, so a library listing too large to carry back is
+    refused without the whole document ever existing as a string beside the data it came from.
+    JSON escapes non-ASCII, so a character here is a byte."""
+    chunks, size = [], 0
+    for chunk in json.JSONEncoder(indent=2, allow_nan=False).iterencode(payload):
+        size += len(chunk)
+        if size > limit:
+            return None
+        chunks.append(chunk)
+    return "".join(chunks)
+
+
+def _result(request_id, result: dict) -> dict | None:
+    return None if request_id is None else {"jsonrpc": "2.0", "id": request_id, "result": result}
+
+
+def _error(request_id, code: int, message: str) -> dict | None:
+    return None if request_id is None else {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
+
+
+# ----- stdio loop -------------------------------------------------------------------------
+
+_OVERSIZED = object()   # a message past the bound: its bytes are never kept, only the fact
+
+
+class _Cancelled(Exception):
+    """The client withdrew the request this call is answering. The protocol says the request gets
+    no response, so this leaves ``handle`` with nothing to send."""
+
+
+class _Lines(threading.Thread):
+    """Reads whole lines off one text stream into a queue, so the loop that answers them can also
+    reach a deadline while the client is idle: a pipe read blocks until a newline or EOF, and no
+    portable select works on a Windows pipe. A line past the bound is drained to the next newline
+    and reported as ``_OVERSIZED``, so the stream stays in frame and nothing huge is held. Daemon:
+    it dies with the process."""
+
+    def __init__(self, source, limit: int):
+        super().__init__(daemon=True)
+        self.source, self.limit = source, limit
+        # One message at a time: while the loop is busy in a call, a client that keeps writing
+        # fills the pipe and waits there instead of filling this process's memory.
+        self.lines: queue.Queue = queue.Queue(maxsize=1)
+        self.start()
+
+    def run(self) -> None:
+        try:
+            while True:
+                line = self.source.readline(self.limit + 1)
+                if not line:
+                    break
+                # The read is capped in characters; the bound is bytes, and a character outside the
+                # basic plane is four of them, so the encoded length decides.
+                if len(line) > self.limit or len(line.encode("utf-8", errors="replace")) > self.limit:
+                    while not line.endswith("\n"):
+                        line = self.source.readline(self.limit + 1)
+                        if not line:
+                            break
+                    self.lines.put(_OVERSIZED)
+                    continue
+                self.lines.put(line)
+        except (OSError, ValueError):
+            pass
+        finally:
+            self.lines.put(None)
+
+
+class _Answers(threading.Thread):
+    """Writes answers to the sink from its own thread.
+
+    A client that stops reading stdout fills the pipe, and the write blocks. On this thread that
+    costs an answer; on the loop it would cost the deadline, the signal and the shutdown, leaving a
+    child running with nobody to stop it. ``send`` waits a bounded time for the answer to be
+    written and reports whether it was. Daemon: a thread stuck on a dead client dies with the
+    process."""
+
+    def __init__(self, sink):
+        super().__init__(daemon=True)
+        self.sink = sink
+        self.queue: queue.Queue = queue.Queue(maxsize=1)
+        self.failed: Exception | None = None
+        self.start()
+
+    def run(self) -> None:
+        while True:
+            message, written = self.queue.get()
+            if message is None:
+                return
+            try:
+                _write(self.sink, message)
+            except (OSError, ValueError) as exc:   # the client closed stdout, or it was detached
+                self.failed = exc
+                written.set()
+                return
+            written.set()
+
+    def send(self, message: dict, grace: float = WRITE_GRACE) -> bool:
+        """True once the answer is on the sink. False when the client is not reading or has gone;
+        either way the session is over, because the next answer would not arrive either."""
+        if self.failed is not None:
+            return False
+        written = threading.Event()
+        limit = time.monotonic() + max(0.0, grace)
+        try:
+            self.queue.put((message, written), timeout=max(0.0, limit - time.monotonic()))
+        except queue.Full:
+            return False
+        return written.wait(max(0.0, limit - time.monotonic())) and self.failed is None
+
+    def close(self) -> None:
+        try:
+            self.queue.put_nowait((None, threading.Event()))
+        except queue.Full:
+            pass
+
+
+def pump(bridge: Bridge, source, sink, deadline: float | None = None, stop: threading.Event | None = None) -> dict:
+    """Answer newline-delimited JSON-RPC from source on sink until the client closes it, the
+    deadline passes or ``stop`` is set. Returns a summary."""
+    handled, errors = 0, 0
+    reader = _Lines(source, MAX_LINE)
+    answers = _Answers(sink)
+
+    def answer(message: dict) -> bool:
+        grace = WRITE_GRACE if deadline is None else min(WRITE_GRACE, max(0.0, deadline - time.monotonic()))
+        return answers.send(message, grace)
+
+    try:
+        return _loop(bridge, reader, answer, deadline, stop)
+    finally:
+        answers.close()
+
+
+def _loop(bridge: Bridge, reader, answer, deadline, stop) -> dict:
+    handled, errors = 0, 0
+    state = {"eof": False, "undeliverable": False}
+
+    def interject(request_id) -> bool:
+        """Read whatever arrived while a call is running and answer it. True when the client
+        withdrew *request_id*, or when an answer could not be delivered -- both mean stop now.
+
+        This is what makes the one-at-a-time rule visible: a second ``tools/call`` sent during a
+        run reaches ``Plane.start``, which refuses it with ``busy`` straight away rather than
+        letting it wait its turn unseen."""
+        nonlocal handled, errors
+        if stop is not None and stop.is_set():
+            return True     # a termination signal stops the child now, not when the route gives up
+        while True:
+            try:
+                line = reader.lines.get_nowait()
+            except queue.Empty:
+                return False
+            if line is None:
+                # The loop ends after this call, with its answer sent. Not a cancellation: stdin
+                # closing is how a batch pipeline (`pat mcp serve < requests.jsonl > answers.jsonl`)
+                # always looks, and a build must not be killed because the requests ran out. A
+                # client that wants the run stopped withdraws it, or sends a signal.
+                state["eof"] = True
+                return False
+            if line is _OVERSIZED:
+                errors += 1
+                if not answer({"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": f"message exceeds {MAX_LINE} bytes"}}):
+                    state["undeliverable"] = True
+                    return True
+                continue
+            text = line.strip()
+            if not text:
+                continue
+            try:
+                message = strict_loads(text)
+                if not isinstance(message, dict):
+                    raise ValueError("not an object")
+            except (ValueError, RecursionError):
+                errors += 1
+                if not answer({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "parse error"}}):
+                    state["undeliverable"] = True
+                    return True
+                continue
+            if (message.get("method") == "notifications/cancelled"
+                    and isinstance(message.get("params"), dict)
+                    and message["params"].get("requestId") == request_id and request_id is not None):
+                handled += 1
+                return True
+            handled += 1
+            response = _answer_for(bridge, message, deadline, interject=None)   # never nests further
+            if response is not None:
+                if response.get("error"):
+                    errors += 1
+                if not answer(response):
+                    state["undeliverable"] = True
+                    return True
+
+    while True:
+        # Order is the honest reason the session ended: a client that cannot be written to, then a
+        # signal (which cuts a call short), then the stream running out.
+        if state["undeliverable"]:
+            return {"stopped": "undeliverable", "messages": handled, "errors": errors}
+        if stop is not None and stop.is_set():
+            return {"stopped": "signal", "messages": handled, "errors": errors}
+        if state["eof"]:
+            return {"stopped": "client", "messages": handled, "errors": errors}
+        if deadline is not None and time.monotonic() >= deadline:
+            return {"stopped": "deadline", "messages": handled, "errors": errors}
+        try:
+            line = reader.lines.get(timeout=min(RUN_POLL * 4, max(0.01, deadline - time.monotonic())) if deadline else 0.2)
+        except queue.Empty:
+            continue
+        if line is None:
+            return {"stopped": "client", "messages": handled, "errors": errors}
+        if line is _OVERSIZED:
+            errors += 1
+            if not answer({"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": f"message exceeds {MAX_LINE} bytes"}}):
+                return {"stopped": "undeliverable", "messages": handled, "errors": errors}
+            continue
+        text = line.strip()
+        if not text:
+            continue
+        try:
+            message = strict_loads(text)
+            if not isinstance(message, dict):
+                raise ValueError("not an object")
+        except (ValueError, RecursionError):   # nesting deep enough to exhaust the stack is a parse error too
+            errors += 1
+            if not answer({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "parse error"}}):
+                return {"stopped": "undeliverable", "messages": handled, "errors": errors}
+            continue
+        handled += 1
+        response = _answer_for(bridge, message, deadline, interject)
+        if response is not None:
+            if response.get("error"):
+                errors += 1
+            # An answer the client will not take ends the session: the next one would not arrive
+            # either, and a queued call must not run with nowhere to report.
+            if not answer(response):
+                return {"stopped": "undeliverable", "messages": handled, "errors": errors}
+
+
+def _answer_for(bridge: Bridge, message: dict, deadline, interject) -> dict | None:
+    """One message answered, with every failure that is not the protocol's turned into one."""
+    try:
+        return bridge.handle(message, deadline, interject)
+    except Failure as exc:
+        return _error(message.get("id"), -32603, exc.message)
+    except (RecursionError, ValueError) as exc:   # deep nesting, or a value JSON cannot represent
+        return _error(message.get("id"), -32603, f"the request could not be answered: {type(exc).__name__}")
+
+
+def _write(sink, message: dict) -> None:
+    sink.write(json.dumps(message, allow_nan=False) + "\n")
+    sink.flush()
+
+
+def serve(library: list[str], jobs: str, seconds: int = 3600, source=None, sink=None) -> dict:
+    """Serve MCP until the client closes stdin, the deadline passes or a termination signal
+    arrives. stdout is the protocol channel, so everything else this process prints goes to
+    stderr while the bridge runs, and a running child is always stopped and recorded on the way
+    out."""
+    roots, jobs_dir = validate_roots(library, jobs)
+    plane = Plane(roots, jobs_dir)
+    bridge = Bridge(plane)
+    source = source or sys.stdin
+    sink = sink or sys.stdout
+    saved = sys.stdout
+    if sink is saved:
+        sys.stdout = sys.stderr  # nothing but protocol reaches the channel while the bridge runs
+    # The protocol is UTF-8 in both directions and one message per "\n"; a console-encoded or
+    # newline-translating stream would corrupt a non-ASCII prompt or split a message on Windows.
+    for stream, is_real in ((source, source is sys.stdin), (sink, sink is saved)):
+        if is_real:
+            try:
+                stream.reconfigure(encoding="utf-8", newline="\n", errors="strict")
+            except (AttributeError, ValueError, OSError):
+                pass
+    stop = threading.Event()
+    previous = {}
+    for name in ("SIGTERM", "SIGINT", "SIGHUP", "SIGBREAK"):
+        number = getattr(signal, name, None)
+        if number is None:
+            continue
+        try:
+            previous[number] = signal.signal(number, lambda *_: stop.set())
+        except (ValueError, OSError):       # not the main thread, or not deliverable on this host
+            pass
+    started = time.monotonic()
+    summary = None
+    try:
+        summary = pump(bridge, source, sink, deadline=started + seconds if seconds else None, stop=stop)
+    finally:
+        for number, handler in previous.items():
+            try:
+                signal.signal(number, handler)
+            except (ValueError, OSError):
+                pass
+        # The caller prints this invocation's own JSON document on the stream we hand back. When the
+        # session ended because the client stopped reading the protocol stream, that stream is a
+        # full pipe: writing the document there would block for as long as the client stays away,
+        # which is the hang this whole path exists to avoid. It goes to stderr instead, and says so.
+        blocked = summary is not None and summary.get("stopped") == "undeliverable" and sink is saved
+        if not blocked:
+            sys.stdout = saved
+        stopped = plane.shutdown()
+    return {"library": [str(p) for p in roots], "jobs": str(jobs_dir), "protocols": list(SUPPORTED_PROTOCOLS),
+            "tools": len(bridge.tools()), "client": bridge.client, "seconds": round(time.monotonic() - started, 1),
+            "document_on": "stderr" if blocked else "stdout",
+            **summary, "child_stopped": stopped["child_stopped"], "game_touched": False,
+            "verification": "the bridge started child processes with validated arguments; each kept its own JSON document and receipt"}

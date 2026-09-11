@@ -30,6 +30,7 @@ from .. import __version__
 from ..core import platform
 from ..core.envelope import now
 from ..core.errors import BUSY, INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, OUTPUT_EXISTS, Failure
+from ..core.jobs import REPARSE_POINT
 from ..dev import compositions, projects
 from .actions import BY_ID, argv_for, table
 
@@ -153,25 +154,48 @@ def _remove_prompts(run: dict) -> None:
                 pass
 
 
+class _Job:
+    """A Windows Job Object handle that is terminated and closed exactly once.
+
+    The thread running a child and whoever stops it both hold this handle, so both reach for it
+    when the child ends. Closing a Windows handle twice is not a harmless no-op: the value is
+    recycled, so the second close can destroy whatever kernel object took it over in the
+    meantime -- a thread's semaphore, say, which ends the interpreter rather than this run."""
+
+    def __init__(self, handle, terminate) -> None:
+        self.handle = handle
+        self._terminate = terminate
+        self._lock = threading.Lock()
+        self._closed = False
+
+    def close(self) -> None:
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+        self._terminate(self.handle)
+
+
 def _job_for(process: subprocess.Popen):
     """On Windows, a Job Object (kill on close) holding the child and everything it starts."""
     if os.name != "nt":
         return None
     from ..core import _winjob
 
+    handle = None
     try:
         handle = _winjob.create_job()
         _winjob.assign(handle, process)
-        return handle
+        return _Job(handle, _winjob.terminate)
     except Failure:
+        if handle is not None:
+            _winjob.terminate(handle)  # created but never assigned: close it here or it leaks
         return None
 
 
 def _close_job(job) -> None:
     if job is not None:
-        from ..core import _winjob
-
-        _winjob.terminate(job)
+        job.close()
 
 
 def _stop_process(process: subprocess.Popen, grace: float, job=None) -> None:
@@ -226,6 +250,7 @@ class Plane:
         self.settled.set()
         self.stopping = False
         self.stop_requested = False
+        self.stopped_runs: set = set()   # runs a caller stopped on purpose: their record says stopped, not failed
         self.prompt_dir = jobs / "plane-prompts"
         (jobs / "plane-runs").mkdir(parents=True, exist_ok=True)
         self.platform = platform.describe()
@@ -371,8 +396,12 @@ class Plane:
             # Spawn under the state lock so shutdown either sees the child (and stops it) or is seen
             # here first (and nothing is spawned).
             with self.lock:
-                if self.stopping:
-                    run.update(status="stopped", exit_code=None, finished=now(), result=None, stderr_head="the plane stopped before the child started")
+                withdrawn = run["run_id"] in self.stopped_runs
+                self.stopped_runs.discard(run["run_id"])
+                if self.stopping or withdrawn:
+                    run.update(status="stopped", exit_code=None, finished=now(), result=None,
+                               stderr_head=("the run was stopped before the child started" if withdrawn
+                                            else "the plane stopped before the child started"))
                     return
                 try:
                     process = subprocess.Popen([sys.executable, "-m", "plutonium_agent_toolkit", *run["argv"]],
@@ -382,7 +411,7 @@ class Plane:
                     run.update(status="failed", exit_code=127, finished=now(), result=None, stderr_head=f"could not start: {exc}")
                     return
                 job = _job_for(process)
-                self.active = (process, job)
+                self.active = (process, job, run["run_id"])
             try:
                 stdout, stderr, overflow, stdout_size = _drain(process, timeout, self.jobs)
                 stopped = False
@@ -394,7 +423,11 @@ class Plane:
             finally:
                 with self.lock:
                     self.active = None
-                    stopped = self.stopping
+                    # Taken, not read: the set holds a run only between the stop and this record, so
+                    # a server that runs for weeks does not grow one entry per cancelled action.
+                    withdrawn = run["run_id"] in self.stopped_runs
+                    self.stopped_runs.discard(run["run_id"])
+                    stopped = self.stopping or withdrawn
                 _close_job(job)  # on Windows this also ends anything the child left behind
             if overflow:
                 _stop_process(process, STOP_GRACE, None)
@@ -404,7 +437,7 @@ class Plane:
                     payload = strict_loads(stdout) if stdout.strip() else None
                 except ValueError:
                     payload = None
-            run.update(status="stopped" if stopped and process.returncode != 0 else "finished", exit_code=process.returncode,
+            run.update(status="stopped" if withdrawn or (stopped and process.returncode != 0) else "finished", exit_code=process.returncode,
                        finished=now(), result=payload, stdout_head=None if payload is not None else stdout[:MAX_HEAD],
                        stdout_bytes=stdout_size, output_overflow=overflow, stderr_head=(stderr or "")[:MAX_HEAD])
         finally:
@@ -418,6 +451,29 @@ class Plane:
                 print(f"warning: run record could not be saved ({exc})", file=sys.stderr)
             finally:
                 self.settled.set()
+
+    def stop_run(self, run_id: str, grace: float = STOP_GRACE) -> bool:
+        """Stop one run's child and wait for its record; True when that run was the one running.
+
+        Unlike ``shutdown`` this does not close the plane: a caller that cancels one action (an MCP
+        client withdrawing a request, say) expects the next one to start normally. A stop that
+        lands between ``start`` returning and the worker spawning still takes effect: the worker
+        sees the id under the same lock and never spawns."""
+        with self.lock:
+            active = self.active if self.active is not None and self.active[2] == run_id else None
+            # Started but not registered yet: the worker takes this lock before it spawns, so
+            # leaving the id here means it either never spawns or spawns and is stopped below.
+            starting = active is None and not self.settled.is_set()
+            if active is not None or starting:
+                self.stopped_runs.add(run_id)
+        if active is None:
+            if not starting:
+                return False        # already finished and recorded; there is nothing to stop
+            self.settled.wait(grace + 5)
+            return True
+        _stop_process(active[0], grace, active[1])
+        self.settled.wait(grace + 5)
+        return True
 
     def shutdown(self, grace: float = STOP_GRACE) -> dict:
         """Refuse new runs, stop the running child (interrupt, then kill) and wait for its record."""
@@ -660,6 +716,18 @@ def make_handler(plane: Plane):
 
 # ----- entry ----------------------------------------------------------------------------------
 
+def _is_link(path: Path) -> bool:
+    """A symbolic link on any OS, or a Windows reparse point (a junction is one and is not a
+    symlink to ``Path.is_symlink``). ``core.jobs.entry_kind`` answers the same question for a
+    directory entry; a root is given to us by name, so it is asked here."""
+    if path.is_symlink():
+        return True
+    try:
+        return bool((getattr(path.lstat(), "st_file_attributes", 0) or 0) & REPARSE_POINT)
+    except OSError:
+        return False
+
+
 def validate_roots(library: list[str], jobs: str) -> tuple[list[Path], Path]:
     if len(library) > MAX_LIBRARY_ROOTS:
         raise Failure(INPUT_LIMIT, f"At most {MAX_LIBRARY_ROOTS} library roots")
@@ -668,13 +736,13 @@ def validate_roots(library: list[str], jobs: str) -> tuple[list[Path], Path]:
         p = Path(text).expanduser()
         if not p.is_absolute():
             raise Failure(INPUT_INVALID, f"Library roots are absolute paths: {text}")
-        if p.is_symlink() or not p.is_dir():
-            raise Failure(INPUT_MISSING, f"Library root is not a directory: {text}")
+        if _is_link(p) or not p.is_dir():
+            raise Failure(INPUT_MISSING, f"Library root is a directory, not a link: {text}")
         roots.append(p.resolve())
     j = Path(jobs).expanduser()
     if not j.is_absolute():
         raise Failure(INPUT_INVALID, f"The jobs directory is an absolute path: {jobs}")
-    if j.is_symlink() or (j.exists() and not j.is_dir()):
+    if _is_link(j) or (j.exists() and not j.is_dir()):
         raise Failure(INPUT_INVALID, f"The jobs directory is a directory, not a link or file: {jobs}")
     j.mkdir(parents=True, exist_ok=True)
     j = j.resolve()

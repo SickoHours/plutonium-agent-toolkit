@@ -50,6 +50,10 @@ class ActionTableTests(unittest.TestCase):
                 self.assertTrue(action.confirm, f"{action.id} writes to the agent host and must confirm")
             if route and route.effect == "writes-config":
                 self.assertTrue(action.confirm, f"{action.id} writes the toolkit configuration and must confirm")
+            # Review finding: module fetch reached the network and wrote a snapshot without the gate
+            # every other state-changing action has, and the docs said it had one.
+            if route and route.effect in ("downloads-source", "downloads-backends"):
+                self.assertTrue(action.confirm, f"{action.id} reaches the network and must confirm")
         self.assertTrue(all(a.screen in ("library", "pack", "install", "agent", "registry") for a in ACTIONS), "every action has a screen the page renders")
 
     def test_table_marks_windows_routes_unavailable_off_windows(self):
@@ -693,7 +697,7 @@ class ShutdownTests(unittest.TestCase):
             process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], stdin=subprocess.DEVNULL,
                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **server_module._group_flags())
             plane.job_lock.acquire()
-            plane.active = (process, server_module._job_for(process))
+            plane.active = (process, server_module._job_for(process), "run-under-test")
             started = time.monotonic()
             summary = plane.shutdown(grace=2)
             self.assertTrue(summary["child_stopped"])
@@ -703,6 +707,81 @@ class ShutdownTests(unittest.TestCase):
                 plane.start("manifest", {}, False)
             self.assertEqual(ctx.exception.code, "busy")
             plane.job_lock.release()
+
+    def test_stopping_one_run_records_it_and_leaves_the_plane_open(self):
+        # The MCP bridge stops a single run when a client withdraws its request: that run's record
+        # must say stopped, the next run must still start, and the id must not be kept afterwards
+        # (review finding: the set grew by one per cancelled action for the life of the server).
+        with tempfile.TemporaryDirectory() as temp:
+            plane = server_module.Plane([], Path(temp) / "jobs")
+            self.addCleanup(plane.shutdown)
+            run = plane.start("manifest", {}, False)
+            self.assertTrue(plane.stop_run(run["run_id"], grace=5))
+            record = next(r for r in plane.run_rows() if r["run_id"] == run["run_id"])
+            # Review finding: a child that handles the interrupt cleanly exits 0, and the record
+            # said "finished" -- reading as if the withdrawn action had done its work.
+            self.assertEqual(record["status"], "stopped")
+            self.assertEqual(plane.stopped_runs, set(), "the id was taken by the record, not kept")
+            self.assertFalse(plane.stopping, "stopping one run does not close the plane")
+            self.assertFalse(plane.stop_run("a-run-that-is-not-active"), "nothing to stop, nothing recorded")
+            self.assertEqual(plane.stopped_runs, set())
+            second = plane.start("manifest", {}, False)               # the plane still accepts work
+            self.assertTrue(plane.settled.wait(60))
+            self.assertNotEqual(second["run_id"], run["run_id"])
+
+    def test_a_stop_between_start_and_the_spawn_still_stops_the_run(self):
+        # Review finding: start() returns as soon as the worker thread exists, before that worker
+        # registers the child. A stop landing in that window found nothing active, returned False,
+        # and the action ran anyway with nobody waiting for it. The worker takes the state lock
+        # before it spawns, so an id left there is seen and nothing is spawned. The gate below holds
+        # the worker in exactly that window instead of racing for it.
+        gate, original = threading.Event(), server_module.Plane._execute
+
+        def delayed(plane_self, run, timeout):
+            self.assertTrue(gate.wait(30), "the test released the worker")
+            return original(plane_self, run, timeout)
+
+        with tempfile.TemporaryDirectory() as temp:
+            plane = server_module.Plane([], Path(temp) / "jobs")
+            self.addCleanup(plane.shutdown)
+            answers = []
+            with unittest.mock.patch.object(server_module.Plane, "_execute", delayed):
+                run = plane.start("manifest", {}, False)
+                self.assertIsNone(plane.active, "the child is not registered yet")
+                stopper = threading.Thread(target=lambda: answers.append(plane.stop_run(run["run_id"], grace=5)))
+                stopper.start()
+                gate.set()
+                stopper.join(60)
+            self.assertFalse(stopper.is_alive())
+            self.assertEqual(answers, [True], "the stop took effect in the startup window")
+            record = next(r for r in plane.run_rows() if r["run_id"] == run["run_id"])
+            self.assertEqual(record["status"], "stopped")
+            self.assertIn("before the child started", record["stderr_head"])
+            self.assertIsNone(record["exit_code"], "nothing was spawned to have one")
+            self.assertEqual(plane.stopped_runs, set(), "the id was taken by the record")
+            self.assertFalse(plane.stopping, "and the plane is still open")
+
+    def test_a_job_handle_is_terminated_once_however_many_threads_reach_for_it(self):
+        # Regression: the thread running a child and the shutdown stopping it both closed the same
+        # Windows Job Object handle. The second close destroyed whatever object had taken the
+        # recycled handle value over -- on the 3.13 runner, a thread's semaphore, which ended the
+        # interpreter mid-suite rather than the run.
+        closed, ready = [], threading.Barrier(8)
+        job = server_module._Job("handle", lambda handle: closed.append(handle))
+
+        def stop():
+            ready.wait(5)
+            job.close()
+
+        threads = [threading.Thread(target=stop) for _ in range(8)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(10)
+            self.assertFalse(thread.is_alive())
+        self.assertEqual(closed, ["handle"])
+        job.close()
+        self.assertEqual(closed, ["handle"], "a later close is still a no-op")
 
     def test_a_run_accepted_just_before_shutdown_never_spawns(self):
         # Review finding: start() returned, shutdown() saw no active child, and the thread then

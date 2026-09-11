@@ -111,7 +111,8 @@ ACTIONS: tuple[Action, ...] = (
         Param("map", "token", "Map id it was tested on", flag="--map", pattern=MAP)), job=True, timeout=900),
     Action("module-fetch", "module fetch", "Fetch a published module or pack at its exact commit", "registry", params=(
         Param("reference", "reference", "<owner>/<id>@<commit> or https://github.com/<owner>/<repo>@<commit>", required=True, pattern=REFERENCE),
-        Param("path", "relpath", "Directory inside the repository holding the declaration", flag="--path")), job=True, timeout=600),
+        Param("path", "relpath", "Directory inside the repository holding the declaration", flag="--path")),
+        job=True, timeout=600, confirm=True),   # reaches the network and writes a snapshot: the person confirms it
     Action("project-verify", "project verify", "Re-hash a build receipt's outputs (and inputs)", "pack", params=(
         Param("receipt", "path", "A receipt.json under the jobs directory", required=True, file="receipt.json", roots=("jobs",)),
         Param("inputs", "flag", "Also re-hash the recorded inputs", flag="--inputs")), job=True),
