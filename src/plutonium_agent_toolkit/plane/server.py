@@ -42,6 +42,7 @@ MAX_RECEIPT = 256 * 1024     # a receipt.json larger than this is listed as unre
 MAX_JOB_ROWS = 512           # newest receipts listed per request
 MAX_CONNECTIONS = 32         # concurrent connections; beyond that a 503 is answered at once
 CONNECTION_TIMEOUT = 30.0    # seconds an idle or half-sent request may hold a connection
+REFUSE_DRAIN_SECONDS = 0.5   # total time an over-capacity client gets for an orderly close, off the accept thread
 MAX_STDERR = 1024 * 1024     # the child's stderr is kept up to this
 MAX_LIBRARY_ROOTS = 16
 MAX_SECONDS = 24 * 3600
@@ -499,25 +500,33 @@ class PlaneServer(ThreadingHTTPServer):
 
     def process_request(self, request, client_address):
         if not self._slots.acquire(blocking=False):
-            try:
-                request.sendall(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
-                # Closing a socket that still holds unread request bytes makes the kernel send a
-                # reset, and on Windows the client then sees the connection aborted instead of the
-                # 503 it was sent. Stop sending, then drain briefly so the close is orderly.
-                request.shutdown(socket.SHUT_WR)
-                request.settimeout(0.2)
-                for _ in range(64):
-                    if not request.recv(4096):
-                        break
-            except OSError:
-                pass
-            self.shutdown_request(request)
+            # Answer at once and hand the orderly close to a short-lived thread: the accept loop
+            # never waits on an over-capacity client, and the drain is bounded so a client that
+            # trickles bytes cannot hold that thread either.
+            threading.Thread(target=self._refuse, args=(request,), daemon=True).start()
             return
         try:
             super().process_request(request, client_address)
         except Exception:
             self._slots.release()
             raise
+
+    def _refuse(self, request) -> None:
+        """Send the 503, then close in order. Closing a socket that still holds unread request
+        bytes makes the kernel send a reset, and on Windows the client then sees the connection
+        aborted instead of the reply; so stop sending and drain, bounded by a total deadline."""
+        try:
+            request.sendall(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            request.shutdown(socket.SHUT_WR)
+            deadline = time.monotonic() + REFUSE_DRAIN_SECONDS
+            request.settimeout(0.1)
+            while time.monotonic() < deadline:
+                if not request.recv(4096):
+                    break
+        except OSError:
+            pass
+        finally:
+            self.shutdown_request(request)
 
     def process_request_thread(self, request, client_address):
         try:

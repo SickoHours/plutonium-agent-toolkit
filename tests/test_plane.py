@@ -556,6 +556,41 @@ class ConnectionBoundTests(PlaneServerFixture):
         self.assertEqual(self.call("/api/state")[0], 200, "the slot is free once the holder is gone")
         self.assertEqual(server_module.make_handler(self.plane).timeout, server_module.CONNECTION_TIMEOUT)
 
+    def test_refused_clients_do_not_hold_the_accept_loop(self):
+        # Review finding: draining an over-capacity client on the accept thread would let a client
+        # that trickles bytes delay every later connection. The refusal is answered at once and the
+        # drain happens off the accept thread with a total deadline.
+        holder = socket.create_connection(("127.0.0.1", self.port), timeout=5)
+        holder.sendall(b"GET /api/state HTTP/1.1\r\nHost: 127.0.0.1\r\n")
+        time.sleep(0.3)
+        tricklers = []
+        try:
+            for _ in range(3):
+                s = socket.create_connection(("127.0.0.1", self.port), timeout=5)
+                s.sendall(b"GET /api/state HTTP/1.1\r\n")   # never finishes; keeps sending after the 503
+                tricklers.append(s)
+            started = time.monotonic()
+            for s in tricklers:
+                self.assertTrue(s.recv(200).startswith(b"HTTP/1.1 503"))
+            for _ in range(4):
+                for s in tricklers:
+                    try:
+                        s.sendall(b"X-Trickle: 1\r\n")
+                    except OSError:
+                        pass
+                time.sleep(0.05)
+            probe = socket.create_connection(("127.0.0.1", self.port), timeout=5)
+            probe.sendall(b"GET /api/state HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Plane-Token: " + self.plane.token.encode() + b"\r\n\r\n")
+            reply = probe.recv(200)
+            probe.close()
+            self.assertTrue(reply.startswith(b"HTTP/1.1 503"), reply)
+            self.assertLess(time.monotonic() - started, server_module.REFUSE_DRAIN_SECONDS * 3,
+                            "later connections are answered while earlier refusals are still draining")
+        finally:
+            for s in tricklers:
+                s.close()
+            holder.close()
+
 
 class SequencingTests(PlaneServerFixture):
     def test_a_failed_first_record_leaves_no_prompt_and_no_running_row(self):
