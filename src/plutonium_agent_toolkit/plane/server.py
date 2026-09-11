@@ -34,7 +34,8 @@ from .actions import BY_ID, argv_for, table
 STATIC = Path(__file__).with_name("static")
 MAX_BODY = 1024 * 1024
 MAX_RUNS = 200
-MAX_OUTPUT = 4 * 1024 * 1024
+MAX_OUTPUT = 64 * 1024 * 1024   # the child's stdout is parsed whole up to this; beyond it the run keeps a head and no result
+MAX_HEAD = 4000
 MAX_LIBRARY_ROOTS = 16
 MAX_SECONDS = 24 * 3600
 MAX_CATALOG_ROWS = 2000      # declarations and compositions across every root, per request
@@ -70,22 +71,49 @@ def _group_flags() -> dict:
     return {"start_new_session": True}
 
 
-def _stop_process(process: subprocess.Popen, grace: float) -> None:
-    """Interrupt the child so it writes its cancelled receipt and stops its backends, then kill it."""
+def _job_for(process: subprocess.Popen):
+    """On Windows, a Job Object (kill on close) holding the child and everything it starts."""
+    if os.name != "nt":
+        return None
+    from ..core import _winjob
+
+    try:
+        handle = _winjob.create_job()
+        _winjob.assign(handle, process)
+        return handle
+    except Failure:
+        return None
+
+
+def _close_job(job) -> None:
+    if job is not None:
+        from ..core import _winjob
+
+        _winjob.terminate(job)
+
+
+def _stop_process(process: subprocess.Popen, grace: float, job=None) -> None:
+    """Interrupt the child so it writes its cancelled receipt and stops its backends, then kill the
+    whole tree: the process group on POSIX, the Job Object on Windows."""
     if process.poll() is not None:
         return
     try:
         if os.name == "nt":
-            process.terminate()
+            process.send_signal(signal.CTRL_BREAK_EVENT)
         else:
             os.killpg(process.pid, signal.SIGINT)
-    except (ProcessLookupError, PermissionError, OSError):
+    except (ProcessLookupError, PermissionError, OSError, ValueError):
         pass
     try:
         process.wait(timeout=grace)
     except subprocess.TimeoutExpired:
+        pass
+    if process.poll() is None:
         try:
             if os.name == "nt":
+                if job is not None:
+                    _close_job(job)
+                    job = None
                 process.kill()
             else:
                 os.killpg(process.pid, signal.SIGKILL)
@@ -95,6 +123,8 @@ def _stop_process(process: subprocess.Popen, grace: float) -> None:
             process.wait(timeout=grace)
         except subprocess.TimeoutExpired:
             pass
+    if os.name == "nt" and job is not None:
+        _close_job(job)
 
 
 class Plane:
@@ -109,7 +139,7 @@ class Plane:
         self.lock = threading.Lock()
         self.job_lock = threading.Lock()
         self.counter = 0
-        self.active: subprocess.Popen | None = None
+        self.active: tuple | None = None   # (process, windows job handle or None) while a child runs
         self.stopping = False
         self.stop_requested = False
         self.prompt_dir = jobs / "plane-prompts"
@@ -242,21 +272,28 @@ class Plane:
         return {k: v for k, v in run.items() if k != "result"}
 
     def _execute(self, run: dict, timeout: int) -> None:
+        job = None
         try:
-            try:
-                process = subprocess.Popen([sys.executable, "-m", "plutonium_agent_toolkit", *run["argv"]],
-                                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=str(self.jobs),
-                                           stdin=subprocess.DEVNULL, env=child_env(), **_group_flags())
-            except OSError as exc:
-                run.update(status="failed", exit_code=127, finished=now(), result=None, stderr_head=f"could not start: {exc}")
-                return
+            # Spawn under the state lock so shutdown either sees the child (and stops it) or is seen
+            # here first (and nothing is spawned).
             with self.lock:
-                self.active = process
+                if self.stopping:
+                    run.update(status="stopped", exit_code=None, finished=now(), result=None, stderr_head="the plane stopped before the child started")
+                    return
+                try:
+                    process = subprocess.Popen([sys.executable, "-m", "plutonium_agent_toolkit", *run["argv"]],
+                                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=str(self.jobs),
+                                               stdin=subprocess.DEVNULL, env=child_env(), **_group_flags())
+                except OSError as exc:
+                    run.update(status="failed", exit_code=127, finished=now(), result=None, stderr_head=f"could not start: {exc}")
+                    return
+                job = _job_for(process)
+                self.active = (process, job)
             try:
                 stdout, stderr = process.communicate(timeout=timeout)
                 stopped = False
             except subprocess.TimeoutExpired:
-                _stop_process(process, STOP_GRACE)
+                _stop_process(process, STOP_GRACE, job)
                 stdout, stderr = process.communicate()
                 run.update(status="timeout", exit_code=process.returncode, finished=now(), result=None,
                            stderr_head=f"exceeded {timeout} seconds and was stopped; " + (stderr or "")[:2000])
@@ -265,14 +302,17 @@ class Plane:
                 with self.lock:
                     self.active = None
                     stopped = self.stopping
-            stdout = (stdout or "")[:MAX_OUTPUT]
-            try:
-                payload = json.loads(stdout) if stdout.strip() else None
-            except ValueError:
-                payload = None
+                _close_job(job)  # on Windows this also ends anything the child left behind
+            stdout = stdout or ""
+            payload = None
+            if len(stdout) <= MAX_OUTPUT:
+                try:
+                    payload = json.loads(stdout) if stdout.strip() else None
+                except ValueError:
+                    payload = None
             run.update(status="stopped" if stopped and process.returncode != 0 else "finished", exit_code=process.returncode,
-                       finished=now(), result=payload, stdout_head=None if payload is not None else stdout[:4000],
-                       stderr_head=(stderr or "")[:4000])
+                       finished=now(), result=payload, stdout_head=None if payload is not None else stdout[:MAX_HEAD],
+                       stdout_bytes=len(stdout), stderr_head=(stderr or "")[:MAX_HEAD])
         finally:
             try:
                 self._record(run)
@@ -285,13 +325,13 @@ class Plane:
         """Refuse new runs, stop the running child (interrupt, then kill) and wait for its record."""
         with self.lock:
             self.stopping = True
-            process = self.active
-        if process is not None:
-            _stop_process(process, grace)
+            active = self.active
+        if active is not None:
+            _stop_process(active[0], grace, active[1])
         deadline = time.monotonic() + grace + 5
         while self.job_lock.locked() and time.monotonic() < deadline:
             time.sleep(0.05)
-        return {"child_stopped": process is not None, "still_running": self.job_lock.locked()}
+        return {"child_stopped": active is not None, "still_running": self.job_lock.locked()}
 
     def run_rows(self) -> list[dict]:
         with self.lock:

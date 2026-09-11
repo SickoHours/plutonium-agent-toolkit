@@ -100,12 +100,13 @@ function rememberModels(result) {
   for (const form of document.querySelectorAll("form.action")) {
     const instance = form.elements.instance, model = form.elements.model;
     if (!instance || !model) continue;
-    for (const [node, values] of [[instance, result.instances.map((i) => `${i.instance_id} (${i.driver}${i.display_name ? ", " + i.display_name : ""})`)],
-                                  [model, result.instances.flatMap((i) => i.models.map((m) => `${m.slug} (${i.instance_id}${m.status ? ", " + m.status : ""})`))]]) {
+    // value is the exact id or slug; label is the description. Nothing is parsed back out of a label.
+    for (const [node, values] of [[instance, result.instances.map((i) => [i.instance_id, `${i.instance_id} (${i.driver}${i.display_name ? ", " + i.display_name : ""})`])],
+                                  [model, result.instances.flatMap((i) => i.models.map((m) => [m.slug, `${m.slug} (${i.instance_id}${m.status ? ", " + m.status : ""})`]))]]) {
       const listId = form.id + "-" + node.name + "-choices";
       let list = document.getElementById(listId);
       if (!list) { list = el("datalist", { id: listId }); form.append(list); node.setAttribute("list", listId); }
-      list.replaceChildren(...values.map((v) => el("option", { value: v.split(" ")[0], label: v })));
+      list.replaceChildren(...values.map(([value, label]) => el("option", { value, label })));
     }
     const options = form.elements.options;
     if (options) {
@@ -238,7 +239,7 @@ function renderLibrary() {
   let tableBox = $("#library-tables");
   if (!tableBox) {
     tableBox = el("div", { id: "library-tables" });
-    box.append(tableBox, actionForm(state.actions.find((a) => a.id === "module-declare")));
+    box.append(tableBox, ...state.actions.filter((a) => a.screen === "library").map(actionForm));
   }
   tableBox.replaceChildren();
   if (!state.library) return;

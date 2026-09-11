@@ -47,6 +47,9 @@ class ActionTableTests(unittest.TestCase):
                 self.assertTrue(action.confirm, f"{action.id} talks to the game and must confirm")
             if route and group == "agent" and route.effect == "writes-output":
                 self.assertTrue(action.confirm, f"{action.id} writes to the agent host and must confirm")
+            if route and route.effect == "writes-config":
+                self.assertTrue(action.confirm, f"{action.id} writes the toolkit configuration and must confirm")
+        self.assertTrue(all(a.screen in ("library", "pack", "install", "agent", "registry") for a in ACTIONS), "every action has a screen the page renders")
 
     def test_table_marks_windows_routes_unavailable_off_windows(self):
         rows = table({"system": "Linux", "game_control_supported": False})
@@ -135,8 +138,11 @@ class ArgvTests(unittest.TestCase):
         self.assertEqual(self.argv("agent-status", {"thread_id": "t-1", "messages": 4}), ["agent", "status", "t-1", "--messages", "4"])
         with self.assertRaises(Failure):
             self.argv("agent-dispatch", {"project": "p", "title": "t", "prompt": "x", "instance": "i", "model": "m", "runtime_mode": "yolo"})
-        with self.assertRaises(Failure):
-            self.argv("game-install-mod", {"package": {"root": "jobs", "path": "build-1/packages/mod.ff"}, "folder": "mp_bad;rm"})
+        for folder in ("mp_bad;rm", "mp_test", ".", "..", "a/b"):
+            with self.assertRaises(Failure, msg=folder):
+                self.argv("game-install-mod", {"package": {"root": "jobs", "path": "build-1/packages/mod.ff"}, "folder": folder})
+        with self.assertRaises(Failure):  # a lone surrogate cannot reach Popen
+            self.argv("agent-dispatch", {"project": "p", "title": "bad \ud800 title", "prompt": "x", "instance": "i", "model": "m"})
         with self.assertRaises(Failure):
             self.argv("registry-search", {"words": "hello\x00"})
         with self.assertRaises(Failure):
@@ -342,13 +348,18 @@ class PlaneServerTests(PlaneServerFixture):
         self.assertFalse(body["running"])
 
     def test_one_run_at_a_time_busy_leaves_nothing_and_a_failed_child_is_recorded(self):
-        args = {"composition": {"root": 0, "path": "hello-pack/composition.json"}}
-        status, first = self.call("/api/run", {"action": "module-build", "args": args})
-        self.assertEqual(status, 202)
-        status, second = self.call("/api/run", {"action": "agent-send", "confirmed": True, "args": {"thread_id": "t-1", "prompt": "x" * 1000}})
+        # The run lock held by a running child (taken directly here so the test has no race).
+        self.assertTrue(self.plane.job_lock.acquire(blocking=False))
+        try:
+            status, second = self.call("/api/run", {"action": "agent-send", "confirmed": True, "args": {"thread_id": "t-1", "prompt": "x" * 1000}})
+        finally:
+            self.plane.job_lock.release()
         self.assertEqual(status, 409)
         self.assertEqual(second["error_code"], "busy")
         self.assertFalse((self.jobs / "plane-prompts").exists(), "a busy dispatch writes no prompt file")
+        args = {"composition": {"root": 0, "path": "hello-pack/composition.json"}}
+        status, first = self.call("/api/run", {"action": "module-build", "args": args})
+        self.assertEqual(status, 202, first)
         self.finish(first["run"]["run_id"])
         # A child that fails structurally is a finished run with the child's error, not a server error.
         status, body = self.call("/api/run", {"action": "game-install-mod", "confirmed": True,
@@ -361,18 +372,21 @@ class PlaneServerTests(PlaneServerFixture):
 
     def test_lock_is_released_even_when_the_run_record_cannot_be_written(self):
         args = {"composition": {"root": 0, "path": "hello-pack/composition.json"}}
-        status, first = self.call("/api/run", {"action": "module-plan", "args": args})
-        self.assertEqual(status, 202)
         original = self.plane._record
+        failures = []
 
         def broken(run):
             if run["status"] != "running":
+                failures.append(run["run_id"])
                 raise OSError("disk full")
             original(run)
         self.plane._record = broken
+        status, first = self.call("/api/run", {"action": "module-plan", "args": args})
+        self.assertEqual(status, 202)
         deadline = time.monotonic() + 60
-        while self.plane.job_lock.locked() and time.monotonic() < deadline:
+        while (self.plane.job_lock.locked() or not failures) and time.monotonic() < deadline:
             time.sleep(0.1)
+        self.assertEqual(failures, [first["run"]["run_id"]], "the final record raised")
         self.assertFalse(self.plane.job_lock.locked(), "the lock outlives a failed record")
         self.plane._record = original
         status, second = self.call("/api/run", {"action": "module-plan", "args": args})
@@ -403,6 +417,8 @@ class PlaneServerTests(PlaneServerFixture):
 
     def test_registry_actions_run_as_children_with_the_words_split(self):
         status, body = self.call("/api/run", {"action": "registry-add", "args": {"source": {"root": 0, "path": "registry.json"}}})
+        self.assertEqual((status, body.get("error_code")), (400, "input_invalid"), "registry add writes configuration and confirms first")
+        status, body = self.call("/api/run", {"action": "registry-add", "confirmed": True, "args": {"source": {"root": 0, "path": "registry.json"}}})
         run = self.finish(body["run"]["run_id"])
         self.assertTrue(run["result"]["ok"], run)
         self.assertEqual(run["result"]["result"]["entries"], 3)
@@ -433,7 +449,7 @@ class ShutdownTests(unittest.TestCase):
             process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], stdin=subprocess.DEVNULL,
                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **server_module._group_flags())
             plane.job_lock.acquire()
-            plane.active = process
+            plane.active = (process, server_module._job_for(process))
             started = time.monotonic()
             summary = plane.shutdown(grace=2)
             self.assertTrue(summary["child_stopped"])
@@ -443,6 +459,24 @@ class ShutdownTests(unittest.TestCase):
                 plane.start("manifest", {}, False)
             self.assertEqual(ctx.exception.code, "busy")
             plane.job_lock.release()
+
+    def test_a_run_accepted_just_before_shutdown_never_spawns(self):
+        # Review finding: start() returned, shutdown() saw no active child, and the thread then
+        # spawned one anyway. The spawn happens under the state lock and rechecks stopping.
+        with tempfile.TemporaryDirectory() as temp:
+            plane = server_module.Plane([], Path(temp) / "jobs")
+            run = plane.start("manifest", {}, False)
+            with plane.lock:  # hold the state lock so the worker cannot spawn yet
+                plane.stopping = True
+            deadline = time.monotonic() + 30
+            while plane.job_lock.locked() and time.monotonic() < deadline:
+                time.sleep(0.05)
+            record = next(r for r in plane.run_rows() if r["run_id"] == run["run_id"])
+            self.assertIn(record["status"], ("stopped", "finished"))
+            if record["status"] == "finished":
+                self.assertEqual(record["exit_code"], 0)  # spawned before stopping was set: ran to completion, was recorded
+            else:
+                self.assertIn("before the child started", record["stderr_head"])
 
 
 class ServeEntryTests(unittest.TestCase):

@@ -9,6 +9,7 @@ here has a default model.
 """
 from __future__ import annotations
 
+import os
 import re
 import uuid
 from dataclasses import dataclass
@@ -18,7 +19,7 @@ from ..core.discovery import find
 from ..core.errors import INPUT_INVALID, INPUT_MISSING, Failure
 
 ID = re.compile(r"^[a-z0-9_]{1,64}\Z")
-FOLDER = re.compile(r"^[A-Za-z0-9_.-]{1,100}\Z")
+FOLDER = re.compile(r"^(?!mp_)(?!\.\.?\Z)[A-Za-z0-9_.-]{1,100}\Z")  # what game install-mod and select-mod accept
 HOST_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z")
 OPTION = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}=[^\x00-\x1f\x7f]{1,512}\Z")  # the value range pat agent accepts
 REFERENCE = re.compile(r"^(?:[a-z0-9][a-z0-9-]{0,38}/[a-z0-9_]{1,64}|https://github\.com/[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100})@[0-9a-f]{40}\Z")
@@ -30,7 +31,7 @@ CATEGORY = re.compile(r"^[a-z][a-z0-9-]{0,31}\Z")
 MAP_KEY = re.compile(r"^[a-z0-9-]{1,64}\Z")
 LOAD_ID = re.compile(r"^[a-f0-9]{32}\Z")
 SOURCE = re.compile(r"^https://[^\s\x00-\x1f]{1,2048}\Z")
-PRINTABLE = re.compile(r"^[^\x00-\x08\x0b\x0c\x0e-\x1f]*\Z")
+PRINTABLE = re.compile(r"^[^\x00-\x08\x0b\x0c\x0e-\x1f\ud800-\udfff]*\Z")  # no control characters, no lone surrogates
 MAX_PROMPT = 200_000
 MAX_TEXT = 512
 MAX_LIST = 16
@@ -75,8 +76,8 @@ THREAD = Param("thread_id", "host_id", "A thread id from agent hosts or a dispat
 
 ACTIONS: tuple[Action, ...] = (
     # ----- reads --------------------------------------------------------------------------
-    Action("manifest", "manifest", "Toolkit manifest", "home"),
-    Action("doctor", "doctor", "Doctor: configuration and backends", "home"),
+    Action("manifest", "manifest", "Toolkit manifest", "library"),
+    Action("doctor", "doctor", "Doctor: configuration and backends", "library"),
     Action("game-mods", "game mods", "Installed mod folders (disk inventory)", "install"),
     Action("game-status", "game status", "Game windows (no engine input)", "install"),
     Action("game-info", "game info", "Fresh map, mod and server state from the engine", "install", confirm=True),
@@ -115,7 +116,7 @@ ACTIONS: tuple[Action, ...] = (
         Param("receipt", "path", "A receipt.json under the jobs directory", required=True, file="receipt.json", roots=("jobs",)),
         Param("inputs", "flag", "Also re-hash the recorded inputs", flag="--inputs")), job=True),
     Action("registry-add", "registry add", "Record a registry file (path under a library root, or an https URL)", "registry", params=(
-        Param("source", "registry_source", "registry.json under a library root, or an https URL", required=True),)),
+        Param("source", "registry_source", "registry.json under a library root, or an https URL", required=True),), confirm=True),
     Action("game-install-mod", "game install-mod", "Copy a built mod.ff into storage/t6/mods/<folder>", "install", params=(
         Param("package", "path", "The mod.ff of a build under the jobs directory, or a seed under a library root", required=True,
               file="mod.ff", roots=("jobs", "library")),
@@ -176,6 +177,16 @@ def _is_absolute(text: str) -> bool:
     return PurePosixPath(text).is_absolute() or PureWindowsPath(text).is_absolute() or bool(PureWindowsPath(text).drive)
 
 
+def _reparse_point(path: Path) -> bool:
+    """A Windows junction or other reparse point, which is_symlink does not report."""
+    if os.name != "nt":
+        return False
+    try:
+        return bool(path.lstat().st_file_attributes & 0x400)  # FILE_ATTRIBUTE_REPARSE_POINT
+    except FileNotFoundError:
+        return False
+
+
 def _regular_path(root: Path, relative: str, what: str) -> Path:
     if not isinstance(relative, str) or not relative or len(relative) > 4096 or "\\" in relative or relative != relative.strip():
         raise Failure(INPUT_INVALID, f"{what}: a forward-slash path relative to its root")
@@ -186,7 +197,7 @@ def _regular_path(root: Path, relative: str, what: str) -> Path:
     try:
         for part in parts:
             current = current / part
-            if current.is_symlink():
+            if current.is_symlink() or _reparse_point(current):
                 raise Failure(INPUT_INVALID, f"{what}: linked paths are not accepted")
     except OSError as exc:
         raise Failure(INPUT_INVALID, f"{what}: cannot read {relative}: {exc.strerror or exc}") from exc

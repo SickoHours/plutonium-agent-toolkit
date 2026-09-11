@@ -36,7 +36,7 @@ The token is not written anywhere and dies with the process.
 
 | Screen | Controls | Routes behind them |
 | --- | --- | --- |
-| Library | Every declaration and composition under the library roots: id, kind, category, bases, maps, tags, payload, whether a seed's package is present; every loose `mod.ff` under a root, declared or not, offered to `module declare` | files; `module declare` |
+| Library | The toolkit manifest and doctor; every declaration and composition under the library roots: id, kind, category, bases, maps, tags, payload, whether a seed's package is present; every loose `mod.ff` under a root, declared or not, offered to `module declare` | `manifest`, `doctor`, files; `module declare` |
 | Pack | Plan a composition (collisions come back as decisions), build it, verify a build receipt | `module plan`, `module build`, `project verify` |
 | Install | Installed mod folders, file-only install of a built package, game status, engine info, launch, select a mod, load a map, check a load | `game mods`, `game install-mod`, `game status`, `game info`, `game launch`, `game select-mod`, `game load-map`, `game check-load` |
 | Agent | Probe the local T3 Code server, list its projects and threads, list this machine's provider instances, models and reasoning choices, dispatch a prompt, read a thread, send a follow-up, interrupt | `agent probe`, `agent hosts`, `agent models`, `agent dispatch`, `agent status`, `agent send`, `agent interrupt` |
@@ -45,8 +45,8 @@ The token is not written anywhere and dies with the process.
 
 `pat plane actions --json` prints the same table the page uses: each action's route, effect,
 status, whether it is available on this host, its typed parameters, and whether it asks for
-confirmation first. Actions whose route changes the game, queries the engine or writes to the
-agent host always confirm. Windows-only routes are shown but disabled on other hosts; the page
+confirmation first. Actions whose route changes the game, queries the engine, writes to the
+agent host or writes the toolkit configuration (`registry add`) always confirm. Windows-only routes are shown but disabled on other hosts; the page
 says why.
 
 ## What the page cannot do, on purpose
@@ -66,15 +66,17 @@ says why.
   `truncated` when a bound was reached; a declaration or manifest that is not what the format
   says is shown with its error, never hidden and never a crash.
 - When it stops (deadline or Ctrl-C) it refuses new runs, interrupts a child still running so the
-  child writes its cancelled receipt, kills it after a grace period, and reports
-  `child_stopped_at_shutdown` in its summary; the run is recorded as `stopped`.
+  child writes its cancelled receipt, kills it after a grace period (the whole tree: a process
+  group on Linux, a Job Object on Windows), and reports `child_stopped_at_shutdown` in its
+  summary; the run is recorded as `stopped`.
 - It is not evidence. A green row is the child's `ok: true`; the six build facts (offline
   verified, installed, launched, loaded, playable, accepted) are stated by the receipts and the
   person, never by the page.
 
 ## Reading a run
 
-Each run row carries `argv` (what ran), `exit_code`, `result` (the child's whole JSON document)
+Each run row carries `argv` (what ran), `exit_code`, `result` (the child's whole JSON document,
+parsed in full; a child that prints more than 64 MiB keeps only `stdout_head` and `stdout_bytes`)
 and, for job routes, `output` (the directory holding `receipt.json` and the artifacts). A run
 that could not start a child (`stderr_head`), or exceeded the action's deadline (`status:
 timeout`), is recorded the same way. The plane's own summary at exit counts runs and says

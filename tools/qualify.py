@@ -332,6 +332,11 @@ def tier_offline(receipt, home: Path, work: Path):
                              "exit_code": tests.returncode, "passed": tests.returncode == 0,
                              "stderr_head": tests.stderr[-2000:], "expected": "success"})
     print(("PASS " if tests.returncode == 0 else "FAIL ") + "unit tests", flush=True)
+    if tests.returncode != 0:
+        # Name the failing tests here too: a caller that only sees this tool's stderr (CI, the
+        # nested qualification test) could otherwise not tell which test failed.
+        failed = [line for line in tests.stderr.splitlines() if line.startswith(("FAIL:", "ERROR:"))]
+        print("unit tests failed: " + ("; ".join(failed[:20]) if failed else tests.stderr[-1500:]), file=sys.stderr, flush=True)
     step(receipt, "version", PAT + ["version", "--json"])
     step(receipt, "manifest", PAT + ["manifest", "--json"])
     step(receipt, "describe game load-map", PAT + ["describe", "game", "load-map", "--json"])
