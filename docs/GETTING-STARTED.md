@@ -90,6 +90,21 @@ any other existing file and says which, writes nothing through a link below your
 launches nothing.
 `doctor` then reports, per harness, whether the installed skills are current. Open a new session in
 the harness for it to list them. Run it again after pulling a newer checkout.
+## Fetch the built-in modules and packs
+
+```sh
+pat dev builtin --plan --json     # what the toolkit's own registry lists, and whether it is on this machine
+pat dev builtin --json            # one pinned snapshot over HTTPS; a receipt per built-in; a rerun verifies
+pat registry search --origin builtin --json
+```
+
+The toolkit ships a registry of the modules and packs the release pins (the examples today). `dev
+builtin` lays them out under the toolkit home so a built-in pack composes as it is (`pat module plan
+<builtin_dir>/composition.json --output <new dir> --json`); it never overwrites a tree with a changed, missing or
+added file, and never touches the game.
+Registries you add with `pat registry add`, including the official one at
+`https://raw.githubusercontent.com/SickoHours/plutonium-module-registry/main/registry.json`, sit beside it
+with origin `added`.
 
 ## What next
 

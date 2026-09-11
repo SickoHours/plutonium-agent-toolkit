@@ -41,6 +41,7 @@ See [AGENTS.md](AGENTS.md) and [docs/FOR-AGENTS.md](docs/FOR-AGENTS.md).
 | Component | Group(s) | Purpose |
 | --- | --- | --- |
 | Development (Windows, Linux) | `dev`, `gsc`, `ff`, `project`, `module`, `model`, `audio`, `image`, `lua`, `weapon` | Scripts, fastfiles, models, media, saved-asset recipes and compositions of declared modules through pinned upstream backends. Verified on Windows 11 and Arch Linux (Omarchy); macOS untested |
+| Built-ins (Windows, Linux) | `dev builtin`, `registry` | The modules and packs the release ships, listed by the toolkit's own registry and fetched onto the machine at their pinned commits with receipts; every registry on the machine carries its origin, built-in or added. [docs/REGISTRY.md](docs/REGISTRY.md) |
 | Agent hosts (Windows, Linux) | `agent` | Hand a prompt to a running T3 Code server as a new thread with the caller's model and reasoning choice; read the thread back. Orchestration protocol 1 (nightly and stable); V2 hosts are detected and refused. [docs/AGENT-HOSTS.md](docs/AGENT-HOSTS.md) |
 | Game control (Windows) | `game` | Launch T6 Zombies, select mods, load maps, verify loads through the external Win32 console. Native Windows only |
 | Testing | `capture`, `test` | **Deferred to a later release.** Contracts registered; routes refuse with `not_implemented` |
@@ -97,7 +98,9 @@ add a script, port a feature, four preflights, diagnose a crash, compose a pack,
 [docs/MODULES.md](docs/MODULES.md) specifies the module declaration and composition recipe that
 let an agent compose several mods, from local directories or fetched repositories, into one pack;
 [docs/REGISTRY.md](docs/REGISTRY.md) specifies the registry file that lists them by name at exact
-commits, with `pat registry` and `pat module fetch`. `examples/registry.json` lists the examples.
+commits, with `pat registry` and `pat module fetch`; the toolkit ships its own registry of built-in
+modules and packs, which `pat dev builtin` fetches onto the machine, and the official community
+registry lives at [SickoHours/plutonium-module-registry](https://github.com/SickoHours/plutonium-module-registry).
 [docs/CONTROL-PLANE.md](docs/CONTROL-PLANE.md) describes `pat plane serve`, a local page over those routes
 and the agent-host routes, where the person picks the model and an agent thread does the work.
 [docs/TRACK-RECORD.md](docs/TRACK-RECORD.md) records what that workflow has produced, and the
@@ -133,7 +136,7 @@ python tools/release_check.py
 | `src/plutonium_agent_toolkit/testing/` | Capture and test routes |
 | `examples/hello-zm/` | The bundled first-run mod used by the qualification loop |
 | `examples/hello-pack/` | The smallest composition: both example modules on the stock game as one `mod.ff`; formats in `docs/MODULES.md` |
-| `examples/registry.json` | A registry listing the examples at an exact commit; format in `docs/REGISTRY.md` |
+| `examples/registry.json` | The same entries as the registry that ships inside the package (`dev/builtin.json`), under an addable name: the built-in modules and packs at an exact commit; format in `docs/REGISTRY.md` |
 | `docs/` | User guide, packaged route qualification, contributor docs, engineering history |
 | `docs/TRACK-RECORD.md`, `docs/track-record.json` | Generated track record: accepted modules by category, milestones with the scope of each verdict, workflows completed without a packaged route |
 | `CONTEXT.md` | The vocabulary every doc, receipt and skill uses, one definition each |

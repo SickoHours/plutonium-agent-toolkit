@@ -116,8 +116,9 @@ class RegistryFileTests(RegistryFixture):
         self.assertEqual(row["result"]["name"], "test-registry")
         code, row = invoke(["registry", "list"])
         self.assertEqual(code, 0, row)
-        self.assertEqual([r["name"] for r in row["result"]["registries"]], ["test-registry"])
-        code, row = invoke(["registry", "search", "round"])
+        # The registry that ships with the toolkit is always first; added ones follow (tests/test_builtin.py).
+        self.assertEqual([r["name"] for r in row["result"]["registries"] if r["origin"] == "added"], ["test-registry"])
+        code, row = invoke(["registry", "search", "round", "--origin", "added"])
         self.assertEqual(code, 0, row)
         self.assertEqual(row["result"]["count"], 1)
         hit = row["result"]["hits"][0]
@@ -126,7 +127,7 @@ class RegistryFileTests(RegistryFixture):
         for filters, expected in ((["--category", "scripts"], 1), (["--category", "weapons"], 0), (["--tag", "example"], 1),
                                   (["--base", "stock"], 1), (["--base", "b2"], 0), (["--map", "zm_transit"], 1), (["--kind", "script"], 1),
                                   (["--entry-kind", "composition"], 0), (["nothing", "matches"], 0)):
-            code, row = invoke(["registry", "search", *filters])
+            code, row = invoke(["registry", "search", "--origin", "added", *filters])
             self.assertEqual(row["result"]["count"], expected, filters)
         code, row = invoke(["registry", "show", "someone/round_announcer"])
         self.assertEqual(code, 0, row)
@@ -149,7 +150,7 @@ class RegistryFileTests(RegistryFixture):
         code, row = invoke(["registry", "add", "https://example.invalid/registry.json"])
         self.assertEqual(row["result"]["entries"], 2)
         code, row = invoke(["registry", "list"])
-        self.assertEqual(len(row["result"]["registries"]), 1, "same name replaces, never duplicates")
+        self.assertEqual(len([r for r in row["result"]["registries"] if r["origin"] == "added"]), 1, "same name replaces, never duplicates")
         code, row = invoke(["registry", "search", "--category", "weapons", "--kind", "melee"])
         self.assertEqual(row["result"]["hits"][0]["name"], "someone/other")
         code, row = invoke(["registry", "add", "http://insecure.invalid/registry.json"])

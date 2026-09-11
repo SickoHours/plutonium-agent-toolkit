@@ -6,7 +6,7 @@
 pat <group> <action> [options]
         │
         ├── core/        errors · envelope · config · receipts · platform · discovery
-        ├── dev/         backends (setup, doctor) · skills (install-skills) · gsc · ff · project · module · model · audio · image · lua · weapon
+        ├── dev/         backends (setup, doctor) · skills (install-skills) · builtin (the shipped registry and its shelf) · gsc · ff · project · module · model · audio · image · lua · weapon
         ├── game/        status · info · launch · select-mod · load-map · reload-mod · check-load · mods · quit
         ├── agent/       probe · hosts · models · dispatch · status · send · interrupt (T3 Code as an agent host)
         ├── plane/       actions · serve (a loopback page whose every control is one of the routes above)

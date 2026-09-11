@@ -649,6 +649,22 @@ def tier_backends(receipt, home: Path, work: Path, media: bool = False):
     step(receipt, "dev setup gsc oat", PAT + ["dev", "setup", "--only", "gsc", "oat", "--json"], timeout=1800)
     step(receipt, "doctor after setup", PAT + ["doctor", "--json"])
     step(receipt, "dev setup rerun verifies", PAT + ["dev", "setup", "--only", "gsc", "oat", "--json"], timeout=600)
+    # Built-ins: the shipped registry's entries fetched from GitHub at their pinned commit (real network,
+    # like the backend downloads above), verified on rerun, and the built-in pack planned from the shelf.
+    step(receipt, "dev builtin --plan", PAT + ["dev", "builtin", "--plan", "--json"])
+    fetched = step(receipt, "dev builtin fetches the built-ins", PAT + ["dev", "builtin", "--json"], timeout=600)
+    if fetched["passed"]:
+        result = fetched["json"]["result"]
+        receipt["notes"].append({"builtin_results": [(r["name"], r["action"], r["files"]) for r in result["results"]],
+                                 "builtin_downloads": [(d["commit"], d["archive_sha256"], d["archive_bytes"]) for d in result["downloads"]]})
+        rerun = step(receipt, "dev builtin rerun verifies", PAT + ["dev", "builtin", "--json"], timeout=600)
+        if rerun["passed"] and (rerun["json"]["result"]["downloads"] or any(r["action"] != "verified" for r in rerun["json"]["result"]["results"])):
+            rerun["passed"] = False
+            rerun["stderr_head"] = "a rerun downloaded or re-installed a built-in that was already present"
+        packs = [r for r in result["results"] if r["kind"] == "composition"]
+        if packs:
+            step(receipt, "module plan the built-in pack from the shelf", PAT + ["module", "plan", str(Path(packs[0]["module_dir"]) / "composition.json"),
+                                                                             "--output", str(work / "builtin-plan"), "--json"])
     recipe = ROOT / "examples/hello-zm/project.json"
     step(receipt, "project plan hello-zm", PAT + ["project", "plan", str(recipe), "--output", str(work / "plan"), "--json"])
     build = step(receipt, "project build hello-zm (real gsc-tool + OAT)", PAT + ["project", "build", str(recipe), "--output", str(work / "build"), "--json"], timeout=600)

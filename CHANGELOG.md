@@ -46,6 +46,20 @@ Every entry states what shipped, on which platform it was verified, and what rem
   receipt per run; `doctor` reports per harness how many skills are current, stale, foreign or
   missing. `SETUP-PROMPT.md`, `docs/GETTING-STARTED.md` and `docs/FOR-AGENTS.md` carry the step; the
   Linux Tier 1 receipt exercises it against a scratch home (issue #22).
+- **Built-in modules and packs, and where every registry comes from.** The toolkit ships its own
+  registry (`plutonium-agent-toolkit-builtin`; `examples/registry.json` lists the same entries under an addable name) and lists it
+  without `registry add`; `registry list`, `search` and `show` carry each registry's `origin`
+  (`builtin` or `added`), `search --origin builtin` lists only the built-ins, and the built-in name is
+  reserved. New route `pat dev builtin [--plan] [--only …]` fetches the built-in modules and packs at
+  their pinned commits under `<toolkit home>/modules/builtin/<owner>/<repository>/<commit>/<path>`
+  (one HTTPS snapshot per repository and commit, hashed, extracted with the archive safety checks,
+  a pack laid out with the members and loads its recipe names) with a receipt per entry; a rerun
+  re-hashes every file and directory and verifies, a tree with a changed, missing or added file is refused
+  with `artifact_changed` and never overwritten, a pack records the member entries it laid out,
+  `--plan` touches no network, and `doctor` reports which built-ins are present. Glossary term
+  built-in. The Linux Tier 2 receipt fetches the three built-ins from GitHub and plans the built-in
+  pack from the shelf, so the route is `available` on Linux. Built-in, fetched and installed are
+  three different places; nothing here touches the game.
 
 - **Registries and fetch by name.** `docs/REGISTRY.md` specifies `registry.json`: a file anyone can
   host that lists module and composition repositories at exact commits and holds no bytes; entries
