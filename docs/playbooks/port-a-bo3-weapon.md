@@ -29,9 +29,12 @@ BO3 containers and a running BO3 process; the general playbook's gates still app
    Proof: the numbers table in the module README, one source reference per row.
 2. Use the target map's own zone listings as the truth for what T6 provides. Read back the
    stock zones the map loads (`pat ff inspect <zone.ff> --output <out> --json` for each: the
-   common, patch, code-post-gfx and map zones) and keep the union of asset names as the
-   "provided" list. Proof: the listing receipts and the combined list; every reference the
-   module does not carry itself must be in it.
+   common, patch, code-post-gfx and map zones). The stdout `listing` is a preview capped at
+   64 KiB and a stock zone exceeds it (`listing_truncated: true`); build the union from each
+   job's full `inventory_log` file in its output directory, never from the preview, and treat a
+   list built from a truncated preview as no list. Keep the union of `type,name` rows as the
+   "provided" list. Proof: the listing receipts, the log file each union row came from, and the
+   combined list; every reference the module does not carry itself must be in it.
 3. Pick native templates of the same kind from those zones and extract them: the closest
    native weapon definition for each form, its material, its camo, the native viewhands rig,
    its accuracy graphs, and the native alias rows on the firing, foley and explosion mixers

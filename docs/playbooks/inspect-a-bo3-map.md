@@ -58,11 +58,24 @@ contract that cannot change it. Formats: `docs/knowledge/bo3-workshop-formats.md
    verify the layout by requiring the map pool to name exactly the loaded map, take the user's
    live lock if one exists, then read with byte and time budgets, saving every touched 4096 byte
    page with its hash, and re-check the map and the process identity after. Proof: a
-   `bo3-page-capture-v1` manifest (`map_before`, `map_after`, `pid`, `start_ticks`,
-   `captured_bytes`, `pages` with hashes, the records decoded) that `pat weapon catalog` can
-   inventory later; the reader's own hash recorded in the manifest.
-9. Seal what a port will consume: a hashed index over the recovered files and captured pages.
-   Proof: the index file and its hash, the inputs a later prepare step refuses to run without.
+   `bo3-page-capture-v1` manifest in the shape `pat weapon catalog` requires (`docs/WEAPONS.md`):
+   `map_before` and `map_after` each a one-element list holding `{"name": <map>}` and equal;
+   `pid` (integer) and `start_ticks`; `pages`, a map from `<16 hex>.bin` (a 4096-aligned
+   address) to the page's SHA-256, with each page file beside the manifest;
+   `captured_bytes` equal to the page count times 4096; and the three record arrays `models`
+   (each with `name`, `tags` as the bone-name list, and `lods` with their `materials`),
+   `animations` and `weapons` (each with `name`), empty lists when nothing of that kind was
+   decoded. The reader's own hash goes in the manifest too.
+9. Seal what a port will consume. Write `index.json` as `{"files": {<relative path>: <sha256>}}`
+   over every recovered file, the manifest and every page, then the donor receipt `pat weapon
+   catalog` takes: `root` (the absolute private donor directory), `index` and `index_sha256`,
+   `map` (the loaded map's name as `map_before` records it), `pid` and `start_ticks` (equal to
+   the manifest's). Then run the inventory once:
+   ```sh
+   pat weapon catalog <donor-receipt.json> --capture <capture dir>/manifest.json --output <new dir> --json
+   ```
+   Proof: `ok: true` and `library.json` in the output; the index hash in the module README; a
+   later prepare step refuses to run when any indexed file differs.
 
 ## Do not
 
