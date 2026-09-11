@@ -192,9 +192,10 @@ class Rows:
     """Findings, capabilities and warnings: one row per (file, line, id), bounded per file and rule.
 
     Findings keep up to ``ROWS_PER_FILE_AND_RULE`` rows per file; capabilities and warnings are
-    one row per file. Matches beyond the bound are counted under ``truncated`` so nothing is
-    dropped silently, and nothing about them is retained: a file with a million matches costs the
-    report its count and no memory."""
+    one row per file. A match a bound stopped the scanner from placing is counted under
+    ``truncated`` so nothing is dropped silently, and nothing about it is retained: a file with a
+    million matches costs the report its count and no memory. A match that lands on a row the file
+    already has is that row, not an omission."""
 
     def __init__(self):
         self.rows: list[dict] = []
@@ -267,15 +268,25 @@ def _numbered_lines(text: str):
         start = end + 1
 
 
+def _line_bounds(text: str, pos: int) -> tuple[int, int]:
+    """Where the line holding ``pos`` starts and ends, searched at most a checkpoint block each
+    way so one enormous line cannot make placing a match cost the whole file."""
+    floor, ceiling = max(0, pos - CHECKPOINT), min(len(text), pos + CHECKPOINT)
+    found = text.rfind("\n", floor, pos)
+    start = found + 1 if found != -1 else floor
+    found = text.find("\n", pos, ceiling)
+    return start, found if found != -1 else ceiling
+
+
 def _window(text: str, pos: int, after: int = 5) -> str:
-    """The line holding ``pos`` and the next ``after`` lines, sliced out of the text."""
-    start = text.rfind("\n", 0, pos) + 1
-    end = start
-    for _ in range(after + 1):
-        found = text.find("\n", end)
+    """The line holding ``pos`` and the next ``after`` lines, sliced out of the text and bounded
+    the same way."""
+    start, end = _line_bounds(text, pos)
+    for _ in range(after):
+        found = text.find("\n", end + 1, end + 1 + CHECKPOINT)
         if found == -1:
-            return text[start:]
-        end = found + 1
+            return text[start:min(len(text), end + 1 + CHECKPOINT)]
+        end = found
     return text[start:end]
 
 
@@ -289,22 +300,29 @@ def _scan_text(rows: Rows, rel: str, suffix: str, text: str) -> None:
     located: dict[str, int] = {}
 
     def where(pos: int) -> tuple[int, str, int]:
-        """1-based line number, the line, and the column of an offset into ``text``. The line is
-        sliced out of the text when it is needed; the nearest checkpoint bounds the counting."""
+        """1-based line number, the line, and the column of an offset into ``text``. The nearest
+        checkpoint bounds the counting and the line is sliced when it is needed, bounded in both
+        directions: a line longer than a checkpoint block shows the part around the match, which
+        is all an excerpt keeps anyway."""
         index = bisect_right(marks, (pos, len(text))) - 1
         offset, line = marks[index]
         n = line + text.count("\n", offset, pos)
-        start = text.rfind("\n", 0, pos) + 1
-        end = text.find("\n", pos)
-        return n, text[start:end if end != -1 else len(text)], pos - start
+        start, stop = _line_bounds(text, pos)
+        return n, text[start:stop], pos - start
 
-    def add_match(rule: str, m: re.Match) -> None:
-        """Where a match is costs something to work out, so it is worked out only while the rule
-        can still report one for this file: past that the match is counted and nothing else."""
+    def locate(rule: str) -> bool:
+        """Whether this match is worth placing. Working out where a match is costs something, so
+        it is done only while the rule can still report one for this file and only for the first
+        matches; past either bound the match is counted and nothing else is computed."""
         seen = located.get(rule, 0)
         located[rule] = seen + 1
         if seen >= MATCHES_LOCATED or rows.capped(rel, rule):
             rows.omit(rel, rule)
+            return False
+        return True
+
+    def add_match(rule: str, m: re.Match) -> None:
+        if not locate(rule):
             return
         n, line, col = where(m.start())
         rows.add(rule, rel, n, _excerpt(line, col, col + len(m.group(0))))
@@ -343,9 +361,11 @@ def _scan_text(rows: Rows, rel: str, suffix: str, text: str) -> None:
         target = m.group(0).rstrip(".,;:!?)'\"").split("#", 1)[0].split("?", 1)[0].lower()
         if not target.endswith(ARCHIVE_SUFFIXES):
             continue
-        n, line, col = where(m.start())
         if SHA256.search(_window(text, m.start())):
+            continue  # pinned: not a finding, and not counted as one
+        if not locate("unpinned-acquisition"):
             continue
+        n, line, col = where(m.start())
         rows.add("unpinned-acquisition", rel, n, _excerpt(line, col, col + len(m.group(0))))
     if suffix in SCRIPT_SUFFIXES:
         for rule, pattern in SCRIPT_RULES:
@@ -811,7 +831,8 @@ class Scan:
         self.dirs: list[bytes] = []  # raw relative path of every directory walked below the root
         self.counts = {"files": 0, "bytes": 0, "text_files": 0, "binary_files": 0}
         self.binary_total = 0
-        self.declarations: list[tuple[str, str, Path, str]] = []  # rel, kind, directory, text
+        self.summary: dict | None = None            # the entry's own declaration, as the report carries it
+        self.nested: list[dict] = []                # every other declaration, the same way
         self.seen = 0
 
     def run(self) -> None:
@@ -958,7 +979,28 @@ class Scan:
                 return
         _scan_text(self.rows, rel, suffix, text)
         if name in DECLARATIONS:
-            self.declarations.append((rel, DECLARATIONS[name], path.parent, text))
+            self.declaration(rel, DECLARATIONS[name], path.parent, text)
+
+    def declaration(self, rel: str, kind: str, directory: Path, text: str) -> None:
+        """Check a declaration while its text is in hand and keep only what the report carries.
+        Holding every declaration's bytes until the walk ended could cost as much as the whole
+        tree bound, for a tree that is within every documented limit.
+
+        ``--repository`` and ``--commit`` describe the entry being listed, which is the
+        declaration at the scanned root: a member vendored or fetched from somewhere else carries
+        its own source, and comparing that with the listing's would make a correct pack
+        unlistable. Its shape is still checked, only the comparison is not made."""
+        listing = self.expected if directory == self.root else NO_LISTING
+        data = _check_declaration(self.rows, rel, kind, text, directory, self.root, listing, self.unreadable)
+        if kind == "recipe":
+            return
+        row = _module_summary(rel, data) if kind == "module" else _composition_summary(rel, data, directory, self.root, self.unreadable)
+        if directory == self.root and (kind == "module" or self.summary is None):
+            if self.summary is not None:
+                self.nested.append(self.summary)  # a root that holds both files reports both
+            self.summary = row
+        else:
+            self.nested.append(row)
 
 
 def execute(args, job: Job) -> dict:
@@ -970,22 +1012,7 @@ def execute(args, job: Job) -> dict:
     if scan.binary_total > ASSETS_THRESHOLD:
         rows.add("bundled-assets", ".", None, f"{counts['binary_files']} binary files, {scan.binary_total} bytes in total (above {ASSETS_THRESHOLD})")
 
-    summary = None
-    nested = []
-    for rel, kind, directory, text in scan.declarations:
-        # --repository and --commit describe the entry being listed, which is the declaration at
-        # the scanned root. A member vendored or fetched from somewhere else carries its own
-        # source, and comparing that with the listing's would make a correct pack unlistable; its
-        # shape is still checked, only the comparison is not made.
-        listing = expected if directory == root else NO_LISTING
-        data = _check_declaration(rows, rel, kind, text, directory, root, listing, scan.unreadable)
-        if kind == "recipe":
-            continue
-        row = _module_summary(rel, data) if kind == "module" else _composition_summary(rel, data, directory, root, scan.unreadable)
-        if directory == root and (kind == "module" or summary is None):
-            summary = row
-        else:
-            nested.append(row)
+    summary, nested = scan.summary, list(scan.nested)
     # A declaration that was binary, oversized or not UTF-8 was found but not parsed: it still
     # names itself, at the root as the summary and below it among the nested ones, so a consumer
     # of this report never misses a declaration the tree contains.

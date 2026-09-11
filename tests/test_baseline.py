@@ -1282,6 +1282,41 @@ class BoundedWorkTests(BaselineFixture):
         self.assertLessEqual(len(baseline._checkpoints("x" * baseline.MAX_TEXT)), baseline.MAX_TEXT // baseline.CHECKPOINT + 1,
                              "one checkpoint per block, whatever the lines look like")
 
+    def test_declaration_text_is_not_held_until_the_walk_ends(self):
+        # Every declaration used to be kept, decoded, until the scan finished: a tree of large
+        # declarations inside every documented bound could cost as much as the whole tree bound.
+        directory = self.module()
+        for n in range(4):
+            nested = directory / f"member-{n}"
+            nested.mkdir()
+            (nested / "module.json").write_text(json.dumps(declaration(id=f"m{n}", title="t" * 50_000), indent=2))
+        code, row = self.scan(directory)
+        self.assertEqual(code, 0, row)
+        scan = baseline.Scan(self.root, mock.MagicMock(), baseline.NO_LISTING)
+        self.assertFalse(hasattr(scan, "declarations"), "the scan keeps summaries, not texts")
+        self.assertEqual(len(row["result"]["nested_declarations"]), 4)
+        self.assertTrue(all(r["valid"] for r in row["result"]["nested_declarations"]))
+
+    def test_a_long_line_full_of_archive_urls_stays_bounded(self):
+        # One line, no newline to find, more archive URLs than the row bound: placing each match
+        # used to rescan the line, and the rule kept locating long past the bound.
+        url = "https://example.test/pack.zip "
+        directory = self.module(files={"one-line.txt": url * 3_000})
+        code, row = self.scan(directory)
+        self.assertEqual(code, 0, row)
+        self.assertEqual(len(self.findings(row, "unpinned-acquisition")), 1, "one line, one row")
+        # Matches the rule stopped placing are counted; the ones it placed and deduplicated onto
+        # the row it already has are that row, not omissions.
+        omitted = [r for r in row["result"]["truncated"] if r["file"] == "one-line.txt"]
+        self.assertEqual(omitted, [{"file": "one-line.txt", "id": "unpinned-acquisition", "omitted": 3_000 - baseline.MATCHES_LOCATED}])
+
+    def test_a_pinned_archive_url_is_not_counted_as_omitted(self):
+        directory = self.module(files={"pinned.md": "https://example.test/pack.zip\nsha256: " + "a" * 64 + "\n"})
+        code, row = self.scan(directory)
+        self.assertEqual(code, 0, row)
+        self.assertEqual(self.findings(row, "unpinned-acquisition"), [])
+        self.assertEqual([r for r in row["result"]["truncated"] if r["file"] == "pinned.md"], [])
+
     def test_many_matches_are_counted_without_being_kept(self):
         rows = baseline.Rows()
         for n in range(1, 1001):

@@ -108,7 +108,9 @@ Every entry states what shipped, on which platform it was verified, and what rem
   `no-resource-contract`. Outcomes `passed`, `review-required`, `needs-fixes` and `incomplete`
   (an unreadable file fails closed); every skipped or unreadable entry is listed. Bounds: 20 000
   files, 2 GiB, 4 MiB of text per file, 20 rows per file and rule (matches past that are counted,
-  never kept, and a match is located only while its rule can still report one); the job's
+  never kept, and a match is located only while its rule can still report one, with the line it
+  sits on searched at most one block each way); each declaration is checked as the walk reads it,
+  so only the summary the report carries is held; the job's
   deadline is checked while the scan reads and
   again while the receipt re-hashes the recorded tree, so a scan cannot succeed late. The report and the result carry
   `not_a_security_audit: true` with the sentence that a baseline is a static check of files, not
@@ -134,7 +136,7 @@ Every entry states what shipped, on which platform it was verified, and what rem
   declaration nested past the parser or past 64 levels is a `declaration-mismatch`, never
   `operation_failed`; so is a declaration that is not UTF-8 or carries `1e9999` or `NaN`. A link
   named `.git` blocks like any link; the root is opened without following links after its
-  by-name check. Verified by 66 unit tests on synthetic trees on Linux; CI runs them on
+  by-name check. Verified by 69 unit tests on synthetic trees on Linux; CI runs them on
   Windows.
 - **Registries and fetch by name.** `docs/REGISTRY.md` specifies `registry.json`: a file anyone can
   host that lists module and composition repositories at exact commits and holds no bytes; entries
