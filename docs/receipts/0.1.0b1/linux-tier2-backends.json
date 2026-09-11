@@ -11,15 +11,15 @@
     "native_windows": false,
     "native_linux": true,
     "compatibility_layer": null,
-    "at": "2026-09-11T04:40:38+00:00",
+    "at": "2026-09-11T04:50:45+00:00",
     "os_release": {
       "pretty_name": "Omarchy",
       "id": "omarchy",
       "id_like": "arch",
       "version_id": "4.0.3"
     },
-    "git_head": "e266b6aad11ec1a75b63be77af103293cb2af762",
-    "git_dirty": true,
+    "git_head": "cbab8dad662c1fc4a1d28b6994192ba94912687e",
+    "git_dirty": false,
     "pat_home_isolated": true
   },
   "steps": [
@@ -33,26 +33,26 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.168,
+      "elapsed_seconds": 1.249,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "dev setup",
         "request_id": "<id>",
-        "at": "2026-09-11T04:40:38+00:00",
+        "at": "2026-09-11T04:50:46+00:00",
         "result": {
           "destination": "<pat-home>/backends",
           "platform": "linux",
           "results": [
             {
               "id": "oat",
-              "action": "verified",
+              "action": "installed",
               "files": 162
             },
             {
               "id": "gsc",
-              "action": "verified",
+              "action": "installed",
               "files": 1
             }
           ],
@@ -71,14 +71,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.103,
+      "elapsed_seconds": 0.141,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "doctor",
         "request_id": "<id>",
-        "at": "2026-09-11T04:40:38+00:00",
+        "at": "2026-09-11T04:50:46+00:00",
         "result": {
           "platform": {
             "system": "Linux",
@@ -138,8 +138,8 @@
                 "id": "ffmpeg",
                 "name": "FFmpeg 9.0 (BtbN gpl builds)",
                 "optional": true,
-                "present": true,
-                "source": "pinned",
+                "present": false,
+                "source": "missing",
                 "overrides": {},
                 "path": "<pat-home>/backends/ffmpeg",
                 "download_available": true
@@ -148,8 +148,8 @@
                 "id": "blender",
                 "name": "Blender 5.2.1",
                 "optional": true,
-                "present": true,
-                "source": "pinned",
+                "present": false,
+                "source": "missing",
                 "overrides": {},
                 "path": "<pat-home>/backends/blender",
                 "download_available": true
@@ -158,8 +158,8 @@
                 "id": "cast",
                 "name": "Cast Blender add-on 2.00",
                 "optional": true,
-                "present": true,
-                "source": "pinned",
+                "present": false,
+                "source": "missing",
                 "overrides": {},
                 "path": "<pat-home>/backends/cast",
                 "download_available": true
@@ -198,72 +198,31 @@
             "verification": "filesystem presence or override resolution only; execution and gameplay are separate facts"
           },
           "ok": true,
-          "skills": {
-            "source": "<repo>",
-            "skills": 7,
-            "harnesses": [
+          "builtin": {
+            "destination": "<pat-home>/modules/builtin",
+            "entries": [
               {
-                "id": "claude",
-                "label": "Claude Code",
-                "directory": "<userprofile>/.claude/skills",
-                "current": 0,
-                "stale": 0,
-                "foreign": 0,
-                "missing": 7,
-                "ok": false
+                "name": "sickohours/hello_zm",
+                "kind": "module",
+                "present": false,
+                "module_dir": null
               },
               {
-                "id": "codex",
-                "label": "Codex CLI",
-                "directory": "<userprofile>/.codex/skills",
-                "current": 0,
-                "stale": 0,
-                "foreign": 0,
-                "missing": 7,
-                "ok": false
+                "name": "sickohours/round_announcer",
+                "kind": "module",
+                "present": false,
+                "module_dir": null
               },
               {
-                "id": "gemini",
-                "label": "Gemini CLI",
-                "directory": "<userprofile>/.gemini/skills",
-                "current": 0,
-                "stale": 0,
-                "foreign": 0,
-                "missing": 7,
-                "ok": false
-              },
-              {
-                "id": "opencode",
-                "label": "OpenCode",
-                "directory": "<userprofile>/.config/opencode/skills",
-                "current": 0,
-                "stale": 0,
-                "foreign": 0,
-                "missing": 7,
-                "ok": false
-              },
-              {
-                "id": "hermes",
-                "label": "Hermes Agent",
-                "directory": "<userprofile>/.hermes/skills",
-                "current": 0,
-                "stale": 0,
-                "foreign": 0,
-                "missing": 7,
-                "ok": false
-              },
-              {
-                "id": "agents",
-                "label": "Agent Skills shared location",
-                "directory": "<userprofile>/.agents/skills",
-                "current": 0,
-                "stale": 0,
-                "foreign": 0,
-                "missing": 7,
-                "ok": false
+                "name": "sickohours/stock_hello_pack",
+                "kind": "composition",
+                "present": false,
+                "module_dir": null
               }
             ],
-            "install": "pat dev install-skills --json"
+            "present": 0,
+            "total": 3,
+            "fetch": "pat dev builtin --json"
           },
           "game_control": {
             "supported_here": false,
@@ -288,14 +247,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.219,
+      "elapsed_seconds": 0.191,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "dev setup",
         "request_id": "<id>",
-        "at": "2026-09-11T04:40:39+00:00",
+        "at": "2026-09-11T04:50:46+00:00",
         "result": {
           "destination": "<pat-home>/backends",
           "platform": "linux",
@@ -322,6 +281,307 @@
     },
     {
       "argv": [
+        "dev",
+        "builtin",
+        "--plan",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.136,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "dev builtin",
+        "request_id": "<id>",
+        "at": "2026-09-11T04:50:46+00:00",
+        "result": {
+          "plan": true,
+          "destination": "<pat-home>/modules/builtin",
+          "registry": "plutonium-agent-toolkit-builtin",
+          "results": [
+            {
+              "name": "sickohours/hello_zm",
+              "kind": "module",
+              "commit": "ebae02d9765c3c0acaa495474113ccd5499934f6",
+              "module_dir": "<pat-home>/modules/builtin/sickohours/plutonium-agent-toolkit/ebae02d9765c3c0acaa495474113ccd5499934f6/examples/hello-zm",
+              "state": "absent",
+              "changed": [],
+              "missing": [],
+              "action": "install"
+            },
+            {
+              "name": "sickohours/round_announcer",
+              "kind": "module",
+              "commit": "ebae02d9765c3c0acaa495474113ccd5499934f6",
+              "module_dir": "<pat-home>/modules/builtin/sickohours/plutonium-agent-toolkit/ebae02d9765c3c0acaa495474113ccd5499934f6/examples/hello-zm-two",
+              "state": "absent",
+              "changed": [],
+              "missing": [],
+              "action": "install"
+            },
+            {
+              "name": "sickohours/stock_hello_pack",
+              "kind": "composition",
+              "commit": "ebae02d9765c3c0acaa495474113ccd5499934f6",
+              "module_dir": "<pat-home>/modules/builtin/sickohours/plutonium-agent-toolkit/ebae02d9765c3c0acaa495474113ccd5499934f6/examples/hello-pack",
+              "state": "absent",
+              "changed": [],
+              "missing": [],
+              "action": "install"
+            }
+          ],
+          "downloads": [
+            [
+              "https://github.com/SickoHours/plutonium-agent-toolkit",
+              "ebae02d9765c3c0acaa495474113ccd5499934f6"
+            ]
+          ],
+          "network_touched": false,
+          "game_touched": false
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "dev builtin --plan",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "dev",
+        "builtin",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.626,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "dev builtin",
+        "request_id": "<id>",
+        "at": "2026-09-11T04:50:47+00:00",
+        "result": {
+          "destination": "<pat-home>/modules/builtin",
+          "registry": "plutonium-agent-toolkit-builtin",
+          "results": [
+            {
+              "name": "sickohours/hello_zm",
+              "kind": "module",
+              "commit": "ebae02d9765c3c0acaa495474113ccd5499934f6",
+              "module_dir": "<pat-home>/modules/builtin/sickohours/plutonium-agent-toolkit/ebae02d9765c3c0acaa495474113ccd5499934f6/examples/hello-zm",
+              "action": "installed",
+              "files": 4,
+              "placed": [
+                "examples/hello-zm"
+              ]
+            },
+            {
+              "name": "sickohours/round_announcer",
+              "kind": "module",
+              "commit": "ebae02d9765c3c0acaa495474113ccd5499934f6",
+              "module_dir": "<pat-home>/modules/builtin/sickohours/plutonium-agent-toolkit/ebae02d9765c3c0acaa495474113ccd5499934f6/examples/hello-zm-two",
+              "action": "installed",
+              "files": 4,
+              "placed": [
+                "examples/hello-zm-two"
+              ]
+            },
+            {
+              "name": "sickohours/stock_hello_pack",
+              "kind": "composition",
+              "commit": "ebae02d9765c3c0acaa495474113ccd5499934f6",
+              "module_dir": "<pat-home>/modules/builtin/sickohours/plutonium-agent-toolkit/ebae02d9765c3c0acaa495474113ccd5499934f6/examples/hello-pack",
+              "action": "installed",
+              "files": 10,
+              "placed": [
+                "examples/hello-pack"
+              ]
+            }
+          ],
+          "downloads": [
+            {
+              "repository": "https://github.com/SickoHours/plutonium-agent-toolkit",
+              "commit": "ebae02d9765c3c0acaa495474113ccd5499934f6",
+              "archive_sha256": "9a24c23ddfaf7ad55ac6ef8aee54d2ce8307f11999a296c67cbaa91c2056dccf",
+              "archive_bytes": 357458
+            }
+          ],
+          "receipts": "<pat-home>/modules/builtin/receipts",
+          "game_touched": false,
+          "next": [
+            "pat module plan <module_dir>/composition.json --output <new dir> --json   (a built-in pack)",
+            "pat registry search --origin builtin --json   (what is built in, with builtin_dir when fetched)"
+          ],
+          "verification": "exact-commit snapshots over HTTPS, hashed, extracted with the archive safety checks, every kept file hashed into a receipt; nothing built, nothing installed into the game"
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "dev builtin fetches the built-ins",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "dev",
+        "builtin",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.107,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "dev builtin",
+        "request_id": "<id>",
+        "at": "2026-09-11T04:50:47+00:00",
+        "result": {
+          "destination": "<pat-home>/modules/builtin",
+          "registry": "plutonium-agent-toolkit-builtin",
+          "results": [
+            {
+              "name": "sickohours/hello_zm",
+              "kind": "module",
+              "commit": "ebae02d9765c3c0acaa495474113ccd5499934f6",
+              "module_dir": "<pat-home>/modules/builtin/sickohours/plutonium-agent-toolkit/ebae02d9765c3c0acaa495474113ccd5499934f6/examples/hello-zm",
+              "action": "verified",
+              "files": 4
+            },
+            {
+              "name": "sickohours/round_announcer",
+              "kind": "module",
+              "commit": "ebae02d9765c3c0acaa495474113ccd5499934f6",
+              "module_dir": "<pat-home>/modules/builtin/sickohours/plutonium-agent-toolkit/ebae02d9765c3c0acaa495474113ccd5499934f6/examples/hello-zm-two",
+              "action": "verified",
+              "files": 4
+            },
+            {
+              "name": "sickohours/stock_hello_pack",
+              "kind": "composition",
+              "commit": "ebae02d9765c3c0acaa495474113ccd5499934f6",
+              "module_dir": "<pat-home>/modules/builtin/sickohours/plutonium-agent-toolkit/ebae02d9765c3c0acaa495474113ccd5499934f6/examples/hello-pack",
+              "action": "verified",
+              "files": 10
+            }
+          ],
+          "downloads": [],
+          "receipts": "<pat-home>/modules/builtin/receipts",
+          "game_touched": false,
+          "next": [
+            "pat module plan <module_dir>/composition.json --output <new dir> --json   (a built-in pack)",
+            "pat registry search --origin builtin --json   (what is built in, with builtin_dir when fetched)"
+          ],
+          "verification": "exact-commit snapshots over HTTPS, hashed, extracted with the archive safety checks, every kept file hashed into a receipt; nothing built, nothing installed into the game"
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "dev builtin rerun verifies",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "module",
+        "plan",
+        "<pat-home>/modules/builtin/sickohours/plutonium-agent-toolkit/ebae02d9765c3c0acaa495474113ccd5499934f6/examples/hello-pack/composition.json",
+        "--output",
+        "<work>/builtin-plan",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.141,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "module plan",
+        "request_id": "<id>",
+        "at": "2026-09-11T04:50:47+00:00",
+        "result": {
+          "job_id": "<id>",
+          "output": "<work>/builtin-plan",
+          "receipt": "<work>/builtin-plan/receipt.json",
+          "artifact_count": 1,
+          "plan": "plan.json",
+          "name": "stock_hello_pack",
+          "title": "hello-zm plus the round announcer",
+          "base": "stock",
+          "map": "zm_transit",
+          "base_member": null,
+          "modules": [
+            {
+              "id": "hello_zm",
+              "version": "0.1.0",
+              "order": 1,
+              "payload": "recipe",
+              "role": "module"
+            },
+            {
+              "id": "round_announcer",
+              "version": "0.1.0",
+              "order": 2,
+              "payload": "recipe",
+              "role": "module"
+            }
+          ],
+          "resource_totals": {
+            "threads": 2,
+            "entities": 0,
+            "hud": 0,
+            "network_fields": 0
+          },
+          "budget": {
+            "threads": 4,
+            "entities": 0,
+            "hud": 0,
+            "network_fields": 0
+          },
+          "scripts": 2,
+          "assets": 0,
+          "seeds": 0,
+          "loads": 0,
+          "decisions": [],
+          "undecided": [],
+          "backends": [
+            {
+              "id": "gsc",
+              "argv": [
+                "<pat-home>/backends/gsc/gsc-tool"
+              ],
+              "available": true
+            },
+            {
+              "id": "linker",
+              "argv": [
+                "<pat-home>/backends/oat/Linker"
+              ],
+              "available": true
+            },
+            {
+              "id": "unlinker",
+              "argv": [
+                "<pat-home>/backends/oat/Unlinker"
+              ],
+              "available": true
+            }
+          ],
+          "backends_available": true,
+          "input_files": 7,
+          "verification": "composition resolved (dependency order, conflicts, base and map fit, budget); collisions listed as decisions; declarations, recipes, seeds and declared inputs hashed; backend presence checked; nothing compiled"
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "module plan the built-in pack from the shelf",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
         "project",
         "plan",
         "<repo>/examples/hello-zm/project.json",
@@ -330,14 +590,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.21,
+      "elapsed_seconds": 0.133,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "project plan",
         "request_id": "<id>",
-        "at": "2026-09-11T04:40:39+00:00",
+        "at": "2026-09-11T04:50:47+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/plan",
@@ -392,14 +652,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.41,
+      "elapsed_seconds": 0.326,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "project build",
         "request_id": "<id>",
-        "at": "2026-09-11T04:40:39+00:00",
+        "at": "2026-09-11T04:50:48+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/build",
@@ -436,14 +696,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.223,
+      "elapsed_seconds": 0.099,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "project verify",
         "request_id": "<id>",
-        "at": "2026-09-11T04:40:39+00:00",
+        "at": "2026-09-11T04:50:48+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/verify",
@@ -481,14 +741,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.256,
+      "elapsed_seconds": 0.172,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "ff inspect",
         "request_id": "<id>",
-        "at": "2026-09-11T04:40:40+00:00",
+        "at": "2026-09-11T04:50:48+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/inspect",
@@ -519,14 +779,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.262,
+      "elapsed_seconds": 0.19,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "ff extract",
         "request_id": "<id>",
-        "at": "2026-09-11T04:40:40+00:00",
+        "at": "2026-09-11T04:50:48+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/extract",
@@ -555,14 +815,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.224,
+      "elapsed_seconds": 0.121,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "module plan",
         "request_id": "<id>",
-        "at": "2026-09-11T04:40:40+00:00",
+        "at": "2026-09-11T04:50:48+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/pack-plan",
@@ -652,14 +912,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.536,
+      "elapsed_seconds": 0.442,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "module build",
         "request_id": "<id>",
-        "at": "2026-09-11T04:40:41+00:00",
+        "at": "2026-09-11T04:50:49+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/pack-build",
@@ -739,14 +999,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.217,
+      "elapsed_seconds": 0.1,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "project verify",
         "request_id": "<id>",
-        "at": "2026-09-11T04:40:41+00:00",
+        "at": "2026-09-11T04:50:49+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/pack-verify",
@@ -784,14 +1044,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.27,
+      "elapsed_seconds": 0.172,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "ff inspect",
         "request_id": "<id>",
-        "at": "2026-09-11T04:40:41+00:00",
+        "at": "2026-09-11T04:50:49+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/pack-inspect",
@@ -826,14 +1086,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.248,
+      "elapsed_seconds": 0.183,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "module declare",
         "request_id": "<id>",
-        "at": "2026-09-11T04:40:41+00:00",
+        "at": "2026-09-11T04:50:49+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/declare",
@@ -876,14 +1136,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.208,
+      "elapsed_seconds": 0.119,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "module plan",
         "request_id": "<id>",
-        "at": "2026-09-11T04:40:42+00:00",
+        "at": "2026-09-11T04:50:49+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/seed-plan",
@@ -968,14 +1228,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.476,
+      "elapsed_seconds": 0.368,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "module build",
         "request_id": "<id>",
-        "at": "2026-09-11T04:40:42+00:00",
+        "at": "2026-09-11T04:50:50+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/seed-build",
@@ -1049,7 +1309,7 @@
         "--json"
       ],
       "exit_code": 1,
-      "elapsed_seconds": 0.263,
+      "elapsed_seconds": 0.173,
       "json": {
         "ok": false,
         "error_code": "backend_failed",
@@ -1062,7 +1322,7 @@
         "toolkit_version": "0.1.0b1",
         "command": "gsc compile",
         "request_id": "<id>",
-        "at": "2026-09-11T04:40:42+00:00",
+        "at": "2026-09-11T04:50:50+00:00",
         "receipt": "<work>/bad-compile/receipt.json"
       },
       "stdout_head": null,
@@ -1081,14 +1341,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.26,
+      "elapsed_seconds": 0.182,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "gsc compile",
         "request_id": "<id>",
-        "at": "2026-09-11T04:40:43+00:00",
+        "at": "2026-09-11T04:50:50+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/good-compile",
@@ -1117,14 +1377,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.268,
+      "elapsed_seconds": 0.169,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "gsc decompile",
         "request_id": "<id>",
-        "at": "2026-09-11T04:40:43+00:00",
+        "at": "2026-09-11T04:50:50+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/good-decompile",
@@ -1153,22 +1413,42 @@
         "cast",
         "--json"
       ],
-      "exit_code": 1,
-      "elapsed_seconds": 2.441,
+      "exit_code": 0,
+      "elapsed_seconds": 43.281,
       "json": {
-        "ok": false,
-        "error_code": "backend_failed",
-        "message": "blender: installed files differ from the receipt; preserving them",
+        "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "dev setup",
         "request_id": "<id>",
-        "at": "2026-09-11T04:40:45+00:00"
+        "at": "2026-09-11T04:51:33+00:00",
+        "result": {
+          "destination": "<pat-home>/backends",
+          "platform": "linux",
+          "results": [
+            {
+              "id": "ffmpeg",
+              "action": "installed",
+              "files": 66
+            },
+            {
+              "id": "blender",
+              "action": "installed",
+              "files": 5675
+            },
+            {
+              "id": "cast",
+              "action": "installed",
+              "files": 10
+            }
+          ],
+          "game_touched": false
+        }
       },
       "stdout_head": null,
       "stderr_head": "",
       "name": "dev setup ffmpeg blender cast",
-      "passed": false,
+      "passed": true,
       "expected": "success"
     },
     {
@@ -1181,14 +1461,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.171,
+      "elapsed_seconds": 0.181,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "audio inspect",
         "request_id": "<id>",
-        "at": "2026-09-11T04:40:46+00:00",
+        "at": "2026-09-11T04:51:34+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/audio-inspect",
@@ -1275,14 +1555,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.26,
+      "elapsed_seconds": 0.273,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "audio convert",
         "request_id": "<id>",
-        "at": "2026-09-11T04:40:46+00:00",
+        "at": "2026-09-11T04:51:34+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/audio-convert",
@@ -1369,14 +1649,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.824,
+      "elapsed_seconds": 2.288,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "model inspect",
         "request_id": "<id>",
-        "at": "2026-09-11T04:40:47+00:00",
+        "at": "2026-09-11T04:51:36+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/model-inspect",
@@ -1528,14 +1808,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.758,
+      "elapsed_seconds": 0.845,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "model convert",
         "request_id": "<id>",
-        "at": "2026-09-11T04:40:47+00:00",
+        "at": "2026-09-11T04:51:37+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/model-convert",
@@ -1679,7 +1959,7 @@
       "name": "make rigged fixture with the installed Blender",
       "passed": true,
       "expected": "rig.blend written",
-      "stderr_head": "exit 0; 87710 bytes"
+      "stderr_head": "exit 0; 87709 bytes"
     },
     {
       "argv": [
@@ -1693,14 +1973,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.77,
+      "elapsed_seconds": 0.824,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "model inspect",
         "request_id": "<id>",
-        "at": "2026-09-11T04:40:49+00:00",
+        "at": "2026-09-11T04:51:39+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/rig-inspect",
@@ -2026,14 +2306,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.779,
+      "elapsed_seconds": 0.803,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "model rename-bones",
         "request_id": "<id>",
-        "at": "2026-09-11T04:40:50+00:00",
+        "at": "2026-09-11T04:51:40+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/rig-rename",
@@ -2360,14 +2640,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.817,
+      "elapsed_seconds": 0.78,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "model retime",
         "request_id": "<id>",
-        "at": "2026-09-11T04:40:51+00:00",
+        "at": "2026-09-11T04:51:40+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/rig-retime",
@@ -2699,14 +2979,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.88,
+      "elapsed_seconds": 0.771,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "model transform",
         "request_id": "<id>",
-        "at": "2026-09-11T04:40:51+00:00",
+        "at": "2026-09-11T04:51:41+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/rig-transform",
@@ -3029,14 +3309,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 1.433,
+      "elapsed_seconds": 1.024,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "model preview",
         "request_id": "<id>",
-        "at": "2026-09-11T04:40:53+00:00",
+        "at": "2026-09-11T04:51:42+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/rig-preview",
@@ -3393,6 +3673,32 @@
   "notes": [
     "work directory <work>",
     {
+      "builtin_results": [
+        [
+          "sickohours/hello_zm",
+          "installed",
+          4
+        ],
+        [
+          "sickohours/round_announcer",
+          "installed",
+          4
+        ],
+        [
+          "sickohours/stock_hello_pack",
+          "installed",
+          10
+        ]
+      ],
+      "builtin_downloads": [
+        [
+          "ebae02d9765c3c0acaa495474113ccd5499934f6",
+          "9a24c23ddfaf7ad55ac6ef8aee54d2ce8307f11999a296c67cbaa91c2056dccf",
+          357458
+        ]
+      ]
+    },
+    {
       "mod_ff_sha256": "0ed41cc5f5ce9faae086e3dcf4a019f67ffc2b040f0975d73b5d9d698ac87701",
       "mod_ff_bytes": 384,
       "rawfiles_verified": 1
@@ -3412,15 +3718,13 @@
       "seed_pack_base_member": "hello_seed"
     },
     {
-      "superseded": "linux-tier2-backends.superseded-20260911T044053Z.json"
+      "superseded": "linux-tier2-backends.superseded-20260911T045142Z.json"
     }
   ],
-  "passed": false,
+  "passed": true,
   "summary": {
-    "steps": 30,
-    "passed": 29,
-    "failed": [
-      "dev setup ffmpeg blender cast"
-    ]
+    "steps": 34,
+    "passed": 34,
+    "failed": []
   }
 }
