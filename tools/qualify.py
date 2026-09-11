@@ -354,12 +354,44 @@ def tier_offline(receipt, home: Path, work: Path):
     if init["passed"]:
         step(receipt, "project plan the init recipe", PAT + ["project", "plan", str(work / "init" / "project.json"),
                                                             "--output", str(work / "init-plan"), "--json"])
+    step(receipt, "dev install-skills --plan", PAT + ["dev", "install-skills", "--plan", "--json"])
+    # A scratch home holding every harness marker: the route writes each skill under each, launches
+    # nothing, and a rerun writes nothing. The user's real home is untouched.
+    skills_home = work / "skills-home"
+    for marker in (".claude", ".codex", ".gemini", ".config/opencode", ".cursor", ".hermes", ".agents"):
+        (skills_home / marker).mkdir(parents=True)
+    installed = step(receipt, "dev install-skills into a scratch home", PAT + ["dev", "install-skills", "--home", str(skills_home), "--json"])
+    if installed["passed"]:
+        summary = installed["json"]["result"]["summary"]
+        receipt["notes"].append({"skills_written": summary["written"], "skills_harnesses_found": summary["found"], "skills_refused": summary["refused"]})
+        rerun = step(receipt, "dev install-skills rerun writes nothing", PAT + ["dev", "install-skills", "--home", str(skills_home), "--json"])
+        if rerun["passed"] and rerun["json"]["result"]["summary"]["written"]:
+            rerun["passed"] = False
+            rerun["stderr_head"] = "a rerun with nothing changed wrote files"
+    for row in receipt["steps"][-3:]:
+        _prune_skills_listing(row)
     step(receipt, "planned route refuses", PAT + ["capture", "start"], expect_ok=False)
     step(receipt, "agent probe refuses an unreachable host", PAT + ["agent", "probe", "--origin", "http://127.0.0.1:9", "--json"], expect_ok=False)
     step(receipt, "agent dispatch refuses without a token", PAT + ["agent", "dispatch", "--origin", "http://127.0.0.1:9", "--project", "p", "--title", "t",
                                                               "--prompt", "p", "--instance", "i", "--model", "m", "--json"], expect_ok=False)
     step(receipt, "private scan", [sys.executable, str(ROOT / "tools/private_scan.py")])
     step(receipt, "release check", [sys.executable, str(ROOT / "tools/release_check.py")])
+
+
+def _prune_skills_listing(row: dict) -> None:
+    """Replace each harness's per-file rows in a recorded install-skills step with counts per action;
+    the summary and the per-harness found flags are what the receipt proves, not the user's file list."""
+    result = ((row.get("json") or {}).get("result")) if row.get("json") else None
+    if not isinstance(result, dict) or not isinstance(result.get("harnesses"), list):
+        return
+    for harness in result["harnesses"]:
+        files = harness.pop("files", None)
+        if isinstance(files, list):
+            counts = {}
+            for f in files:
+                counts[f.get("action")] = counts.get(f.get("action"), 0) + 1
+            harness["files"] = counts
+    result["pruned"] = "per-file rows were replaced by counts per action before recording"
 
 
 def _prune_agent_listing(row: dict, keep: dict) -> None:

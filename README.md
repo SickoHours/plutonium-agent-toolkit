@@ -61,7 +61,8 @@ Linux works; to control a running game you need Windows. macOS is untested and n
 
 The agent installs the toolkit for your user, configures it to your machine, obtains the backends
 (downloading the pinned build where one exists for your platform, or using a tool you already have
-via `PAT_BACKEND_<NAME>`), and reports what is ready. If anything about your machine is unusual, the
+via `PAT_BACKEND_<NAME>`), installs the skills where every coding-agent harness on the machine
+reads them (`pat dev install-skills`), and reports what is ready. If anything about your machine is unusual, the
 agent is expected to adapt the toolkit to it rather than give up. Nothing launches or touches the
 game during setup; live game operations happen only when you ask for a specific test, on Windows.
 

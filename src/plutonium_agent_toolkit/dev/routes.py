@@ -17,6 +17,12 @@ AVAILABLE = [
           owner="core",
           notes="Use --plan to list without downloading; --only to select IDs. Runs no vendor installer. "
                 "Pinned downloads are per-platform; where a platform has no pin, supply the tool with PAT_BACKEND_<NAME>."),
+    Route("dev", "install-skills", "Copy the toolkit's skills into the skills directories of the coding-agent harnesses found on this machine, with a receipt", "writes-config",
+          status="available", owner="core",
+          notes="Arguments: [--plan] [--only claude codex gemini opencode cursor hermes agents]... [--home <dir>] [--source <checkout>]. "
+                "Detects a harness by its home directory; launches nothing. Writes absent files and files it wrote before; refuses "
+                "any other existing file, any link below the resolved home and any oversized file with output_exists after writing the rest. "
+                "Record and receipts under <toolkit home>/skills/."),
 ]
 
 PLANNED = [

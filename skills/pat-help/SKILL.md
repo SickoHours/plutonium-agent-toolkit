@@ -45,7 +45,8 @@ verified, installed, launched, playable, captured, accepted. Words are defined i
 - **Something broke in the game** (menu return, close, dialog): **`pat-diagnose`**. It builds a
   red loop before theorising and ends by adding the gate that would have caught it.
 - **First time on this machine**: `docs/playbooks/first-build.md`, then the setup prompt in the
-  repository root if backends are missing.
+  repository root if backends are missing; `pat dev install-skills` puts these skills where the
+  harnesses on the machine read them.
 - **`docs/SUPPORT.md` has a receipt for a development route from the other OS only**: run it;
   it is expected to work here, and a Linux receipt is strong evidence for Windows. Fix the
   adapter on the spot if the real program differs; `docs/playbooks/qualify-on-this-host.md`
