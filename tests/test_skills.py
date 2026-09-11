@@ -237,7 +237,7 @@ class InstallSkillsTests(SkillsFixture):
         self.assertTrue((self.home / ".codex" / "skills" / "crlf" / "SKILL.md").read_text(encoding="utf-8").startswith("---\nname: crlf\n"))
         (self.home / ".codex" / "skills" / "two-file" / "reporting.md").unlink()
         codex = next(h for h in skills.status(str(self.home), source=str(checkout))["harnesses"] if h["id"] == "codex")
-        self.assertEqual((codex["current"], codex["missing"], codex["ok"]), (0, 1, False), "a skill with an asset missing is not current")
+        self.assertEqual((codex["current"], codex["missing"], codex["ok"]), (1, 1, False), "a skill with an asset missing is not current; the other stays current")
         # A directory swapped for a link after the decision is caught by the write itself.
         home = self.home.resolve()
         skills_dir = home / ".gemini" / "skills"
