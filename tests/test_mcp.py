@@ -162,7 +162,9 @@ class ToolCallTests(BridgeFixture):
         receipt = Path(result["output"]) / "receipt.json"
         self.assertTrue(receipt.is_file())
         self.assertEqual(json.loads(receipt.read_text())["status"], "succeeded")
-        self.assertTrue(Path(result["output"]).is_relative_to(self.jobs))
+        # Resolved on both sides: on Windows the runner's temp path is an 8.3 short name and the
+        # plane records the resolved one.
+        self.assertTrue(Path(result["output"]).resolve().is_relative_to(self.jobs.resolve()))
         is_error, runs = self.call_tool("runs")
         self.assertFalse(is_error)
         self.assertEqual(runs["runs"][0]["action"], "module-plan")
