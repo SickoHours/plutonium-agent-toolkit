@@ -796,6 +796,52 @@ class IncompleteAndBoundsTests(BaselineFixture):
         self.assertEqual(code, 1, row)
         self.assertIn(row["error_code"], ("input_changed", "input_missing"), "a linked input is never re-hashed as the original")
 
+    def test_a_declaration_nested_too_deeply_is_a_finding_not_a_defect(self):
+        # The parser gives up on absurd nesting with RecursionError; that is a declaration-mismatch
+        # row and a written report, never operation_failed.
+        broken = self.module("deep")
+        (broken / "module.json").write_text("[" * 100000 + "]" * 100000)
+        code, row = self.scan(broken)
+        self.assertEqual(code, 0, row)
+        rows = self.findings(row, "declaration-mismatch")
+        self.assertEqual(len(rows), 1, rows)
+        self.assertIn("not valid JSON", rows[0]["evidence"])
+        self.assertEqual(row["result"]["outcome"], "review-required")
+        self.assertTrue((Path(row["result"]["output"]) / "baseline.json").is_file())
+        # Valid JSON nested deeper than the path walk follows: the paths below are reported as not
+        # checked, the summary carries a marker instead of the nest, and the report is still written.
+        nest = {"path": "../x"}
+        for _ in range(300):
+            nest = {"inner": nest}
+        deep = self.module("deep-valid", decl={"source": {"repository": REPOSITORY, "extra": nest}, "title": nest})
+        code, row = self.scan(deep)
+        self.assertEqual(code, 0, row)
+        rows = self.findings(row, "declaration-mismatch")
+        self.assertEqual([r["evidence"][:18] for r in rows], ["nested deeper than"], rows)
+        self.assertEqual(self.findings(row, "path-escape"), [], "the path below the depth bound was not reached, and the row says so")
+        self.assertEqual(row["result"]["declaration"]["title"], baseline.NESTED)
+        self.assertEqual(row["result"]["declaration"]["source"], baseline.NESTED)
+
+    def test_the_file_bound_is_the_job_input_cap_and_more_than_4096_files_scan(self):
+        # The job records every file read and every listing as an input; its cap is the scan's
+        # bound, so a tree the scan admits is never refused at finish. 4 200 files exceed the 4 096
+        # that the job's source-tree helper allows, which is a different bound.
+        from plutonium_agent_toolkit.core import receipts
+
+        self.assertEqual(baseline.MAX_FILES, receipts.MAX_FILES)
+        directory = self.module()
+        many = directory / "many"
+        many.mkdir()
+        for i in range(4200):
+            (many / f"f{i}.txt").write_bytes(b"x")
+        code, row = self.scan(directory)
+        self.assertEqual(code, 0, row)
+        self.assertEqual(row["result"]["outcome"], "passed")
+        self.assertEqual(row["result"]["scanned"]["files"], 4203)
+        receipt = json.loads(Path(row["result"]["receipt"]).read_text(encoding="utf-8"))
+        self.assertEqual(len(receipt["inputs"]), 4203)
+        self.assertEqual(len(receipt["input_listings"]), 3)
+
     def test_entries_of_every_kind_count_against_the_file_bound_before_sorting(self):
         # Links are never read, but a directory of them is still listed entry by entry; the bound
         # applies while listing, so a huge directory is refused before it is materialized.

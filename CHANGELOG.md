@@ -119,7 +119,9 @@ Every entry states what shipped, on which platform it was verified, and what rem
   directory listing (names and kinds) is an input of the job (a change, an addition or an entry
   swapped for a link of the same name after the scan is `input_changed`), the deadline is
   checked between chunks of every read, and file names that are not UTF-8 are hashed as bytes
-  and shown escaped. Verified by 40 unit tests on synthetic trees on Linux; CI runs them on
+  and shown escaped. The file bound is the job's own cap on recorded inputs (20 000), and a
+  declaration nested past the parser or past 64 levels is a `declaration-mismatch`, never
+  `operation_failed`. Verified by 42 unit tests on synthetic trees on Linux; CI runs them on
   Windows.
 - **Registries and fetch by name.** `docs/REGISTRY.md` specifies `registry.json`: a file anyone can
   host that lists module and composition repositories at exact commits and holds no bytes; entries

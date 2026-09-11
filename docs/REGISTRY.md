@@ -142,8 +142,12 @@ Rows are sorted by file, line and id. Findings keep at most 20 rows per file and
 the rest under `truncated`; nothing is skipped silently: links, `.git` and unreadable entries
 are all listed. Bounds: 20 000 files and 2 GiB per tree (`input_limit` above them, counted from
 the bytes actually read, so a file that grows during the scan cannot slip past; directory
-entries of every kind, links included, count as they are listed), 4 MiB of text per file, 64
-directory levels. The directory given must be a real directory, not a link (`input_invalid`).
+entries of every kind, links included, and the scanned directory itself count as they are
+listed; the same 20 000 is the job's cap on recorded inputs, so a tree the scan admits is never
+refused at the receipt), 4 MiB of text per file, 64 directory levels, 64 levels of nesting
+inside a declaration (deeper paths are reported as not checked; a declaration the parser
+cannot follow is `declaration-mismatch`, never a toolkit defect). The directory given must be
+a real directory, not a link (`input_invalid`).
 On POSIX every directory and file is opened relative to its
 parent's descriptor, without following links and without blocking, and the open descriptor must
 be the regular file or directory the listing saw; Windows has no descriptor-relative opens, so

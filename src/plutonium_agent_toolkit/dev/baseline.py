@@ -71,6 +71,7 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from ..core.errors import INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, Failure
 from ..core.jobs import Job, entry_kind
+from ..core.receipts import MAX_FILES as JOB_INPUT_CAP
 
 POLICY_VERSION = "1"
 ENFORCEMENT = "selective"
@@ -82,10 +83,14 @@ WARNINGS = ("no-resource-contract",)
 OUTCOMES = ("passed", "review-required", "needs-fixes", "incomplete")
 DISCLAIMER = "A baseline is a static check of files; it is not a security audit, certification, warranty or endorsement."
 
-MAX_FILES = 20000
+# One bound for the walk and the job: every file read and every listing becomes a job input, and
+# the job's cap on inputs is this same number, so the job never refuses what the scan admitted.
+# The scanned directory itself counts as the first entry.
+MAX_FILES = JOB_INPUT_CAP
 MAX_BYTES = 2 * 1024**3
 MAX_TEXT = 4 * 1024 * 1024
 MAX_DEPTH = 64
+MAX_JSON_DEPTH = 64
 SNIFF = 8 * 1024
 CHUNK = 1024 * 1024
 ASSETS_THRESHOLD = 8 * 1024 * 1024
@@ -144,6 +149,10 @@ COMMIT = re.compile(r"^[0-9a-f]{40}\Z")
 
 class Replaced(OSError):
     """The entry changed between the directory listing and the open; it is reported as unreadable."""
+
+
+class TooDeep(Exception):
+    """A declaration nested deeper than ``MAX_JSON_DEPTH``; the paths below are reported unchecked."""
 
 
 def add_parser(actions, common):
@@ -323,9 +332,26 @@ def _reject_constant(name: str):
 def _load_json(rows: Rows, rel: str, text: str):
     try:
         return json.loads(text, parse_constant=_reject_constant)
-    except ValueError as exc:
+    except (ValueError, RecursionError) as exc:
+        # RecursionError: nested past what the parser follows; a finding, never a toolkit defect.
         rows.add("declaration-mismatch", rel, getattr(exc, "lineno", None), f"not valid JSON: {getattr(exc, 'msg', exc)}")
         return None
+
+
+SCALARS = (str, int, float, bool, type(None))
+NESTED = "<nested; see the declaration>"
+
+
+def _shallow(value):
+    """A value as the report carries it: a scalar, or a list or object of scalars. Anything deeper
+    is replaced by a marker, so a declaration cannot make the report arbitrarily deep."""
+    if isinstance(value, SCALARS):
+        return value
+    if isinstance(value, list) and all(isinstance(v, SCALARS) for v in value):
+        return list(value)
+    if isinstance(value, dict) and all(isinstance(k, str) and isinstance(v, SCALARS) for k, v in value.items()):
+        return dict(value)
+    return NESTED
 
 
 def _paths(data, kind: str):
@@ -333,8 +359,11 @@ def _paths(data, kind: str):
 
     A confined path must stay inside its own directory. A composition's members and loads may
     name siblings with ``..`` (docs/MODULES.md), so they are not confined by ``..``; every path,
-    confined or not, must still resolve inside the scanned directory."""
-    def walk(node, in_member: bool):
+    confined or not, must still resolve inside the scanned directory. The walk follows at most
+    ``MAX_JSON_DEPTH`` levels and raises ``TooDeep`` below that."""
+    def walk(node, in_member: bool, depth: int):
+        if depth > MAX_JSON_DEPTH:
+            raise TooDeep
         if isinstance(node, dict):
             for key, value in node.items():
                 if key in PATH_KEYS and isinstance(value, str):
@@ -344,13 +373,13 @@ def _paths(data, kind: str):
                         if isinstance(item, str):
                             yield key, item, kind != "composition"
                         else:
-                            yield from walk(item, kind == "composition" and key == "modules")
+                            yield from walk(item, kind == "composition" and key == "modules", depth + 1)
                 else:
-                    yield from walk(value, False)
+                    yield from walk(value, False, depth + 1)
         elif isinstance(node, list):
             for item in node:
-                yield from walk(item, in_member)
-    yield from walk(data, False)
+                yield from walk(item, in_member, depth + 1)
+    yield from walk(data, False, 0)
 
 
 def _check_path(rows: Rows, rel: str, text: str, directory: Path, root: Path, field: str, value: str, confined: bool) -> None:
@@ -420,8 +449,11 @@ def _check_declaration(rows: Rows, rel: str, kind: str, text: str, directory: Pa
             rows.add("no-resource-contract", rel, None, "module.json declares no resource_contract (docs/MODULES.md)")
         if "source" in data:
             _check_source(rows, rel, text, data["source"], expected)
-    for field, value, confined in _paths(data, kind):
-        _check_path(rows, rel, text, directory, root, field, value, confined)
+    try:
+        for field, value, confined in _paths(data, kind):
+            _check_path(rows, rel, text, directory, root, field, value, confined)
+    except TooDeep:
+        rows.add("declaration-mismatch", rel, None, f"nested deeper than {MAX_JSON_DEPTH} levels; paths below that depth were not checked")
     return data
 
 
@@ -429,13 +461,14 @@ def _module_summary(rel: str, data) -> dict:
     if not isinstance(data, dict):
         return {"file": rel, "kind": "module", "valid": False}
     payload = "recipe" if "recipe" in data else "seed" if "seed" in data else None
-    return {"file": rel, "kind": "module", "valid": True, "id": data.get("id"), "version": data.get("version"),
-            "title": data.get("title"), "category": data.get("category"), "module_kind": data.get("kind"),
-            "payload": payload, "payload_path": data.get(payload) if payload else None,
-            "distribution": data.get("distribution", "seed" if payload == "seed" else "source"),
-            "bases": data.get("bases"), "maps": data.get("maps"),
-            "dependencies": data.get("dependencies", []), "conflicts": data.get("conflicts", []),
-            "source": data.get("source"), "resource_contract": "resource_contract" in data}
+    field = lambda key, default=None: _shallow(data.get(key, default))  # noqa: E731
+    return {"file": rel, "kind": "module", "valid": True, "id": field("id"), "version": field("version"),
+            "title": field("title"), "category": field("category"), "module_kind": field("kind"),
+            "payload": payload, "payload_path": field(payload) if payload else None,
+            "distribution": field("distribution", "seed" if payload == "seed" else "source"),
+            "bases": field("bases"), "maps": field("maps"),
+            "dependencies": field("dependencies", []), "conflicts": field("conflicts", []),
+            "source": field("source"), "resource_contract": "resource_contract" in data}
 
 
 def _composition_summary(rel: str, data, directory: Path, root: Path) -> dict:
@@ -447,7 +480,7 @@ def _composition_summary(rel: str, data, directory: Path, root: Path) -> dict:
         if isinstance(item, str):
             row = {"path": item}
         elif isinstance(item, dict):
-            row = {"path": item.get("path")} | {k: item[k] for k in ("name", "commit", "role") if k in item}
+            row = {"path": _shallow(item.get("path"))} | {k: _shallow(item[k]) for k in ("name", "commit", "role") if k in item}
         else:
             row = {"path": None}
         path = row["path"]
@@ -459,9 +492,9 @@ def _composition_summary(rel: str, data, directory: Path, root: Path) -> dict:
                 row["declares"] = next((n for n in ("module.json", "composition.json") if (full / n).is_file()), None) if row["exists"] else None
         members.append(row)
     loads = data.get("loads") if isinstance(data.get("loads"), list) else []
-    return {"file": rel, "kind": "composition", "valid": True, "name": data.get("name"), "title": data.get("title"),
-            "base": data.get("base"), "map": data.get("map"), "members": members,
-            "loads": [x for x in loads if isinstance(x, str)], "budget": data.get("budget")}
+    return {"file": rel, "kind": "composition", "valid": True, "name": _shallow(data.get("name")), "title": _shallow(data.get("title")),
+            "base": _shallow(data.get("base")), "map": _shallow(data.get("map")), "members": members,
+            "loads": [x for x in loads if isinstance(x, str)], "budget": _shallow(data.get("budget"))}
 
 
 # ----- the walk -------------------------------------------------------------------------
@@ -625,6 +658,7 @@ class Scan:
         self.seen = 0
 
     def run(self) -> None:
+        self.seen = 1  # the scanned directory itself: its listing is recorded like every other
         if DESCRIPTOR_WALK:
             fd = os.open(self.root, DIR_FLAGS)
             try:
