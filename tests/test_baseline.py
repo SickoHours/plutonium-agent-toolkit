@@ -1297,6 +1297,23 @@ class BoundedWorkTests(BaselineFixture):
         self.assertEqual(len(row["result"]["nested_declarations"]), 4)
         self.assertTrue(all(r["valid"] for r in row["result"]["nested_declarations"]))
 
+    def test_a_declaration_cannot_make_the_report_large(self):
+        # The summary is what the report carries; the declaration's own bytes are where a
+        # megabyte-long title is read. Both must stay inside the report's own bounds.
+        directory = self.module(decl={"title": "t" * 2_000_000, "dependencies": [f"dep_{n}" for n in range(5_000)]})
+        pack = self.pack("pack", [f"./m{n}" for n in range(5_000)])
+        code, row = self.scan(directory)
+        self.assertEqual(code, 0, row)
+        self.assertEqual(row["result"]["declaration"]["title"], baseline.CLIPPED)
+        self.assertEqual(row["result"]["declaration"]["dependencies"], baseline.CLIPPED)
+        report = (Path(row["result"]["output"]) / "baseline.json").read_bytes()
+        self.assertLess(len(report), 256 * 1024, "the report stays small whatever the declaration says")
+        code, row = self.scan(pack)
+        self.assertEqual(code, 0, row)
+        summary = row["result"]["declaration"]
+        self.assertEqual(summary["members_declared"], 5_000)
+        self.assertEqual(len(summary["members"]), baseline.SUMMARY_ITEMS)
+
     def test_a_long_line_full_of_archive_urls_stays_bounded(self):
         # One line, no newline to find, more archive URLs than the row bound: placing each match
         # used to rescan the line, and the rule kept locating long past the bound.

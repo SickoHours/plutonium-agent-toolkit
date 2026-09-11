@@ -477,22 +477,34 @@ def _load_json(rows: Rows, rel: str, text: str):
 
 SCALARS = (str, int, float, bool, type(None))
 NESTED = "<nested; see the declaration>"
+CLIPPED = "<clipped; see the declaration>"
+SUMMARY_TEXT = 512      # characters kept from one value of a declaration
+SUMMARY_ITEMS = 256     # entries kept from one list or object of a declaration, and members
 
 
 def _finite_scalar(value) -> bool:
     return isinstance(value, SCALARS) and not (isinstance(value, float) and (value != value or value in (float("inf"), float("-inf"))))
 
 
+def _scalar(value):
+    """A scalar as the report carries it: text longer than ``SUMMARY_TEXT`` is a marker, because a
+    declaration's own bytes are the place to read a megabyte-long title."""
+    if isinstance(value, str) and len(value) > SUMMARY_TEXT:
+        return CLIPPED
+    return value
+
+
 def _shallow(value):
     """A value as the report carries it: a finite scalar, or a list or object of them. Anything
-    deeper, or a number the receipt could not serialize, is replaced by a marker, so a declaration
-    cannot make the report arbitrarily deep or unwritable."""
+    deeper, a number the receipt could not serialize, a value longer than ``SUMMARY_TEXT`` or a
+    list or object of more than ``SUMMARY_ITEMS`` entries is replaced by a marker, so a
+    declaration cannot make the report arbitrarily deep, long or unwritable."""
     if _finite_scalar(value):
-        return value
+        return _scalar(value)
     if isinstance(value, list) and all(_finite_scalar(v) for v in value):
-        return list(value)
+        return [_scalar(v) for v in value] if len(value) <= SUMMARY_ITEMS else CLIPPED
     if isinstance(value, dict) and all(isinstance(k, str) and _finite_scalar(v) for k, v in value.items()):
-        return dict(value)
+        return {k: _scalar(v) for k, v in value.items()} if len(value) <= SUMMARY_ITEMS else CLIPPED
     return NESTED
 
 
@@ -626,7 +638,8 @@ def _composition_summary(rel: str, data, directory: Path, root: Path, unreadable
         return {"file": rel, "kind": "composition", "valid": False}
     members = []
     items = data.get("modules") if isinstance(data.get("modules"), list) else []
-    for item in items:
+    counted = len(items)
+    for item in items[:SUMMARY_ITEMS]:
         if isinstance(item, str):
             row = {"path": item}
         elif isinstance(item, dict):
@@ -659,7 +672,8 @@ def _composition_summary(rel: str, data, directory: Path, root: Path, unreadable
     loads = data.get("loads") if isinstance(data.get("loads"), list) else []
     return {"file": rel, "kind": "composition", "valid": True, "name": _shallow(data.get("name")), "title": _shallow(data.get("title")),
             "base": _shallow(data.get("base")), "map": _shallow(data.get("map")), "members": members,
-            "loads": [x for x in loads if isinstance(x, str)], "budget": _shallow(data.get("budget"))}
+            "members_declared": counted,
+            "loads": [_scalar(x) for x in loads[:SUMMARY_ITEMS] if isinstance(x, str)], "budget": _shallow(data.get("budget"))}
 
 
 # ----- the walk -------------------------------------------------------------------------

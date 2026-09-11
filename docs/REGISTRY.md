@@ -160,7 +160,9 @@ every path component is re-checked for reparse points by name just before each o
 replaced under the scan (by a link, a pipe, another file, or a swapped ancestor directory) is
 `unreadable` and the outcome `incomplete`. A declaration that is binary, larger than the text bound or not valid UTF-8 is
 reported as `declaration-mismatch` and still names itself among the declarations, so no declaration in the tree is missing
-from the report. `.git` is git's local bookkeeping whether it is a directory or the one-line file a worktree leaves: it is
+from the report. A declaration summary is bounded: a value longer than 512 characters, or a list or object of more than 256
+entries, is carried as a marker, and a composition's members are listed to that bound beside `members_declared`. The
+declaration's own bytes are where an oversized value is read. `.git` is git's local bookkeeping whether it is a directory or the one-line file a worktree leaves: it is
 skipped, not scanned, and not part of `tree_sha256`; a link named `.git` is still a link and still blocks.
 Every file read and every directory listing is an
 input of the job: the receipt lists their hashes (`inputs`, `input_listings`; a listing is every
