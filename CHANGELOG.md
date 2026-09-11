@@ -89,7 +89,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
   file under the directory and nothing else; `.git`, links and other skipped entries are recorded
   without reading their contents or targets: nothing in the tree is executed, no backend runs, no
   model and no network are used, and the same bytes always give the same `baseline.json`
-  (`tree_sha256` compares two scans). Policy version `1`, enforcement `selective`: exactly three
+  (`tree_sha256`, over every file's bytes and every directory's name, compares two scans). Policy
+  version `1`, enforcement `selective`: exactly three
   finding ids block (`native-plugin`: PE, ELF or Mach-O headers under any name, or text naming
   Plutonium's plugins folder; `download-and-execute`: `iex (iwr ...)`, `Invoke-Expression`,
   `curl`/`wget ... | sh`, or a downloaded file started later in the same script; `path-escape`:
@@ -125,7 +126,7 @@ Every entry states what shipped, on which platform it was verified, and what rem
   declaration nested past the parser or past 64 levels is a `declaration-mismatch`, never
   `operation_failed`; so is a declaration that is not UTF-8 or carries `1e9999` or `NaN`. A link
   named `.git` blocks like any link; the root is opened without following links after its
-  by-name check. Verified by 48 unit tests on synthetic trees on Linux; CI runs them on
+  by-name check. Verified by 51 unit tests on synthetic trees on Linux; CI runs them on
   Windows.
 - **Registries and fetch by name.** `docs/REGISTRY.md` specifies `registry.json`: a file anyone can
   host that lists module and composition repositories at exact commits and holds no bytes; entries

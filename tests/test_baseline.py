@@ -983,6 +983,58 @@ class IncompleteAndBoundsTests(BaselineFixture):
         self.assertEqual(row["result"]["outcome"], "review-required")
         self.assertEqual(row["result"]["scanned"]["text_files"], 4, "the README with a stray byte is still text and still scanned")
 
+    def test_rechecking_an_unchanged_directory_at_the_receipt_leaves_the_descriptor_open(self):
+        # list_entries lists through its own no-follow descriptor; scandir works on a duplicate, so the
+        # descriptor is closed exactly once and an unchanged directory rechecks cleanly, twice.
+        from plutonium_agent_toolkit.core import jobs
+
+        directory = self.module()
+        identity = None
+        if os.name != "nt":
+            st = os.stat(directory)
+            identity = (st.st_dev, st.st_ino)
+        first = jobs.list_entries(directory, identity)
+        second = jobs.list_entries(directory, identity)
+        self.assertEqual(sorted(first), [("module.json", "file"), ("project.json", "file"), ("scripts", "dir")])
+        self.assertEqual(first, second)
+        # And the route: a clean scan of an unchanged tree succeeds at finish with every listing recorded.
+        code, row = self.scan(directory)
+        self.assertEqual(code, 0, row)
+        receipt = json.loads(Path(row["result"]["receipt"]).read_text(encoding="utf-8"))
+        self.assertEqual(receipt["status"], "succeeded")
+        self.assertEqual(len(receipt["input_listings"]), 2)
+
+    def test_a_scan_path_ending_in_dot_dot_is_normalized_before_the_output_check(self):
+        directory = self.module()
+        dotted = directory / "scripts" / ".."
+        code, row = invoke(["registry", "baseline", str(dotted), "--output", str(directory / "inside")])
+        self.assertEqual(row["error_code"], "input_invalid", row)
+        self.assertIn("outside the directory being scanned", row["message"])
+        self.assertFalse((directory / "inside" / "baseline.json").exists())
+        code, row = self.scan(dotted)
+        self.assertEqual(code, 0, row)
+        self.assertEqual(row["result"]["directory"], str(directory))
+        code, plain = self.scan(directory)
+        self.assertEqual(row["result"]["tree_sha256"], plain["result"]["tree_sha256"])
+
+    def test_an_empty_directory_changes_the_tree_hash(self):
+        directory = self.module()
+        code, first = self.scan(directory)
+        code, again = self.scan(directory)
+        self.assertEqual(first["result"]["tree_sha256"], again["result"]["tree_sha256"])
+        self.assertEqual(first["result"]["scanned"]["directories"], 1)
+        (directory / "empty").mkdir()
+        code, added = self.scan(directory)
+        self.assertNotEqual(added["result"]["tree_sha256"], first["result"]["tree_sha256"])
+        self.assertEqual(added["result"]["scanned"]["directories"], 2)
+        self.assertEqual(added["result"]["scanned"]["files"], first["result"]["scanned"]["files"])
+        (directory / "empty").rename(directory / "renamed")
+        code, renamed = self.scan(directory)
+        self.assertNotEqual(renamed["result"]["tree_sha256"], added["result"]["tree_sha256"])
+        (directory / "renamed").rmdir()
+        code, removed = self.scan(directory)
+        self.assertEqual(removed["result"]["tree_sha256"], first["result"]["tree_sha256"])
+
     def test_entries_of_every_kind_count_against_the_file_bound_before_sorting(self):
         # Links are never read, but a directory of them is still listed entry by entry; the bound
         # applies while listing, so a huge directory is refused before it is materialized.

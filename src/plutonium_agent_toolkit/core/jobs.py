@@ -83,6 +83,8 @@ def list_entries(directory: Path, identity: tuple[int, int] | None = None) -> li
             raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {directory} is no longer a directory")
         if identity is not None and identity[1] and (opened.st_dev, opened.st_ino) != tuple(identity):
             raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {directory} was replaced")
+        # scandir(fd) works on its own duplicate of the descriptor (CPython dups it before
+        # fdopendir), so closing the iterator leaves fd open and the close below is the only one.
         with os.scandir(fd) as it:
             return [(e.name, entry_kind(e.stat(follow_symlinks=False))) for e in it]
     finally:

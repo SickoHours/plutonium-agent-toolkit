@@ -520,7 +520,9 @@ def _root(text: str, job: Job) -> Path:
     """The directory to scan, by name: it must exist and not be a link. ``Scan.run`` then opens it
     without following links and works from that descriptor, so a link put there after this check
     is refused by the open rather than followed."""
-    root = Path(text).expanduser().absolute()
+    # Lexically normalized first (``a/b/..`` is ``a``), so the name that is checked, opened and
+    # compared with the output directory is one and the same.
+    root = Path(os.path.normpath(Path(text).expanduser().absolute()))
     try:
         listed = os.lstat(root)
     except FileNotFoundError:
@@ -531,7 +533,7 @@ def _root(text: str, job: Job) -> Path:
         raise Failure(INPUT_INVALID, f"Not a directory: {root}", "Give the module or composition directory, not a file in it.")
     # Resolve the parent only: the root's own name is opened without following links, so a link
     # put there after this check is refused by the open (ELOOP), never followed by resolve().
-    root = (root.parent.resolve() / root.name) if root.name else root.resolve()
+    root = Path(os.path.normpath(root.parent.resolve() / root.name)) if root.name else root.resolve()
     if job.root.is_relative_to(root):
         raise Failure(INPUT_INVALID, "The output directory must be outside the directory being scanned",
                       "Choose an --output beside the tree, never inside it; the scan would otherwise read its own receipt.")
@@ -673,6 +675,7 @@ class Scan:
         self.unreadable: list[dict] = []
         self.skipped: list[dict] = []
         self.digests: list[tuple[bytes, str]] = []  # raw relative path, sha256
+        self.dirs: list[bytes] = []  # raw relative path of every directory walked below the root
         self.counts = {"files": 0, "bytes": 0, "text_files": 0, "binary_files": 0}
         self.binary_total = 0
         self.declarations: list[tuple[str, str, Path, str]] = []  # rel, kind, directory, text
@@ -755,6 +758,7 @@ class Scan:
                 except OSError as exc:
                     self.unreadable.append({"path": rel, "reason": exc.strerror or str(exc)})
                     continue
+                self.dirs.append(os.fsencode("/".join(here)))
                 try:
                     self.directory(child, here)
                 finally:
@@ -858,16 +862,19 @@ def execute(args, job: Job) -> dict:
         outcome = "review-required"
     else:
         outcome = "passed"
-    # One record per file: the hash, the raw path's length and the raw path bytes, so names that
-    # are not UTF-8 hash as themselves and no separator can be forged by a file name.
+    # One record per file (``f``, the hash, the raw path's length, the raw path bytes) and per
+    # directory (``d``, length, bytes), so an empty directory added, removed or renamed changes
+    # the hash, names that are not UTF-8 hash as themselves, and no separator can be forged.
     tree = hashlib.sha256()
-    for raw, digest in sorted(scan.digests):
-        tree.update(digest.encode("ascii") + len(raw).to_bytes(8, "big") + raw)
+    records = [b"f" + digest.encode("ascii") + len(raw).to_bytes(8, "big") + raw for raw, digest in scan.digests]
+    records += [b"d" + len(raw).to_bytes(8, "big") + raw for raw in scan.dirs]
+    for record in sorted(records):
+        tree.update(record)
     report = {
         "schema_version": 1, "policy_version": POLICY_VERSION, "enforcement": ENFORCEMENT, "blocking_ids": list(BLOCKING),
         "outcome": outcome, "blocked": outcome in ("needs-fixes", "incomplete"),
         "findings": findings, "capabilities": capabilities, "warnings": warnings, "truncated": rows.omitted(),
-        "scanned": counts, "tree_sha256": tree.hexdigest(), "unreadable": unreadable, "skipped": skipped,
+        "scanned": counts | {"directories": len(scan.dirs)}, "tree_sha256": tree.hexdigest(), "unreadable": unreadable, "skipped": skipped,
         "declaration": summary, "nested_declarations": nested,
         "expected": {"repository": expected["repository"], "commit": expected["commit"]},
         "bounds": {"max_files": MAX_FILES, "max_bytes": MAX_BYTES, "max_text_bytes": MAX_TEXT, "max_depth": MAX_DEPTH,

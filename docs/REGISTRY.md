@@ -101,8 +101,9 @@ the check a submitter's agent runs offline first, on the same directory, so the 
 surprise. `pat registry baseline <directory> --output <new dir> --json` reads every eligible
 file under the directory and nothing else (`.git`, links and other skipped entries are recorded
 without reading their contents or targets): it executes nothing in the tree, runs no backend,
-uses no model and touches no network. The same bytes always give the same `baseline.json`; the report carries
-the tree's hash (`tree_sha256`) so two scans can be compared. Give `--repository` and `--commit`
+uses no model and touches no network. The same bytes always give the same `baseline.json`; the
+report carries the tree's hash (`tree_sha256`, over every file's bytes and every directory's
+name, so an empty directory added, removed or renamed changes it) so two scans can be compared. Give `--repository` and `--commit`
 when the listing's values are known; the declaration's `source` is compared with them.
 
 **A baseline is a static check of files; it is not a security audit, certification, warranty or
@@ -167,7 +168,7 @@ an older tree. The job deadline (`--timeout`) is checked
 between chunks of every read. File names that are not UTF-8 are hashed as their bytes and
 shown with backslash escapes. The result and
 `baseline.json` carry `policy_version`, `enforcement`, `outcome`, the three row lists,
-`scanned` (files, bytes, text and binary counts), `unreadable`, `skipped`, a `declaration`
+`scanned` (files, bytes, text and binary counts, directories), `unreadable`, `skipped`, a `declaration`
 summary when `module.json` or `composition.json` is at the root, and `nested_declarations` for
 every module or pack below it (a repository scanned from its root lists them all).
 
