@@ -8,8 +8,10 @@ starts, after every step and on every exit path, including failure.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import stat
 import subprocess
 import sys
 import time
@@ -19,7 +21,7 @@ from pathlib import Path
 from .envelope import now
 from .errors import (BACKEND_FAILED, BACKEND_TIMEOUT, BACKEND_UNAVAILABLE, CANCELLED, INPUT_CHANGED,
                      INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, OUTPUT_LIMIT, Failure)
-from .receipts import MAX_FILES, inventory, new_output_dir, sha256_file
+from .receipts import FILE_FLAGS, MAX_FILES, inventory, new_output_dir, sha256_descriptor, sha256_file
 
 MAX_LOG = 4 * 1024 * 1024
 MAX_OUTPUT = 8 * 1024**3
@@ -27,6 +29,66 @@ MAX_TREE_FILES = 4096
 MAX_TREE_BYTES = 2 * 1024**3
 MAX_TREES = 64
 CHILD_LAUNCH_FAILED = 127  # returned by _child.py when the backend itself cannot start
+
+
+REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+# Re-listing a recorded directory goes through a descriptor opened without following links on
+# POSIX; Windows cannot open a directory that way and re-lists by name after an lstat check.
+DIR_FLAGS = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+DESCRIPTOR_LISTINGS = os.name != "nt" and os.scandir in os.supports_fd and hasattr(os, "O_DIRECTORY")
+
+
+def entry_kind(st) -> str:
+    """What a directory entry is from its own ``lstat``: ``link`` (a symbolic link on any OS or a
+    Windows reparse point), ``dir``, ``file`` or ``other``. Recorded beside the name so an entry
+    swapped for another kind under the same name is a change."""
+    if stat.S_ISLNK(st.st_mode) or ((getattr(st, "st_file_attributes", 0) or 0) & REPARSE_POINT):
+        return "link"
+    if stat.S_ISDIR(st.st_mode):
+        return "dir"
+    if stat.S_ISREG(st.st_mode):
+        return "file"
+    return "other"
+
+
+def listing_digest(entries) -> str:
+    """One hash for a directory's entries as ``(name, kind)`` pairs, order-independent, raw name
+    bytes so any name works."""
+    h = hashlib.sha256()
+    for name, kind in sorted((os.fsencode(n), k) for n, k in entries):
+        h.update(len(name).to_bytes(4, "big") + name + b"\0" + kind.encode("ascii") + b"\0")
+    return h.hexdigest()
+
+
+def list_entries(directory: Path, identity: tuple[int, int] | None = None) -> list[tuple[str, str]]:
+    """``(name, kind)`` for every entry of a directory, from each entry's own ``lstat``.
+
+    On POSIX the directory is opened without following links and listed through that descriptor,
+    whose ``fstat`` must be a directory with the recorded ``identity`` (``st_dev``, ``st_ino``)
+    when one was recorded, so a directory swapped for a link or recreated between the caller's
+    check and the listing is a change, not a listing of something else. Windows lists by name
+    after an ``lstat`` that refuses links; the window between the two is what it leaves open."""
+    if not DESCRIPTOR_LISTINGS:
+        if entry_kind(os.lstat(directory)) != "dir":
+            raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {directory} is no longer a directory")
+        with os.scandir(directory) as it:
+            return [(e.name, entry_kind(e.stat(follow_symlinks=False))) for e in it]
+    try:
+        fd = os.open(directory, DIR_FLAGS)
+    except OSError as exc:
+        raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {directory} ({exc.strerror or exc})") from exc
+    try:
+        opened = os.fstat(fd)
+        if not stat.S_ISDIR(opened.st_mode):
+            raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {directory} is no longer a directory")
+        if identity is not None and identity[1] and (opened.st_dev, opened.st_ino) != tuple(identity):
+            raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {directory} was replaced")
+        # scandir(fd) works on its own duplicate of the descriptor (CPython dups it before
+        # fdopendir), so closing the iterator leaves fd open and the close below is the only one.
+        with os.scandir(fd) as it:
+            return [(e.name, entry_kind(e.stat(follow_symlinks=False))) for e in it]
+    finally:
+        os.close(fd)
 
 
 def _write(path: Path, data: dict) -> None:
@@ -45,6 +107,8 @@ class Job:
         self._t0 = time.monotonic()
         self.deadline = self._t0 + timeout
         self.inputs: dict[str, str] = {}
+        self.listings: dict[str, str] = {}
+        self._listing_identity: dict[str, tuple[int, int]] = {}
         self.trees: dict[str, dict[str, str]] = {}
         self.steps: list[dict] = []
         self.repairs: list[str] = []
@@ -56,7 +120,7 @@ class Job:
             "schema_version": 1, "job_id": self.id, "command": self.command, "argv": self.argv,
             "status": status, "started": self.started, "updated": now(),
             "elapsed_seconds": round(time.monotonic() - self._t0, 3), "output": str(self.root),
-            "inputs": self.inputs, "input_trees": self.trees, "steps": self.steps,
+            "inputs": self.inputs, "input_listings": self.listings, "input_trees": self.trees, "steps": self.steps,
             **({"receipt_path_repaired": list(self.repairs)} if self.repairs else {}), **extra,
         }
 
@@ -95,6 +159,39 @@ class Job:
                 raise Failure(INPUT_LIMIT, "Too many declared inputs")
             self.inputs[key] = sha256_file(p)
         return p
+
+    def record_input(self, path: Path, digest: str) -> None:
+        """Register an input the caller has already hashed through its own descriptor (a scan
+        that opened the file without following links). The receipt lists it and ``finish``
+        re-hashes it like any other input, so a change after the read fails the job."""
+        p = Path(path).absolute()
+        if p.is_relative_to(self.root):
+            raise Failure(INPUT_INVALID, "Inputs must live outside the job's output directory")
+        if not isinstance(digest, str) or len(digest) != 64:
+            raise Failure(INPUT_INVALID, f"Not a sha256 digest for {p}")
+        key = str(p)
+        if key not in self.inputs:
+            if len(self.inputs) >= MAX_FILES:
+                raise Failure(INPUT_LIMIT, "Too many declared inputs")
+            self.inputs[key] = digest
+
+    def record_listing(self, path: Path, entries, identity: tuple[int, int] | None = None) -> None:
+        """Register a directory listing the caller enumerated, as ``(name, kind)`` pairs (see
+        ``entry_kind``), with the directory's own identity (``st_dev``, ``st_ino``) when the
+        caller holds it. ``finish`` lists the directory again through a no-follow descriptor and
+        compares, so an entry added, removed or swapped for another kind under the same name
+        after the caller looked fails the job, as does the directory itself becoming a link,
+        being recreated or disappearing."""
+        p = Path(path).absolute()
+        if p.is_relative_to(self.root):
+            raise Failure(INPUT_INVALID, "Inputs must live outside the job's output directory")
+        key = str(p)
+        if key not in self.listings:
+            if len(self.listings) >= MAX_FILES:
+                raise Failure(INPUT_LIMIT, "Too many declared inputs")
+            self.listings[key] = listing_digest(entries)
+            if identity is not None:
+                self._listing_identity[key] = (int(identity[0]), int(identity[1]))
 
     def input_tree(self, root: Path) -> Path:
         root = Path(root).resolve()
@@ -173,11 +270,99 @@ class Job:
                 raise Failure(OUTPUT_LIMIT, "Backend exceeded the output file count or size bound")
 
     # ----- completion --------------------------------------------------------------
+    def _recorded_ancestors(self, parent: str) -> list[Path]:
+        """The recorded directories from the topmost recorded ancestor of ``parent`` down to
+        ``parent`` itself; empty when ``parent`` was never recorded."""
+        chain = []
+        path = Path(parent)
+        while str(path) in self.listings:
+            chain.append(path)
+            if path.parent == path:
+                break
+            path = path.parent
+        chain.reverse()
+        return chain
+
+    def _identity_ok(self, key: str, opened: os.stat_result) -> None:
+        if not stat.S_ISDIR(opened.st_mode):
+            raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {key} is no longer a directory")
+        identity = self._listing_identity.get(key)
+        if identity is not None and identity[1] and (opened.st_dev, opened.st_ino) != identity:
+            raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {key} was replaced")
+
+    def _open_chain(self, chain: list[Path]) -> list[int]:
+        """Descriptors for the recorded ancestors, the first opened by name and each next relative
+        to the previous, none following links, each a directory with the identity recorded when it
+        was walked. The caller closes every descriptor returned."""
+        fds: list[int] = []
+        try:
+            for i, directory in enumerate(chain):
+                fd = os.open(directory, DIR_FLAGS) if i == 0 else os.open(directory.name, DIR_FLAGS, dir_fd=fds[-1])
+                fds.append(fd)
+                self._identity_ok(str(directory), os.fstat(fd))
+        except OSError as exc:
+            for fd in fds:
+                os.close(fd)
+            raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {chain[len(fds)]} ({exc.strerror or exc})") from exc
+        except Failure:
+            for fd in fds:
+                os.close(fd)
+            raise
+        return fds
+
+    def _rehash(self, key: str) -> str:
+        """The current hash of a recorded input. A file whose parent directory is a recorded
+        listing is opened relative to its recorded ancestors (``_open_chain``), so no ancestor can
+        redirect the open outside the tree and every ancestor is checked before a byte is read;
+        an input declared by name alone (``input``) is re-hashed by name, its final component
+        never followed as a link. Windows has no descriptor-relative opens: every recorded ancestor
+        is re-checked by name for links immediately before the open, and the moment between that
+        check and the open is the window it leaves."""
+        path = Path(key)
+        chain = self._recorded_ancestors(str(path.parent))
+        try:
+            if not chain:
+                return sha256_file(path, check=self.check_deadline)
+            if not DESCRIPTOR_LISTINGS:
+                for directory in chain:
+                    if entry_kind(os.lstat(directory)) != "dir":
+                        raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {directory} is no longer a directory")
+                return sha256_file(path, check=self.check_deadline)
+            fds = self._open_chain(chain)
+            try:
+                try:
+                    fd = os.open(path.name, FILE_FLAGS, dir_fd=fds[-1])
+                except OSError as exc:
+                    raise Failure(INPUT_CHANGED, f"Input changed while the job ran: {key} ({exc.strerror or exc})") from exc
+                return sha256_descriptor(fd, key, check=self.check_deadline)
+            finally:
+                for fd in fds:
+                    os.close(fd)
+        except Failure as exc:
+            # A file that cannot be hashed any more is an input change; running out of time or
+            # being cancelled is not, and keeps its own code.
+            if exc.code in (INPUT_CHANGED, BACKEND_TIMEOUT, CANCELLED):
+                raise
+            raise Failure(INPUT_CHANGED, f"Input changed while the job ran: {key} ({exc.message})") from exc
+
     def finish(self, result: dict) -> dict:
         self.check_deadline()
+        # Re-hashing a large recorded tree is itself work: the deadline is checked before every
+        # file and every listing, and inside each read, so a job cannot succeed after its deadline.
         for key, digest in self.inputs.items():
-            if sha256_file(Path(key)) != digest:
+            self.check_deadline()
+            if self._rehash(key) != digest:
                 raise Failure(INPUT_CHANGED, f"Input changed while the job ran: {key}")
+        for key, digest in self.listings.items():
+            self.check_deadline()
+            try:
+                entries = list_entries(Path(key), self._listing_identity.get(key))
+            except OSError as exc:
+                raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {key} ({exc.strerror or exc})") from exc
+            if listing_digest(entries) != digest:
+                raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {key}")
+        # Listing the last recorded directory can itself use the remaining time.
+        self.check_deadline()
         # The periodic scan during run() can miss a final burst; recheck before declaring success.
         self._watch_output()
         outputs = {rel: digest for rel, digest in inventory(self.root).items() if rel != "receipt.json"}

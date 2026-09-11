@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import stat
 import uuid
 from pathlib import Path
 
@@ -21,17 +22,41 @@ MAX_FILES = 20000
 CHUNK = 1024 * 1024
 
 
-def sha256_file(path: Path, limit: int = MAX_HASH_BYTES) -> str:
+# Hashing opens without following links where the OS allows (POSIX), so the bytes hashed are the
+# regular file at that name and never a link's target; Windows relies on the checks by name.
+FILE_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0) | getattr(os, "O_CLOEXEC", 0)
+
+
+def sha256_file(path: Path, limit: int = MAX_HASH_BYTES, check=None) -> str:
+    """Hash the regular file at a name; the final component is never followed as a link.
+
+    ``check`` is called once per chunk, so a caller with a deadline (a ``Job``) stops a long read
+    instead of finishing it late."""
     p = Path(path)
     if p.is_symlink() or not p.is_file():
         raise Failure(INPUT_MISSING, f"Cannot hash a missing or linked file: {p}")
+    try:
+        fd = os.open(p, FILE_FLAGS)
+    except OSError as exc:
+        raise Failure(INPUT_MISSING, f"Cannot hash a missing or linked file: {p} ({exc.strerror or exc})") from exc
+    return sha256_descriptor(fd, str(p), limit, check)
+
+
+def sha256_descriptor(fd: int, label: str, limit: int = MAX_HASH_BYTES, check=None) -> str:
+    """Hash a regular file through an open descriptor, which this closes. The descriptor must
+    describe a regular file; a link, a pipe or a directory is refused before a byte is read.
+    ``check`` is called once per chunk (see ``sha256_file``)."""
     h = hashlib.sha256()
     total = 0
-    with p.open("rb") as stream:
+    with os.fdopen(fd, "rb") as stream:
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            raise Failure(INPUT_MISSING, f"Cannot hash a missing or linked file: {label}")
         while block := stream.read(CHUNK):
+            if check is not None:
+                check()
             total += len(block)
             if total > limit:
-                raise Failure(INPUT_LIMIT, f"File exceeds {limit} bytes: {p}")
+                raise Failure(INPUT_LIMIT, f"File exceeds {limit} bytes: {label}")
             h.update(block)
     return h.hexdigest()
 

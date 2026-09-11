@@ -17,6 +17,7 @@
     pat module declare <mod.ff> --output <new dir>
     pat module fetch <owner/id@commit | https://github.com/o/r@commit> --output <new dir>
     pat registry add <file|url> | list | search [words] [--category ...] | show <owner/id>
+    pat registry baseline <directory> [--repository <url>] [--commit <40 hex>] --output <new dir>
     pat agent probe|hosts|models|dispatch|status|send|interrupt ...   T3 Code (protocol 1) as an agent host
     pat plane actions | serve --library <dir> --jobs <dir>   a local control plane over these routes
     pat mcp tools | serve --library <dir> --jobs <dir>       the same typed actions as MCP tools on stdin and stdout
@@ -114,6 +115,9 @@ def build_parser() -> Parser:
     q.add_argument("--origin", choices=["builtin", "added"], help="Only the registry that ships with the toolkit, or only registries you added")
     q.add_argument("--json", action="store_true")
     q = ra.add_parser("show"); q.add_argument("name", help="<owner>/<id>"); q.add_argument("--json", action="store_true")
+    from .dev import baseline
+
+    baseline.add_parser(ra, common)  # registry baseline is a job: --output and --timeout like every other job
     from .agent import cli as _agent_cli
 
     _agent_cli.add_parser(sub)
@@ -148,6 +152,13 @@ def _timeout(value):
 
 JOB_GROUPS = {"gsc": "scripts", "ff": "fastfiles", "project": "projects", "module": "compositions", "audio": "media",
               "image": "media", "lua": "media", "model": "models", "weapon": "weapons"}
+# Single actions that are jobs inside a group whose other actions are not (registry add|list|search|show
+# take no --output; registry baseline writes a report and a receipt into a new directory).
+JOB_ACTIONS = {("registry", "baseline"): "baseline"}
+
+
+def is_job(group: str, action: str) -> bool:
+    return group in JOB_GROUPS or (group, action) in JOB_ACTIONS
 
 
 def run_job(args, argv: list[str]) -> dict:
@@ -159,7 +170,8 @@ def run_job(args, argv: list[str]) -> dict:
     route = find(args.group, args.action)
     if route.requires_windows and not os.environ.get("PAT_DEV_UNGATED"):
         platform.require_windows(f"{args.group} {args.action}")
-    module = import_module(f".dev.{JOB_GROUPS[args.group]}", __package__)
+    owner = JOB_ACTIONS.get((args.group, args.action), JOB_GROUPS.get(args.group))
+    module = import_module(f".dev.{owner}", __package__)
     job = Job(Path(args.output), f"{args.group} {args.action}", argv, timeout=max(args.timeout, 60) * 4)
     try:
         result = module.execute(args, job)
@@ -258,7 +270,7 @@ def run(argv: list[str]) -> dict:
 
         return success(command, builtin.install(plan=args.plan, only=args.only))
 
-    if group in JOB_GROUPS:
+    if is_job(group, getattr(args, "action", "")):
         return run_job(args, argv)
 
     if group == "game":
