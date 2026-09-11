@@ -1,42 +1,57 @@
-"""``module plan|build``: several declared modules composed into one mod on a named base.
+"""``module plan|build|declare``: declared modules composed into one mod on a named base.
 
-A module declaration (``module.json``) sits beside a module's ``project.json`` recipe and says
-what the module is and needs. A composition recipe (``composition.json``) names a base, a map
-and the module directories to compose. ``plan`` resolves the composition (dependency order,
-conflicts, base and map fit, target collisions, resource budget) and hashes every input without
-running a backend. ``build`` compiles every module's scripts, stages every asset, links one
-``mod.ff`` as zone ``mod``, reads it back and byte-compares every rawfile, exactly as
-``project build`` does for one recipe. Both formats are specified in ``docs/MODULES.md``.
+A module declaration (``module.json``) sits beside a module's payload and says what the module is
+and needs. The payload is either a ``project.json`` recipe (scripts and loose assets the toolkit
+compiles and links) or a seed (an already-linked ``mod.ff`` with a manifest, see ``seeds.py``).
+A composition recipe (``composition.json``) names a base, a map and the members to compose:
+module directories, other compositions (a pack used as a base for a bigger pack), or references
+to published modules pinned at a commit. ``plan`` resolves the composition (dependency order,
+conflicts, base and map fit, budget) and lists every collision as a decision for the agent to
+record; ``build`` compiles every recipe module's scripts, links one ``mod.ff`` as zone ``mod``
+against every seed and load, reads it back and byte-compares every rawfile. Both formats are
+specified in ``docs/MODULES.md``.
 
 Module declaration (``module.json``, schema 1)::
 
     {
-      "schema": 1, "id": "hello_zm", "version": "0.1.0", "title": "hello-zm",
-      "category": "scripts", "recipe": "project.json",
-      "bases": ["stock"], "maps": ["*"],
+      "schema": 1, "id": "penetrator", "version": "0.1.0", "title": "The Penetrator",
+      "category": "weapons", "kind": "melee", "tags": ["saints-row"],
+      "seed": "seed.json",                       # or "recipe": "project.json"
+      "bases": ["b2"], "maps": ["zm_factory"],
       "dependencies": [], "conflicts": [],
-      "resource_contract": {"threads": 1, "entities": 0, "hud": 0, "network_fields": 0},
-      "menu_route": "none; prints on spawn",
+      "provides": {"weapons": ["halo_penetrator_zm"]},
+      "resource_contract": {"threads": 0, "entities": 0, "hud": 0, "network_fields": 0},
+      "menu_route": "Equipment & melee > Melee > The Penetrator",
+      "distribution": "seed",
       "source": {"repository": "https://github.com/<owner>/<repo>", "commit": "<40 hex>"}
     }
 
 Composition recipe (``composition.json``, schema 1)::
 
     {
-      "schema": 1, "name": "stock_hello_pack", "base": "stock", "map": "zm_transit",
-      "modules": ["../hello-zm", "../hello-zm-two"], "loads": [],
-      "budget": {"threads": 4, "entities": 0, "hud": 0, "network_fields": 0}
+      "schema": 1, "name": "b2_enhanced_penetrator_pack", "base": "b2", "map": "zm_factory",
+      "modules": [
+        {"path": "../dlc5-enhanced", "role": "base"},
+        "../penetrator",
+        {"name": "owner/round_announcer", "commit": "<40 hex>", "path": "../fetched/round_announcer"}
+      ],
+      "loads": ["../base/zone/common_zm.ff"],
+      "budget": {"threads": 4, "entities": 0, "hud": 0, "network_fields": 0},
+      "decisions": [{"collision": "scripts/zm/hud.gsc", "owner": "dlc5_enhanced", "reason": "the pack's HUD wins"}]
     }
 """
 from __future__ import annotations
 
 import json
 import re
+import shutil
 from pathlib import Path
+from types import SimpleNamespace
 
-from ..core.errors import INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, Failure
+from ..core.errors import BACKEND_FAILED, INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, Failure
 from ..core.jobs import Job
-from . import projects
+from ..core.receipts import sha256_file
+from . import fastfiles, projects, scripts, seeds
 from .backends import executable
 
 ID = re.compile(r"^[a-z0-9_]{1,64}\Z")
@@ -44,23 +59,49 @@ BASE = re.compile(r"^[a-z0-9]{1,16}\Z")
 MAP = re.compile(r"^[a-z0-9_]{1,64}\Z")
 VERSION = re.compile(r"^[0-9A-Za-z][0-9A-Za-z.+-]{0,31}\Z")
 CATEGORY = re.compile(r"^[a-z][a-z0-9-]{0,31}\Z")
+TAG = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}\Z")
 COMMIT = re.compile(r"^[0-9a-f]{40}\Z")
+NAME_REF = re.compile(r"^[a-z0-9][a-z0-9-]{0,38}/[a-z0-9_]{1,64}\Z")
 STAGES = ("test", "pack", "pub")
 CONTRACT_FIELDS = ("threads", "entities", "hud", "network_fields")
+# The taxonomy people browse by. `category` is the shelf; `kind` narrows it; `tags` are free
+# lowercase words (a source game, a series, a theme). None of them affects resolution.
+CATEGORIES = ("weapons", "perks", "gobblegums", "powerups", "equipment", "bosses", "companions", "maps", "ui",
+              "core", "scripts", "audio", "tooling", "pack", "module")
+KINDS = {"weapons": ("wonder", "firearm", "melee", "launcher", "special"), "perks": ("perk", "machine"),
+         "gobblegums": ("gum", "machine"), "powerups": ("powerup",), "equipment": ("tactical", "lethal", "buildable", "shield"),
+         "bosses": ("boss", "special-round"), "companions": ("companion",), "maps": ("map", "patch"),
+         "ui": ("hud", "menu"), "core": ("inventory", "registry", "adapter"), "scripts": ("script",),
+         "audio": ("bank", "music"), "tooling": ("tool",), "pack": ("pack",), "module": ()}
+DISTRIBUTIONS = ("source", "seed", "private")
+PROVIDES_KINDS = ("weapons", "perks", "gobblegums", "powerups", "equipment", "localize", "soundbanks", "scripts", "models", "effects")
 MAX_MODULES = 32
 MAX_LIST = 64
+MAX_TAGS = 16
 MAX_CONTRACT = 100_000
+MAX_NESTING = 4
 
 
 def add_parser(sub, common):
-    p = sub.add_parser("module", help="Declared modules composed into one mod on a named base: plan, build")
+    p = sub.add_parser("module", help="Declared modules composed into one mod on a named base: plan, build, declare")
     actions = p.add_subparsers(dest="action", required=True)
-    for action, help_text in (("plan", "Resolve a composition and hash its inputs; runs no backend"),
-                              ("build", "Compile, link, read back and compare every module into one mod.ff")):
+    for action, help_text in (("plan", "Resolve a composition, list collisions as decisions and hash its inputs; runs no backend"),
+                              ("build", "Compile, link against seeds and loads, read back and compare every module into one mod.ff")):
         q = actions.add_parser(action, help=help_text)
         q.add_argument("composition", help="Path to composition.json")
         common(q)
+    q = actions.add_parser("declare", help="Read a prebuilt mod.ff back and draft its seed manifest and declaration")
+    q.add_argument("package", help="Path to a mod.ff (soundbanks beside it are hashed too)")
+    q.add_argument("--load", action="append", default=[], help="Base fastfile the package references; repeat as needed")
+    q.add_argument("--id", help="Module id for the draft declaration")
+    q.add_argument("--title", help="Display title for the draft")
+    q.add_argument("--category", help="Category for the draft (weapons, perks, ...)")
+    q.add_argument("--base", help="Base token the package was built and tested on")
+    q.add_argument("--map", help="Map id the package was tested on")
+    common(q)
 
+
+# ----- declarations ---------------------------------------------------------------------
 
 def _text(value, what: str, limit: int) -> str:
     if not isinstance(value, str) or not value.strip() or len(value) > limit:
@@ -95,21 +136,50 @@ def _contract(value, what: str) -> dict:
     return rows
 
 
-def _module_dir(text: str, base: Path, job: Job) -> Path:
-    """A module directory named in a composition: relative, forward slashes, may live beside the
+def _provides(value, owner: str) -> dict:
+    if value is None:
+        return {}
+    if not isinstance(value, dict) or set(value) - set(PROVIDES_KINDS):
+        raise Failure(INPUT_INVALID, f"{owner}: provides maps kinds {list(PROVIDES_KINDS)} to lists of names")
+    out = {}
+    for kind, names in value.items():
+        if not isinstance(names, list) or len(names) > 512 or not all(isinstance(n, str) and 0 < len(n) <= 128 for n in names):
+            raise Failure(INPUT_INVALID, f"{owner}: provides.{kind} is a list of names")
+        if len(set(names)) != len(names):
+            raise Failure(INPUT_INVALID, f"{owner}: duplicate names under provides.{kind}")
+        out[kind] = list(names)
+    return out
+
+
+def _relative_dir(text: str, base: Path, job: Job, what: str) -> Path:
+    """A directory named in a composition: relative, forward slashes, may live beside the
     composition (``../hello-zm``), never absolute, never a link, never inside the job output."""
     if not isinstance(text, str) or not text or len(text) > 4096 or "\\" in text or text != text.strip():
-        raise Failure(INPUT_INVALID, "Module paths are forward-slash relative paths")
+        raise Failure(INPUT_INVALID, f"{what} paths are forward-slash relative paths")
     p = Path(text)
     if p.is_absolute() or not p.parts:
-        raise Failure(INPUT_INVALID, f"Module paths are relative to the composition directory: {text}")
+        raise Failure(INPUT_INVALID, f"{what} paths are relative to the composition directory: {text}")
     full = base / p
     if full.is_symlink() or not full.is_dir():
-        raise Failure(INPUT_MISSING, f"Module directory is missing or is a link: {text}")
+        raise Failure(INPUT_MISSING, f"{what} directory is missing or is a link: {text}")
     full = full.resolve()
     if full.is_relative_to(job.root):
-        raise Failure(INPUT_INVALID, "Modules must live outside the job's output directory")
+        raise Failure(INPUT_INVALID, f"{what} directories must live outside the job's output directory")
     return full
+
+
+def _relative_file(text: str, base: Path, job: Job, what: str) -> Path:
+    """A file named in a composition (a base fastfile to load): relative like a member directory,
+    so a pack may point at zones kept beside it (``../base/common_zm.ff``), never absolute or a link."""
+    if not isinstance(text, str) or not text or len(text) > 4096 or "\\" in text or text != text.strip():
+        raise Failure(INPUT_INVALID, f"{what} paths are forward-slash relative paths")
+    p = Path(text)
+    if p.is_absolute() or not p.parts:
+        raise Failure(INPUT_INVALID, f"{what} paths are relative to the composition directory: {text}")
+    full = base / p
+    if full.is_symlink() or not full.is_file():
+        raise Failure(INPUT_MISSING, f"{what} file is missing or is a link: {text}")
+    return job.input(full)
 
 
 def load_declaration(directory: Path, job: Job) -> dict:
@@ -122,9 +192,9 @@ def load_declaration(directory: Path, job: Job) -> dict:
     except ValueError as exc:
         raise Failure(INPUT_INVALID, f"module.json is not valid JSON: {src}") from exc
     where = f"module.json in {directory.name}"
-    projects._fields(data, {"schema", "id", "version", "title", "category", "recipe", "bases", "maps", "dependencies",
-                            "conflicts", "resource_contract", "menu_route", "source"},
-                     {"schema", "id", "version", "recipe", "bases", "maps"}, where)
+    projects._fields(data, {"schema", "id", "version", "title", "category", "kind", "tags", "recipe", "seed", "bases", "maps",
+                            "dependencies", "conflicts", "provides", "resource_contract", "menu_route", "distribution", "source"},
+                     {"schema", "id", "version", "bases", "maps"}, where)
     if data["schema"] != 1:
         raise Failure(INPUT_INVALID, f"{where}: expected schema 1")
     mid = data["id"]
@@ -136,9 +206,34 @@ def load_declaration(directory: Path, job: Job) -> dict:
     category = data.get("category", "module")
     if not isinstance(category, str) or not CATEGORY.match(category):
         raise Failure(INPUT_INVALID, f"{mid}: category is a lowercase identifier such as weapons, perks or scripts")
-    recipe = projects._rel(_text(data["recipe"], f"{mid}: recipe", 4096), directory)
-    if recipe.is_symlink() or not recipe.is_file():
-        raise Failure(INPUT_MISSING, f"{mid}: recipe is missing: {data['recipe']}")
+    kind = data.get("kind")
+    if kind is not None and (not isinstance(kind, str) or not CATEGORY.match(kind)):
+        raise Failure(INPUT_INVALID, f"{mid}: kind is a lowercase identifier that narrows the category (melee, wonder, perk, ...)")
+    if kind is not None and category in KINDS and KINDS[category] and kind not in KINDS[category]:
+        raise Failure(INPUT_INVALID, f"{mid}: kind {kind!r} is not one of {list(KINDS[category])} for category {category!r}",
+                      "Use a listed kind so packs and catalogs group modules the same way, or drop kind and keep only tags.")
+    tags = data.get("tags", [])
+    if not isinstance(tags, list) or len(tags) > MAX_TAGS or not all(isinstance(t, str) and TAG.match(t) for t in tags) \
+            or len(set(tags)) != len(tags):
+        raise Failure(INPUT_INVALID, f"{mid}: tags is a list of at most {MAX_TAGS} distinct lowercase words (a source game, a series, a theme)")
+    if ("recipe" in data) == ("seed" in data):
+        raise Failure(INPUT_INVALID, f"{mid}: a declaration names exactly one payload: recipe (project.json) or seed (seed.json)")
+    recipe = seed = None
+    if "recipe" in data:
+        recipe = projects._rel(_text(data["recipe"], f"{mid}: recipe", 4096), directory)
+        if recipe.is_symlink() or not recipe.is_file():
+            raise Failure(INPUT_MISSING, f"{mid}: recipe is missing: {data['recipe']}")
+    distribution = data.get("distribution", "seed" if "seed" in data else "source")
+    if distribution not in DISTRIBUTIONS:
+        raise Failure(INPUT_INVALID, f"{mid}: distribution is one of {list(DISTRIBUTIONS)}")
+    if "seed" in data:
+        seed_rel = _text(data["seed"], f"{mid}: seed", 4096)
+        if distribution == "private" and not (directory / seed_rel).is_file():
+            seed = {"private": True, "relative": seed_rel}
+        else:
+            seed = seeds.load_manifest(directory, seed_rel, job, mid)
+    elif distribution == "private":
+        raise Failure(INPUT_INVALID, f"{mid}: distribution private applies to a seed whose package is not published")
     bases = data["bases"]
     if not isinstance(bases, list) or not bases or len(bases) > MAX_LIST or len(set(bases)) != len(bases) \
             or not all(isinstance(b, str) and BASE.match(b) for b in bases):
@@ -158,21 +253,63 @@ def load_declaration(directory: Path, job: Job) -> dict:
             raise Failure(INPUT_INVALID, f"{mid}: source.repository is an https URL")
         if "commit" in source and (not isinstance(source["commit"], str) or not COMMIT.match(source["commit"])):
             raise Failure(INPUT_INVALID, f"{mid}: source.commit is a 40-character lowercase hex commit id")
-    return {"id": mid, "version": data["version"], "title": title, "category": category, "directory": directory,
-            "recipe": recipe, "bases": list(bases), "maps": list(maps),
+    provides = _provides(data.get("provides"), mid)
+    if seed and not seed.get("private"):
+        # The manifest is the fact; a declaration may narrow it, never contradict it.
+        for pkind, names in provides.items():
+            listed = set(seed["provides"].get(pkind, []))
+            if listed and not set(names) <= listed:
+                raise Failure(INPUT_INVALID, f"{mid}: provides.{pkind} names {sorted(set(names) - listed)} which the seed manifest does not list")
+        for pkind, names in seed["provides"].items():
+            provides.setdefault(pkind, list(names))
+    return {"id": mid, "version": data["version"], "title": title, "category": category, "kind": kind, "tags": list(tags),
+            "directory": directory, "recipe": recipe, "seed": seed, "distribution": distribution,
+            "bases": list(bases), "maps": list(maps),
             "dependencies": _ids(data.get("dependencies", []), "dependencies", mid),
             "conflicts": _ids(data.get("conflicts", []), "conflicts", mid),
+            "provides": provides,
             "resource_contract": _contract(data.get("resource_contract"), f"{mid}: resource_contract"),
             "menu_route": menu_route, "source": source, "declaration": src}
 
 
-def load_composition(path: Path, job: Job) -> dict:
+# ----- compositions ----------------------------------------------------------------------
+
+def _decisions(value, comp_name: str) -> list[dict]:
+    if value is None:
+        return []
+    if not isinstance(value, list) or len(value) > 256:
+        raise Failure(INPUT_INVALID, f"{comp_name}: decisions is a list of at most 256 recorded decisions")
+    rows = []
+    seen = set()
+    for row in value:
+        projects._fields(row, {"collision", "owner", "reason"}, {"collision", "owner"}, f"{comp_name}: decision")
+        collision = _text(row["collision"], f"{comp_name}: decision.collision", 512)
+        owner = row["owner"]
+        if not isinstance(owner, str) or not ID.match(owner):
+            raise Failure(INPUT_INVALID, f"{comp_name}: decision.owner is a module id in the composition")
+        reason = row.get("reason", "")
+        if not isinstance(reason, str) or len(reason) > 400:
+            raise Failure(INPUT_INVALID, f"{comp_name}: decision.reason is at most 400 characters")
+        key = collision.casefold()
+        if key in seen:
+            raise Failure(INPUT_INVALID, f"{comp_name}: two decisions for the same collision: {collision}")
+        seen.add(key)
+        rows.append({"collision": collision, "owner": owner, "reason": reason})
+    return rows
+
+
+def load_composition(path: Path, job: Job, depth: int = 0, seen: tuple = ()) -> dict:
     src = job.input(path, limit=256 * 1024)
+    key = str(src.resolve())
+    if key in seen:
+        raise Failure(INPUT_INVALID, f"Compositions include each other in a cycle: {src.name}")
+    if depth > MAX_NESTING:
+        raise Failure(INPUT_LIMIT, f"Compositions nest at most {MAX_NESTING} deep")
     try:
         data = json.loads(src.read_text(encoding="utf-8"))
     except ValueError as exc:
         raise Failure(INPUT_INVALID, f"Composition is not valid JSON: {src}") from exc
-    projects._fields(data, {"schema", "name", "base", "map", "modules", "loads", "budget"},
+    projects._fields(data, {"schema", "name", "base", "map", "modules", "loads", "budget", "decisions", "title", "tags", "zone_header"},
                      {"schema", "name", "base", "map", "modules"}, "composition")
     if data["schema"] != 1:
         raise Failure(INPUT_INVALID, "Expected a schema 1 composition")
@@ -186,30 +323,108 @@ def load_composition(path: Path, job: Job) -> dict:
     if not isinstance(name, str) or not projects.NAME.match(name) \
             or not re.fullmatch(rf"{re.escape(base)}_[a-z0-9_]+_(?:{'|'.join(STAGES)})", name):
         raise Failure(INPUT_INVALID, f"Composition name follows <base>_<feature>_<stage> with base {base!r} and stage test, pack or pub")
+    title = data.get("title", name)
+    if not isinstance(title, str) or not title.strip() or len(title) > 120:
+        raise Failure(INPUT_INVALID, "Composition title is at most 120 characters")
+    tags = data.get("tags", [])
+    if not isinstance(tags, list) or len(tags) > MAX_TAGS or not all(isinstance(t, str) and TAG.match(t) for t in tags):
+        raise Failure(INPUT_INVALID, f"Composition tags is a list of at most {MAX_TAGS} lowercase words")
     entries = data["modules"]
     if not isinstance(entries, list) or not entries or len(entries) > MAX_MODULES:
-        raise Failure(INPUT_INVALID, f"modules lists 1 to {MAX_MODULES} module directories")
-    directories = []
-    for text in entries:
-        directory = _module_dir(text, src.parent, job)
+        raise Failure(INPUT_INVALID, f"modules lists 1 to {MAX_MODULES} members")
+    members = []
+    directories: list[Path] = []
+    base_members = 0
+    for entry in entries:
+        row = {"path": entry} if isinstance(entry, str) else entry
+        projects._fields(row, {"path", "name", "commit", "role"}, set(), "composition member")
+        role = row.get("role", "module")
+        if role not in ("module", "base"):
+            raise Failure(INPUT_INVALID, "A member's role is module or base")
+        if "name" in row:
+            ref = row["name"]
+            if not isinstance(ref, str) or not NAME_REF.match(ref):
+                raise Failure(INPUT_INVALID, f"A reference name is <github-owner>/<module id>: {ref!r}")
+            if not isinstance(row.get("commit"), str) or not COMMIT.match(row["commit"]):
+                raise Failure(INPUT_INVALID, f"Reference {ref} needs a 40-hex commit; a pack pins what it was built from")
+            if "path" not in row:
+                raise Failure(INPUT_MISSING, f"Reference {ref} is not fetched: add its local path once module fetch has placed it",
+                              "pat module fetch is the route that resolves a reference into a directory; until then name the fetched path here.")
+        elif "commit" in row:
+            raise Failure(INPUT_INVALID, "commit belongs to a reference (with name); a local path member has none")
+        if "path" not in row:
+            raise Failure(INPUT_INVALID, "Every member names a path")
+        directory = _relative_dir(row["path"], src.parent, job, "Member")
         if directory in directories:
-            raise Failure(INPUT_INVALID, f"Module directory listed twice: {text}")
+            raise Failure(INPUT_INVALID, f"Member directory listed twice: {row['path']}")
         directories.append(directory)
+        nested = directory / "composition.json"
+        if (directory / "module.json").is_file():
+            member = {"kind": "module", "directory": directory, "role": role, "path": row["path"],
+                      "reference": {"name": row["name"], "commit": row["commit"]} if "name" in row else None}
+        elif nested.is_file() and not nested.is_symlink():
+            inner = load_composition(nested, job, depth + 1, seen + (key,))
+            if inner["base"] != base:
+                raise Failure(INPUT_INVALID, f"Nested composition {inner['name']} is for base {inner['base']!r}, not {base!r}")
+            if inner["map"] != map_id:
+                raise Failure(INPUT_INVALID, f"Nested composition {inner['name']} is for map {inner['map']!r}, not {map_id!r}")
+            member = {"kind": "composition", "directory": directory, "role": role, "path": row["path"], "composition": inner,
+                      "reference": {"name": row["name"], "commit": row["commit"]} if "name" in row else None}
+        else:
+            raise Failure(INPUT_MISSING, f"Member directory has neither module.json nor composition.json: {row['path']}")
+        if role == "base":
+            base_members += 1
+        members.append(member)
+    if base_members > 1:
+        raise Failure(INPUT_INVALID, "A composition names at most one member with role base",
+                      "The base is the pack everything else attaches to; put a second pack in as an ordinary member or nest it.")
     load_rows = data.get("loads", [])
     if not isinstance(load_rows, list) or len(load_rows) > projects.MAX_LOADS:
         raise Failure(INPUT_INVALID, f"loads is a list of at most {projects.MAX_LOADS} fastfiles")
-    loads = [job.input(projects._rel(text, src.parent)) for text in load_rows]
-    return {"name": name, "base": base, "map": map_id, "directories": directories, "entries": list(entries),
-            "loads": loads, "budget": _contract(data["budget"], "budget") if "budget" in data else None,
-            "source": src}
+    loads = [_relative_file(text, src.parent, job, "Load") for text in load_rows]
+    header = data.get("zone_header", [])
+    if not isinstance(header, list) or len(header) > 32 or not all(isinstance(h, str) and re.fullmatch(r">[A-Za-z0-9_.@]+,[A-Za-z0-9_.-]{0,64}", h) for h in header):
+        raise Failure(INPUT_INVALID, "zone_header is a list of at most 32 linker metadata lines such as >level.ipak_read,common_zm")
+    return {"name": name, "title": title, "tags": list(tags), "base": base, "map": map_id, "members": members,
+            "zone_header": list(header), "loads": loads, "budget": _contract(data["budget"], "budget") if "budget" in data else None,
+            "decisions": _decisions(data.get("decisions"), name), "source": src}
+
+
+def flatten(comp: dict, job: Job) -> tuple[list[dict], list[Path], list[dict], list[str]]:
+    """Every module in this composition and its nested compositions, with the loads and
+    decisions gathered along the way. A nested composition's decisions apply to its own
+    collisions; the outer recipe records the ones between its members."""
+    modules: list[dict] = []
+    loads: list[Path] = list(comp["loads"])
+    decisions: list[dict] = list(comp["decisions"])
+    header: list[str] = list(comp["zone_header"])
+    for member in comp["members"]:
+        if member["kind"] == "module":
+            declaration = load_declaration(member["directory"], job)
+            declaration["role"] = member["role"]
+            declaration["reference"] = member["reference"]
+            declaration["via"] = comp["name"]
+            modules.append(declaration)
+        else:
+            inner_modules, inner_loads, inner_decisions, inner_header = flatten(member["composition"], job)
+            header += [h for h in inner_header if h not in header]
+            for declaration in inner_modules:
+                if member["role"] == "base":
+                    declaration["role"] = "base"
+                modules.append(declaration)
+            loads += [p for p in inner_loads if p not in loads]
+            decisions += inner_decisions
+    return modules, loads, decisions, header
 
 
 def _order(modules: list[dict]) -> list[str]:
-    """Dependency order (a module after everything it depends on); refuses cycles."""
+    """Dependency order (a module after everything it depends on); refuses cycles. Base-role
+    members sort first among equals so the base's assets are staged before attachments."""
     pending = {m["id"]: set(m["dependencies"]) for m in modules}
+    rank = {m["id"]: 0 if m.get("role") == "base" else 1 for m in modules}
     order: list[str] = []
     while pending:
-        ready = sorted(mid for mid, deps in pending.items() if not deps - set(order))
+        ready = sorted((mid for mid, deps in pending.items() if not deps - set(order)), key=lambda mid: (rank[mid], mid))
         if not ready:
             raise Failure(INPUT_INVALID, f"Dependency cycle among modules: {sorted(pending)}")
         for mid in ready:
@@ -222,7 +437,8 @@ def resolve(comp: dict, modules: list[dict]) -> dict:
     ids = [m["id"] for m in modules]
     if len(set(ids)) != len(ids):
         duplicates = sorted({i for i in ids if ids.count(i) > 1})
-        raise Failure(INPUT_INVALID, f"Two module directories declare the same id: {duplicates}")
+        raise Failure(INPUT_INVALID, f"Two members declare the same id: {duplicates}",
+                      "A module appears once in a pack, including through nested compositions.")
     known = set(ids)
     for m in modules:
         for dep in m["dependencies"]:
@@ -236,7 +452,11 @@ def resolve(comp: dict, modules: list[dict]) -> dict:
             raise Failure(INPUT_INVALID, f"{m['id']} is declared for bases {m['bases']}, not for {comp['base']!r}",
                           "Build the module on a base it declares, or extend its declaration after testing it there.")
         if "*" not in m["maps"] and comp["map"] not in m["maps"]:
-            raise Failure(INPUT_INVALID, f"{m['id']} is declared for maps {m['maps']}, not for {comp['map']!r}")
+            raise Failure(INPUT_INVALID, f"{m['id']} is declared for maps {m['maps']}, not for {comp['map']!r}",
+                          "Qualify the module on that map first (build alone, load, play, record the verdict), then extend maps.")
+        if m["seed"] and m["seed"].get("private"):
+            raise Failure(INPUT_MISSING, f"{m['id']} is distribution private and its seed package is not on this machine",
+                          "Others can plan around a private module; building needs the package beside its manifest.")
     order = _order(modules)
     totals = {field: sum(m["resource_contract"][field] for m in modules) for field in CONTRACT_FIELDS}
     if comp["budget"] is not None:
@@ -247,16 +467,65 @@ def resolve(comp: dict, modules: list[dict]) -> dict:
     return {"order": order, "resource_totals": totals}
 
 
-def _targets(modules: list[dict], loaded: dict[str, tuple]) -> None:
-    owners: dict[str, str] = {}
+def collisions(modules: list[dict], loaded: dict[str, tuple], decisions: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Every place two modules would own the same thing, as decisions. Identical bytes for the
+    same file dedupe with no decision; anything else needs an owner recorded in the recipe.
+    Returns (decided, undecided)."""
+    file_owners: dict[str, list[tuple[str, str]]] = {}
     for m in modules:
-        _, compiled, loose, _ = loaded[m["id"]]
-        for target in [t for _, t, _ in compiled] + [t for _, t, _, _ in loose]:
-            key = target.as_posix().casefold()
-            if key in owners:
-                raise Failure(INPUT_INVALID, f"{owners[key]} and {m['id']} both produce {target.as_posix()}",
-                              "Two modules cannot ship the same file; rename one target or drop one module.")
-            owners[key] = m["id"]
+        if m["recipe"] is not None:
+            _, compiled, loose, _ = loaded[m["id"]]
+            for source, target, _ in compiled:
+                file_owners.setdefault(target.as_posix().casefold(), []).append((m["id"], sha256_file(source)))
+            for source, target, _, _ in loose:
+                file_owners.setdefault(target.as_posix().casefold(), []).append((m["id"], sha256_file(source)))
+        elif m["seed"] and not m["seed"].get("private"):
+            for row in m["seed"]["embedded"]:
+                kind, name = row.split(",", 1)
+                if kind == "rawfile":
+                    file_owners.setdefault(name.casefold(), []).append((m["id"], "seed:" + m["seed"]["files"]["mod.ff"].name))
+    name_owners: dict[str, list[str]] = {}
+    for m in modules:
+        for pkind, names in m["provides"].items():
+            for name in names:
+                name_owners.setdefault(f"{pkind}:{name}", []).append(m["id"])
+        if m["seed"] and not m["seed"].get("private"):
+            for row in m["seed"]["embedded"]:
+                kind, name = row.split(",", 1)
+                if kind in ("weapon", "soundbank", "xmodel", "xanim", "material", "fx", "image"):
+                    name_owners.setdefault(f"asset:{row}", []).append(m["id"])
+    recorded = {d["collision"].casefold(): d for d in decisions}
+    decided, undecided = [], []
+    for target, owners in sorted(file_owners.items()):
+        if len(owners) < 2:
+            continue
+        ids = [o for o, _ in owners]
+        digests = {d for _, d in owners}
+        if len(digests) == 1 and not any(d.startswith("seed:") for d in digests):
+            decided.append({"collision": target, "kind": "file", "modules": ids, "resolution": "identical bytes; one copy is packed", "owner": ids[0]})
+            continue
+        decision = recorded.get(target)
+        row = {"collision": target, "kind": "file", "modules": ids}
+        if decision and decision["owner"] in ids:
+            decided.append({**row, "resolution": "recorded decision", "owner": decision["owner"], "reason": decision["reason"]})
+        elif decision:
+            raise Failure(INPUT_INVALID, f"Decision for {target} names {decision['owner']}, which is not one of {ids}")
+        else:
+            undecided.append({**row, "resolution": "undecided", "choices": ids,
+                              "how": "record {\"collision\": \"" + target + "\", \"owner\": \"<one of the modules>\", \"reason\": \"...\"} under decisions in the composition, or rename the target in one module"})
+    for key, ids in sorted(name_owners.items()):
+        if len(ids) < 2:
+            continue
+        decision = recorded.get(key.casefold())
+        row = {"collision": key, "kind": "name", "modules": ids}
+        if decision and decision["owner"] in ids:
+            decided.append({**row, "resolution": "recorded decision", "owner": decision["owner"], "reason": decision["reason"]})
+        elif decision:
+            raise Failure(INPUT_INVALID, f"Decision for {key} names {decision['owner']}, which is not one of {ids}")
+        else:
+            undecided.append({**row, "resolution": "undecided", "choices": ids,
+                              "how": "two modules register the same " + key.split(":", 1)[0] + "; keep one, or record an owner under decisions and drop the other's registration"})
+    return decided, undecided
 
 
 def _backends(compiled: list) -> list[dict]:
@@ -269,50 +538,202 @@ def _backends(compiled: list) -> list[dict]:
     return checks
 
 
-def execute(args, job: Job) -> dict:
-    comp = load_composition(Path(args.composition), job)
-    modules = [load_declaration(d, job) for d in comp["directories"]]
-    resolved = resolve(comp, modules)
-    loaded = {m["id"]: projects.load_recipe(m["recipe"], job) for m in modules}
-    _targets(modules, loaded)
+def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
     by_id = {m["id"]: m for m in modules}
-    compiled, loose, loads = [], [], list(comp["loads"])
+    rows = []
+    for mid in order:
+        m = by_id[mid]
+        row = {"id": mid, "version": m["version"], "title": m["title"], "category": m["category"], "kind": m["kind"],
+               "tags": m["tags"], "role": m.get("role", "module"), "via": m.get("via"), "directory": str(m["directory"]),
+               "declaration_sha256": job.inputs[str(m["declaration"])], "payload": "seed" if m["seed"] else "recipe",
+               "distribution": m["distribution"], "dependencies": m["dependencies"], "conflicts": m["conflicts"],
+               "bases": m["bases"], "maps": m["maps"], "provides": m["provides"], "resource_contract": m["resource_contract"],
+               "menu_route": m["menu_route"], "source": m["source"], "reference": m.get("reference")}
+        if m["recipe"] is not None:
+            row["recipe_sha256"] = job.inputs[str(m["recipe"].resolve())]
+        else:
+            row["seed_sha256"] = m["seed"]["files"]["mod.ff"] and job.inputs[str(m["seed"]["package"].resolve())]
+            row["seed_manifest_sha256"] = job.inputs[str(m["seed"]["manifest"])]
+            row["seed_roots"] = len(m["seed"]["roots"])
+        rows.append(row)
+    return rows
+
+
+def execute(args, job: Job) -> dict:
+    if args.action == "declare":
+        return seeds.declare(Path(args.package).expanduser(), args, job)
+    comp = load_composition(Path(args.composition), job)
+    modules, loads, decisions, header = flatten(comp, job)
+    resolved = resolve(comp, modules)
+    loaded = {m["id"]: projects.load_recipe(m["recipe"], job) for m in modules if m["recipe"] is not None}
+    by_id = {m["id"]: m for m in modules}
+    compiled, loose = [], []
     for mid in resolved["order"]:
-        _, c, l, extra_loads = loaded[mid]
-        compiled += c
-        loose += l
-        loads += [p for p in extra_loads if p not in loads]
-    if len(compiled) > projects.MAX_SCRIPTS or len(loose) > projects.MAX_ASSETS or len(loads) > projects.MAX_LOADS:
-        raise Failure(INPUT_LIMIT, f"A composition holds at most {projects.MAX_SCRIPTS} scripts, {projects.MAX_ASSETS} assets and {projects.MAX_LOADS} loads in total")
+        if mid in loaded:
+            _, c, l, extra_loads = loaded[mid]
+            compiled += c
+            loose += l
+            loads += [p for p in extra_loads if p not in loads]
+    seed_modules = [by_id[mid] for mid in resolved["order"] if by_id[mid]["seed"]]
+    if len(compiled) > projects.MAX_SCRIPTS or len(loose) > projects.MAX_ASSETS or len(loads) + len(seed_modules) > projects.MAX_LOADS:
+        raise Failure(INPUT_LIMIT, f"A composition holds at most {projects.MAX_SCRIPTS} scripts, {projects.MAX_ASSETS} assets and {projects.MAX_LOADS} loads (seeds count as loads)")
+    decided, undecided = collisions(modules, loaded, decisions)
     checks = _backends(compiled)
-    rows = [{"id": mid, "version": by_id[mid]["version"], "title": by_id[mid]["title"], "category": by_id[mid]["category"],
-             "directory": str(by_id[mid]["directory"]), "declaration_sha256": job.inputs[str(by_id[mid]["declaration"])],
-             "recipe_sha256": job.inputs[str(by_id[mid]["recipe"].resolve())],
-             "dependencies": by_id[mid]["dependencies"], "conflicts": by_id[mid]["conflicts"],
-             "bases": by_id[mid]["bases"], "maps": by_id[mid]["maps"], "resource_contract": by_id[mid]["resource_contract"],
-             "menu_route": by_id[mid]["menu_route"], "source": by_id[mid]["source"]}
-            for mid in resolved["order"]]
+    rows = _plan_rows(modules, resolved["order"], job)
+    base_ids = [r["id"] for r in rows if r["role"] == "base"]
     plan = {
-        "schema_version": 1, "name": comp["name"], "base": comp["base"], "map": comp["map"], "game": "t6", "mode": "zm",
+        "schema_version": 1, "name": comp["name"], "title": comp["title"], "tags": comp["tags"], "base": comp["base"],
+        "map": comp["map"], "game": "t6", "mode": "zm", "base_member": base_ids[0] if base_ids else None,
         "modules": rows, "order": resolved["order"],
         "scripts": [{"source": str(p), "target": t.as_posix(), "instance": i} for p, t, i in compiled],
         "assets": [{"source": str(p), "target": t.as_posix(), "type": k, "name": n} for p, t, k, n in loose],
-        "loads": [str(p) for p in loads],
+        "seeds": [{"id": m["id"], "package": str(m["seed"]["package"]), "roots": m["seed"]["roots"],
+                   "soundbanks": [n for n in m["seed"]["files"] if n != "mod.ff"],
+                   "strings": str(m["seed"]["strings"]) if m["seed"].get("strings") else None} for m in seed_modules],
+        "loads": [str(p) for p in loads], "zone_header": header,
         "resource_totals": resolved["resource_totals"], "budget": comp["budget"],
+        "decisions": decided, "undecided": undecided,
         "backends": checks, "backends_available": all(c["available"] for c in checks),
         "input_files": len(job.inputs),
-        "verification": "composition resolved (dependency order, conflicts, base and map fit, target collisions, resource budget); "
-                        "declarations, recipes and declared inputs hashed; backend presence checked; nothing compiled",
+        "verification": "composition resolved (dependency order, conflicts, base and map fit, budget); collisions listed as decisions; "
+                        "declarations, recipes, seeds and declared inputs hashed; backend presence checked; nothing compiled",
     }
     (job.root / "plan.json").write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
-    summary = {"plan": "plan.json", "name": comp["name"], "base": comp["base"], "map": comp["map"],
-               "modules": [{"id": r["id"], "version": r["version"], "order": i + 1} for i, r in enumerate(rows)],
+    summary = {"plan": "plan.json", "name": comp["name"], "title": comp["title"], "base": comp["base"], "map": comp["map"],
+               "base_member": plan["base_member"],
+               "modules": [{"id": r["id"], "version": r["version"], "order": i + 1, "payload": r["payload"], "role": r["role"]}
+                           for i, r in enumerate(rows)],
                "resource_totals": resolved["resource_totals"], "budget": comp["budget"],
-               "scripts": len(compiled), "assets": len(loose), "loads": len(loads)}
+               "scripts": len(compiled), "assets": len(loose), "seeds": len(seed_modules), "loads": len(loads),
+               "decisions": decided, "undecided": undecided}
     if args.action == "plan":
         return {**summary, "backends": checks, "backends_available": plan["backends_available"],
                 "input_files": plan["input_files"], "verification": plan["verification"]}
-    built = projects._build({"name": comp["name"]}, compiled, loose, loads, plan, args, job)
-    return {**built, **{k: v for k, v in summary.items() if k != "plan"},
-            "verification": "every module's scripts compiled, one mod.ff linked and read back, every rawfile byte-compared; "
-                            "the composition's fit and budget were checked from declarations, not measured in game"}
+    if undecided:
+        raise Failure(INPUT_INVALID, f"{len(undecided)} collision(s) have no recorded decision; nothing was built",
+                      "Read plan.json's undecided list, record an owner for each under decisions in the composition (or rename a target), then build.",
+                      undecided=undecided)
+    return _build_composition(comp, plan, compiled, loose, seed_modules, loads, decided, header, args, job)
+
+
+def _build_composition(comp: dict, plan: dict, compiled, loose, seed_modules, loads, decided, header, args, job: Job) -> dict:
+    missing = [c["id"] for c in plan["backends"] if not c["available"]]
+    if missing:
+        raise Failure("backend_unavailable", f"Required backends are not installed: {missing}", "Run: pat dev setup")
+    # Decided file collisions: only the owner's copy is staged.
+    losers = {(d["collision"], mid) for d in decided if d["kind"] == "file" for mid in d["modules"] if mid != d["owner"]}
+    owner_of = {d["collision"]: d["owner"] for d in decided if d["kind"] == "file"}
+    base = job.root / "project"
+    raw, zone_dir = base / "raw", base / "zone_source"
+    raw.mkdir(parents=True)
+    zone_dir.mkdir()
+    lines = ["> game,T6", "> name,mod", *header]
+    rawfiles = []
+    staged_targets: set[str] = set()
+    module_of_source = {}
+    for m in plan["modules"]:
+        module_of_source[m["id"]] = m["directory"]
+    def owner_for(target: str, source: Path) -> str | None:
+        for m in plan["modules"]:
+            if str(source).startswith(m["directory"]):
+                return m["id"]
+        return None
+    for index, (source, target, instance) in enumerate(compiled):
+        key = target.as_posix().casefold()
+        mid = owner_for(target.as_posix(), source)
+        if key in owner_of and owner_of[key] != mid:
+            continue
+        if key in staged_targets:
+            continue
+        child = Job(job.root / f"script-{index:03d}", "gsc compile", ["pat", "gsc", "compile", str(source)],
+                    timeout=max(1, int(job.deadline - __import__("time").monotonic())))
+        try:
+            result = scripts.execute(SimpleNamespace(action="compile", input=str(source), instance=instance,
+                                                     includes=str(source.parent), timeout=args.timeout), child)
+            child.finish(result)
+        except Failure as exc:
+            child.fail(exc)
+            raise
+        produced = child.root / result["files"][0]
+        dest = raw / target
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(produced, dest)
+        lines.append(f"rawfile,{target.as_posix()}")
+        rawfiles.append(target)
+        staged_targets.add(key)
+    for source, target, asset_type, name in loose:
+        key = target.as_posix().casefold()
+        mid = owner_for(target.as_posix(), source)
+        if key in owner_of and owner_of[key] != mid:
+            continue
+        if key in staged_targets:
+            continue
+        dest = raw / target
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, dest)
+        lines.append(f"{asset_type},{name}")
+        if asset_type == "rawfile":
+            rawfiles.append(target)
+        staged_targets.add(key)
+    seed_loads = []
+    banks = job.root / "packages"
+    strings: dict[str, str] = {}
+    for m in seed_modules:
+        seed_loads.append(m["seed"]["package"])
+        for root in m["seed"]["roots"]:
+            if root not in lines:
+                lines.append(root)
+        if m["seed"].get("strings"):
+            rows = seeds.parse_strings(m["seed"]["strings"].read_text(encoding="utf-8", errors="replace"), m["id"])
+            for key, value in rows.items():
+                if key in strings and strings[key] != value:
+                    raise Failure(INPUT_INVALID, f"Two seeds define the localized string {key} differently; record which module owns it",
+                                  "Rename the string in one module, or drop one module from the pack.")
+                strings[key] = value
+    if strings:
+        (raw / "english" / "localizedstrings").mkdir(parents=True, exist_ok=True)
+        (raw / "english" / "localizedstrings" / "mod.str").write_text(seeds.write_strings(strings), encoding="utf-8")
+        lines.insert(2 + len(header), "localize,mod")
+    (zone_dir / "mod.zone").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    link = fastfiles.execute(SimpleNamespace(action="link", project=str(base), zone="mod",
+                                             load=[str(p) for p in seed_loads] + [str(p) for p in loads],
+                                             assets=[], timeout=args.timeout), job)
+    if len(link["packages"]) != 1:
+        raise Failure(BACKEND_FAILED, "A composition must produce exactly one fastfile")
+    package = job.root / link["packages"][0]["path"]
+    # The seeds' soundbanks travel beside the package: the engine reads them from the profile folder.
+    for m in seed_modules:
+        for name, path in m["seed"]["files"].items():
+            if name == "mod.ff":
+                continue
+            dest = banks / name
+            if dest.exists():
+                raise Failure(INPUT_INVALID, f"Two seeds ship the soundbank {name}; a pack carries one copy of each bank")
+            shutil.copyfile(path, dest)
+    readback_log = job.run([*executable("unlinker"), "--no-color", "--include-assets", "rawfile", "--output-folder",
+                            str(job.root / "readback"), str(package)], timeout=args.timeout)
+    fastfiles.check_readback_log(readback_log)
+    for rel in rawfiles:
+        restored = job.root / "readback" / rel
+        if not restored.is_file() or sha256_file(raw / rel) != sha256_file(restored):
+            raise Failure(BACKEND_FAILED, f"Rawfile did not round-trip through the fastfile: {rel.as_posix()}")
+    # Every seed root must be in the composed package: the linker copies roots out of loaded seeds.
+    listing_log = job.run([*executable("unlinker"), "--no-color", "--skip-obj", "--list", str(package)], timeout=args.timeout)
+    fastfiles.check_readback_log(listing_log)
+    embedded, referenced = seeds.parse_listing(listing_log.read_text(encoding="utf-8", errors="replace"))
+    missing_roots = [root for m in seed_modules for root in m["seed"]["roots"] if root not in embedded]
+    if missing_roots:
+        raise Failure(BACKEND_FAILED, f"{len(missing_roots)} seed root(s) are not in the composed package: {missing_roots[:5]}",
+                      "The linker did not copy them from the seed; check the loads and the seed manifest.", missing=missing_roots[:64])
+    return {**link, "plan": "plan.json", "rawfiles_verified": len(rawfiles), "mod_ff": link["packages"][0]["path"],
+            "seed_roots_verified": sum(len(m["seed"]["roots"]) for m in seed_modules),
+            "embedded_assets": len(embedded), "referenced_assets": len(referenced), "localized_strings": len(strings),
+            "soundbanks": sorted(p.name for p in banks.iterdir() if p.is_file() and p.name != "mod.ff"),
+            "name": comp["name"], "title": comp["title"], "base": comp["base"], "map": comp["map"], "base_member": plan["base_member"],
+            "modules": [{"id": r["id"], "version": r["version"], "order": i + 1, "payload": r["payload"], "role": r["role"]}
+                        for i, r in enumerate(plan["modules"])],
+            "resource_totals": plan["resource_totals"], "budget": plan["budget"], "decisions": decided,
+            "scripts": len(compiled), "assets": len(loose), "seeds": len(seed_modules), "loads": len(loads),
+            "install_hint": f"pat game install-mod <output>/{link['packages'][0]['path']} {comp['name']}  (copy the soundbanks under packages/ beside it; loading in game is a separate, authorized step)",
+            "verification": "every recipe module's scripts compiled, one mod.ff linked against every seed and load, read back, every rawfile "
+                            "byte-compared and every seed root found in the package; fit, budget and decisions come from declarations, not from the game"}

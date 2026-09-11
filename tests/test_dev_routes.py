@@ -160,7 +160,8 @@ class DevRouteTests(DevRouteFixture):
         ff.write_text(json.dumps({"zone": "sample", "rawfiles": {"scripts/zm/a.gsc": base64.b64encode(b"X").decode()}}))
         code, row = invoke(["ff", "inspect", str(ff), "--output", self.out()])
         self.assertEqual(code, 0, row)
-        self.assertIn("rawfile scripts/zm/a.gsc", row["result"]["listing"])
+        # The fake prints the real Unlinker --list form: "type, name" under a Content: header.
+        self.assertIn("rawfile, scripts/zm/a.gsc", row["result"]["listing"])
         code, row = invoke(["ff", "extract", str(ff), "--types", "rawfile", "--output", self.out()])
         self.assertEqual(code, 0, row)
         self.assertTrue((Path(row["result"]["output"]) / "assets" / "scripts/zm/a.gsc").is_file())
@@ -405,7 +406,7 @@ class ThirdReviewRegressionTests(DevRouteFixture):
         ff.write_text(json.dumps({"zone": "named", "rawfiles": {k: base64.b64encode(v.encode()).decode() for k, v in names.items()}}))
         code, row = invoke(["ff", "inspect", str(ff), "--output", self.out()])
         self.assertEqual(code, 0, row)
-        self.assertIn("rawfile scripts/fatal error.gsc", row["result"]["listing"])
+        self.assertIn("rawfile, scripts/fatal error.gsc", row["result"]["listing"])
 
     def test_directory_count_is_bounded(self):
         from unittest.mock import patch

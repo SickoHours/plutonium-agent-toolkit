@@ -23,9 +23,11 @@ formats are in `docs/MODULES.md`; the words in `CONTEXT.md` (module, composition
    ```
    Proof: `ok: true`, `result.modules[]` in dependency order, `result.resource_totals`,
    `result.backends_available: true`. A refusal names the exact cause: a missing dependency, a
-   declared conflict, a module not declared for this base or map, two modules producing the same
-   file, or a budget exceeded. Fix the declaration or the selection; do not edit a module's
-   `bases` to make a plan pass.
+   declared conflict, a module not declared for this base or map, or a budget exceeded. Fix the
+   declaration or the selection; do not edit a module's `bases` to make a plan pass. Rows under
+   `result.undecided` are collisions (the same file, weapon or string from two modules): record
+   an owner for each under `decisions` in the composition, or rename a target, and plan again
+   until `undecided` is empty; `build` refuses otherwise.
 2. Build it:
    ```sh
    pat module build <pack>/composition.json --output ../jobs/<pack>-build-001 --json

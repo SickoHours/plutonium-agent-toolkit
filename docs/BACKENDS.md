@@ -23,8 +23,8 @@ job's new `--output`; inputs are staged inside it before the program runs.
 | Routes | Command line | What the toolkit checks |
 | --- | --- | --- |
 | `ff link`, `project build`, `module build` | `Linker --no-color --base-folder <project> --output-folder <out>/packages [--add-asset-search-path <dir>]... [-l <zone.ff>]... <zone>` | a .ff was produced; every package is read back with Unlinker |
-| `ff inspect`, `ff link`, `project build`, `module build` | `Unlinker --no-color --skip-obj --list [-l <zone.ff>]... <fastfile>` | readback log has no load failure; inventory kept as a job log |
-| `ff extract`, `project build`, `module build` | `Unlinker --no-color --output-folder <out>/assets [--model-format <fmt>] [--image-format <fmt>] [--include-assets <types>] [-l <zone.ff>]... <fastfile>` | files were written; project build byte-compares every rawfile against its source |
+| `ff inspect`, `ff link`, `project build`, `module build`, `module declare` | `Unlinker --no-color --skip-obj --list [-l <zone.ff>]... <fastfile>` | readback log has no load failure; inventory kept as a job log |
+| `ff extract`, `project build`, `module build`, `module declare` | `Unlinker --no-color --output-folder <out>/assets [--model-format <fmt>] [--image-format <fmt>] [--include-assets <types>] [-l <zone.ff>]... <fastfile>` | files were written; project build byte-compares every rawfile against its source |
 | `image convert` | `ImageConverter --no-color --<t6\|t5> <image.dds\|image.iwi>` | a non-empty converted image exists beside the staged input |
 
 ### gsc-tool 1.4.10

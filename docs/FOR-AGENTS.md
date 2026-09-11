@@ -154,7 +154,10 @@ inventing a result.
 - One recipe (`project.json`) per mod, naming its scripts, assets and dependency loads explicitly.
 - One declaration (`module.json`) beside it, naming the bases and maps the mod was built for, its
   dependencies, conflicts and resource contract, so an agent can compose it with others
-  (`docs/MODULES.md`, `pat module plan|build`, playbook `compose-a-pack.md`).
+  (`docs/MODULES.md`, `pat module plan|build|declare`, playbooks `compose-a-pack.md` and
+  `attach-to-a-pack.md`). A pack someone else built is a base member of the next pack; a pack that
+  is only a fastfile is declared as a seed first. Collisions the planner lists are yours to decide
+  and record, not to skip.
 - Keep build outputs in fresh directories, never overwriting; the receipt ties source to package.
 - Record a mod's normal and Pack-a-Punch identity, its maps, and what was actually tested, apart
   from what merely compiled. Untested maps, co-op and performance stay listed as untested.

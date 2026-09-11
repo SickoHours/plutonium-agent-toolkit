@@ -535,6 +535,38 @@ def tier_backends(receipt, home: Path, work: Path, media: bool = False):
         step(receipt, "project verify --inputs the pack receipt", PAT + ["project", "verify", str(Path(result["output"]) / "receipt.json"),
                                                                        "--inputs", "--output", str(work / "pack-verify"), "--json"])
         step(receipt, "ff inspect the pack mod.ff", PAT + ["ff", "inspect", str(pack_ff), "--output", str(work / "pack-inspect"), "--json"])
+    if build["passed"]:
+        # Seeds: the hello-zm package just built becomes a seed module, declared from its fastfile, then
+        # composed with the second example on the stock game. Exercises declare, seed loads and roots.
+        seed_dir = work / "seed-module"
+        seed_dir.mkdir()
+        shutil.copyfile(mod_ff, seed_dir / "mod.ff")
+        declared = step(receipt, "module declare the hello-zm package", PAT + ["module", "declare", str(seed_dir / "mod.ff"),
+                                                                              "--id", "hello_seed", "--base", "stock", "--map", "zm_transit",
+                                                                              "--output", str(work / "declare"), "--json"])
+        if declared["passed"]:
+            shutil.copyfile(work / "declare" / "seed.json", seed_dir / "seed.json")
+            if (work / "declare" / "mod.str").is_file():
+                shutil.copyfile(work / "declare" / "mod.str", seed_dir / "mod.str")
+            declaration = json.loads((work / "declare" / "module.json").read_text(encoding="utf-8"))
+            declaration.update({"category": "scripts", "kind": "script", "maps": ["*"]})
+            (seed_dir / "module.json").write_text(json.dumps(declaration, indent=2) + "\n", encoding="utf-8")
+            second = work / "second-module"
+            shutil.copytree(ROOT / "examples/hello-zm-two", second)
+            pack_dir = work / "seed-pack"
+            pack_dir.mkdir()
+            (pack_dir / "composition.json").write_text(json.dumps({
+                "schema": 1, "name": "stock_seeded_pack", "title": "hello-zm as a seed plus the round announcer",
+                "base": "stock", "map": "zm_transit",
+                "modules": [{"path": "../seed-module", "role": "base"}, "../second-module"]}, indent=2) + "\n", encoding="utf-8")
+            step(receipt, "module plan a seed composition", PAT + ["module", "plan", str(pack_dir / "composition.json"),
+                                                                  "--output", str(work / "seed-plan"), "--json"])
+            seeded = step(receipt, "module build a seed composition (real OAT)", PAT + ["module", "build", str(pack_dir / "composition.json"),
+                                                                                       "--output", str(work / "seed-build"), "--json"], timeout=600)
+            if seeded["passed"]:
+                result = seeded["json"]["result"]
+                receipt["notes"].append({"seed_pack_mod_ff_sha256": hashlib.sha256((Path(result["output"]) / result["mod_ff"]).read_bytes()).hexdigest(),
+                                         "seed_roots_verified": result["seed_roots_verified"], "seed_pack_base_member": result["base_member"]})
     bad = work / "bad.gsc"
     bad.write_text("main()\n{\n    this is not gsc ;;; \n}\n", encoding="utf-8")
     step(receipt, "gsc compile broken script fails structurally", PAT + ["gsc", "compile", str(bad), "--output", str(work / "bad-compile"), "--json"], expect_ok=False)

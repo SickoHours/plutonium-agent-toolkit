@@ -22,7 +22,13 @@ pat game install-mod ../jobs/pack-build-001/packages/mod.ff stock_hello_pack --j
 ```
 
 `plan` resolves the composition without running a backend: dependency order, declared conflicts,
-whether every module declares the composition's base and map, whether two modules would ship the
-same file, and whether the summed resource contracts fit the budget. `build` compiles both scripts,
+whether every module declares the composition's base and map, and whether the summed resource
+contracts fit the budget; two modules shipping the same file is listed as a decision to record,
+not a refusal. `build` compiles both scripts,
 links one `mod.ff`, reads it back and byte-compares both rawfiles. Loading the pack in the game
 and seeing both lines on screen is a separate, human-authorized step on Windows.
+
+A pack can also be built from a prebuilt package: `pat module declare <folder>/mod.ff --output
+<out> --json` writes a `seed.json` manifest and a draft declaration from any T6 mod fastfile, and a
+composition may name that module beside recipe modules, or name this whole pack as the base
+member of a bigger one (`docs/playbooks/attach-to-a-pack.md`).
