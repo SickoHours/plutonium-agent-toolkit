@@ -93,7 +93,7 @@ PLANNED = [
     Route("registry", "baseline", "Static, deterministic check of a module or composition directory before it is listed: "
           "executable headers, download-and-execute, links and path escapes, unpinned archives, declaration mismatches, "
           "and the capabilities a reviewer should know about", "writes-output",
-          status="implemented", owner=OWNER,
+          status="available", owner=OWNER,
           notes="Argument: <directory> [--repository <https url>] [--commit <40 hex>]. Reads files only: nothing in the tree is "
                 "executed, no backend, no network, no model. Policy version 1, enforcement selective: native-plugin, "
                 "download-and-execute and path-escape block; everything else is reported for review. Outcomes passed, "

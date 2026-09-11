@@ -105,8 +105,10 @@ Every entry states what shipped, on which platform it was verified, and what rem
   a security audit, certification, warranty or endorsement. `docs/REGISTRY.md` has the rule
   table; `publish-a-module.md` runs the baseline before listing; glossary term baseline. Tier 1
   of `tools/qualify.py` runs the baseline on `examples/hello-zm` and checks the outcome is
-  `passed`. Not measured: real community repositories. Verified by 24 unit tests on synthetic
-  trees on Linux; CI runs them on Windows.
+  `passed`; the regenerated Arch Linux (Omarchy 4.0.3) Tier 1 receipt carries both steps (17
+  steps; the previous receipt is kept as a superseded file), so the route is `available` on
+  Linux. No Windows receipt yet; expected to pass there. Not measured: real community
+  repositories. Verified by 24 unit tests on synthetic trees on Linux; CI runs them on Windows.
 - **Registries and fetch by name.** `docs/REGISTRY.md` specifies `registry.json`: a file anyone can
   host that lists module and composition repositories at exact commits and holds no bytes; entries
   are `<github-owner>/<id>` and ownership is the repository living under that owner. New routes

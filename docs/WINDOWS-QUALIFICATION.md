@@ -46,8 +46,9 @@ pat version --json
 python tools/qualify_windows.py --tier offline --output docs/receipts
 ```
 
-The script runs the unit tests, `manifest`, `describe`, `doctor`, `configure`, `dev setup --plan`
-and the `project plan` of `examples/hello-zm`, then writes `tier1-offline.json`. Everything in
+The script runs the unit tests, `manifest`, `describe`, `doctor`, `configure`, `dev setup --plan`,
+the `project plan` of `examples/hello-zm`, `project init`, and the `registry baseline` of
+`examples/hello-zm` (its outcome must be `passed`), then writes `tier1-offline.json`. Everything in
 this tier must pass. A failure here is a toolkit bug on native Windows Python; fix it.
 
 Commit: `git add docs/receipts && git commit -m "qualify(windows): tier 1 offline"`.
