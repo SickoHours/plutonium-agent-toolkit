@@ -59,8 +59,8 @@ modules and packs the release ships as **built-ins**, at the exact commit the re
 hashed and extracted with the archive safety checks, laid out under
 `<toolkit home>/modules/builtin/<owner>/<repository>/<commit>/<path>` so a pack's relative member
 paths keep resolving, with a receipt per entry under `modules/builtin/receipts/`. A rerun re-hashes
-every kept file and answers `verified`; a changed tree is refused with `artifact_changed` and never
-overwritten; `--plan` reports the state without touching the network. `registry list`, `search` and
+every kept file and the recorded directories and answers `verified`; a tree with a changed, missing or added
+file is refused with `artifact_changed` and never overwritten; `--plan` reports the state without touching the network. `registry list`, `search` and
 `show` carry each registry's `origin` (`builtin` or `added`), `search --origin builtin` lists only
 the built-ins, and a built-in hit carries `builtin_dir` once it is fetched. The name is reserved:
 `registry add` refuses a file that claims it. An added registry that lists a built-in at the same
@@ -69,8 +69,8 @@ second hit; a listing at another commit is its own hit.
 
 Built-in, fetched and installed are three places (`CONTEXT.md`): the shelf under the toolkit home,
 the `module fetch` job directories you chose, and the profiles under Plutonium's `mods`. A built-in
-is planned and built like any other module (`pat module plan <builtin_dir>/composition.json`);
-nothing under `dev builtin` installs anything into the game.
+is planned and built like any other module (`pat module plan <builtin_dir>/composition.json --output
+<new dir> --json`); nothing under `dev builtin` installs anything into the game.
 
 ## Routes
 

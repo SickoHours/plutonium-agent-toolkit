@@ -54,7 +54,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
   their pinned commits under `<toolkit home>/modules/builtin/<owner>/<repository>/<commit>/<path>`
   (one HTTPS snapshot per repository and commit, hashed, extracted with the archive safety checks,
   a pack laid out with the members and loads its recipe names) with a receipt per entry; a rerun
-  re-hashes and verifies, a changed tree is refused with `artifact_changed` and never overwritten,
+  re-hashes every file and directory and verifies, a tree with a changed, missing or added file is refused
+  with `artifact_changed` and never overwritten, a pack records the member entries it laid out,
   `--plan` touches no network, and `doctor` reports which built-ins are present. Glossary term
   built-in. The Linux Tier 2 receipt fetches the three built-ins from GitHub and plans the built-in
   pack from the shelf, so the route is `available` on Linux. Built-in, fetched and installed are

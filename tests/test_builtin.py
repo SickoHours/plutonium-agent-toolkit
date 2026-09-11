@@ -228,6 +228,29 @@ class DevBuiltinTests(BuiltinFixture):
         code, row = invoke(["dev", "builtin", "--only", "nobody/nothing"])
         self.assertEqual(row["error_code"], "input_invalid")
 
+    def test_an_added_file_is_a_changed_tree_and_a_pack_records_the_members_it_lays_out(self):
+        code, row = invoke(["dev", "builtin", "--only", "sickohours/stock_hello_pack"])
+        self.assertEqual(code, 0, row)
+        actions = {r["name"]: r["action"] for r in row["result"]["results"]}
+        self.assertEqual(actions, {"sickohours/stock_hello_pack": "installed", "sickohours/hello_zm": "recorded", "sickohours/round_announcer": "recorded"},
+                         "members the pack laid out get their own receipts from the same snapshot")
+        self.assertEqual(self.requests, [self.url])
+        code, row = invoke(["dev", "builtin"])
+        self.assertEqual(code, 0, row)
+        self.assertEqual({r["action"] for r in row["result"]["results"]}, {"verified"}, "no stranger, no second download")
+        self.assertEqual(self.requests, [self.url])
+        module_dir = Path(next(r["module_dir"] for r in row["result"]["results"] if r["name"] == "sickohours/hello_zm"))
+        (module_dir / "notes.txt").write_text("added by hand")
+        code, row = invoke(["dev", "builtin", "--only", "sickohours/hello_zm"])
+        self.assertEqual(row["error_code"], "artifact_changed")
+        self.assertEqual(row["details"]["added"], ["examples/hello-zm/notes.txt"])
+        self.assertTrue((module_dir / "notes.txt").is_file(), "preserved")
+        code, row = invoke(["dev", "builtin", "--plan"])
+        by = {r["name"]: r for r in row["result"]["results"]}
+        self.assertEqual(by["sickohours/hello_zm"]["action"], "refuse")
+        self.assertEqual(by["sickohours/stock_hello_pack"]["action"], "refuse", "the pack's receipt covers its members too")
+        self.assertEqual(by["sickohours/round_announcer"]["action"], "verify")
+
     def test_lock_and_download_failures_leave_no_partial_shelf(self):
         builtin.shelf_dir().mkdir(parents=True)
         (builtin.shelf_dir() / "builtin.lock").write_text("1")

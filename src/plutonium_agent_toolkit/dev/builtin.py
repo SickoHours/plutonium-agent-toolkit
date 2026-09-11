@@ -6,8 +6,8 @@ repository and commit, keeps the entry directories (and, for a pack, the member 
 loads its recipe names inside the same snapshot), and lays them out under
 ``<toolkit home>/modules/builtin/<owner>/<repository>/<commit>/<path>`` so the relative paths a
 composition uses keep resolving. A receipt per entry records the commit, the archive hash and every
-file's hash; a rerun re-hashes the tree and reports ``verified``, refuses a changed tree with
-``artifact_changed`` and never overwrites it. ``--plan`` reports the state and touches no network.
+file's hash; a rerun re-hashes the tree and reports ``verified``, refuses a tree with a changed,
+missing or added file with ``artifact_changed`` and never overwrites it. ``--plan`` reports the state and touches no network.
 
 Built-in, fetched and installed are three different places: this shelf under the toolkit home,
 the ``module fetch`` job directories a person chose, and the profiles under Plutonium's ``mods``.
@@ -147,15 +147,30 @@ def verify(entry: dict) -> dict:
     if receipt is None:
         return {"state": "unrecorded" if directory.exists() else "absent", "changed": [], "missing": []}
     snapshot = snapshot_dir(entry)
-    changed, missing = [], []
+    changed, missing, added = [], [], []
     for rel, digest in receipt["files"].items():
         p = snapshot / rel
         if p.is_symlink() or not p.is_file():
             missing.append(rel)
         elif sha256_file(p) != digest:
             changed.append(rel)
-    return {"state": "verified" if not changed and not missing else "changed", "changed": changed, "missing": missing,
-            "receipt": receipt}
+    # The recorded directories must hold exactly the recorded files: a file added under a fetched
+    # built-in is a changed tree too, not something a rerun quietly keeps.
+    for rel in receipt.get("paths", []):
+        p = snapshot if rel == "." else snapshot / rel
+        if not p.is_dir():
+            continue
+        try:
+            present = inventory(p)
+        except Failure as exc:
+            added.append(f"{rel}: {exc.message}")
+            continue
+        for sub in present:
+            key = sub if rel == "." else (Path(rel) / sub).as_posix()
+            if key not in receipt["files"]:
+                added.append(key)
+    state = "verified" if not changed and not missing and not added else "changed"
+    return {"state": state, "changed": changed, "missing": missing, "added": added, "receipt": receipt}
 
 
 def _write_json(path: Path, data: dict) -> None:
@@ -188,24 +203,33 @@ def _place(entry: dict, extracted: Path, archive_sha: str, archive_bytes: int) -
         src = extracted if rel == "." else extracted / rel
         dst = snapshot if rel == "." else snapshot / rel
         if src.is_dir():
+            expected = inventory(src)
+            if len(files) + len(expected) > MAX_ENTRY_FILES:
+                raise Failure(INPUT_LIMIT, f"Built-in {entry['name']} exceeds {MAX_ENTRY_FILES} files")
             if dst.exists():
-                # Shared with an entry placed earlier from the same snapshot: hash what is there, place nothing.
-                pass
+                # Shared with an entry placed earlier from the same snapshot: it must still equal the
+                # snapshot byte for byte, otherwise it is somebody's changed tree and is preserved.
+                if inventory(dst) != expected:
+                    raise Failure(ARTIFACT_CHANGED, f"{rel} is already on the shelf and differs from the snapshot; preserving it",
+                                  "Move it aside if you want the pinned copy; built-ins are never overwritten.", path=str(dst))
             else:
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copytree(src, dst, symlinks=False)
                 placed.append(rel)
-            rows = inventory(dst)
-            if len(files) + len(rows) > MAX_ENTRY_FILES:
-                raise Failure(INPUT_LIMIT, f"Built-in {entry['name']} exceeds {MAX_ENTRY_FILES} files")
-            for sub, digest in rows.items():
+                if inventory(dst) != expected:
+                    raise Failure(ARTIFACT_CHANGED, f"{rel} does not match the snapshot after the copy; inspect the storage volume")
+            for sub, digest in expected.items():
                 files[(Path(rel) / sub).as_posix() if rel != "." else sub] = digest
         else:
-            if not dst.exists():
+            digest = sha256_file(src)
+            if dst.exists():
+                if dst.is_symlink() or not dst.is_file() or sha256_file(dst) != digest:
+                    raise Failure(ARTIFACT_CHANGED, f"{rel} is already on the shelf and differs from the snapshot; preserving it", path=str(dst))
+            else:
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(src, dst)
                 placed.append(rel)
-            files[rel] = sha256_file(dst)
+            files[rel] = digest
     receipt = {"schema_version": 1, "name": entry["name"], "kind": entry["kind"], "repository": entry["repository"],
                "commit": entry["listed"]["commit"], "path": entry["path"], "module_dir": str(entry_dir(entry)),
                "snapshot_dir": str(snapshot), "archive_sha256": archive_sha, "archive_bytes": archive_bytes,
@@ -223,7 +247,7 @@ def install(plan: bool = False, only: list[str] | None = None) -> dict:
         for e in rows:
             check = verify(e)
             results.append({"name": e["name"], "kind": e["kind"], "commit": e["listed"]["commit"], "module_dir": str(entry_dir(e)),
-                            "state": check["state"], "changed": check["changed"], "missing": check["missing"],
+                            "state": check["state"], "changed": check["changed"], "missing": check["missing"], "added": check.get("added", []),
                             "action": {"verified": "verify", "absent": "install", "changed": "refuse", "unrecorded": "refuse"}[check["state"]]})
         return {"plan": True, "destination": str(shelf), "registry": registry.BUILTIN_NAME, "results": results,
                 "downloads": sorted({(e["repository"], e["listed"]["commit"]) for e in rows if verify(e)["state"] == "absent"}),
@@ -247,8 +271,8 @@ def install(plan: bool = False, only: list[str] | None = None) -> dict:
                 continue
             if check["state"] == "changed":
                 raise Failure(ARTIFACT_CHANGED, f"Built-in {e['name']} differs from its receipt; preserving it",
-                              "Move the changed files aside if you want the pinned copy back; built-ins are never overwritten.",
-                              changed=check["changed"], missing=check["missing"], module_dir=str(entry_dir(e)))
+                              "Move the changed or added files aside if you want the pinned copy back; built-ins are never overwritten.",
+                              changed=check["changed"], missing=check["missing"], added=check.get("added", []), module_dir=str(entry_dir(e)))
             if check["state"] == "unrecorded":
                 raise Failure(OUTPUT_EXISTS, f"{entry_dir(e)} exists without a built-in receipt; preserving it",
                               "Move it aside if you want dev builtin to fetch the pinned copy there.")
@@ -263,6 +287,18 @@ def install(plan: bool = False, only: list[str] | None = None) -> dict:
             receipt = _place(e, extracted, sha, size)
             results.append({"name": e["name"], "kind": e["kind"], "commit": e["listed"]["commit"], "module_dir": receipt["module_dir"],
                             "action": "installed", "files": len(receipt["files"]), "placed": receipt["placed"]})
+            # A pack lays out its members; a member that is itself a built-in entry from the same
+            # snapshot gets its own receipt now, so a later run verifies it instead of finding a stranger.
+            covered = set(receipt["paths"])
+            for other in registry.builtin_registry()["entries"]:
+                if other["name"] == e["name"] or (other["repository"], other["listed"]["commit"]) != key or other["path"] not in covered:
+                    continue
+                if _read_receipt(other) is not None or any(r["name"] == other["name"] for r in results):
+                    continue
+                adopted = _place(other, extracted, sha, size)
+                results.append({"name": other["name"], "kind": other["kind"], "commit": other["listed"]["commit"], "module_dir": adopted["module_dir"],
+                                "action": "recorded", "files": len(adopted["files"]), "placed": adopted["placed"],
+                                "note": f"laid out by {e['name']}; its own receipt written from the same snapshot"})
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
         lock.unlink(missing_ok=True)

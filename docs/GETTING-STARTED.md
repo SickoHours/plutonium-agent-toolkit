@@ -100,7 +100,8 @@ pat registry search --origin builtin --json
 
 The toolkit ships a registry of the modules and packs the release pins (the examples today). `dev
 builtin` lays them out under the toolkit home so a built-in pack composes as it is (`pat module plan
-<builtin_dir>/composition.json`); it never overwrites a tree that changed and never touches the game.
+<builtin_dir>/composition.json --output <new dir> --json`); it never overwrites a tree with a changed, missing or
+added file, and never touches the game.
 Registries you add with `pat registry add`, including the official one at
 `https://raw.githubusercontent.com/SickoHours/plutonium-module-registry/main/registry.json`, sit beside it
 with origin `added`.
