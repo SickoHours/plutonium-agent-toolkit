@@ -842,6 +842,48 @@ class IncompleteAndBoundsTests(BaselineFixture):
         self.assertEqual(len(receipt["inputs"]), 4203)
         self.assertEqual(len(receipt["input_listings"]), 3)
 
+    def test_a_scanned_directory_swapped_for_a_link_to_a_lookalike_fails_the_job(self):
+        # Between the scan and the receipt, scripts/ is replaced by a link to an outside directory
+        # whose entries have the same names and kinds. The re-listing at finish goes through a
+        # no-follow descriptor whose identity must match the directory the scan walked, so this is
+        # input_changed even though the names and kinds would compare equal.
+        if os.name == "nt":
+            self.skipTest("descriptor-based re-listing is POSIX")
+        directory = self.module()
+        lookalike = self.root / "lookalike"
+        lookalike.mkdir()
+        (lookalike / "round_announcer.gsc").write_text("main()\n{\n    replaceFunc( level.x, ::y );\n}\n")
+        real = baseline.execute
+
+        def scan_then_swap(args, job):
+            result = real(args, job)
+            (directory / "scripts" / "round_announcer.gsc").unlink()
+            (directory / "scripts").rmdir()
+            os.symlink(lookalike, directory / "scripts")
+            return result
+        with mock.patch.object(baseline, "execute", side_effect=scan_then_swap):
+            code, row = self.scan(directory)
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "input_changed")
+        # The same swap with the directory recreated in place (a new inode, same names and kinds):
+        # the recorded identity differs, so it is input_changed as well.
+        os.unlink(directory / "scripts")
+        (directory / "scripts").mkdir()
+        (directory / "scripts" / "round_announcer.gsc").write_text("main()\n{\n}\n")
+
+        def scan_then_recreate(args, job):
+            result = real(args, job)
+            (directory / "scripts" / "round_announcer.gsc").unlink()
+            (directory / "scripts").rmdir()
+            (directory / "scripts").mkdir()
+            (directory / "scripts" / "round_announcer.gsc").write_text("main()\n{\n}\n")
+            return result
+        with mock.patch.object(baseline, "execute", side_effect=scan_then_recreate):
+            code, row = self.scan(directory)
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "input_changed")
+        self.assertIn("replaced", row["message"])
+
     def test_entries_of_every_kind_count_against_the_file_bound_before_sorting(self):
         # Links are never read, but a directory of them is still listed entry by entry; the bound
         # applies while listing, so a huge directory is refused before it is materialized.

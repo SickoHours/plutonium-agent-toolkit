@@ -155,9 +155,10 @@ every path component is re-checked for reparse points by name just before each o
 replaced under the scan (by a link, a pipe, another file, or a swapped ancestor directory) is
 `unreadable` and the outcome `incomplete`. Every file read and every directory listing is an
 input of the job: the receipt lists their hashes (`inputs`, `input_listings`; a listing is every
-entry's name and kind) and the job re-hashes and re-lists them before succeeding, so a file
-changed, added, removed or swapped for a link of the same name after the scan is
-`input_changed`, never a report for an older tree. The job deadline (`--timeout`) is checked
+entry's name and kind) and the job re-hashes and re-lists them before succeeding, through
+no-follow descriptors whose identity must match what the scan walked on POSIX, so a file
+changed, added, removed or swapped for a link of the same name after the scan, or a directory
+replaced by a link to a look-alike, is `input_changed`, never a report for an older tree. The job deadline (`--timeout`) is checked
 between chunks of every read. File names that are not UTF-8 are hashed as their bytes and
 shown with backslash escapes. The result and
 `baseline.json` carry `policy_version`, `enforcement`, `outcome`, the three row lists,

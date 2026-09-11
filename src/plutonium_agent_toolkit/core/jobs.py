@@ -32,6 +32,10 @@ CHILD_LAUNCH_FAILED = 127  # returned by _child.py when the backend itself canno
 
 
 REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+# Re-listing a recorded directory goes through a descriptor opened without following links on
+# POSIX; Windows cannot open a directory that way and re-lists by name after an lstat check.
+DIR_FLAGS = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+DESCRIPTOR_LISTINGS = os.name != "nt" and os.scandir in os.supports_fd and hasattr(os, "O_DIRECTORY")
 
 
 def entry_kind(st) -> str:
@@ -56,10 +60,33 @@ def listing_digest(entries) -> str:
     return h.hexdigest()
 
 
-def list_entries(directory: Path) -> list[tuple[str, str]]:
-    """``(name, kind)`` for every entry of a directory, from each entry's own ``lstat``."""
-    with os.scandir(directory) as it:
-        return [(e.name, entry_kind(e.stat(follow_symlinks=False))) for e in it]
+def list_entries(directory: Path, identity: tuple[int, int] | None = None) -> list[tuple[str, str]]:
+    """``(name, kind)`` for every entry of a directory, from each entry's own ``lstat``.
+
+    On POSIX the directory is opened without following links and listed through that descriptor,
+    whose ``fstat`` must be a directory with the recorded ``identity`` (``st_dev``, ``st_ino``)
+    when one was recorded, so a directory swapped for a link or recreated between the caller's
+    check and the listing is a change, not a listing of something else. Windows lists by name
+    after an ``lstat`` that refuses links; the window between the two is what it leaves open."""
+    if not DESCRIPTOR_LISTINGS:
+        if entry_kind(os.lstat(directory)) != "dir":
+            raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {directory} is no longer a directory")
+        with os.scandir(directory) as it:
+            return [(e.name, entry_kind(e.stat(follow_symlinks=False))) for e in it]
+    try:
+        fd = os.open(directory, DIR_FLAGS)
+    except OSError as exc:
+        raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {directory} ({exc.strerror or exc})") from exc
+    try:
+        opened = os.fstat(fd)
+        if not stat.S_ISDIR(opened.st_mode):
+            raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {directory} is no longer a directory")
+        if identity is not None and identity[1] and (opened.st_dev, opened.st_ino) != tuple(identity):
+            raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {directory} was replaced")
+        with os.scandir(fd) as it:
+            return [(e.name, entry_kind(e.stat(follow_symlinks=False))) for e in it]
+    finally:
+        os.close(fd)
 
 
 def _write(path: Path, data: dict) -> None:
@@ -79,6 +106,7 @@ class Job:
         self.deadline = self._t0 + timeout
         self.inputs: dict[str, str] = {}
         self.listings: dict[str, str] = {}
+        self._listing_identity: dict[str, tuple[int, int]] = {}
         self.trees: dict[str, dict[str, str]] = {}
         self.steps: list[dict] = []
         self.repairs: list[str] = []
@@ -145,11 +173,13 @@ class Job:
                 raise Failure(INPUT_LIMIT, "Too many declared inputs")
             self.inputs[key] = digest
 
-    def record_listing(self, path: Path, entries) -> None:
+    def record_listing(self, path: Path, entries, identity: tuple[int, int] | None = None) -> None:
         """Register a directory listing the caller enumerated, as ``(name, kind)`` pairs (see
-        ``entry_kind``). ``finish`` lists the directory again and compares, so an entry added,
-        removed or swapped for another kind under the same name after the caller looked fails
-        the job, as does the directory itself becoming a link or disappearing."""
+        ``entry_kind``), with the directory's own identity (``st_dev``, ``st_ino``) when the
+        caller holds it. ``finish`` lists the directory again through a no-follow descriptor and
+        compares, so an entry added, removed or swapped for another kind under the same name
+        after the caller looked fails the job, as does the directory itself becoming a link,
+        being recreated or disappearing."""
         p = Path(path).absolute()
         if p.is_relative_to(self.root):
             raise Failure(INPUT_INVALID, "Inputs must live outside the job's output directory")
@@ -158,6 +188,8 @@ class Job:
             if len(self.listings) >= MAX_FILES:
                 raise Failure(INPUT_LIMIT, "Too many declared inputs")
             self.listings[key] = listing_digest(entries)
+            if identity is not None:
+                self._listing_identity[key] = (int(identity[0]), int(identity[1]))
 
     def input_tree(self, root: Path) -> Path:
         root = Path(root).resolve()
@@ -243,9 +275,7 @@ class Job:
                 raise Failure(INPUT_CHANGED, f"Input changed while the job ran: {key}")
         for key, digest in self.listings.items():
             try:
-                if entry_kind(os.lstat(key)) != "dir":
-                    raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {key} is no longer a directory")
-                entries = list_entries(Path(key))
+                entries = list_entries(Path(key), self._listing_identity.get(key))
             except OSError as exc:
                 raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {key} ({exc.strerror or exc})") from exc
             if listing_digest(entries) != digest:

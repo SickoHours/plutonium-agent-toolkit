@@ -690,7 +690,11 @@ class Scan:
         # The listing, names and kinds, is an input of the job: an entry added, removed or swapped
         # for another kind under the same name after the scan fails the job at finish.
         try:
-            self.job.record_listing(self.root.joinpath(*parts), [(e.name, entry_kind(e.stat(follow_symlinks=False))) for e in entries])
+            identity = None
+            if DESCRIPTOR_WALK:
+                opened = os.fstat(handle)
+                identity = (opened.st_dev, opened.st_ino)
+            self.job.record_listing(self.root.joinpath(*parts), [(e.name, entry_kind(e.stat(follow_symlinks=False))) for e in entries], identity)
         except OSError as exc:
             self.unreadable.append({"path": _display("/".join(parts)) or ".", "reason": exc.strerror or str(exc)})
             return
