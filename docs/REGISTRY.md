@@ -141,16 +141,20 @@ forward slashes), `line` (or null) and a short `evidence` excerpt of at most 160
 Rows are sorted by file, line and id. Findings keep at most 20 rows per file and rule and count
 the rest under `truncated`; nothing is skipped silently: links, `.git` and unreadable entries
 are all listed. Bounds: 20 000 files and 2 GiB per tree (`input_limit` above them, counted from
-the bytes actually read, so a file that grows during the scan cannot slip past), 4 MiB of text
-per file, 64 directory levels. On POSIX every directory and file is opened relative to its
+the bytes actually read, so a file that grows during the scan cannot slip past; directory
+entries of every kind, links included, count as they are listed), 4 MiB of text per file, 64
+directory levels. The directory given must be a real directory, not a link (`input_invalid`).
+On POSIX every directory and file is opened relative to its
 parent's descriptor, without following links and without blocking, and the open descriptor must
 be the regular file or directory the listing saw; Windows has no descriptor-relative opens, so
 every path component is re-checked for reparse points by name just before each open. An entry
 replaced under the scan (by a link, a pipe, another file, or a swapped ancestor directory) is
-`unreadable` and the outcome `incomplete`. Every file read is an input of the job: the receipt
-lists its hash and the job re-hashes it before succeeding, so a file changed after the scan is
-`input_changed`, never a report for an older tree. File names that are not UTF-8 are hashed as
-their bytes and shown with backslash escapes. The result and
+`unreadable` and the outcome `incomplete`. Every file read and every directory listing is an
+input of the job: the receipt lists their hashes (`inputs`, `input_listings`) and the job
+re-hashes and re-lists them before succeeding, so a file changed or added after the scan is
+`input_changed`, never a report for an older tree. The job deadline (`--timeout`) is checked
+between chunks of every read. File names that are not UTF-8 are hashed as their bytes and
+shown with backslash escapes. The result and
 `baseline.json` carry `policy_version`, `enforcement`, `outcome`, the three row lists,
 `scanned` (files, bytes, text and binary counts), `unreadable`, `skipped`, a `declaration`
 summary when `module.json` or `composition.json` is at the root, and `nested_declarations` for
