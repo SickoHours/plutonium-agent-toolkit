@@ -10,6 +10,8 @@ import json
 import os
 import subprocess
 import sys
+import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -51,6 +53,8 @@ class ToolDefinitionTests(unittest.TestCase):
         for name, action in BY_ID.items():
             if action.confirm:
                 self.assertIn("confirmed", by_name[name]["inputSchema"]["required"], name)
+                # The schema admits only true, so a client cannot send a schema-valid refusal.
+                self.assertEqual(by_name[name]["inputSchema"]["properties"]["confirmed"]["const"], True, name)
                 self.assertIn("Changes state", by_name[name]["description"], name)
             else:
                 self.assertNotIn("confirmed", by_name[name]["inputSchema"]["properties"], name)
@@ -135,6 +139,16 @@ class HandshakeTests(BridgeFixture):
         self.assertEqual(self.rpc("tools/there_is_no_such_method")["error"]["code"], -32601)
         self.assertIsNone(self.rpc("notifications/something_unknown", notification=True))
         self.assertEqual(self.rpc("tools/call", "not an object")["error"]["code"], -32602)
+        # Review findings: the protocol version is checked before any method runs, and an explicit
+        # non-object `arguments` reaches the type check instead of being read as an empty object.
+        self.assertEqual(self.bridge.handle({"id": 7, "method": "ping"})["error"]["code"], -32600)
+        self.assertEqual(self.bridge.handle({"jsonrpc": "1.0", "id": 8, "method": "tools/list"})["error"]["code"], -32600)
+        self.assertIsNone(self.bridge.handle({"method": "notifications/initialized"}), "a versionless notification is ignored")
+        before = len(self.plane.run_rows())
+        for bad in ([], False, "x", 0):
+            answer = self.rpc("tools/call", {"name": "manifest", "arguments": bad})
+            self.assertEqual(answer["error"]["code"], -32602, bad)
+        self.assertEqual(len(self.plane.run_rows()), before, "no child started for a malformed arguments value")
 
     def test_tools_list_matches_the_action_table(self):
         self.start()
@@ -237,6 +251,66 @@ class PumpTests(BridgeFixture):
         summary = mcp.pump(self.bridge, io.StringIO(""), io.StringIO(), deadline=0)
         self.assertEqual(summary["stopped"], "deadline")
 
+    def test_an_idle_client_does_not_hold_the_deadline_open(self):
+        # Review finding: a harness that keeps stdin open but sends nothing must not keep the
+        # bridge alive past --seconds. The read happens off the loop, so the deadline is reached.
+        read_fd, write_fd = os.pipe()
+        idle = os.fdopen(read_fd, "r", encoding="utf-8")
+        try:
+            started = time.monotonic()
+            summary = mcp.pump(self.bridge, idle, io.StringIO(), deadline=started + 0.4)
+            elapsed = time.monotonic() - started
+        finally:
+            os.write(write_fd, b"\n")   # release the reader thread before the pipe closes under it
+            os.close(write_fd)
+            idle.close()
+        self.assertEqual(summary["stopped"], "deadline")
+        self.assertLess(elapsed, 5, "the loop did not wait for a line that never came")
+
+    def test_a_termination_signal_stops_the_loop(self):
+        stop = threading.Event()
+        stop.set()
+        summary = mcp.pump(self.bridge, io.StringIO(""), io.StringIO(), stop=stop)
+        self.assertEqual(summary["stopped"], "signal")
+
+    def test_nesting_deep_enough_to_exhaust_the_stack_is_a_parse_error(self):
+        # Review finding: a RecursionError inside the parser must not end the session.
+        deep = "[" * 4000 + "]" * 4000        # past the interpreter's recursion limit, cheap to build
+        lines = [json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}}),
+                 deep,
+                 json.dumps({"jsonrpc": "2.0", "id": 2, "method": "ping"})]
+        sink = io.StringIO()
+        summary = mcp.pump(self.bridge, io.StringIO("\n".join(lines) + "\n"), sink)
+        answers = [json.loads(line) for line in sink.getvalue().splitlines()]
+        self.assertEqual([a.get("id") for a in answers], [1, None, 2])
+        self.assertEqual(answers[1]["error"]["code"], -32700)
+        self.assertEqual(summary["stopped"], "client", "the stream stayed open")
+
+
+class DeadlineDuringACallTests(BridgeFixture):
+    def test_the_serve_deadline_ends_a_wait_and_shutdown_stops_the_child(self):
+        # Review finding: a long tool call must not outlive --seconds. With the deadline already
+        # past, the bridge stops waiting and says so; the shutdown that follows stops the child.
+        self.start()
+        payload, is_error = self.bridge.call("manifest", {}, deadline=time.monotonic() - 1)
+        self.assertTrue(is_error)
+        self.assertEqual(payload["result"]["error_code"], "cancelled")
+        self.assertIn("deadline", payload["result"]["message"])
+        self.assertEqual(payload["run"]["action"], "manifest")
+        stopped = self.plane.shutdown()
+        self.assertFalse(stopped["still_running"], "the child is stopped and its record written")
+
+    def test_the_registry_source_schema_offers_only_what_the_resolver_accepts(self):
+        # Review finding: the resolver takes a library root for this parameter, never the jobs
+        # directory, so the advertised schema must not offer one.
+        schema = next(t for t in self.bridge.tools() if t["name"] == "registry-add")["inputSchema"]["properties"]["source"]
+        structured = next(option for option in schema["anyOf"] if option.get("type") == "object")
+        self.assertEqual(structured["properties"]["root"], {"type": "integer", "minimum": 0})
+        self.start()
+        is_error, payload = self.call_tool("registry-add", {"source": {"root": "jobs", "path": "registry.json"}, "confirmed": True})
+        self.assertTrue(is_error)
+        self.assertEqual(payload["error_code"], "input_invalid")
+
 
 class StdioProcessTests(BridgeFixture):
     def test_a_real_child_speaks_the_protocol_on_stdout_and_nothing_else(self):
@@ -245,7 +319,8 @@ class StdioProcessTests(BridgeFixture):
                                   "--library", str(self.lib), "--jobs", str(self.root / "stdio-jobs"), "--seconds", "60", "--json"],
                                  stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
         try:
-            for message in ({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}},
+            for message in ({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                             "params": {"protocolVersion": "2025-06-18", "clientInfo": {"name": "härness ✓", "version": "1"}}},
                             {"jsonrpc": "2.0", "method": "notifications/initialized"},
                             {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "manifest", "arguments": {}}}):
                 child.stdin.write(json.dumps(message) + "\n")
@@ -269,7 +344,8 @@ class StdioProcessTests(BridgeFixture):
         self.assertEqual(document["command"], "mcp serve")
         self.assertEqual(document["result"]["stopped"], "client")
         self.assertEqual(document["result"]["messages"], 3)
-        self.assertIsNone(document["result"]["client"], "this handshake sent no clientInfo")
+        # Non-ASCII survived the real pipe in both directions: the streams are UTF-8, not the console's encoding.
+        self.assertEqual(document["result"]["client"]["name"], "härness ✓")
         self.assertFalse(document["result"]["game_touched"])
 
 

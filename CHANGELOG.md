@@ -18,7 +18,9 @@ Every entry states what shipped, on which platform it was verified, and what rem
   with its own receipt under the jobs directory. There is no tool that takes argv, a shell string or
   an absolute path. `pat mcp tools --json` prints the definitions and serves nothing. stdout carries
   only the protocol (everything else goes to stderr) and the invocation's own JSON document is the
-  last line after the client disconnects. New effect `serves-stdio`; `docs/MCP.md` has the harness
+  last line after the client disconnects; a reader thread keeps `--seconds` reachable while a
+  harness is idle, a call still running at the deadline stops waiting, and a termination signal
+  still stops the child and records it. New effect `serves-stdio`; `docs/MCP.md` has the harness
   configuration, the tool table and the stdio contract.
 
 - **Black Ops III Workshop maps as donors.** `docs/knowledge/bo3-workshop-formats.md` records
