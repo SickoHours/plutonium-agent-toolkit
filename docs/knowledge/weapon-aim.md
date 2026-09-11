@@ -1,7 +1,7 @@
 # Weapon aim: donor tuning, outlier templates and the two places aim breaks
 
-"Blurry when I aim down sights" was reported four times across the authoring workspace's Mars
-port and reappeared on the R99, and it was never a texture. Aim breaks in two independent
+"Blurry when I aim down sights" was reported four times across the authoring workspace's first
+weapon port and reappeared on the second, and it was never a texture. Aim breaks in two independent
 places: the `ads*` field block inherited from a native weapon, and the geometry that lines the
 sights up. Words: `CONTEXT.md` (Normal and PAP, donor, gate). Steps:
 `docs/playbooks/port-a-bo3-weapon.md`.
@@ -9,7 +9,7 @@ sights up. Words: `CONTEXT.md` (Normal and PAP, donor, gate). Steps:
 ## Donor aim tuning does not transfer
 
 A donor game's aim fields are authored against its own aim model. Carrying them over gave the
-Mars a 0.2 s aim-in and 0.25 s aim-out against the native 0.1 s, 0.3 spread on an aimed shot
+the pistol port kept a 0.2 s aim-in and 0.25 s aim-out against the native 0.1 s, 0.3 spread on an aimed shot
 where a native pistol is pinpoint at zero, and more than double the aimed view kick (65/50, and
 100 on the upgraded form, against 45/25).
 
@@ -30,7 +30,7 @@ pistol port, is an outlier twice over among stock zombies weapons:
 
 A port built on it faithfully inherits a gun that blurs the whole scene and does not zoom, which
 is exactly what "zoom in is still blurry" describes. Swapping the whole `ads*` block to
-`fiveseven_zm` fixed it. The R99 confirmed the rule from the other side: its SMG block (idle 2,
+`fiveseven_zm` fixed it. The second port confirmed the rule from the other side: its SMG block (idle 2,
 zoom 50, depth of field 2 to 2.7, spread 0) is ordinary among SMGs and stayed whole.
 
 The rule: diff an inherited field block against the distribution of each field across the game's
@@ -45,7 +45,7 @@ The field names above are the WEAPONFILE keys `adsZoomFov`, `adsZoomInFrac`, `ad
 ## The geometry half: the sight tag against `tag_ads`
 
 After the field block is native, aim can still fail because the sights are not where the engine's
-aim reference is. The R99 spent four builds with "no iron sight picture at ADS" for this reason:
+aim reference is. The second port spent four builds with "no iron sight picture at ADS" for this reason:
 the donor's sight tag against the native viewhands' `tag_ads` alignment convention. The engine
 owns the camera roots (`tag_view`, `tag_ads`, `tag_cambone`) and weapon animation leaves must not
 key them (`zombies-contracts.md`); the gun's sight geometry has to end up on that aim reference.
@@ -58,7 +58,7 @@ native SMG used as the timing donor) and the timing from that native clip.
 
 ## Do not derive the view model camera offline
 
-One R99 build rigid-moved the assembly about 12 units on an assumed camera and the gun was
+One build of the second port rigid-moved the assembly about 12 units on an assumed camera and the gun was
 invisible at ADS. The end pose is solved from the sight geometry against a native gun's measured
 aim end; offline you project the packaged clip and the packaged model to verify the sight points
 land on the axis. The projection verifies the work; it is not a substitute for the native

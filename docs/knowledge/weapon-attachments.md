@@ -1,6 +1,6 @@
 # Attachment models: a BO3 weapon's sights may not be in the gun
 
-The authoring workspace's R99 port spent four builds treating "no iron sight picture at ADS" as
+The authoring workspace's second BO3 weapon port spent four builds treating "no iron sight picture at ADS" as
 an aim-clip problem. It was not: the sights are a separate attachment model that BO3 mounts at
 runtime, so a capture of the weapon model alone yields a barrel with no sights, and no aim clip
 can put a sight picture on geometry that is not there. This page gates the model conversion step

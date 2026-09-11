@@ -1,6 +1,6 @@
 # BO3 weapon audio offline: the SAB name table, the alias namespace and the prototype fallback
 
-Across the authoring workspace's Mars and R99 ports, weapon audio was recovered without holding
+Across the authoring workspace's two BO3 weapon ports, weapon audio was recovered without holding
 the donor game open. The first port carved its recordings by name and read its alias chain from
 one live pass; the second recovered a whole family with no new live capture at all. This page
 complements `bo3-workshop-formats.md`, which stops at the bank header. Words: `CONTEXT.md`
@@ -43,7 +43,7 @@ row are a documented adaptation, not donor data, and every one belongs in the pr
 When a named recording is absent from the bank, use the nearest recorded layer and record that
 stand-in too. Exact BO3 mixer values require a live alias capture.
 
-The R99 port validated the route: 53 recordings carved by name, 72 alias rows built, the package
+The second port validated the route: 53 recordings carved by name, 72 alias rows built, the package
 linked, and every row re-read byte-identical by name. Its missing recordings and every prototype
 row are listed in its prepare report as adaptations.
 

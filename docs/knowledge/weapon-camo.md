@@ -1,6 +1,6 @@
 # Weapon camo: how a T6 `weaponCamo` asset renders, and the four ways a port gets it wrong
 
-These facts were paid for on the authoring workspace's Mars and R99 ports to a stock T6 Zombies
+These facts were paid for on the authoring workspace's two BO3 weapon ports to a stock T6 Zombies
 map, where the Pack-a-Punch camo took four rejected builds. Words: `CONTEXT.md` (Normal and PAP,
 donor, preflight). Contracts: `zombies-contracts.md` ("A weapon is normal plus
 Pack-a-Punch"). Steps: `docs/playbooks/port-a-bo3-weapon.md`.
