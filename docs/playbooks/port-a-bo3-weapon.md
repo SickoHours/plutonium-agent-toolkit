@@ -61,9 +61,12 @@ BO3 containers and a running BO3 process; the general playbook's gates still app
      with volume, pitch, distance and priority converted, foley rows on the foley mixer, the
      secondary chain preserved; check every secondary resolves inside the bank and rows re-read
      equal (`preflight-audio-memory.md`).
-   - Textures: colour to DXT1, specular to DXT5 with gloss in alpha, normal to BC5 with
-     renormalised mips, at the size the native pistol uses; check mip storage equal after
-     readback.
+   - Textures: colour to DXT1 when the source colour map carries no graded alpha (a pistol
+     body), and to DXT5 when it does (a translucent sight, a decal, a mask), never DXT1 for
+     an alpha-bearing map; specular to DXT5 with gloss in alpha; normal to BC5 with
+     renormalised mips; all at the size the native pistol uses. Check the alpha channel's
+     presence and range on the source before choosing, and check mip storage and, for DXT5,
+     the alpha plane equal after readback.
    Proof: one conversion receipt per kind with its equality check recorded.
 6. Register with one loose server script, not a map patch: guarded by map name and an
    idempotent flag, it includes both forms, adds the PAP relationship, and, for a starting
