@@ -131,11 +131,14 @@ def build_parser() -> Parser:
     ka = k.add_subparsers(dest="action", required=True)
     q = ka.add_parser("builtin", help="Does this call exist on a script VM, with which argument counts")
     q.add_argument("name"); q.add_argument("--vm", choices=["server", "client"], help="Only this script VM"); q.add_argument("--json", action="store_true")
+    q.add_argument("--output", help="Optional new directory: also write the answer and a receipt there (provenance for a benchmark)")
     q = ka.add_parser("signature", help="Match a console log slice against the crash signatures")
     q.add_argument("--log", help="Console log file or slice to read"); q.add_argument("--text", help="One log line or a short slice")
     q.add_argument("--json", action="store_true")
+    q.add_argument("--output", help="Optional new directory: also write the answer and a receipt there (provenance for a benchmark)")
     q = ka.add_parser("limits", help="Observed engine limits, or one map's loaded zones counted against them")
     q.add_argument("--map", help="Zombies map id, for example zm_transit"); q.add_argument("--json", action="store_true")
+    q.add_argument("--output", help="Optional new directory: also write the answer and a receipt there (provenance for a benchmark)")
     from .agent import cli as _agent_cli
 
     _agent_cli.add_parser(sub)
@@ -313,10 +316,15 @@ def run(argv: list[str]) -> dict:
         from .dev import knowledge
 
         if args.action == "builtin":
-            return success(command, knowledge.builtin(args.name, args.vm))
-        if args.action == "signature":
-            return success(command, knowledge.signature(Path(args.log) if args.log else None, args.text))
-        return success(command, knowledge.limits(args.map))
+            answer = knowledge.builtin(args.name, args.vm)
+        elif args.action == "signature":
+            answer = knowledge.signature(Path(args.log) if args.log else None, args.text)
+        else:
+            answer = knowledge.limits(args.map)
+        if getattr(args, "output", None):
+            return success(command, knowledge.record(Path(args.output), command, argv, answer,
+                                                    Path(args.log) if getattr(args, "log", None) else None))
+        return success(command, answer)
     if group == "agent":
         from .agent import cli as agent_cli
 

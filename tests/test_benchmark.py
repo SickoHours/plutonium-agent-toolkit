@@ -146,9 +146,12 @@ class BenchmarkTests(unittest.TestCase):
                     outputs={"compiled/t6/face_glow.gsc": hashlib.sha256(body).hexdigest()})
             return compiled
 
-        lookup = self.run / task["id"] / "knowledge-lookup.json"
-        lookup.parent.mkdir(parents=True, exist_ok=True)
-        lookup.write_text(json.dumps({"ok": True, "command": "knowledge builtin", "result": {"name": "setanimknob", "verdict": "builtin"}}))
+        lookup = self.run / task["id"] / "lookup"
+        answer = json.dumps({"name": "setanimknob", "verdict": "builtin"}).encode()
+        lookup.mkdir(parents=True, exist_ok=True)
+        (lookup / "answer.json").write_bytes(answer)
+        receipt(lookup, "knowledge builtin", started="2026-09-10T09:59:00+00:00", finished="2026-09-10T09:59:01+00:00",
+                outputs={"answer.json": hashlib.sha256(answer).hexdigest()})
         compiled = compiled_receipt(b"\x80GSC\x00face_glow_think\x00^3face glow armed\x00iprintln\x00")
         row = bench.score_task(task, self.run)
         self.assertTrue(all(row["checks"].values()), row)
@@ -169,12 +172,15 @@ class BenchmarkTests(unittest.TestCase):
         # No artifact at all (a failed compile) cannot pass the artifact check.
         compiled.unlink()
         self.assertFalse(bench.score_task(task, self.run)["checks"]["artifacts"])
-        # Without the saved knowledge lookup the lookup check fails: guessing is not using the toolkit.
-        lookup.unlink()
+        # A fabricated answer whose hash is not the receipt's does not count; no receipt at all does not count.
+        (lookup / "answer.json").write_bytes(b'{"name": "setanimknob", "verdict": "guessed"}')
         compiled_receipt(b"\x80GSC\x00face_glow_think\x00^3face glow armed\x00iprintln\x00")
         self.assertFalse(bench.score_task(task, self.run)["checks"]["lookup"])
-        lookup.write_text(json.dumps({"ok": True, "command": "knowledge limits", "result": {}}))
-        self.assertFalse(bench.score_task(task, self.run)["checks"]["lookup"])
+        import shutil
+        shutil.rmtree(lookup)
+        row = bench.score_task(task, self.run)
+        self.assertFalse(row["checks"]["lookup"])
+        self.assertFalse(row["checks"]["routes_present"])
 
     def test_table_row_has_one_cell_per_task_plus_totals(self):
         report = bench.score_run(self.run, bench.DEFAULT_TASKS)

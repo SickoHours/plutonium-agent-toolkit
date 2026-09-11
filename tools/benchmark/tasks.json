@@ -100,6 +100,7 @@
       ],
       "expect": {
         "routes": [
+          "knowledge builtin",
           "gsc compile"
         ],
         "final_status": "succeeded",
@@ -114,8 +115,7 @@
         "inputs_contain": [
           "face_glow.gsc"
         ],
-        "lookup_record": {
-          "file": "knowledge-lookup.json",
+        "lookup": {
           "command": "knowledge builtin",
           "contains": [
             "setanimknob"
@@ -132,6 +132,7 @@
       ],
       "expect": {
         "routes": [
+          "knowledge signature",
           "gsc compile"
         ],
         "final_status": "succeeded",
@@ -147,8 +148,7 @@
           "riser_glow.gsc",
           "console_slice.log"
         ],
-        "lookup_record": {
-          "file": "knowledge-lookup.json",
+        "lookup": {
           "command": "knowledge signature",
           "contains": [
             "clientfield"

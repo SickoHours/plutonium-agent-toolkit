@@ -151,3 +151,22 @@ def limits(map_id: str | None = None) -> dict:
         raise Failure(INVALID_ARGUMENTS, f"No occupancy is recorded for {map_id}", f"Known maps: {', '.join(sorted(maps))}")
     row = maps[map_id]
     return {"map": map_id, **row, "note": occupancy["note"]}
+
+
+def record(output: Path, command: str, argv: list[str], answer: dict, log: Path | None = None) -> dict:
+    """The same answer, plus a job directory holding it as ``answer.json`` and a receipt. The
+    lookup itself stays inert; the receipt is provenance, so a benchmark can tell a toolkit answer
+    from a fabricated file. A log passed with ``--log`` is recorded as the job's input."""
+    from ..core.jobs import Job
+
+    job = Job(output, command, argv, timeout=60)
+    try:
+        if log is not None:
+            job.input(log)
+        (job.root / "answer.json").write_text(json.dumps(answer, indent=2) + "\n", encoding="utf-8")
+        result = job.finish(dict(answer))
+    except Failure as exc:
+        job.fail(exc)
+        raise
+    result["receipt"] = str(job.receipt_path)
+    return result

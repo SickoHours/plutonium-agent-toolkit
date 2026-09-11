@@ -127,20 +127,26 @@ def _artifacts_ok(receipt: dict | None, contains: list[str], excludes: list[str]
     return bool(blobs) and not drift and not missing and not present, {"missing": missing, "present": present, "files": len(blobs), "drift": drift}
 
 
-def _lookup_ok(task_dir: Path, spec: dict) -> tuple[bool, dict]:
-    """The knowledge routes are inert and write no receipt, so the task asks the agent to save the
-    route's stdout document as a file under the task directory. That file must be the toolkit's own
-    document for the named command, successful, and must carry the needles; a guess leaves no such file."""
-    path = task_dir / spec["file"]
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return False, {"file": str(path), "reason": "missing or not JSON"}
-    if not isinstance(data, dict) or data.get("command") != spec["command"] or not data.get("ok"):
-        return False, {"file": str(path), "reason": "not a successful document for " + spec["command"]}
-    text = json.dumps(data)
-    missing = [n for n in spec.get("contains", []) if n not in text]
-    return not missing, {"file": str(path), "missing": missing}
+def _lookup_ok(receipts: list[dict], spec: dict) -> tuple[bool, dict]:
+    """A knowledge lookup run with --output leaves a receipt like any job, and the answer it
+    recorded (answer.json, hashed in the receipt's outputs) must carry the needles. A fabricated
+    file has no receipt from the toolkit and does not count."""
+    for receipt in reversed(receipts):
+        if receipt.get("command") != spec["command"] or receipt.get("status") != "succeeded":
+            continue
+        rel = "answer.json"
+        want = (receipt.get("outputs") or {}).get(rel)
+        path = Path(receipt["_dir"]) / rel
+        try:
+            data = path.read_bytes()
+        except OSError:
+            continue
+        if not want or hashlib.sha256(data).hexdigest() != want:
+            return False, {"reason": "answer.json is not the file the receipt recorded"}
+        text = data.decode("utf-8", errors="replace")
+        missing = [n for n in spec.get("contains", []) if n not in text]
+        return not missing, {"receipt": str(receipt["_dir"]), "missing": missing}
+    return False, {"reason": "no succeeded receipt for " + spec["command"]}
 
 
 def _inputs_ok(receipt: dict | None, suffixes: list[str]) -> tuple[bool, list[str]]:
@@ -204,8 +210,8 @@ def score_task(task: dict, run_dir: Path) -> dict:
         ok, missing = _readback_ok(anchor, expect["readback_contains"])
         checks["readback"] = ok
         detail["readback_missing"] = missing
-    if expect.get("lookup_record"):
-        ok, why = _lookup_ok(task_dir, expect["lookup_record"])
+    if expect.get("lookup"):
+        ok, why = _lookup_ok(receipts, expect["lookup"])
         checks["lookup"] = ok
         detail["lookup"] = why
     if expect.get("artifact_contains") or expect.get("artifact_excludes"):
