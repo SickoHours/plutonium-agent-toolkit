@@ -172,6 +172,14 @@ _Avoid_: mutex, session lock
 **Test owner**: The single agent or human who currently controls the running game.
 _Avoid_: driver, operator, controller
 
+**Agent host**: A running T3 Code server that `pat agent` can hand a prompt to as a new thread,
+with the caller's model and reasoning choice. Identified by its origin and orchestration protocol.
+_Avoid_: orchestrator, backend, IDE
+
+**Dispatch**: Creating a thread on an agent host and starting its first turn. Accepted commands
+carry sequence numbers; what the thread then did is read from its status and the receipts it wrote.
+_Avoid_: launch (reserved for the game), send (a follow-up turn), trigger
+
 **Run**: One admitted test with explicit owner, plan, display mode, bounded events and receipts.
 _Avoid_: session, job, test case
 

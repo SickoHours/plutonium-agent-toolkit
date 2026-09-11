@@ -77,8 +77,10 @@ These are how the toolkit is built, so that you can extend it without breaking i
 - `error_code: delivery_uncertain` means inspect fresh state, not retry. Never replay an uncertain
   game command.
 - Setup, discovery, `dev`, `gsc`, `ff`, `project`, `module`, `model`, `audio`, `image`, `lua`,
-  `weapon`, `registry` and `game mods`/`install-mod` touch no running game (`registry add` with a
-  URL and `module fetch` read the network, one file or one exact-commit snapshot each). `game launch/info/load-map/select-mod/
+  `weapon`, `registry`, `agent` and `game mods`/`install-mod` touch no running game (`registry add`
+  with a URL and `module fetch` read the network, one file or one exact-commit snapshot each;
+  `agent dispatch`, `send` and `interrupt` write to a T3 Code server, never to the game;
+  `docs/AGENT-HOSTS.md`). `game launch/info/load-map/select-mod/
   reload-mod/fast-restart/map-restart/disconnect/check-load/quit` control the running client and
   need the user's go-ahead for that specific test.
 - The development (file) routes run on Windows and Linux; macOS is untested and not claimed. Game
@@ -94,9 +96,11 @@ These are how the toolkit is built, so that you can extend it without breaking i
 - Do not focus, minimize, kill or send keystrokes to the game as a workaround. Report the failure.
 - Do not elevate privileges, read process memory, launcher arguments or logins, or change registry
   keys beyond a documented per-user PATH entry.
-- Never ask the user for, or use, a password, token, launcher credential or login database. You do
-  not need any of them to install, configure, adapt or run this toolkit. If a step seems to require
-  one, that is a signal to stop and report, not to request it.
+- Never ask the user for a password, token, launcher credential or login database, and never read
+  one from their files. The one exception is the T3 Code bearer the user issued themselves and saved
+  with `pat configure --t3-bearer-token`: `agent` routes send it to the local server only, and never
+  print, log or forward it. If any other step seems to require a credential, that is a signal to
+  stop and report, not to request it.
 - Keep the user's paths, receipts, recordings and logs on their machine. Sanitize before sharing.
 - There is no arbitrary console-string, memory-write or arbitrary-function route, and you should
   not add one. Adapting the toolkit means new typed, validated routes, not an escape hatch.

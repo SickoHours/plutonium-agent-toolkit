@@ -41,6 +41,7 @@ See [AGENTS.md](AGENTS.md) and [docs/FOR-AGENTS.md](docs/FOR-AGENTS.md).
 | Component | Group(s) | Purpose |
 | --- | --- | --- |
 | Development (Windows, Linux) | `dev`, `gsc`, `ff`, `project`, `module`, `model`, `audio`, `image`, `lua`, `weapon` | Scripts, fastfiles, models, media, saved-asset recipes and compositions of declared modules through pinned upstream backends. Verified on Windows 11 and Arch Linux (Omarchy); macOS untested |
+| Agent hosts (Windows, Linux) | `agent` | Hand a prompt to a running T3 Code server as a new thread with the caller's model and reasoning choice; read the thread back. Orchestration protocol 1 (nightly and stable); V2 hosts are detected and refused. [docs/AGENT-HOSTS.md](docs/AGENT-HOSTS.md) |
 | Game control (Windows) | `game` | Launch T6 Zombies, select mods, load maps, verify loads through the external Win32 console. Native Windows only |
 | Testing | `capture`, `test` | **Deferred to a later release.** Contracts registered; routes refuse with `not_implemented` |
 
@@ -124,6 +125,7 @@ python tools/release_check.py
 | `src/plutonium_agent_toolkit/core/` | Errors, JSON envelope, config, receipts, platform gate, route registry |
 | `src/plutonium_agent_toolkit/dev/` | Backend pins and setup; development routes |
 | `src/plutonium_agent_toolkit/game/` | Game control routes |
+| `src/plutonium_agent_toolkit/agent/` | Agent-host routes: T3 Code as a thread dispatcher |
 | `src/plutonium_agent_toolkit/testing/` | Capture and test routes |
 | `examples/hello-zm/` | The bundled first-run mod used by the qualification loop |
 | `examples/hello-pack/` | The smallest composition: both example modules on the stock game as one `mod.ff`; formats in `docs/MODULES.md` |

@@ -1,0 +1,744 @@
+{
+  "schema_version": 1,
+  "tier": "agent",
+  "environment": {
+    "toolkit_version": "0.1.0b1",
+    "python": "3.14.7",
+    "platform": "Linux-7.2.3-arch1-3-x86_64-with-glibc2.44",
+    "machine": "x86_64",
+    "platform_token": "linux",
+    "os": "Arch Linux (Omarchy 4.0.3)",
+    "native_windows": false,
+    "native_linux": true,
+    "compatibility_layer": null,
+    "at": "2026-09-11T02:11:02+00:00",
+    "os_release": {
+      "pretty_name": "Omarchy",
+      "id": "omarchy",
+      "id_like": "arch",
+      "version_id": "4.0.3"
+    },
+    "git_head": "16dd753222379893c9ac1048604d4542c5d1346a",
+    "git_dirty": true,
+    "pat_home_isolated": true
+  },
+  "steps": [
+    {
+      "argv": [
+        "agent",
+        "probe",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.072,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "agent probe",
+        "request_id": "<id>",
+        "at": "2026-09-11T02:11:02+00:00",
+        "result": {
+          "origin": "http://127.0.0.1:3773",
+          "server_version": "0.0.41-nightly.20260910.1507",
+          "environment_id": "<uuid>",
+          "label": "<user>",
+          "platform": {
+            "os": "linux",
+            "arch": "x64",
+            "machine": "desktop"
+          },
+          "orchestration_protocol": 1,
+          "capabilities": [
+            "agentActivityPublishing",
+            "attachmentUploads",
+            "connectionProbe",
+            "desktopAppUpdate",
+            "environmentIcon",
+            "environmentThemes",
+            "fileAttachments",
+            "pullRequestStackActions",
+            "pullRequests",
+            "questionAttachments",
+            "repositoryIdentity",
+            "serverSelfUpdate",
+            "serverSelfUpdateProgress",
+            "serverUpdateThreadContinuation",
+            "threadActiveReorder",
+            "threadAutoSettlement",
+            "threadPinReorder",
+            "threadPinning",
+            "threadPullRequestLinking",
+            "threadPullRequests",
+            "threadRestartContinuation",
+            "threadSettlement",
+            "threadSnooze",
+            "threadTitleRegeneration",
+            "usageLimitSources",
+            "usagePriceOverrides"
+          ],
+          "drivable": true,
+          "thread_url": "http://127.0.0.1:3773/<uuid>/<thread-id>",
+          "runtime_state": {
+            "path": "<userprofile>/.t3/userdata/server-runtime.json",
+            "origin": "http://127.0.0.1:3773",
+            "pid": 6181,
+            "port": 3773,
+            "started_at": "2026-09-10T20:00:13.200Z"
+          }
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "agent probe",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "agent",
+        "hosts",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.113,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "agent hosts",
+        "request_id": "<id>",
+        "at": "2026-09-11T02:11:02+00:00",
+        "result": {
+          "probe": {
+            "origin": "http://127.0.0.1:3773",
+            "server_version": "0.0.41-nightly.20260910.1507",
+            "environment_id": "<uuid>",
+            "label": "<user>",
+            "platform": {
+              "os": "linux",
+              "arch": "x64",
+              "machine": "desktop"
+            },
+            "orchestration_protocol": 1,
+            "capabilities": [
+              "agentActivityPublishing",
+              "attachmentUploads",
+              "connectionProbe",
+              "desktopAppUpdate",
+              "environmentIcon",
+              "environmentThemes",
+              "fileAttachments",
+              "pullRequestStackActions",
+              "pullRequests",
+              "questionAttachments",
+              "repositoryIdentity",
+              "serverSelfUpdate",
+              "serverSelfUpdateProgress",
+              "serverUpdateThreadContinuation",
+              "threadActiveReorder",
+              "threadAutoSettlement",
+              "threadPinReorder",
+              "threadPinning",
+              "threadPullRequestLinking",
+              "threadPullRequests",
+              "threadRestartContinuation",
+              "threadSettlement",
+              "threadSnooze",
+              "threadTitleRegeneration",
+              "usageLimitSources",
+              "usagePriceOverrides"
+            ],
+            "drivable": true,
+            "thread_url": "http://127.0.0.1:3773/<uuid>/<thread-id>"
+          },
+          "projects": [
+            {
+              "id": "<uuid>"
+            },
+            {
+              "id": "<uuid>"
+            },
+            {
+              "id": "<uuid>"
+            },
+            {
+              "id": "<uuid>"
+            },
+            {
+              "id": "<uuid>"
+            }
+          ],
+          "threads": [
+            {
+              "id": "<uuid>",
+              "turn_state": "error",
+              "session_status": "stopped"
+            },
+            {
+              "id": "<uuid>",
+              "turn_state": "error",
+              "session_status": "stopped"
+            },
+            {
+              "id": "<uuid>",
+              "turn_state": null,
+              "session_status": "error"
+            },
+            {
+              "id": "<uuid>",
+              "turn_state": "completed",
+              "session_status": "stopped"
+            },
+            {
+              "id": "<uuid>",
+              "turn_state": "error",
+              "session_status": "stopped"
+            }
+          ],
+          "snapshot_sequence": 144789,
+          "game_touched": false,
+          "projects_count": 11,
+          "threads_count": 154,
+          "pruned": "titles, workspace roots, display names and all but the first rows were removed before recording"
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "agent hosts",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "agent",
+        "models",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.065,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "agent models",
+        "request_id": "<id>",
+        "at": "2026-09-11T02:11:02+00:00",
+        "result": {
+          "home": "<userprofile>/.t3",
+          "manifest_updated_at": "2026-09-04T19:10:48Z",
+          "instances": [
+            {
+              "driver": "claudeAgent",
+              "enabled": false,
+              "models": [
+                {
+                  "slug": "claude-fable-5-1",
+                  "options": [
+                    "effort",
+                    "contextWindow"
+                  ]
+                },
+                {
+                  "slug": "claude-fable-5",
+                  "options": [
+                    "effort",
+                    "contextWindow"
+                  ]
+                },
+                {
+                  "slug": "claude-opus-5",
+                  "options": [
+                    "effort",
+                    "fastMode",
+                    "contextWindow"
+                  ]
+                }
+              ]
+            },
+            {
+              "driver": "claudeAgent",
+              "enabled": true,
+              "models": [
+                {
+                  "slug": "claude-fable-5-1",
+                  "options": [
+                    "effort",
+                    "contextWindow"
+                  ]
+                },
+                {
+                  "slug": "claude-fable-5",
+                  "options": [
+                    "effort",
+                    "contextWindow"
+                  ]
+                },
+                {
+                  "slug": "claude-opus-5",
+                  "options": [
+                    "effort",
+                    "fastMode",
+                    "contextWindow"
+                  ]
+                }
+              ]
+            },
+            {
+              "driver": "opencode",
+              "enabled": true,
+              "models": []
+            }
+          ],
+          "note": "Read from this machine's T3 Code settings and cached model manifest; a driver with no manifest entry lists no models here. Pick instance_id, model slug and option choices explicitly; pat never chooses for the user.",
+          "instances_count": 3,
+          "pruned": "titles, workspace roots, display names and all but the first rows were removed before recording"
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "agent models",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "agent",
+        "dispatch",
+        "--project",
+        "<uuid>",
+        "--title",
+        "pat qualification proof (safe to archive)",
+        "--prompt",
+        "This thread was created by `pat agent dispatch` as a qualification proof. Do exactly one thing and stop: reply with the single word QUALIFIED. Do not edit files, do not run commands, do not touch any game.",
+        "--instance",
+        "claude_personal_pool",
+        "--model",
+        "claude-sonnet-5",
+        "--runtime-mode",
+        "approval-required",
+        "--interaction-mode",
+        "plan",
+        "--json",
+        "--option",
+        "effort=low"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.126,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "agent dispatch",
+        "request_id": "<id>",
+        "at": "2026-09-11T02:11:02+00:00",
+        "result": {
+          "probe": {
+            "origin": "http://127.0.0.1:3773",
+            "server_version": "0.0.41-nightly.20260910.1507",
+            "environment_id": "<uuid>",
+            "orchestration_protocol": 1
+          },
+          "thread_id": "<uuid>",
+          "message_id": "<uuid>",
+          "project_id": "<uuid>",
+          "title": "pat qualification proof (safe to archive)",
+          "model_selection": {
+            "instanceId": "claude_personal_pool",
+            "model": "claude-sonnet-5",
+            "options": [
+              {
+                "id": "effort",
+                "value": "low"
+              }
+            ]
+          },
+          "runtime_mode": "approval-required",
+          "interaction_mode": "plan",
+          "worktree_path": null,
+          "branch": null,
+          "commands": [
+            {
+              "command_id": "<uuid>",
+              "type": "thread.create",
+              "sequence": 144790
+            },
+            {
+              "command_id": "<uuid>",
+              "type": "thread.turn.start",
+              "sequence": 144792
+            }
+          ],
+          "thread_url": "http://127.0.0.1:3773/<uuid>/<uuid>",
+          "prompt_chars": 205,
+          "game_touched": false,
+          "verification": "Both commands were accepted by the server (sequence numbers). Whether the provider started, and what it did, is read with pat agent status."
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "agent dispatch proof thread",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "agent",
+        "status",
+        "<uuid>",
+        "--messages",
+        "2",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.076,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "agent status",
+        "request_id": "<id>",
+        "at": "2026-09-11T02:11:07+00:00",
+        "result": {
+          "probe": {
+            "origin": "http://127.0.0.1:3773",
+            "server_version": "0.0.41-nightly.20260910.1507",
+            "environment_id": "<uuid>",
+            "label": "<user>",
+            "platform": {
+              "os": "linux",
+              "arch": "x64",
+              "machine": "desktop"
+            },
+            "orchestration_protocol": 1,
+            "capabilities": [
+              "agentActivityPublishing",
+              "attachmentUploads",
+              "connectionProbe",
+              "desktopAppUpdate",
+              "environmentIcon",
+              "environmentThemes",
+              "fileAttachments",
+              "pullRequestStackActions",
+              "pullRequests",
+              "questionAttachments",
+              "repositoryIdentity",
+              "serverSelfUpdate",
+              "serverSelfUpdateProgress",
+              "serverUpdateThreadContinuation",
+              "threadActiveReorder",
+              "threadAutoSettlement",
+              "threadPinReorder",
+              "threadPinning",
+              "threadPullRequestLinking",
+              "threadPullRequests",
+              "threadRestartContinuation",
+              "threadSettlement",
+              "threadSnooze",
+              "threadTitleRegeneration",
+              "usageLimitSources",
+              "usagePriceOverrides"
+            ],
+            "drivable": true,
+            "thread_url": "http://127.0.0.1:3773/<uuid>/<thread-id>"
+          },
+          "thread_id": "<uuid>",
+          "project_id": "<uuid>",
+          "title": "pat qualification proof (safe to archive)",
+          "model_selection": {
+            "instanceId": "claude_personal_pool",
+            "model": "claude-sonnet-5",
+            "options": [
+              {
+                "id": "effort",
+                "value": "low"
+              }
+            ]
+          },
+          "runtime_mode": "approval-required",
+          "interaction_mode": "plan",
+          "worktree_path": null,
+          "branch": null,
+          "turn_state": "completed",
+          "turn_id": "<uuid>",
+          "turn_requested_at": "2026-09-11T02:11:02.793Z",
+          "turn_started_at": "2026-09-11T02:11:02.793Z",
+          "turn_completed_at": "2026-09-11T02:11:06.174Z",
+          "session_status": "ready",
+          "session_error": null,
+          "provider": "claudeAgent",
+          "settled_at": null,
+          "pending_approvals": false,
+          "pending_user_input": false,
+          "message_count": 2,
+          "recent_messages": [
+            {
+              "id": "<uuid>",
+              "role": "user",
+              "streaming": false,
+              "created_at": "2026-09-11T02:11:02.793Z",
+              "text": "This thread was created by `pat agent dispatch` as a qualification proof. Do exactly one thing and stop: reply with the single word QUALIFIED. Do not edit files, do not run commands, do not touch any game."
+            },
+            {
+              "id": "assistant:<uuid>",
+              "role": "assistant",
+              "streaming": false,
+              "created_at": "2026-09-11T02:11:06.131Z",
+              "text": "QUALIFIED"
+            }
+          ],
+          "thread_url": "http://127.0.0.1:3773/<uuid>/<uuid>",
+          "verification": "Server read model only. A completed turn means the provider returned; whether the task is done is in the messages and the receipts the agent wrote."
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "agent status after the first turn",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "name": "first turn completed with the requested reply",
+      "argv": [
+        "(observed)"
+      ],
+      "exit_code": 0,
+      "passed": true,
+      "expected": "turn_state completed and an assistant message containing QUALIFIED",
+      "observed": {
+        "turn_state": "completed",
+        "session_status": "ready",
+        "message_count": 2,
+        "waited_seconds": 5.2
+      }
+    },
+    {
+      "argv": [
+        "agent",
+        "send",
+        "<uuid>",
+        "--prompt",
+        "Second turn. Count slowly from one to twenty, one number per line, then reply AGAIN and stop.",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.083,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "agent send",
+        "request_id": "<id>",
+        "at": "2026-09-11T02:11:08+00:00",
+        "result": {
+          "thread_id": "<uuid>",
+          "message_id": "<uuid>",
+          "queued_behind_running_turn": false,
+          "command": {
+            "command_id": "<uuid>",
+            "type": "thread.turn.start",
+            "sequence": 144812
+          },
+          "thread_url": "http://127.0.0.1:3773/<uuid>/<uuid>",
+          "prompt_chars": 93,
+          "game_touched": false
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "agent send a second turn",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "agent",
+        "send",
+        "<uuid>",
+        "--prompt",
+        "refused",
+        "--json"
+      ],
+      "exit_code": 1,
+      "elapsed_seconds": 0.071,
+      "json": {
+        "ok": false,
+        "error_code": "busy",
+        "message": "Thread <uuid> has a running turn; nothing was sent",
+        "hint": "Wait for turn_state to leave running, interrupt it, or pass --queue to let the server adopt the message afterwards.",
+        "details": {
+          "turn_id": "<uuid>"
+        },
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "agent send",
+        "request_id": "<id>",
+        "at": "2026-09-11T02:11:08+00:00"
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "agent send while running refuses with busy",
+      "passed": true,
+      "expected": "structured failure"
+    },
+    {
+      "argv": [
+        "agent",
+        "interrupt",
+        "<uuid>",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.094,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "agent interrupt",
+        "request_id": "<id>",
+        "at": "2026-09-11T02:11:08+00:00",
+        "result": {
+          "thread_id": "<uuid>",
+          "turn_id": "<uuid>",
+          "turn_state_before": "running",
+          "command": {
+            "command_id": "<uuid>",
+            "type": "thread.turn.interrupt",
+            "sequence": 144816
+          },
+          "game_touched": false,
+          "verification": "The interrupt was accepted. Read agent status to see the turn leave running."
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "agent interrupt",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "agent",
+        "status",
+        "<uuid>",
+        "--messages",
+        "1",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.072,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "agent status",
+        "request_id": "<id>",
+        "at": "2026-09-11T02:11:13+00:00",
+        "result": {
+          "probe": {
+            "origin": "http://127.0.0.1:3773",
+            "server_version": "0.0.41-nightly.20260910.1507",
+            "environment_id": "<uuid>",
+            "label": "<user>",
+            "platform": {
+              "os": "linux",
+              "arch": "x64",
+              "machine": "desktop"
+            },
+            "orchestration_protocol": 1,
+            "capabilities": [
+              "agentActivityPublishing",
+              "attachmentUploads",
+              "connectionProbe",
+              "desktopAppUpdate",
+              "environmentIcon",
+              "environmentThemes",
+              "fileAttachments",
+              "pullRequestStackActions",
+              "pullRequests",
+              "questionAttachments",
+              "repositoryIdentity",
+              "serverSelfUpdate",
+              "serverSelfUpdateProgress",
+              "serverUpdateThreadContinuation",
+              "threadActiveReorder",
+              "threadAutoSettlement",
+              "threadPinReorder",
+              "threadPinning",
+              "threadPullRequestLinking",
+              "threadPullRequests",
+              "threadRestartContinuation",
+              "threadSettlement",
+              "threadSnooze",
+              "threadTitleRegeneration",
+              "usageLimitSources",
+              "usagePriceOverrides"
+            ],
+            "drivable": true,
+            "thread_url": "http://127.0.0.1:3773/<uuid>/<thread-id>"
+          },
+          "thread_id": "<uuid>",
+          "project_id": "<uuid>",
+          "title": "pat qualification proof (safe to archive)",
+          "model_selection": {
+            "instanceId": "claude_personal_pool",
+            "model": "claude-sonnet-5",
+            "options": [
+              {
+                "id": "effort",
+                "value": "low"
+              }
+            ]
+          },
+          "runtime_mode": "approval-required",
+          "interaction_mode": "plan",
+          "worktree_path": null,
+          "branch": null,
+          "turn_state": "interrupted",
+          "turn_id": "<uuid>",
+          "turn_requested_at": "2026-09-11T02:11:08.032Z",
+          "turn_started_at": "2026-09-11T02:11:08.032Z",
+          "turn_completed_at": "2026-09-11T02:11:08.294Z",
+          "session_status": "stopped",
+          "session_error": null,
+          "provider": "claudeAgent",
+          "settled_at": null,
+          "pending_approvals": false,
+          "pending_user_input": false,
+          "message_count": 3,
+          "recent_messages": [
+            {
+              "id": "<uuid>",
+              "role": "user",
+              "streaming": false,
+              "created_at": "2026-09-11T02:11:08.032Z",
+              "text": "Second turn. Count slowly from one to twenty, one number per line, then reply AGAIN and stop."
+            }
+          ],
+          "thread_url": "http://127.0.0.1:3773/<uuid>/<uuid>",
+          "verification": "Server read model only. A completed turn means the provider returned; whether the task is done is in the messages and the receipts the agent wrote."
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "agent status after interrupt",
+      "passed": true,
+      "expected": "turn_state interrupted (or completed when the turn finished before the interrupt landed)",
+      "observed_turn_state": "interrupted"
+    }
+  ],
+  "notes": [
+    "work directory <work>",
+    "PAT_HOME=<pat-home>; the bearer token was issued by the user's own t3 CLI beforehand and is never printed",
+    "The proof thread stays on the user's T3 Code server, titled so it can be archived; nothing else was created.",
+    {
+      "superseded": "linux-tier4-agent.superseded-20260911T021113Z.json"
+    }
+  ],
+  "passed": true,
+  "summary": {
+    "steps": 10,
+    "passed": 10,
+    "failed": []
+  }
+}
