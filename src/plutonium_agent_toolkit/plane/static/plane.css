@@ -1,34 +1,109 @@
-:root { color-scheme: light dark; font: 15px/1.45 system-ui, sans-serif; }
-body { margin: 0; }
-header { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; padding: .75rem 1.25rem; border-bottom: 1px solid #8884; }
+/* The control plane's look. One palette per colour scheme, every pair of colours chosen so text
+   stays readable: body text at 12:1 or better against its background, secondary text and every
+   badge at 4.5:1 or better (WCAG AA for normal text). Nothing that carries meaning is drawn with
+   transparency or opacity, because a tint that reads on a dark background disappears on a light
+   one. tests/test_plane.py checks the ratios from this file. */
+:root {
+  color-scheme: light dark;
+  font: 15px/1.45 system-ui, sans-serif;
+  --bg: #ffffff;
+  --fg: #16181d;
+  --muted: #4c525b;
+  --line: #c6ccd4;
+  --panel: #f3f5f7;
+  --panel-line: #d8dde3;
+  --field-bg: #ffffff;
+  --field-fg: #16181d;
+  --field-line: #8d95a0;
+  --chip-bg: #e6e9ed;
+  --chip-fg: #33383f;
+  --ok-bg: #d6efdc;
+  --ok-fg: #14512a;
+  --bad-bg: #fadcdc;
+  --bad-fg: #80181c;
+  --warn-bg: #f8ebc6;
+  --warn-fg: #63480a;
+  --rule: #9a7b12;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161a;
+    --fg: #e8ebef;
+    --muted: #aab2bd;
+    --line: #333a43;
+    --panel: #1b1f25;
+    --panel-line: #2c333b;
+    --field-bg: #0e1013;
+    --field-fg: #e8ebef;
+    --field-line: #4d555f;
+    --chip-bg: #272c33;
+    --chip-fg: #ccd3db;
+    --ok-bg: #11301e;
+    --ok-fg: #88dfa4;
+    --bad-bg: #3a1618;
+    --bad-fg: #ffb0b0;
+    --warn-bg: #362c0e;
+    --warn-fg: #efd189;
+    --rule: #b99a2c;
+  }
+}
+
+body { margin: 0; background: var(--bg); color: var(--fg); }
+header { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; padding: .75rem 1.25rem; border-bottom: 1px solid var(--line); }
 header h1 { font-size: 1.1rem; margin: 0; }
 nav button { margin-right: .25rem; }
 nav button.selected { font-weight: 700; text-decoration: underline; }
 main { padding: 1rem 1.25rem 3rem; max-width: 1200px; }
 h2 { margin: .25rem 0 .25rem; }
 h3 { margin: 1.25rem 0 .5rem; font-size: 1rem; }
-.muted { opacity: .7; }
+a { color: inherit; }
+
+/* Secondary text is a colour, never faded body text: opacity is what made this unreadable. */
+.muted, form.action .help { color: var(--muted); }
+
 table { border-collapse: collapse; width: 100%; margin: .5rem 0 1rem; font-size: .92rem; }
-th, td { text-align: left; padding: .3rem .5rem; border-bottom: 1px solid #8883; vertical-align: top; }
+th, td { text-align: left; padding: .35rem .5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; color: var(--muted); }
+tbody tr:hover { background: var(--panel); }
+
 code, pre { font-family: ui-monospace, monospace; font-size: .88rem; }
-pre { white-space: pre-wrap; word-break: break-word; max-height: 24rem; overflow: auto; padding: .5rem; background: #8881; border-radius: 4px; }
-form.action { display: grid; grid-template-columns: max-content 1fr; gap: .35rem .75rem; align-items: center; margin: .5rem 0 1rem; padding: .75rem; border: 1px solid #8884; border-radius: 6px; }
+pre { white-space: pre-wrap; word-break: break-word; max-height: 24rem; overflow: auto; padding: .5rem;
+      background: var(--panel); border: 1px solid var(--panel-line); border-radius: 4px; }
+
+form.action { display: grid; grid-template-columns: max-content 1fr; gap: .35rem .75rem; align-items: center;
+              margin: .5rem 0 1rem; padding: .75rem; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
 form.action h4 { grid-column: 1 / -1; margin: 0 0 .25rem; font-size: .95rem; }
-form.action .help { grid-column: 1 / -1; font-size: .85rem; opacity: .7; margin: 0 0 .25rem; }
+form.action .help { grid-column: 1 / -1; font-size: .85rem; margin: 0 0 .25rem; }
 form.action label { font-size: .9rem; }
-form.action input[type=text], form.action select, form.action textarea { width: 100%; box-sizing: border-box; font: inherit; }
+form.action input, form.action select, form.action textarea {
+  width: 100%; box-sizing: border-box; font: inherit;
+  background: var(--field-bg); color: var(--field-fg); border: 1px solid var(--field-line); border-radius: 4px; padding: .2rem .35rem;
+}
+form.action input[type=checkbox] { width: auto; }
 form.action textarea { min-height: 8rem; font-family: ui-monospace, monospace; font-size: .85rem; }
-form.action menu { grid-column: 1 / -1; display: flex; gap: .5rem; margin: .25rem 0 0; padding: 0; }
+form.action menu { grid-column: 1 / -1; display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin: .25rem 0 0; padding: 0; }
+:focus-visible { outline: 2px solid var(--fg); outline-offset: 1px; }
+
+button { font: inherit; color: var(--fg); background: var(--chip-bg); border: 1px solid var(--field-line);
+         border-radius: 4px; padding: .15rem .6rem; cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--fg); }
 button.primary { font-weight: 700; }
-button:disabled { opacity: .5; }
-.badge { display: inline-block; padding: 0 .4rem; border-radius: 3px; background: #8882; font-size: .8rem; }
-.badge.ok { background: #2a72; }
-.badge.bad { background: #a222; }
-.badge.warn { background: #aa22; }
-dialog { max-width: 42rem; }
+/* A disabled control is exempt from the contrast minimum, but the row still says why in full text. */
+button:disabled { opacity: .55; cursor: not-allowed; }
+
+.badge { display: inline-block; padding: 0 .4rem; border-radius: 3px; font-size: .8rem;
+         background: var(--chip-bg); color: var(--chip-fg); }
+.badge.ok { background: var(--ok-bg); color: var(--ok-fg); }
+.badge.bad { background: var(--bad-bg); color: var(--bad-fg); }
+.badge.warn { background: var(--warn-bg); color: var(--warn-fg); }
+
+dialog { max-width: 42rem; background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; }
+dialog::backdrop { background: rgba(0, 0, 0, .45); }
 dialog pre { max-height: 12rem; }
-.unavailable { opacity: .6; }
-.decision-box { grid-column: 1 / -1; margin-top: .5rem; padding: .5rem .75rem; border-left: 3px solid #aa2; }
+
+/* An action the host cannot run keeps its text readable; the badge beside it says why. */
+.unavailable { border-style: dashed; }
+.decision-box { grid-column: 1 / -1; margin-top: .5rem; padding: .5rem .75rem; border-left: 3px solid var(--rule); background: var(--bg); }
 .decision-box ol { margin: .25rem 0 0; padding-left: 1.25rem; }
 .decisions li { margin: .2rem 0; }
 .prompt { display: grid; gap: .3rem; }
