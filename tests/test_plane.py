@@ -614,9 +614,10 @@ class ShutdownTests(unittest.TestCase):
             run = plane.start("manifest", {}, False)
             with plane.lock:  # hold the state lock so the worker cannot spawn yet
                 plane.stopping = True
-            deadline = time.monotonic() + 30
-            while plane.job_lock.locked() and time.monotonic() < deadline:
-                time.sleep(0.05)
+            # Wait for the run to be fully recorded (not only for the lock) before reading it and
+            # before the temporary directory goes away: on Windows a record still being written
+            # would make the cleanup fail.
+            self.assertTrue(plane.settled.wait(30), "the run settled")
             record = next(r for r in plane.run_rows() if r["run_id"] == run["run_id"])
             self.assertIn(record["status"], ("stopped", "finished"))
             if record["status"] == "finished":
