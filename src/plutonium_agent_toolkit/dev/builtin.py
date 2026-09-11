@@ -171,6 +171,11 @@ def verify(entry: dict) -> dict:
             continue
         if not p.is_dir():
             continue
+        # So would a link anywhere below it: the recorded files would still hash through it.
+        links = _links_under(p)
+        if links:
+            added.extend(f"{rel}/{sub}: is a link" if rel != "." else f"{sub}: is a link" for sub in links)
+            continue
         try:
             present = inventory(p)
         except Failure as exc:
@@ -182,6 +187,17 @@ def verify(entry: dict) -> dict:
                 added.append(key)
     state = "verified" if not changed and not missing and not added else "changed"
     return {"state": state, "changed": changed, "missing": missing, "added": added, "receipt": receipt}
+
+
+def _links_under(root: Path) -> list[str]:
+    """Every link (file or directory) below root, relative to it; the walk never follows one."""
+    found = []
+    for directory, dirs, files in os.walk(root, followlinks=False):
+        for name in sorted(dirs) + sorted(files):
+            p = Path(directory) / name
+            if p.is_symlink():
+                found.append(p.relative_to(root).as_posix())
+    return found
 
 
 def _write_json(path: Path, data: dict) -> None:

@@ -335,6 +335,22 @@ class DevBuiltinTests(BuiltinFixture):
             code, row = invoke(["dev", "builtin", "--only", "sickohours/hello_zm"])
             self.assertEqual(row["error_code"], "artifact_changed")
             self.assertEqual(row["details"]["added"], ["examples/hello-zm: is a link"])
+        # A link below a recorded directory (a subdirectory swapped for a link) is a changed tree too.
+        if module_dir.is_symlink():
+            module_dir.unlink()
+            shutil.copytree(elsewhere, module_dir)
+            scripts = module_dir / "scripts"
+            moved = self.root / "scripts-elsewhere"
+            shutil.move(str(scripts), str(moved))
+            scripts.symlink_to(moved, target_is_directory=True)
+            code, row = invoke(["dev", "builtin", "--only", "sickohours/hello_zm"])
+            self.assertEqual(row["error_code"], "artifact_changed")
+            self.assertEqual(row["details"]["added"], ["examples/hello-zm/scripts: is a link"])
+            scripts.unlink()
+            shutil.move(str(moved), str(scripts))
+            code, row = invoke(["dev", "builtin", "--only", "sickohours/hello_zm"])
+            self.assertEqual(code, 0, row)
+            self.assertEqual(row["result"]["results"][0]["action"], "verified", "the restored tree verifies again")
         # A name listed by the built-in registry and by an added registry at another commit resolves by commit.
         newer = "f" * 40
         added = {"schema": 1, "name": "official", "description": "", "entries": [dict(self.entries[0], listed={"commit": newer, "at": "2026-09-12"})]}
