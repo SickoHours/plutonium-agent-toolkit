@@ -22,8 +22,9 @@ pat plane serve --library /abs/path/to/modules --jobs /abs/path/to/jobs --json
   recipe or a seed) and pack directories (`composition.json`). The page lists what it finds by
   reading those files; nothing is indexed or cached elsewhere.
 - `--jobs`: where every job's output directory goes (`<action>-<n>`), plus the plane's own run
-  records under `plane-runs/` and dispatched prompts under `plane-prompts/`. It must not lie
-  inside a library root, and no library root inside it.
+  records under `plane-runs/`. A dispatched prompt is written under `plane-prompts/` only while
+  its `pat agent` child runs and is removed afterwards (and at shutdown). The jobs directory
+  must not lie inside a library root, and no library root inside it.
 - `--port` (default 0, a free port) and `--seconds` (default one hour): the server binds
   `127.0.0.1` only and stops on its deadline or Ctrl-C, then prints one JSON summary.
 
@@ -76,8 +77,11 @@ says why.
 ## Reading a run
 
 Each run row carries `argv` (what ran), `exit_code`, `result` (the child's whole JSON document,
-parsed in full; a child that prints more than 64 MiB keeps only `stdout_head` and `stdout_bytes`)
-and, for job routes, `output` (the directory holding `receipt.json` and the artifacts). A run
+parsed in full; both pipes are read through bounded buffers, and a child that prints more than
+64 MiB is stopped and recorded with `output_overflow: true`, `stdout_head` and `stdout_bytes`)
+and, for job routes, `output` (the directory holding `receipt.json` and the artifacts). Every
+file the plane reads (declarations, manifests, receipts, request bodies) is strict JSON with a
+size bound; anything else is listed as unreadable, and nothing it returns contains `NaN`. A run
 that could not start a child (`stderr_head`), or exceeded the action's deadline (`status:
 timeout`), is recorded the same way. The plane's own summary at exit counts runs and says
 `game_touched: false`, because it touched nothing itself.

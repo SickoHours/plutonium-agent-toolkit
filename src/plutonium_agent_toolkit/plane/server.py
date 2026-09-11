@@ -36,6 +36,8 @@ MAX_BODY = 1024 * 1024
 MAX_RUNS = 200
 MAX_OUTPUT = 64 * 1024 * 1024   # the child's stdout is parsed whole up to this; beyond it the run keeps a head and no result
 MAX_HEAD = 4000
+MAX_RECEIPT = 256 * 1024     # a receipt.json larger than this is listed as unreadable, not parsed
+MAX_STDERR = 1024 * 1024     # the child's stderr is kept up to this
 MAX_LIBRARY_ROOTS = 16
 MAX_SECONDS = 24 * 3600
 MAX_CATALOG_ROWS = 2000      # declarations and compositions across every root, per request
@@ -43,6 +45,15 @@ MAX_PACKAGES = 512           # loose mod.ff files listed per root for module dec
 MAX_DIRECTORIES = 4096       # directories walked per root
 STOP_GRACE = 10.0            # seconds a child gets to stop cleanly at shutdown
 NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}\Z")
+
+
+def _reject_constant(name: str):
+    raise ValueError(f"non-finite JSON constant {name}")
+
+
+def strict_loads(text):
+    """JSON without NaN or Infinity: what the page and any strict client can read back."""
+    return json.loads(text, parse_constant=_reject_constant)
 
 
 def _loopback(value: str | None) -> bool:
@@ -69,6 +80,70 @@ def _group_flags() -> dict:
     if os.name == "nt":
         return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
     return {"start_new_session": True}
+
+
+class _Reader(threading.Thread):
+    """Drains one pipe into a bounded buffer; past the bound it keeps counting and drops bytes."""
+
+    def __init__(self, pipe, limit: int):
+        super().__init__(daemon=True)
+        self.pipe, self.limit = pipe, limit
+        self.chunks: list[str] = []
+        self.size = 0
+        self.overflow = False
+        self.start()
+
+    def run(self) -> None:
+        try:
+            while True:
+                chunk = self.pipe.read(65536)
+                if not chunk:
+                    break
+                self.size += len(chunk)
+                if self.size <= self.limit:
+                    self.chunks.append(chunk)
+                else:
+                    if not self.overflow:
+                        self.chunks.append(chunk[: max(0, self.limit - (self.size - len(chunk)))])
+                    self.overflow = True
+        except (OSError, ValueError):
+            pass
+        finally:
+            try:
+                self.pipe.close()
+            except OSError:
+                pass
+
+    def text(self) -> str:
+        return "".join(self.chunks)
+
+
+def _drain(process: subprocess.Popen, timeout: float, jobs: Path) -> tuple[str, str, bool, int]:
+    """Read both pipes with bounded buffers until the child exits or the deadline passes. A child
+    that exceeds the stdout bound is stopped rather than allowed to fill memory. Returns the
+    texts, whether stdout overflowed, and how many stdout characters the child wrote in total."""
+    out, err = _Reader(process.stdout, MAX_OUTPUT), _Reader(process.stderr, MAX_STDERR)
+    deadline = time.monotonic() + timeout
+    while process.poll() is None:
+        if out.overflow:
+            _stop_process(process, STOP_GRACE, None)
+            break
+        if time.monotonic() >= deadline:
+            raise subprocess.TimeoutExpired(process.args, timeout, stderr=err.text())
+        time.sleep(0.05)
+    out.join(STOP_GRACE)
+    err.join(STOP_GRACE)
+    return out.text(), err.text(), out.overflow, out.size
+
+
+def _remove_prompts(run: dict) -> None:
+    """A dispatched prompt lives on disk only while its child runs; the argv keeps the file name."""
+    for index, item in enumerate(run["argv"]):
+        if index and run["argv"][index - 1] == "--prompt" and item.startswith("@"):
+            try:
+                Path(item[1:]).unlink()
+            except OSError:
+                pass
 
 
 def _job_for(process: subprocess.Popen):
@@ -192,7 +267,9 @@ class Plane:
                 if child.is_symlink() or not child.is_dir() or receipt.is_symlink() or not receipt.is_file():
                     continue
                 try:
-                    data = json.loads(receipt.read_text(encoding="utf-8"))
+                    if receipt.stat().st_size > MAX_RECEIPT:
+                        raise OSError("receipt larger than the bound")
+                    data = strict_loads(receipt.read_text(encoding="utf-8"))
                 except (OSError, ValueError):
                     rows.append({"directory": child.name, "status": "unreadable"})
                     continue
@@ -297,30 +374,31 @@ class Plane:
                 job = _job_for(process)
                 self.active = (process, job)
             try:
-                stdout, stderr = process.communicate(timeout=timeout)
+                stdout, stderr, overflow, stdout_size = _drain(process, timeout, self.jobs)
                 stopped = False
-            except subprocess.TimeoutExpired:
+            except subprocess.TimeoutExpired as exc:
                 _stop_process(process, STOP_GRACE, job)
-                stdout, stderr = process.communicate()
                 run.update(status="timeout", exit_code=process.returncode, finished=now(), result=None,
-                           stderr_head=f"exceeded {timeout} seconds and was stopped; " + (stderr or "")[:2000])
+                           stderr_head=f"exceeded {timeout} seconds and was stopped; " + str(exc.stderr or "")[:2000])
                 return
             finally:
                 with self.lock:
                     self.active = None
                     stopped = self.stopping
                 _close_job(job)  # on Windows this also ends anything the child left behind
-            stdout = stdout or ""
+            if overflow:
+                _stop_process(process, STOP_GRACE, None)
             payload = None
-            if len(stdout) <= MAX_OUTPUT:
+            if not overflow:
                 try:
-                    payload = json.loads(stdout) if stdout.strip() else None
+                    payload = strict_loads(stdout) if stdout.strip() else None
                 except ValueError:
                     payload = None
             run.update(status="stopped" if stopped and process.returncode != 0 else "finished", exit_code=process.returncode,
                        finished=now(), result=payload, stdout_head=None if payload is not None else stdout[:MAX_HEAD],
-                       stdout_bytes=len(stdout), stderr_head=(stderr or "")[:MAX_HEAD])
+                       stdout_bytes=stdout_size, output_overflow=overflow, stderr_head=(stderr or "")[:MAX_HEAD])
         finally:
+            _remove_prompts(run)
             # The lock goes first: a client that reads the finished record may start the next run at
             # once. The record follows, and settled tells shutdown the run is fully written.
             self.job_lock.release()
@@ -339,7 +417,15 @@ class Plane:
         if active is not None:
             _stop_process(active[0], grace, active[1])
         self.settled.wait(grace + 5)
-        return {"child_stopped": active is not None, "still_running": self.job_lock.locked()}
+        removed = 0
+        if self.prompt_dir.is_dir():
+            for leftover in self.prompt_dir.glob("prompt-*.txt"):
+                try:
+                    leftover.unlink()
+                    removed += 1
+                except OSError:
+                    pass
+        return {"child_stopped": active is not None, "still_running": self.job_lock.locked(), "prompts_removed": removed}
 
     def run_rows(self) -> list[dict]:
         with self.lock:
@@ -351,7 +437,7 @@ def _summary(path: Path, rel: str, kind: str) -> dict:
         raw = path.read_bytes()
         if len(raw) > 256 * 1024:
             return {"path": rel, "kind": kind, "error": "declaration larger than 256 KiB"}
-        data = json.loads(raw)
+        data = strict_loads(raw)
     except (OSError, ValueError):
         return {"path": rel, "kind": kind, "error": "unreadable"}
     if not isinstance(data, dict):
@@ -364,7 +450,9 @@ def _summary(path: Path, rel: str, kind: str) -> dict:
         manifest = path.parent / str(data["seed"])
         if manifest.is_file() and not manifest.is_symlink():
             try:
-                seed = json.loads(manifest.read_text(encoding="utf-8"))
+                if manifest.stat().st_size > 4 * 1024 * 1024:
+                    raise OSError("seed manifest larger than the bound")
+                seed = strict_loads(manifest.read_text(encoding="utf-8"))
             except (OSError, ValueError):
                 seed = None
             if not isinstance(seed, dict):
@@ -389,7 +477,7 @@ def make_handler(plane: Plane):
 
         # ----- helpers -----
         def _json(self, status: int, body: dict) -> None:
-            data = json.dumps(body, indent=2, ensure_ascii=False).encode("utf-8")
+            data = json.dumps(body, indent=2, ensure_ascii=False, allow_nan=False).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(data)))
@@ -423,7 +511,7 @@ def make_handler(plane: Plane):
                 raise Failure(INPUT_LIMIT, f"Request body is 0 to {MAX_BODY} bytes")
             raw = self.rfile.read(length) if length else b""
             try:
-                value = json.loads(raw or b"{}")
+                value = strict_loads(raw or b"{}")
             except ValueError as exc:
                 raise Failure(INPUT_INVALID, "Request body is not JSON") from exc
             if not isinstance(value, dict):

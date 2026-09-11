@@ -310,6 +310,62 @@ class PlaneServerTests(PlaneServerFixture):
         self.assertIsNone(rows["odd0"]["package_present"])
         self.assertEqual(rows["odd0"]["bases"], "b2", "the page normalises scalars; the server reports the file as it is")
 
+    def test_strict_json_and_bounded_receipts(self):
+        # Review findings: NaN in a declaration must not leak into the API as invalid JSON, and a
+        # huge receipt.json must not be read whole.
+        odd = self.lib / "nan"
+        odd.mkdir()
+        (odd / "module.json").write_text('{"schema": 1, "id": "nan_mod", "version": "1", "recipe": "project.json", "bases": ["stock"], "maps": ["*"], "resource_contract": {"threads": NaN}}')
+        status, body = self.call("/api/library")
+        self.assertEqual(status, 200)
+        row = next(m for m in body["roots"][0]["modules"] if m["path"] == "nan")
+        self.assertEqual(row["error"], "unreadable")
+        big = self.jobs / "huge-receipt"
+        big.mkdir(parents=True)
+        (big / "receipt.json").write_text("{" + " " * (300 * 1024) + "}")
+        status, body = self.call("/api/jobs")
+        self.assertEqual(status, 200)
+        self.assertEqual(next(r for r in body["runs"] if r["directory"] == "huge-receipt")["status"], "unreadable")
+        status, body = self.call("/api/run", {"action": "registry-search", "args": {"words": "x"}}, )
+        self.assertEqual(status, 202)
+        self.finish(body["run"]["run_id"])
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        conn.request("POST", "/api/run", body='{"action": "manifest", "args": {}, "confirmed": NaN}',
+                     headers={"X-Plane-Token": self.plane.token, "Content-Type": "application/json"})
+        response = conn.getresponse()
+        self.assertEqual(response.status, 400)
+        response.read()
+        conn.close()
+
+    def test_a_child_that_floods_stdout_is_stopped_and_recorded_without_a_result(self):
+        with unittest.mock.patch.object(server_module, "MAX_OUTPUT", 20_000):
+            status, body = self.call("/api/run", {"action": "manifest", "args": {}})
+            self.assertEqual(status, 202, body)
+            run = self.finish(body["run"]["run_id"])
+        self.assertTrue(run["output_overflow"], run)
+        self.assertIsNone(run["result"])
+        self.assertGreater(run["stdout_bytes"], 20_000)
+        self.assertLessEqual(len(run["stdout_head"]), server_module.MAX_HEAD)
+        status, body = self.call("/api/run", {"action": "manifest", "args": {}})
+        self.assertEqual(status, 202, "the plane is usable afterwards")
+        run = self.finish(body["run"]["run_id"])
+        self.assertFalse(run["output_overflow"])
+        self.assertTrue(run["result"]["ok"])
+
+    def test_prompt_files_live_only_while_their_child_runs(self):
+        status, body = self.call("/api/run", {"action": "agent-send", "confirmed": True, "args": {"thread_id": "t-1", "prompt": "a secret plan"}})
+        self.assertEqual(status, 202, body)
+        prompt_arg = next(a for a in body["run"]["argv"] if a.startswith("@"))
+        run = self.finish(body["run"]["run_id"])
+        self.assertEqual(run["result"]["error_code"], "config_missing", "no T3 server recorded in this fixture")
+        self.assertFalse(Path(prompt_arg[1:]).exists(), "the prompt file is removed once the child ran")
+        (self.jobs / "plane-prompts").mkdir(exist_ok=True)
+        stray = self.jobs / "plane-prompts" / "prompt-stray.txt"
+        stray.write_text("left over")
+        summary = self.plane.shutdown(grace=1)
+        self.assertEqual(summary["prompts_removed"], 1)
+        self.assertFalse(stray.exists())
+
     def test_plan_build_verify_and_the_receipt_index(self):
         status, body = self.call("/api/run", {"action": "module-plan", "args": {"composition": {"root": 0, "path": "hello-pack/composition.json"}}})
         self.assertEqual(status, 202, body)
