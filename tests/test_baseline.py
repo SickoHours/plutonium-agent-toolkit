@@ -1316,6 +1316,20 @@ class DeclarationReportingTests(BaselineFixture):
         self.assertFalse(nested["bad-utf8/composition.json"]["valid"])
         self.assertEqual(len(self.findings(row, "declaration-mismatch")), 2)
 
+    def test_the_listing_is_compared_with_the_entry_declaration_only(self):
+        # A pack vendors a module from another repository: the pack is the entry being listed, the
+        # member carries its own source, and a correct pack must still be listable.
+        directory = self.pack("pack", ["./member"])
+        self.module(name="pack/member", decl={"source": {"repository": "https://github.com/someone/else", "commit": "b" * 40}})
+        code, row = self.scan(directory, "--repository", "https://github.com/owner/pack", "--commit", "a" * 40)
+        self.assertEqual(code, 0, row)
+        self.assertEqual(self.findings(row, "declaration-mismatch"), [], "the member's own source is not the listing's")
+        self.assertEqual(row["result"]["outcome"], "passed", row["result"]["findings"])
+        # The entry declaration itself is still compared: a module listed under the wrong commit.
+        entry = self.module(name="entry", decl={"source": {"repository": "https://github.com/owner/entry", "commit": "c" * 40}})
+        code, row = self.scan(entry, "--repository", "https://github.com/owner/entry", "--commit", "d" * 40)
+        self.assertEqual([(r["file"], "commit" in r["evidence"]) for r in self.findings(row, "declaration-mismatch")], [("module.json", True)])
+
     def test_an_embedded_nul_in_a_declared_path_is_a_finding_not_a_crash(self):
         directory = self.module(rec={"scripts": [{"source": "scripts/a\u0000b.gsc", "target": "scripts/zm/x.gsc", "instance": "server"}]})
         code, row = self.scan(directory)

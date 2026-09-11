@@ -11,14 +11,14 @@
     "native_windows": false,
     "native_linux": true,
     "compatibility_layer": null,
-    "at": "2026-09-11T07:38:57+00:00",
+    "at": "2026-09-11T07:48:55+00:00",
     "os_release": {
       "pretty_name": "Omarchy",
       "id": "omarchy",
       "id_like": "arch",
       "version_id": "4.0.3"
     },
-    "git_head": "af23b0e883238cb980679d0dd16da34bbf54367c",
+    "git_head": "c28a72560cfac7f0f77ededf7c3adeaf413d94bb",
     "git_dirty": true,
     "pat_home_isolated": true
   },
@@ -35,7 +35,7 @@
       ],
       "exit_code": 0,
       "passed": true,
-      "stderr_head": "..................................................................................................................................................................................................................................................................................sss.........................warning: run record could not be saved (disk full)\n.............sss.sThis process runs on a CI runner (GITHUB_ACTIONS is set); receipts are recorded on real hosts only.\n.This host runs linux under wsl, which never counts as native; qualify on a real host.\n.....s...................................................................\n----------------------------------------------------------------------\nRan 394 tests in 37.129s\n\nOK (skipped=8)\n",
+      "stderr_head": "...................................................................................................................................................................................................................................................................................sss.........................warning: run record could not be saved (disk full)\n.............sss.sThis process runs on a CI runner (GITHUB_ACTIONS is set); receipts are recorded on real hosts only.\n.This host runs linux under wsl, which never counts as native; qualify on a real host.\n.....s...................................................................\n----------------------------------------------------------------------\nRan 395 tests in 37.165s\n\nOK (skipped=8)\n",
       "expected": "success"
     },
     {
@@ -44,14 +44,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.124,
+      "elapsed_seconds": 0.136,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "version",
         "request_id": "<id>",
-        "at": "2026-09-11T07:39:34+00:00",
+        "at": "2026-09-11T07:49:32+00:00",
         "result": {
           "version": "0.1.0b1",
           "platform": {
@@ -79,14 +79,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.125,
+      "elapsed_seconds": 0.131,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "manifest",
         "request_id": "<id>",
-        "at": "2026-09-11T07:39:35+00:00",
+        "at": "2026-09-11T07:49:32+00:00",
         "result": {
           "platform": {
             "system": "Linux",
@@ -1514,14 +1514,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.127,
+      "elapsed_seconds": 0.142,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "describe",
         "request_id": "<id>",
-        "at": "2026-09-11T07:39:35+00:00",
+        "at": "2026-09-11T07:49:32+00:00",
         "result": {
           "group": "game",
           "action": "load-map",
@@ -1555,14 +1555,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.137,
+      "elapsed_seconds": 0.135,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "doctor",
         "request_id": "<id>",
-        "at": "2026-09-11T07:39:35+00:00",
+        "at": "2026-09-11T07:49:33+00:00",
         "result": {
           "platform": {
             "system": "Linux",
@@ -1796,14 +1796,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.125,
+      "elapsed_seconds": 0.131,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "configure",
         "request_id": "<id>",
-        "at": "2026-09-11T07:39:35+00:00",
+        "at": "2026-09-11T07:49:33+00:00",
         "result": {
           "path": "<pat-home>/config.json",
           "saved": [
@@ -1824,14 +1824,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.147,
+      "elapsed_seconds": 0.123,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "game mods",
         "request_id": "<id>",
-        "at": "2026-09-11T07:39:35+00:00",
+        "at": "2026-09-11T07:49:33+00:00",
         "result": {
           "storage": "<work>/fake-storage/t6",
           "mods": [],
@@ -1852,14 +1852,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.14,
+      "elapsed_seconds": 0.095,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "dev setup",
         "request_id": "<id>",
-        "at": "2026-09-11T07:39:35+00:00",
+        "at": "2026-09-11T07:49:33+00:00",
         "result": {
           "plan": true,
           "platform": "linux",
@@ -1941,14 +1941,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.112,
+      "elapsed_seconds": 0.127,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "project plan",
         "request_id": "<id>",
-        "at": "2026-09-11T07:39:35+00:00",
+        "at": "2026-09-11T07:49:33+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/plan-hello",
@@ -1997,7 +1997,7 @@
         "--json"
       ],
       "exit_code": 1,
-      "elapsed_seconds": 0.123,
+      "elapsed_seconds": 0.108,
       "json": {
         "ok": false,
         "error_code": "output_exists",
@@ -2007,7 +2007,7 @@
         "toolkit_version": "0.1.0b1",
         "command": "project plan",
         "request_id": "<id>",
-        "at": "2026-09-11T07:39:35+00:00"
+        "at": "2026-09-11T07:49:33+00:00"
       },
       "stdout_head": null,
       "stderr_head": "",
@@ -2026,14 +2026,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.141,
+      "elapsed_seconds": 0.102,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "project init",
         "request_id": "<id>",
-        "at": "2026-09-11T07:39:36+00:00",
+        "at": "2026-09-11T07:49:33+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/init",
@@ -2061,14 +2061,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.12,
+      "elapsed_seconds": 0.112,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "project plan",
         "request_id": "<id>",
-        "at": "2026-09-11T07:39:36+00:00",
+        "at": "2026-09-11T07:49:33+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/init-plan",
@@ -2117,14 +2117,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.113,
+      "elapsed_seconds": 0.144,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "registry baseline",
         "request_id": "<id>",
-        "at": "2026-09-11T07:39:36+00:00",
+        "at": "2026-09-11T07:49:33+00:00",
         "result": {
           "job_id": "<id>",
           "output": "<work>/baseline-hello",
@@ -2220,14 +2220,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.136,
+      "elapsed_seconds": 0.133,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "dev install-skills",
         "request_id": "<id>",
-        "at": "2026-09-11T07:39:36+00:00",
+        "at": "2026-09-11T07:49:34+00:00",
         "result": {
           "plan": true,
           "source": "<repo>",
@@ -2343,14 +2343,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.117,
+      "elapsed_seconds": 0.136,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "dev install-skills",
         "request_id": "<id>",
-        "at": "2026-09-11T07:39:36+00:00",
+        "at": "2026-09-11T07:49:34+00:00",
         "result": {
           "plan": false,
           "source": "<repo>",
@@ -2445,7 +2445,7 @@
             "unchanged": 0,
             "refused": 0
           },
-          "receipt": "<pat-home>/skills/receipts/20260911T073936+0000-cffc9d87.json",
+          "receipt": "<pat-home>/skills/receipts/20260911T074934+0000-e373f1f5.json",
           "record": "<pat-home>/skills/installed.json",
           "game_touched": false,
           "verification": "files compared by hash and written under the user's home; no harness was launched, so each harness's own listing (for example /skills in a new session) is the check that it sees them",
@@ -2467,14 +2467,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.142,
+      "elapsed_seconds": 0.117,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "dev install-skills",
         "request_id": "<id>",
-        "at": "2026-09-11T07:39:36+00:00",
+        "at": "2026-09-11T07:49:34+00:00",
         "result": {
           "plan": false,
           "source": "<repo>",
@@ -2569,7 +2569,7 @@
             "unchanged": 49,
             "refused": 0
           },
-          "receipt": "<pat-home>/skills/receipts/20260911T073936+0000-0f5e62bd.json",
+          "receipt": "<pat-home>/skills/receipts/20260911T074934+0000-281032ed.json",
           "record": "<pat-home>/skills/installed.json",
           "game_touched": false,
           "verification": "files compared by hash and written under the user's home; no harness was launched, so each harness's own listing (for example /skills in a new session) is the check that it sees them",
@@ -2588,7 +2588,7 @@
         "start"
       ],
       "exit_code": 1,
-      "elapsed_seconds": 0.128,
+      "elapsed_seconds": 0.113,
       "json": {
         "ok": false,
         "error_code": "not_implemented",
@@ -2618,7 +2618,7 @@
         "toolkit_version": "0.1.0b1",
         "command": "capture start",
         "request_id": "<id>",
-        "at": "2026-09-11T07:39:36+00:00"
+        "at": "2026-09-11T07:49:34+00:00"
       },
       "stdout_head": null,
       "stderr_head": "",
@@ -2635,7 +2635,7 @@
         "--json"
       ],
       "exit_code": 1,
-      "elapsed_seconds": 0.146,
+      "elapsed_seconds": 0.159,
       "json": {
         "ok": false,
         "error_code": "backend_failed",
@@ -2645,7 +2645,7 @@
         "toolkit_version": "0.1.0b1",
         "command": "agent probe",
         "request_id": "<id>",
-        "at": "2026-09-11T07:39:37+00:00"
+        "at": "2026-09-11T07:49:34+00:00"
       },
       "stdout_head": null,
       "stderr_head": "",
@@ -2672,7 +2672,7 @@
         "--json"
       ],
       "exit_code": 1,
-      "elapsed_seconds": 0.117,
+      "elapsed_seconds": 0.12,
       "json": {
         "ok": false,
         "error_code": "config_missing",
@@ -2682,7 +2682,7 @@
         "toolkit_version": "0.1.0b1",
         "command": "agent dispatch",
         "request_id": "<id>",
-        "at": "2026-09-11T07:39:37+00:00"
+        "at": "2026-09-11T07:49:34+00:00"
       },
       "stdout_head": null,
       "stderr_head": "",
@@ -2696,7 +2696,7 @@
         "<repo>/tools/private_scan.py"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.195,
+      "elapsed_seconds": 0.227,
       "json": {
         "ok": true,
         "hits": [],
@@ -2718,7 +2718,7 @@
         "<repo>/tools/release_check.py"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.1,
+      "elapsed_seconds": 0.062,
       "json": {
         "ok": true,
         "version": "0.1.0b1",
@@ -2742,7 +2742,7 @@
       "skills_refused": 0
     },
     {
-      "superseded": "linux-tier1-offline.superseded-20260911T073937Z.json"
+      "superseded": "linux-tier1-offline.superseded-20260911T074935Z.json"
     }
   ],
   "passed": true,

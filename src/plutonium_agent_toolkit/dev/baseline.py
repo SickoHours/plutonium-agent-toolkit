@@ -679,6 +679,9 @@ def _expected(args) -> dict:
     return {"repository": repository.rstrip("/").lower() if repository else None, "commit": commit.lower() if commit else None}
 
 
+NO_LISTING = {"repository": None, "commit": None}   # a declaration that is not the listed entry
+
+
 def _display(rel: str) -> str:
     """A file name as UTF-8 text: bytes that are not UTF-8 show as backslash escapes."""
     return rel.encode("utf-8", "surrogateescape").decode("utf-8", "backslashreplace")
@@ -970,7 +973,12 @@ def execute(args, job: Job) -> dict:
     summary = None
     nested = []
     for rel, kind, directory, text in scan.declarations:
-        data = _check_declaration(rows, rel, kind, text, directory, root, expected, scan.unreadable)
+        # --repository and --commit describe the entry being listed, which is the declaration at
+        # the scanned root. A member vendored or fetched from somewhere else carries its own
+        # source, and comparing that with the listing's would make a correct pack unlistable; its
+        # shape is still checked, only the comparison is not made.
+        listing = expected if directory == root else NO_LISTING
+        data = _check_declaration(rows, rel, kind, text, directory, root, listing, scan.unreadable)
         if kind == "recipe":
             continue
         row = _module_summary(rel, data) if kind == "module" else _composition_summary(rel, data, directory, root, scan.unreadable)
