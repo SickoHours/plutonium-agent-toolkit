@@ -142,7 +142,7 @@ Every entry states what shipped, on which platform it was verified, and what rem
   rows, each naming the occupancy field that counts against it), `occupancy.json` (per map, what the
   zones the engine loads already carry against each limit; counts only) and `crash-signatures.json`
   (18 console-log regexes with class, cause and fix). New inert routes `pat knowledge builtin <name>
-  [--vm]`, `pat knowledge signature --log <file>|--text <line>` and `pat knowledge limits [--map]`.
+  [--vm server|client]`, `pat knowledge signature --log <file>|--text <line>` and `pat knowledge limits [--map <zm_map>]`.
   A name with no witness answers `not-witnessed`, not `unknown`, and carries a `caution` saying that
   absence of a witness is not evidence of absence and naming the VM it is witnessed on, because a
   caller branches on the verdict and skips the note. The projectile-effect limit row says in the data

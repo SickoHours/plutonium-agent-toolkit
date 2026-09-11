@@ -136,23 +136,45 @@ class BenchmarkTests(unittest.TestCase):
     def test_wrong_vm_task_is_scored_on_the_compiled_artifact(self):
         task = self.by_id["bench-05-builtin-wrong-vm"]
         job = self.run / task["id"] / "job"
-        receipt(job, "gsc compile", inputs={"/run/bench-05/face_glow.gsc": "a" * 64})
-        compiled = job / "compiled" / "t6" / "face_glow.gsc"
-        compiled.parent.mkdir(parents=True)
-        compiled.write_bytes(b"\x80GSC\x00face_glow_think\x00iprintln\x00")
+        import hashlib
+
+        def compiled_receipt(body: bytes):
+            compiled = job / "compiled" / "t6" / "face_glow.gsc"
+            compiled.parent.mkdir(parents=True, exist_ok=True)
+            compiled.write_bytes(body)
+            receipt(job, "gsc compile", inputs={"/run/bench-05/face_glow.gsc": "a" * 64},
+                    outputs={"compiled/t6/face_glow.gsc": hashlib.sha256(body).hexdigest()})
+            return compiled
+
+        lookup = self.run / task["id"] / "knowledge-lookup.json"
+        lookup.parent.mkdir(parents=True, exist_ok=True)
+        lookup.write_text(json.dumps({"ok": True, "command": "knowledge builtin", "result": {"name": "setanimknob", "verdict": "builtin"}}))
+        compiled = compiled_receipt(b"\x80GSC\x00face_glow_think\x00^3face glow armed\x00iprintln\x00")
         row = bench.score_task(task, self.run)
         self.assertTrue(all(row["checks"].values()), row)
         # The call the engine cannot resolve is still in the artifact: compiling is not fixing.
-        compiled.write_bytes(b"\x80GSC\x00face_glow_think\x00setanimknob\x00")
+        compiled_receipt(b"\x80GSC\x00face_glow_think\x00^3face glow armed\x00setanimknob\x00")
         row = bench.score_task(task, self.run)
         self.assertFalse(row["checks"]["artifacts"])
         self.assertEqual(row["detail"]["artifacts"]["present"], ["setanimknob"])
         # Gutting the feature is not a fix either.
-        compiled.write_bytes(b"\x80GSC\x00main\x00")
-        self.assertEqual(bench.score_task(task, self.run)["detail"]["artifacts"]["missing"], ["face_glow_think"])
+        compiled_receipt(b"\x80GSC\x00main\x00")
+        self.assertIn("face_glow_think", bench.score_task(task, self.run)["detail"]["artifacts"]["missing"])
+        # An artifact replaced after the job (hash no longer the receipt's) is not the job's artifact.
+        compiled_receipt(b"\x80GSC\x00face_glow_think\x00^3face glow armed\x00setanimknob\x00")
+        compiled.write_bytes(b"\x80GSC\x00face_glow_think\x00^3face glow armed\x00iprintln\x00")
+        row = bench.score_task(task, self.run)
+        self.assertFalse(row["checks"]["artifacts"])
+        self.assertEqual(row["detail"]["artifacts"]["drift"], ["compiled/t6/face_glow.gsc"])
         # No artifact at all (a failed compile) cannot pass the artifact check.
         compiled.unlink()
         self.assertFalse(bench.score_task(task, self.run)["checks"]["artifacts"])
+        # Without the saved knowledge lookup the lookup check fails: guessing is not using the toolkit.
+        lookup.unlink()
+        compiled_receipt(b"\x80GSC\x00face_glow_think\x00^3face glow armed\x00iprintln\x00")
+        self.assertFalse(bench.score_task(task, self.run)["checks"]["lookup"])
+        lookup.write_text(json.dumps({"ok": True, "command": "knowledge limits", "result": {}}))
+        self.assertFalse(bench.score_task(task, self.run)["checks"]["lookup"])
 
     def test_table_row_has_one_cell_per_task_plus_totals(self):
         report = bench.score_run(self.run, bench.DEFAULT_TASKS)

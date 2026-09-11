@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
+import hashlib
 import json
 import sys
 from datetime import datetime
@@ -105,11 +106,41 @@ def _artifacts_ok(receipt: dict | None, contains: list[str], excludes: list[str]
     if receipt is None:
         return False, {"missing": list(contains), "present": list(excludes), "files": 0}
     root = Path(receipt["_dir"])
-    blobs = [p.read_bytes() for folder in ("compiled", "readback") if (root / folder).is_dir()
-             for p in (root / folder).rglob("*") if p.is_file()]
+    # Only the files the receipt recorded as outputs count, and each must still hash as recorded:
+    # a file added or replaced after the job is not the job's artifact.
+    recorded = receipt.get("outputs") or {}
+    blobs, drift = [], []
+    for rel, meta in recorded.items():
+        if not rel.startswith(("compiled/", "readback/")):
+            continue
+        path = root / rel
+        try:
+            data = path.read_bytes()
+        except OSError:
+            drift.append(rel); continue
+        want = meta.get("sha256") if isinstance(meta, dict) else meta
+        if want and hashlib.sha256(data).hexdigest() != want:
+            drift.append(rel); continue
+        blobs.append(data)
     missing = [n for n in contains if not any(n.encode() in blob for blob in blobs)]
     present = [n for n in excludes if any(n.encode() in blob for blob in blobs)]
-    return bool(blobs) and not missing and not present, {"missing": missing, "present": present, "files": len(blobs)}
+    return bool(blobs) and not drift and not missing and not present, {"missing": missing, "present": present, "files": len(blobs), "drift": drift}
+
+
+def _lookup_ok(task_dir: Path, spec: dict) -> tuple[bool, dict]:
+    """The knowledge routes are inert and write no receipt, so the task asks the agent to save the
+    route's stdout document as a file under the task directory. That file must be the toolkit's own
+    document for the named command, successful, and must carry the needles; a guess leaves no such file."""
+    path = task_dir / spec["file"]
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False, {"file": str(path), "reason": "missing or not JSON"}
+    if not isinstance(data, dict) or data.get("command") != spec["command"] or not data.get("ok"):
+        return False, {"file": str(path), "reason": "not a successful document for " + spec["command"]}
+    text = json.dumps(data)
+    missing = [n for n in spec.get("contains", []) if n not in text]
+    return not missing, {"file": str(path), "missing": missing}
 
 
 def _inputs_ok(receipt: dict | None, suffixes: list[str]) -> tuple[bool, list[str]]:
@@ -173,6 +204,10 @@ def score_task(task: dict, run_dir: Path) -> dict:
         ok, missing = _readback_ok(anchor, expect["readback_contains"])
         checks["readback"] = ok
         detail["readback_missing"] = missing
+    if expect.get("lookup_record"):
+        ok, why = _lookup_ok(task_dir, expect["lookup_record"])
+        checks["lookup"] = ok
+        detail["lookup"] = why
     if expect.get("artifact_contains") or expect.get("artifact_excludes"):
         ok, why = _artifacts_ok(anchor, expect.get("artifact_contains", []), expect.get("artifact_excludes", []))
         checks["artifacts"] = ok

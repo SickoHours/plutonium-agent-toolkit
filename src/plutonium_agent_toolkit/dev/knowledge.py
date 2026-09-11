@@ -109,10 +109,11 @@ def signature(log: Path | None = None, text: str | None = None) -> dict:
     matches = []
     for number, raw in enumerate(lines, 1):
         line = TIMESTAMP.sub("", raw.rstrip())
-        for pattern, row in compiled:
+        for pattern, row in reversed(compiled):  # rows are ordered general to specific; the specific one wins
             if pattern.search(line):
                 matches.append({"line": number, "text": line[:300], "id": row["id"], "class": row["class"],
                                 "cause": row["cause"], "fix": row["fix"]})
+                break
     classes: dict[str, int] = {}
     for hit in matches:
         classes[hit["class"]] = classes.get(hit["class"], 0) + 1

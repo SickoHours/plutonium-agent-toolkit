@@ -107,12 +107,20 @@
           "setanimknob"
         ],
         "artifact_contains": [
-          "face_glow_think"
+          "face_glow_think",
+          "^3face glow armed"
         ],
         "max_invocations": 4,
         "inputs_contain": [
           "face_glow.gsc"
-        ]
+        ],
+        "lookup_record": {
+          "file": "knowledge-lookup.json",
+          "command": "knowledge builtin",
+          "contains": [
+            "setanimknob"
+          ]
+        }
       }
     },
     {
@@ -131,12 +139,21 @@
           "bench_riser_glow"
         ],
         "artifact_contains": [
-          "riser_glow_think"
+          "riser_glow_think",
+          "^5riser glow armed"
         ],
         "max_invocations": 4,
         "inputs_contain": [
-          "riser_glow.gsc"
-        ]
+          "riser_glow.gsc",
+          "console_slice.log"
+        ],
+        "lookup_record": {
+          "file": "knowledge-lookup.json",
+          "command": "knowledge signature",
+          "contains": [
+            "clientfield"
+          ]
+        }
       }
     }
   ]

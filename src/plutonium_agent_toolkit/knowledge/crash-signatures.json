@@ -1,5 +1,5 @@
 {
- "note": "Console log lines seen after clean compiles and readbacks, as regexes without the [HH:MM:SS] prefix. `python scripts/t6_knowledge.py lookup log <slice>` matches a slice. The cause beside each is the one found and fixed, not the only possible one. A repair that names a new line adds a row in the same task.",
+ "note": "Console log lines seen after clean compiles and readbacks, as regexes without the [HH:MM:SS] prefix. `pat knowledge signature --text <slice>` (or `--log <file>`) matches a slice. The cause beside each is the one found and fixed, not the only possible one. A repair that names a new line adds a row in the same task.",
  "rows": [
   {
    "cause": "Animation-state entry without a compiled tree reference",

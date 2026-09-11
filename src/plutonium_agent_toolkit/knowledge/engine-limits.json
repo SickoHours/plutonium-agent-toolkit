@@ -17,7 +17,7 @@
   {
    "bound": null,
    "bound_text": "Filled by existing composition",
-   "count_source": "clientfield_bits.actor.server.bits",
+   "count_source": "clientfield_bits.actor.server",
    "how_to_count": "Sum every actor field across map, mod and global scripts; other sets (world, player, scriptmover) are separate",
    "id": "actor-client-field-set",
    "kind": "engine",

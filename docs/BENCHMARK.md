@@ -13,8 +13,8 @@ outcome; it says nothing about gameplay, and it gates no release.
 | `bench-02-build-hello` | Plan, build and verify `examples/hello-zm` | `project plan`, `project build`, `project verify` in that order, the build declares `examples/hello-zm`'s recipe and script as inputs, `packages/mod.ff` in its outputs, at most 6 |
 | `bench-03-extract-rawfile` | Extract the rawfiles from a built `mod.ff` | one `ff extract` whose input `mod.ff` hash equals the bench-02 build's output hash and whose outputs match `assets/**/*.gsc`, at most 4 |
 | `bench-04-port-feature` | Port `announce_round` from `examples/hello-zm-two` into a copy of `hello-zm`, build, verify | `project build` then `project verify`, a recipe and `scripts/hello.gsc` declared as inputs, `mod.ff` produced, the build's readback contains both `announce_round` and `on_player_spawned`, at most 10 |
-| `bench-05-builtin-wrong-vm` | Fix a server script whose one call exists only on the client VM, then compile | one `gsc compile` of the corrected `face_glow.gsc`, final status `succeeded`, the compiled artifact no longer carries `setanimknob` and still carries `face_glow_think`, at most 4 |
-| `bench-06-classify-then-fix` | Classify a console slice (`Client Field Set actor is out of space`), fix the script that caused it, compile | one `gsc compile` of the corrected `riser_glow.gsc`, final status `succeeded`, the compiled artifact no longer carries the new field `bench_riser_glow` and still carries `riser_glow_think`, at most 4 |
+| `bench-05-builtin-wrong-vm` | Fix a server script whose one call exists only on the client VM, then compile | one `gsc compile` of the corrected `face_glow.gsc`, final status `succeeded`, the compiled artifact no longer carries `setanimknob` and still carries `face_glow_think` and its `^3face glow armed` message, the saved `knowledge-lookup.json` is the toolkit's own `knowledge builtin` document naming `setanimknob`, at most 4 |
+| `bench-06-classify-then-fix` | Classify a console slice (`Client Field Set actor is out of space`), fix the script that caused it, compile | one `gsc compile` of the corrected `riser_glow.gsc`, final status `succeeded`, the compiled artifact no longer carries the new field `bench_riser_glow` and still carries `riser_glow_think` and its `^5riser glow armed` message, the console slice is among the scored inputs, the saved `knowledge-lookup.json` is the toolkit's own `knowledge signature` document, at most 4 |
 
 Task definitions are `tools/benchmark/tasks.json`; prompts are `tools/benchmark/prompts/`;
 the broken script, the wrong-VM script and the failed load's script and log slice are fixtures.
@@ -22,6 +22,10 @@ the broken script, the wrong-VM script and the failed load's script and log slic
 `pat knowledge signature`) exists for: a compiler accepts both fixtures unchanged, so the score
 comes from what the corrected artifact carries, not from a compile passing. `examples/hello-zm-two` exists so the port task has a real
 source and target.
+The knowledge routes are inert and write no receipt, so each of these two prompts asks the agent to
+save the route's stdout document as `knowledge-lookup.json` in the task directory; the scorer reads
+that file. Artifacts are scored only through the compile receipt's recorded outputs, hash-checked,
+so a file added or replaced after the job is not the job's artifact.
 
 ## Running one model on one harness
 
