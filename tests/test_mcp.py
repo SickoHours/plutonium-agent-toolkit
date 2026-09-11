@@ -457,6 +457,49 @@ class SignalDuringACallTests(BridgeFixture):
         self.assertEqual(self.plane.run_rows()[0]["status"], "finished")
 
 
+class FinalDocumentTests(BridgeFixture):
+    class _Deaf:
+        """A client that stopped reading: every write blocks until the test is over."""
+
+        def __init__(self):
+            self.released = threading.Event()
+
+        def write(self, text):
+            self.released.wait(60)
+
+        def flush(self):
+            pass
+
+    def test_the_invocation_document_does_not_go_to_a_stream_the_client_stopped_reading(self):
+        # Review finding: after the session ended because stdout was full, serve restored that
+        # stream and the caller wrote this invocation's own document to it -- blocking the process
+        # for as long as the client stayed away, which is the hang the bounded writer exists to
+        # avoid. The document goes to stderr instead and says so.
+        sink = self._Deaf()
+        self.addCleanup(sink.released.set)
+        saved = sys.stdout
+        sys.stdout = sink
+        try:
+            with unittest.mock.patch.object(mcp, "WRITE_GRACE", 0.3):
+                result = mcp.serve([str(self.lib)], str(self.root / "final-jobs"), seconds=60,
+                                   source=io.StringIO(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "ping"}) + "\n"),
+                                   sink=None)
+            self.assertIs(sys.stdout, sys.stderr, "the blocked stream is not handed back to the caller")
+        finally:
+            sys.stdout = saved
+        self.assertEqual(result["stopped"], "undeliverable")
+        self.assertEqual(result["document_on"], "stderr")
+
+    def test_a_session_that_ends_normally_hands_stdout_back(self):
+        saved = sys.stdout
+        result = mcp.serve([str(self.lib)], str(self.root / "normal-jobs"), seconds=60,
+                           source=io.StringIO(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "ping"}) + "\n"),
+                           sink=io.StringIO())
+        self.assertIs(sys.stdout, saved)
+        self.assertEqual(result["stopped"], "client")
+        self.assertEqual(result["document_on"], "stdout")
+
+
 class RenderingTests(BridgeFixture):
     def test_a_result_json_cannot_represent_is_an_error_not_the_end_of_the_session(self):
         # Review finding: a number outside JSON's range (1e999 read from a library file) made the
@@ -486,6 +529,19 @@ class SchemaConstraintTests(BridgeFixture):
         # Review finding: the schemas said "string" for every text-like parameter, so a harness that
         # validated against them still had calls refused by the action table's own patterns.
         by_name = {tool["name"]: tool for tool in self.bridge.tools()}
+        # Review finding: every path advertised both kinds of root, so a schema-valid call could
+        # name a root the parameter's validator refuses.
+        self.assertEqual(by_name["module-declare"]["inputSchema"]["properties"]["package"]["properties"]["root"]["type"], "integer")
+        self.assertEqual(by_name["project-verify"]["inputSchema"]["properties"]["receipt"]["properties"]["root"]["const"], "jobs")
+        self.assertEqual(len(by_name["game-install-mod"]["inputSchema"]["properties"]["package"]["properties"]["root"]["anyOf"]), 2)
+        for tool in by_name.values():
+            for pname, schema in tool["inputSchema"]["properties"].items():
+                root = schema.get("properties", {}).get("root") if isinstance(schema.get("properties"), dict) else None
+                if root is None or pname == "source":
+                    continue
+                roots = BY_ID[tool["name"]].params[[p.name for p in BY_ID[tool["name"]].params].index(pname)].roots
+                offered = {"jobs" if o.get("const") == "jobs" else "library" for o in (root.get("anyOf") or [root])}
+                self.assertEqual(offered, set(roots), f"{tool['name']}.{pname}")
         folder = by_name["game-install-mod"]["inputSchema"]["properties"]["folder"]
         self.assertEqual(folder["pattern"], BY_ID["game-install-mod"].params[1].pattern.pattern.replace("\\Z", "$"))
         self.assertNotIn("\\Z", folder["pattern"], "a schema pattern is read in the ECMA-262 dialect")

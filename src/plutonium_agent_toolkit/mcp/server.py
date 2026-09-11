@@ -51,9 +51,18 @@ def _schema_for(param) -> dict:
     """One parameter's JSON Schema, from the kind the control plane validates it by."""
     kind = param.kind
     if kind == "path":
+        # Only the roots this parameter's own validator accepts: advertising both when it takes one
+        # is an invitation to write a call that is refused (`resolve_path` checks `param.roots`).
+        choices, where = [], []
+        if "library" in param.roots:
+            choices.append({"type": "integer", "minimum": 0})
+            where.append("index of a library root")
+        if "jobs" in param.roots:
+            choices.append({"const": "jobs"})
+            where.append("\"jobs\" for the jobs directory")
+        root = (choices[0] if len(choices) == 1 else {"anyOf": choices}) | {"description": " or ".join(where).capitalize()}
         return {"type": "object", "description": param.help,
-                "properties": {"root": {"description": "Index of a library root, or \"jobs\" for the jobs directory",
-                                        "anyOf": [{"type": "integer", "minimum": 0}, {"const": "jobs"}]},
+                "properties": {"root": root,
                                "path": {"type": "string", "description": "Forward-slash path relative to that root; no .., no links, no absolute path"}},
                 "required": ["root", "path"], "additionalProperties": False}
     if kind == "flag":
@@ -533,6 +542,7 @@ def serve(library: list[str], jobs: str, seconds: int = 3600, source=None, sink=
         except (ValueError, OSError):       # not the main thread, or not deliverable on this host
             pass
     started = time.monotonic()
+    summary = None
     try:
         summary = pump(bridge, source, sink, deadline=started + seconds if seconds else None, stop=stop)
     finally:
@@ -541,9 +551,16 @@ def serve(library: list[str], jobs: str, seconds: int = 3600, source=None, sink=
                 signal.signal(number, handler)
             except (ValueError, OSError):
                 pass
-        sys.stdout = saved
+        # The caller prints this invocation's own JSON document on the stream we hand back. When the
+        # session ended because the client stopped reading the protocol stream, that stream is a
+        # full pipe: writing the document there would block for as long as the client stays away,
+        # which is the hang this whole path exists to avoid. It goes to stderr instead, and says so.
+        blocked = summary is not None and summary.get("stopped") == "undeliverable" and sink is saved
+        if not blocked:
+            sys.stdout = saved
         stopped = plane.shutdown()
     return {"library": [str(p) for p in roots], "jobs": str(jobs_dir), "protocols": list(SUPPORTED_PROTOCOLS),
             "tools": len(bridge.tools()), "client": bridge.client, "seconds": round(time.monotonic() - started, 1),
+            "document_on": "stderr" if blocked else "stdout",
             **summary, "child_stopped": stopped["child_stopped"], "game_touched": False,
             "verification": "the bridge started child processes with validated arguments; each kept its own JSON document and receipt"}

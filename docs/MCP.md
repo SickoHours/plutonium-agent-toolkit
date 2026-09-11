@@ -128,7 +128,8 @@ signal. The reader holds one message at a time: a harness
 that keeps sending while a call runs waits in the pipe rather than filling this process's memory.
 Answers are written by a second thread for the same reason in reverse: a harness that stops
 reading stdout blocks that thread, not the loop, and after 30 seconds the session ends
-(`stopped: undeliverable`) with the running child stopped -- an answer that cannot be delivered
+(`stopped: undeliverable`) with the running child stopped and this invocation's own document
+written to stderr instead of the full pipe (`document_on` says which stream it went to) -- an answer that cannot be delivered
 means the next one cannot either, so no message still in hand is run. When the harness closes stdin, the deadline passes,
 or a termination signal arrives, the bridge stops a running child, waits for its record, and
 writes the invocation's own JSON document (library roots, jobs directory, tool count, messages

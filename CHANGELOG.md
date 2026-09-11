@@ -27,7 +27,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
   so a client that keeps sending waits in the pipe instead of in memory, a result too large to
   carry back is refused while it is being encoded rather than after, and a client that stops
   reading stdout blocks the writer thread instead of the loop -- the session then ends with the
-  child stopped, and no message still in hand is run. New effect `serves-stdio`; `docs/MCP.md` has
+  child stopped, no message still in hand is run, and the invocation's own document goes to stderr
+  rather than blocking on the same full pipe. New effect `serves-stdio`; `docs/MCP.md` has
   the harness configuration, the tool table and the stdio contract. A call in progress keeps
   reading its client, so `notifications/cancelled` stops the child at once instead of after the
   route's own timeout, a second call is refused with `busy` while the first is still running

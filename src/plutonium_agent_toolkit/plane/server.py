@@ -30,6 +30,7 @@ from .. import __version__
 from ..core import platform
 from ..core.envelope import now
 from ..core.errors import BUSY, INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, OUTPUT_EXISTS, Failure
+from ..core.jobs import REPARSE_POINT
 from ..dev import compositions, projects
 from .actions import BY_ID, argv_for, table
 
@@ -715,6 +716,18 @@ def make_handler(plane: Plane):
 
 # ----- entry ----------------------------------------------------------------------------------
 
+def _is_link(path: Path) -> bool:
+    """A symbolic link on any OS, or a Windows reparse point (a junction is one and is not a
+    symlink to ``Path.is_symlink``). ``core.jobs.entry_kind`` answers the same question for a
+    directory entry; a root is given to us by name, so it is asked here."""
+    if path.is_symlink():
+        return True
+    try:
+        return bool((getattr(path.lstat(), "st_file_attributes", 0) or 0) & REPARSE_POINT)
+    except OSError:
+        return False
+
+
 def validate_roots(library: list[str], jobs: str) -> tuple[list[Path], Path]:
     if len(library) > MAX_LIBRARY_ROOTS:
         raise Failure(INPUT_LIMIT, f"At most {MAX_LIBRARY_ROOTS} library roots")
@@ -723,13 +736,13 @@ def validate_roots(library: list[str], jobs: str) -> tuple[list[Path], Path]:
         p = Path(text).expanduser()
         if not p.is_absolute():
             raise Failure(INPUT_INVALID, f"Library roots are absolute paths: {text}")
-        if p.is_symlink() or not p.is_dir():
-            raise Failure(INPUT_MISSING, f"Library root is not a directory: {text}")
+        if _is_link(p) or not p.is_dir():
+            raise Failure(INPUT_MISSING, f"Library root is a directory, not a link: {text}")
         roots.append(p.resolve())
     j = Path(jobs).expanduser()
     if not j.is_absolute():
         raise Failure(INPUT_INVALID, f"The jobs directory is an absolute path: {jobs}")
-    if j.is_symlink() or (j.exists() and not j.is_dir()):
+    if _is_link(j) or (j.exists() and not j.is_dir()):
         raise Failure(INPUT_INVALID, f"The jobs directory is a directory, not a link or file: {jobs}")
     j.mkdir(parents=True, exist_ok=True)
     j = j.resolve()

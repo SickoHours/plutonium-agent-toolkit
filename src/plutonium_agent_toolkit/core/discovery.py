@@ -21,7 +21,7 @@ EFFECTS = (
     "changes-game",        # launches, loads, restarts or stops the game
     "captures-display",    # records or screenshots the game window
     "serves-local",        # binds a loopback HTTP server that runs other routes on request; each keeps its own effect and receipt
-    "serves-stdio",        # speaks a protocol on stdin and stdout to its parent, running other routes on request; each keeps its own effect and receipt
+    "serves-stdio",        # speaks a protocol on stdin and stdout to its parent, running other routes on request; each keeps its own effect, and a job route its receipt
 )
 
 STATUS = ("available", "implemented", "planned", "deferred", "unsupported")

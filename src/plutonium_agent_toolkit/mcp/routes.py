@@ -16,11 +16,12 @@ ROUTES = [
                 "because a definition does not depend on one."),
     Route("mcp", "serve", "Speak Model Context Protocol on stdin and stdout, exposing the control plane's typed actions as tools", "serves-stdio",
           status="implemented", owner=OWNER,
-          notes="Arguments: [--library <dir>]... [--jobs <dir>] [--seconds N]. While the session runs stdout carries the protocol and "
+          notes="Arguments: --library <dir> (repeatable) --jobs <dir> [--seconds N]; both roots are required. While the session runs stdout carries the protocol and "
                 "nothing else; diagnostics go to stderr. The invocation's own JSON document is written to stdout once the session has ended, "
-                "as the last thing on the stream. Every tool is one registered route with "
+                "as the last thing on the stream (on stderr instead, with document_on saying so, when the client stopped reading stdout). Every tool is one registered route with "
                 "validated parameters, run as a `pat` child with its own receipt, one at a time; a state-changing action needs confirmed: true, "
-                "and no tool takes argv, a shell string or an absolute path."),
+                "and no tool takes argv, a shell string or an absolute path. Two tools are not routes: `library` and `runs` read this "
+                "bridge's own state and start nothing."),
 ]
 
 for route in ROUTES:
