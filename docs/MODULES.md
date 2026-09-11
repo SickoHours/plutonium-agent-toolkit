@@ -204,8 +204,8 @@ anyone's bytes.
 
 ## What is not in this version
 
-- No registry, index or download of modules: a reference member records a name and commit, but
-  the toolkit does not fetch it yet; an agent fetches the repository and names the path.
+- No catalog, official registry repository or submission workflow yet: `docs/REGISTRY.md` has the
+  registry file, `pat registry add|list|search|show` and `pat module fetch`.
 - No version constraints on dependencies: an id is either present or not.
 - No detection of runtime conflicts that only the engine would show (competing hooks on the
   same level notify, pool exhaustion). Declare them under `conflicts` when you learn them, and

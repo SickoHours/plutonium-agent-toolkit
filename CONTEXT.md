@@ -114,6 +114,22 @@ _Avoid_: source game, reference
 plans can prove they used the same bytes.
 _Avoid_: snapshot, archive
 
+**Registry**: A `registry.json` anyone can host, listing module and composition repositories at
+exact commits; it holds metadata and points at repositories, never bytes (`docs/REGISTRY.md`).
+_Avoid_: marketplace, store, index
+
+**Entry**: One listing in a registry: `<github-owner>/<module id>`, the repository, the path, the
+listed commit, and a summary of the declaration at that commit.
+_Avoid_: package, listing (say entry), record
+
+**Reference**: A composition member that names an entry and a commit beside the directory it was
+fetched into, so a pack records exactly what it was built from.
+_Avoid_: dependency (that is a declaration field), link, import
+
+**Catalog**: The generated, browseable projection of one or more registries. Read-only; produced
+from registries and declarations, never edited by hand.
+_Avoid_: registry (the source), marketplace, index
+
 **Port**: A module whose assets or behaviour come from a donor and are adapted to T6.
 _Avoid_: conversion, import, remake
 

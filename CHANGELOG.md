@@ -9,6 +9,19 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Added
 
+- **Registries and fetch by name.** `docs/REGISTRY.md` specifies `registry.json`: a file anyone can
+  host that lists module and composition repositories at exact commits and holds no bytes; entries
+  are `<github-owner>/<id>` and ownership is the repository living under that owner. New routes
+  `registry add` (a local file or an https URL, validated and copied under the toolkit home),
+  `registry list`, `registry search` (words, category, kind, tag, base, map, entry kind; offline)
+  and `registry show`; and `module fetch <owner/id@commit>` (or `https://github.com/<owner>/<repo>@commit`
+  with `--path`), which downloads the exact-commit tarball over HTTPS without git or a token, hashes it,
+  extracts it with the archive safety checks, confirms the declaration is at the entry's path and names
+  the same repository and commit, and writes a receipt; the result is named as a reference member of a
+  composition. `examples/registry.json` lists the bundled examples. A `private` module may commit its
+  seed manifest without the package; plans name the missing file. Glossary terms registry, entry,
+  reference and catalog; playbook `publish-a-module.md`; a new `downloads-source` effect. No catalog,
+  official registry repository, submission workflow or baseline scanner yet (issue #23).
 - **Seeds, base packs and collisions as decisions.** A module's payload may now be a **seed**: an
   already-linked `mod.ff` with its soundbanks and a hashed `seed.json` manifest (embedded,
   referenced and root assets, provides, localized strings). New route `module declare <mod.ff>`

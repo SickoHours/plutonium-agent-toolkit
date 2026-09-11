@@ -16,7 +16,7 @@ PLAYBOOK_HEADINGS = ["## Preconditions", "## Steps", "## Do not", "## Stop condi
 # headings (enforced in test_docs_consistency) and name proofs where a receipt field exists.
 STRICT_PLAYBOOKS = {"preflight-scripts.md", "preflight-audio-memory.md"}
 PREFLIGHT_HEADINGS = PLAYBOOK_HEADINGS
-ROUTE_RE = re.compile(r"`pat (dev|gsc|ff|project|model|audio|image|lua|weapon|game|capture|test) ([a-z-]+)")
+ROUTE_RE = re.compile(r"`pat (dev|gsc|ff|project|module|registry|model|audio|image|lua|weapon|game|agent|capture|test) ([a-z-]+)")
 SIX_FACTS = ["offline verified", "installed", "launched", "loaded", "playable", "captured", "accepted"]
 
 

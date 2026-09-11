@@ -90,6 +90,10 @@ def add_parser(sub, common):
         q = actions.add_parser(action, help=help_text)
         q.add_argument("composition", help="Path to composition.json")
         common(q)
+    q = actions.add_parser("fetch", help="Download a published module or pack at its exact commit into a new directory")
+    q.add_argument("reference", help="<owner>/<id>@<commit> (through a recorded registry) or https://github.com/<owner>/<repo>@<commit>")
+    q.add_argument("--path", help="Directory inside the repository that holds module.json or composition.json (default: the registry entry's path, or the root)")
+    common(q)
     q = actions.add_parser("declare", help="Read a prebuilt mod.ff back and draft its seed manifest and declaration")
     q.add_argument("package", help="Path to a mod.ff (soundbanks beside it are hashed too)")
     q.add_argument("--load", action="append", default=[], help="Base fastfile the package references; repeat as needed")
@@ -229,9 +233,9 @@ def load_declaration(directory: Path, job: Job) -> dict:
     if "seed" in data:
         seed_rel = _text(data["seed"], f"{mid}: seed", 4096)
         if distribution == "private" and not (directory / seed_rel).is_file():
-            seed = {"private": True, "relative": seed_rel}
+            seed = {"private": True, "relative": seed_rel, "provides": {}, "missing": ["seed manifest"]}
         else:
-            seed = seeds.load_manifest(directory, seed_rel, job, mid)
+            seed = seeds.load_manifest(directory, seed_rel, job, mid, allow_missing_files=distribution == "private")
     elif distribution == "private":
         raise Failure(INPUT_INVALID, f"{mid}: distribution private applies to a seed whose package is not published")
     bases = data["bases"]
@@ -455,8 +459,8 @@ def resolve(comp: dict, modules: list[dict]) -> dict:
             raise Failure(INPUT_INVALID, f"{m['id']} is declared for maps {m['maps']}, not for {comp['map']!r}",
                           "Qualify the module on that map first (build alone, load, play, record the verdict), then extend maps.")
         if m["seed"] and m["seed"].get("private"):
-            raise Failure(INPUT_MISSING, f"{m['id']} is distribution private and its seed package is not on this machine",
-                          "Others can plan around a private module; building needs the package beside its manifest.")
+            raise Failure(INPUT_MISSING, f"{m['id']} is distribution private and its seed package is not on this machine (missing: {m['seed'].get('missing')})",
+                          "Others can read what a private module provides from its manifest; building a pack with it needs the package beside the manifest.")
     order = _order(modules)
     totals = {field: sum(m["resource_contract"][field] for m in modules) for field in CONTRACT_FIELDS}
     if comp["budget"] is not None:
@@ -560,6 +564,10 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
 
 
 def execute(args, job: Job) -> dict:
+    if args.action == "fetch":
+        from . import registry
+
+        return registry.fetch(args, job)
     if args.action == "declare":
         return seeds.declare(Path(args.package).expanduser(), args, job)
     comp = load_composition(Path(args.composition), job)
