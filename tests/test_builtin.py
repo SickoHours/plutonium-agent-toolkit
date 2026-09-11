@@ -350,6 +350,35 @@ class DevBuiltinTests(BuiltinFixture):
             code, row = invoke(["dev", "builtin", "--only", "sickohours/stock_hello_pack"])
         self.assertEqual(row["error_code"], "input_invalid")
         self.assertIn("nests deeper", row["message"])
+        # Duplicate members across nesting levels are read once, and a member count above the planner's bound is refused.
+        def fan(members_per_level, levels):
+            buf = io.BytesIO()
+            with tarfile.open(fileobj=buf, mode="w:gz") as t:
+                root = "repo-" + self.commit[:7]
+                for f in sorted((ROOT / "examples/hello-zm").rglob("*")):
+                    if f.is_file():
+                        body = f.read_bytes(); info = tarfile.TarInfo(f"{root}/examples/hello-zm/{f.relative_to(ROOT / 'examples/hello-zm').as_posix()}"); info.size = len(body); info.mode = 0o644
+                        t.addfile(info, io.BytesIO(body))
+                for level in range(levels):
+                    name = "examples/hello-pack" if level == 0 else f"examples/level{level}"
+                    member = f"../level{level + 1}" if level + 1 < levels else "../hello-zm"
+                    body = json.dumps({"schema": 1, "name": "stock_hello_pack", "base": "stock", "map": "zm_transit", "modules": [member] * members_per_level}).encode()
+                    info = tarfile.TarInfo(f"{root}/{name}/composition.json"); info.size = len(body); info.mode = 0o644
+                    t.addfile(info, io.BytesIO(body))
+            return buf.getvalue()
+        import time
+        self.served[self.url] = fan(builtin.MAX_MEMBERS, builtin.MAX_NESTING + 1)
+        home4 = self.root / "home4"
+        started = time.monotonic()
+        with mock.patch.dict(os.environ, {"PAT_HOME": str(home4)}):
+            code, row = invoke(["dev", "builtin", "--only", "sickohours/stock_hello_pack"])
+        self.assertEqual(code, 0, row)
+        self.assertLess(time.monotonic() - started, 10, "32 duplicate members at every level is linear work, not exponential")
+        self.served[self.url] = fan(builtin.MAX_MEMBERS + 1, 1)
+        home5 = self.root / "home5"
+        with mock.patch.dict(os.environ, {"PAT_HOME": str(home5)}):
+            code, row = invoke(["dev", "builtin", "--only", "sickohours/stock_hello_pack"])
+        self.assertEqual(row["error_code"], "input_limit")
         # A recipe above the size bound is refused before it is parsed.
         buf = io.BytesIO()
         with tarfile.open(fileobj=buf, mode="w:gz") as t:

@@ -33,6 +33,8 @@ from . import backends, registry
 MAX_ENTRY_FILES = 4096
 MAX_NESTING = 4          # the same bound load_composition applies: depth 0 is the pack itself
 MAX_RECIPE_BYTES = 256 * 1024
+MAX_MEMBERS = 32         # the planner's bound on a composition's members
+MAX_LOADS = 32
 
 
 def shelf_dir() -> Path:
@@ -85,15 +87,22 @@ def _inside(path: Path, root: Path) -> bool:
         return False
 
 
-def needed_paths(snapshot: Path, path: str, depth: int = 0) -> list[str]:
+def needed_paths(snapshot: Path, path: str, depth: int = 0, found: list[str] | None = None) -> list[str]:
     """The entry directory plus, for a composition, every member directory and load file its recipe
-    names inside the same snapshot (nested packs followed to a bound). Relative to the snapshot."""
+    names inside the same snapshot (nested packs followed to a bound). Relative to the snapshot.
+    A path is read once: a member already found is not recursed into again, so duplicate members
+    across nesting levels cost nothing, and a recipe names at most MAX_MEMBERS members and
+    MAX_LOADS loads, as the planner allows."""
     base = snapshot if path == "." else snapshot / path
     if not base.is_dir():
         raise Failure(INPUT_MISSING, f"The snapshot has no directory {path!r}")
     if not _inside(base, snapshot):
         raise Failure(INPUT_INVALID, f"Built-in entry path escapes its snapshot: {path}")
-    found = [base.relative_to(snapshot).as_posix() if base != snapshot else "."]
+    found = [] if found is None else found
+    own = base.relative_to(snapshot).as_posix() if base != snapshot else "."
+    if own in found:
+        return found
+    found.append(own)
     recipe = base / "composition.json"
     if not recipe.is_file():
         return found
@@ -109,6 +118,8 @@ def needed_paths(snapshot: Path, path: str, depth: int = 0) -> list[str]:
     loads = data.get("loads", []) if isinstance(data, dict) else []
     if not isinstance(members, list) or not isinstance(loads, list):
         raise Failure(INPUT_INVALID, f"Built-in pack {path}: modules and loads must be lists")
+    if len(members) > MAX_MEMBERS or len(loads) > MAX_LOADS:
+        raise Failure(INPUT_LIMIT, f"Built-in pack {path}: at most {MAX_MEMBERS} members and {MAX_LOADS} loads")
     for member in members:
         rel = member.get("path") if isinstance(member, dict) else member
         if not isinstance(rel, str) or not rel or "\\" in rel or Path(rel).is_absolute():
@@ -117,9 +128,7 @@ def needed_paths(snapshot: Path, path: str, depth: int = 0) -> list[str]:
         if not _inside(target, snapshot) or not target.is_dir():
             raise Failure(INPUT_MISSING, f"Built-in pack {path} names a member outside its snapshot or missing: {rel}")
         rel_snapshot = target.resolve().relative_to(snapshot.resolve()).as_posix()
-        for item in needed_paths(snapshot, rel_snapshot, depth + 1):
-            if item not in found:
-                found.append(item)
+        needed_paths(snapshot, rel_snapshot, depth + 1, found)
     for load in loads:
         if not isinstance(load, str) or not load or "\\" in load or Path(load).is_absolute():
             raise Failure(INPUT_INVALID, f"Built-in pack {path} names a load that is not a relative path: {load!r}")
