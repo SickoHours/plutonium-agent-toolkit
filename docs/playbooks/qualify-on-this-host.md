@@ -16,7 +16,7 @@ and it is where a real program that differs from the fake gets its adapter fixed
   not a qualification host: the tool refuses `darwin`, and the matrix says macOS is untested
   and unclaimed; on a Mac, report that and stop.
 - You have read the route's row in `docs/SUPPORT.md` and know which tier covers it: Tier 1
-  (offline: discovery, configure, `project init` and `plan`) needs no downloads; Tier 2
+  (offline: discovery, configure, `project init` and `plan`, `registry baseline`) needs no downloads; Tier 2
   (backends) downloads gsc-tool and OpenAssetTools and runs `gsc compile|decompile`, `ff` and
   `project build|verify`; with `--media` it also downloads FFmpeg, Blender and Cast (about
   510 MB, 2 GB on disk) and runs `audio inspect|convert` and every `model` action on a rigged

@@ -83,6 +83,63 @@ Every entry states what shipped, on which platform it was verified, and what rem
   pack from the shelf, so the route is `available` on Linux. Built-in, fetched and installed are
   three different places; nothing here touches the game.
 
+- **Registry baseline.** New route `registry baseline <directory> [--repository <url>]
+  [--commit <40 hex>] --output <new dir>`: the deterministic, static check a registry runs on a
+  snapshot before listing it and a submitter's agent runs offline first. It reads every eligible
+  file under the directory and nothing else; `.git`, links and other skipped entries are recorded
+  without reading their contents or targets: nothing in the tree is executed, no backend runs, no
+  model and no network are used, and the same bytes always give the same `baseline.json`
+  (`tree_sha256`, over every file's bytes and every directory's name, compares two scans). Policy
+  version `1`, enforcement `selective`: exactly three
+  finding ids block (`native-plugin`: PE, ELF or Mach-O headers under any name, or text naming
+  Plutonium's plugins folder; `download-and-execute`: `iex (iwr ...)`, `Invoke-Expression`,
+  `curl`/`wget ... | sh`, or a downloaded file started later in the same script; `path-escape`:
+  a link anywhere in the tree, an absolute path or Windows drive, a `..` segment in a confined
+  declared path, or a member or load resolving outside the scanned directory; a pack is scanned
+  from the directory that holds it and every member it names). Every declared path is read one
+  component at a time without following anything, so a path under a link is reported and never
+  read through, and a component the filesystem refuses to describe is `unreadable` rather than
+  an answer; the report is written either way.
+  Non-blocking findings `unpinned-acquisition` (a `.zip`, `.tar.gz`/`.tgz`, `.tar.xz`/`.txz`,
+  `.tar.bz2`/`.tbz2`, `.7z`, `.rar`, `.ff`, `.ipak`, `.exe` or `.msi` URL without a SHA-256 nearby) and `declaration-mismatch` (repository or commit different from the listing,
+  a declared path missing, `bases`/`maps` empty, invalid JSON); capabilities `installer`,
+  `bundled-package`, `lua-ui`, `file-io`, `client-dvar`, `function-replacement`, `command-hook`,
+  `global-tooling`, `bundled-assets` (binary total above 8 MiB) and `large-text`; warning
+  `no-resource-contract`. Outcomes `passed`, `review-required`, `needs-fixes` and `incomplete`
+  (an unreadable file fails closed); every skipped or unreadable entry is listed. Bounds: 20 000
+  files, 2 GiB, 4 MiB of text per file, 20 rows per file and rule (matches past that are counted,
+  never kept, and a match is located only while its rule can still report one, with the line it
+  sits on searched at most one block each way); each declaration is checked as the walk reads it,
+  so only the summary the report carries is held, and that summary is bounded too (a value longer
+  than 512 characters, or a list or object of more than 256 entries, is a marker; a composition's
+  members are listed to that bound beside the number declared); the job's
+  deadline is checked while the scan reads and
+  again while the receipt re-hashes the recorded tree, so a scan cannot succeed late. The report and the result carry
+  `not_a_security_audit: true` with the sentence that a baseline is a static check of files, not
+  a security audit, certification, warranty or endorsement. `docs/REGISTRY.md` has the rule
+  table; `publish-a-module.md` runs the baseline before listing; glossary term baseline. Tier 1
+  of `tools/qualify.py` runs the baseline on `examples/hello-zm` and checks the outcome is
+  `passed`; the regenerated Arch Linux (Omarchy 4.0.3) Tier 1 receipt carries both steps (22
+  steps; the previous receipts are kept as superseded files), so the route is `available` on
+  Linux. No Windows receipt yet; expected to pass there. Not measured: real community
+  repositories. On POSIX every directory and file is opened relative to its parent's descriptor
+  without following links and without blocking, and the descriptor must be what the listing saw;
+  Windows re-checks every path component for reparse points before each open. Bytes count
+  against the tree bound as they are read and directory entries of every kind against the file
+  bound as they are listed, the directory given must not be a link, every file read and every
+  directory listing (names and kinds) is an input of the job, re-hashed and re-listed at the
+  receipt through no-follow descriptors whose identity must match the walk on POSIX, each file
+  opened relative to its recorded ancestors so no swapped ancestor can redirect the re-hash
+  outside the tree (a change,
+  an addition, an entry swapped for a link of the same name or a directory replaced by a link
+  to a look-alike after the scan is `input_changed`), the deadline is
+  checked between chunks of every read, and file names that are not UTF-8 are hashed as bytes
+  and shown escaped. The file bound is the job's own cap on recorded inputs (20 000), and a
+  declaration nested past the parser or past 64 levels is a `declaration-mismatch`, never
+  `operation_failed`; so is a declaration that is not UTF-8 or carries `1e9999` or `NaN`. A link
+  named `.git` blocks like any link; the root is opened without following links after its
+  by-name check. Verified by 70 unit tests on synthetic trees on Linux; CI runs them on
+  Windows.
 - **Registries and fetch by name.** `docs/REGISTRY.md` specifies `registry.json`: a file anyone can
   host that lists module and composition repositories at exact commits and holds no bytes; entries
   are `<github-owner>/<id>` and ownership is the repository living under that owner. New routes

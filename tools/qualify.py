@@ -354,6 +354,15 @@ def tier_offline(receipt, home: Path, work: Path):
     if init["passed"]:
         step(receipt, "project plan the init recipe", PAT + ["project", "plan", str(work / "init" / "project.json"),
                                                             "--output", str(work / "init-plan"), "--json"])
+    baseline = step(receipt, "registry baseline hello-zm", PAT + ["registry", "baseline", str(ROOT / "examples/hello-zm"),
+                                                                   "--output", str(work / "baseline-hello"), "--json"])
+    if baseline["passed"]:
+        # The route's own success is not the qualification fact; the example passing the policy is.
+        outcome = (baseline["json"].get("result") or {}).get("outcome")
+        ok = outcome == "passed"
+        receipt["steps"].append({"name": "baseline outcome for hello-zm is passed", "passed": ok, "expected": "outcome passed",
+                                 **({} if ok else {"stderr_head": f"outcome {outcome!r}"})})
+        print(("PASS " if ok else "FAIL ") + "baseline outcome for hello-zm is passed", flush=True)
     step(receipt, "dev install-skills --plan", PAT + ["dev", "install-skills", "--plan", "--json"])
     # A scratch home holding every harness marker: the route writes each skill under each, launches
     # nothing, and a rerun writes nothing. The user's real home is untouched.
