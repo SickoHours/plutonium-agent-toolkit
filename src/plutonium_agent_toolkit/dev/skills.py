@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import uuid
 from pathlib import Path
 
@@ -117,6 +118,9 @@ def rendered(skill: dict, root: Path) -> dict[str, bytes]:
         data = (skill["directory"] / rel).read_bytes()
         if rel == "SKILL.md":
             data = stamp(data.decode("utf-8"), root, skill["name"]).encode("utf-8")
+        if len(data) > MAX_SKILL_FILE_BYTES:
+            raise Failure(INPUT_LIMIT, f"Skill file exceeds {MAX_SKILL_FILE_BYTES} bytes as installed: {skill['name']}/{rel}",
+                          "The installed copy carries a short note after the frontmatter; keep the source below the limit.")
         out[rel] = data
     return out
 
@@ -232,11 +236,30 @@ def _decision(target: Path, data: bytes, recorded: dict, home: Path) -> tuple[st
     return "refused", "exists with different content that this route did not write"
 
 
-def _apply(target: Path, data: bytes) -> None:
+def _apply(target: Path, data: bytes, home: Path) -> str:
+    """Write target atomically. The path is checked again after the directories exist and again
+    before the rename, and the temporary file is created without following a link, so a directory
+    swapped for a link by another process of the same user is caught in either window rather than
+    written through. Descriptor-relative writes would close the window entirely; they are not
+    available on Windows, so the check is repeated instead. Returns a reason when refused."""
     target.parent.mkdir(parents=True, exist_ok=True)
+    blocked = _blocked(target, home)
+    if blocked:
+        return blocked
     tmp = target.with_name(target.name + "." + uuid.uuid4().hex + ".tmp")
-    tmp.write_bytes(data)
-    tmp.replace(target)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+    fd = os.open(tmp, flags, 0o644)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+        blocked = _blocked(target, home)
+        if blocked:
+            return blocked
+        os.replace(tmp, target)
+        return ""
+    finally:
+        if tmp.exists() or tmp.is_symlink():
+            tmp.unlink(missing_ok=True)
 
 
 def install(*, plan: bool = False, only: list[str] | None = None, home: str | None = None, source: str | None = None) -> dict:
@@ -262,11 +285,16 @@ def install(*, plan: bool = False, only: list[str] | None = None, home: str | No
                 if reason:
                     entry["reason"] = reason
                 if not plan and action in ("write", "update"):
-                    _apply(target, data)
-                    recorded[str(target)] = {"sha256": entry["sha256"], "harness": row["id"], "skill": skill["name"],
-                                             "source_root": str(root), "toolkit_version": __version__, "installed_at": now()}
-                    action = "written" if action == "write" else "updated"
-                    entry["action"] = action
+                    reason = _apply(target, data, user_home)
+                    if reason:
+                        action = "refused"
+                        entry["action"] = action
+                        entry["reason"] = reason
+                    else:
+                        recorded[str(target)] = {"sha256": entry["sha256"], "harness": row["id"], "skill": skill["name"],
+                                                 "source_root": str(root), "toolkit_version": __version__, "installed_at": now()}
+                        action = "written" if action == "write" else "updated"
+                        entry["action"] = action
                 key = {"write": "written", "written": "written", "update": "updated", "updated": "updated",
                        "unchanged": "unchanged", "refused": "refused"}[action]
                 counts[key] += 1
@@ -297,10 +325,11 @@ def install(*, plan: bool = False, only: list[str] | None = None, home: str | No
     return result
 
 
-def status(home: str | None = None) -> dict:
-    """For doctor: per detected harness, how many skills are current, stale, foreign or missing. Never raises for a missing checkout."""
+def status(home: str | None = None, source: str | None = None) -> dict:
+    """For doctor: per detected harness, how many skills are current, stale, foreign or missing,
+    judged over every file a skill installs. Never raises for a missing checkout."""
     try:
-        root = source_root(None)
+        root = source_root(source)
     except Failure as exc:
         return {"source": None, "note": exc.message, "harnesses": []}
     try:
@@ -316,10 +345,13 @@ def status(home: str | None = None) -> dict:
         skills_dir = Path(row["directory"])
         summary = {"current": 0, "stale": 0, "foreign": 0, "missing": 0}
         for skill in skills:
-            target = skills_dir / skill["name"] / "SKILL.md"
-            data = rendered(skill, root)["SKILL.md"]
-            action, _ = _decision(target, data, recorded, user_home)
-            summary[{"unchanged": "current", "update": "stale", "refused": "foreign", "write": "missing"}[action]] += 1
+            actions = []
+            for rel, data in rendered(skill, root).items():
+                action, _ = _decision(skills_dir / skill["name"] / rel, data, recorded, user_home)
+                actions.append(action)
+            # One state per skill: the worst of its files (a foreign file beats a stale one beats a missing one).
+            state = next((candidate for candidate in ("refused", "update", "write") if candidate in actions), "unchanged")
+            summary[{"unchanged": "current", "update": "stale", "refused": "foreign", "write": "missing"}[state]] += 1
         rows.append({"id": row["id"], "label": row["label"], "directory": row["directory"], **summary,
                      "ok": summary["current"] == len(skills)})
     return {"source": str(root), "skills": len(skills), "harnesses": rows,

@@ -7,6 +7,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from plutonium_agent_toolkit.cli import entry
 from plutonium_agent_toolkit.dev import skills
@@ -99,12 +100,13 @@ class InstallSkillsTests(SkillsFixture):
         self.assertGreater(details["summary"]["written"], 0)
         self.assertEqual(foreign.read_text(encoding="utf-8"), "---\nname: pat-help\n---\nsomebody else's skill\n", "never overwritten")
         refused = [f for h in details["harnesses"] for f in h["files"] if f["action"] == "refused"]
-        self.assertEqual([Path(f["path"]) for f in refused], [foreign])
+        # Paths are reported under the resolved home (on Windows the runner's temp directory is a short name).
+        self.assertEqual([Path(f["path"]).resolve() for f in refused], [foreign.resolve()])
         self.assertIn("did not write", refused[0]["reason"])
         self.assertTrue((self.home / ".claude" / "skills" / "pat-help" / "SKILL.md").is_file())
         # The record holds only what was written, so a later run still refuses the same file.
         record = json.loads(Path(details["record"]).read_text(encoding="utf-8"))
-        self.assertNotIn(str(foreign), record["files"])
+        self.assertNotIn(str(foreign.resolve()), record["files"])
 
     def test_a_file_this_route_wrote_is_updated_when_the_source_changes(self):
         code, row = self.install("--only", "claude")
@@ -200,6 +202,42 @@ class InstallSkillsTests(SkillsFixture):
         self.assertEqual(code, 1)
         self.assertEqual(row["error_code"], "input_invalid")
         self.assertIn("malformed entry", row["message"])
+
+    def test_second_review_round_oversized_render_partial_installs_and_a_swapped_directory(self):
+        # A source SKILL.md at exactly the limit would be installed larger than it: refused before writing.
+        largest = max((ROOT / "skills" / n / "SKILL.md").stat().st_size for n in self.names)
+        with mock.patch.object(skills, "MAX_SKILL_FILE_BYTES", largest):
+            code, row = self.install("--only", "claude", "--plan")
+        self.assertEqual(row["error_code"], "input_limit")
+        self.assertIn("as installed", row["message"])
+        # status judges every file a skill installs, not only SKILL.md: a fake checkout with a two-file skill.
+        checkout = self.root / "checkout"
+        (checkout / "skills" / "two-file").mkdir(parents=True)
+        (checkout / "AGENTS.md").write_text("agents\n")
+        (checkout / "CONTEXT.md").write_text("context\n")
+        (checkout / "skills" / "two-file" / "SKILL.md").write_text("---\nname: two-file\ndescription: test\n---\n\nBody.\n")
+        (checkout / "skills" / "two-file" / "reporting.md").write_text("asset\n")
+        code, row = invoke(["dev", "install-skills", "--home", str(self.home), "--only", "codex", "--source", str(checkout)])
+        self.assertEqual(code, 0, row)
+        report = skills.status(str(self.home), source=str(checkout))
+        codex = next(h for h in report["harnesses"] if h["id"] == "codex")
+        self.assertEqual((codex["current"], codex["ok"]), (1, True))
+        (self.home / ".codex" / "skills" / "two-file" / "reporting.md").unlink()
+        codex = next(h for h in skills.status(str(self.home), source=str(checkout))["harnesses"] if h["id"] == "codex")
+        self.assertEqual((codex["current"], codex["missing"], codex["ok"]), (0, 1, False), "a skill with an asset missing is not current")
+        # A directory swapped for a link after the decision is caught by the write itself.
+        home = self.home.resolve()
+        skills_dir = home / ".gemini" / "skills"
+        skills_dir.mkdir(parents=True)
+        elsewhere = self.root / "swap-target"
+        elsewhere.mkdir()
+        try:
+            (skills_dir / "pat-build").symlink_to(elsewhere, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            return
+        reason = skills._apply(skills_dir / "pat-build" / "SKILL.md", b"x", home)
+        self.assertIn("link", reason)
+        self.assertEqual(list(elsewhere.iterdir()), [], "nothing was written through the swapped-in link")
 
     def test_no_harness_found_is_a_clean_result_with_a_hint(self):
         empty = self.root / "empty-home"
