@@ -34,7 +34,7 @@ Every entry states what shipped, on which platform it was verified, and what rem
   parameter (files confined to the named roots and file names, ids by the routes' own patterns), adds
   `--output` for job routes, runs `pat` as a child process, one at a time, and records each run; it never
   builds argv, names an output directory, picks a model or reads the bearer. `pat plane actions` prints the
-  table. New effect `serves-local`. Twenty-seven tests drive the server against the fake backends.
+  table. New effect `serves-local`. Twenty-nine tests drive the server against the fake backends.
   `docs/CONTROL-PLANE.md`; glossary term control plane.
 - **Registries and fetch by name.** `docs/REGISTRY.md` specifies `registry.json`: a file anyone can
   host that lists module and composition repositories at exact commits and holds no bytes; entries

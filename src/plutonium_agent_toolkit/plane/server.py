@@ -29,6 +29,7 @@ from .. import __version__
 from ..core import platform
 from ..core.envelope import now
 from ..core.errors import BUSY, INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, OUTPUT_EXISTS, Failure
+from ..dev import compositions, projects
 from .actions import BY_ID, argv_for, table
 
 STATIC = Path(__file__).with_name("static")
@@ -37,6 +38,9 @@ MAX_RUNS = 200
 MAX_OUTPUT = 64 * 1024 * 1024   # the child's stdout is parsed whole up to this; beyond it the run keeps a head and no result
 MAX_HEAD = 4000
 MAX_RECEIPT = 256 * 1024     # a receipt.json larger than this is listed as unreadable, not parsed
+MAX_JOB_ROWS = 512           # newest receipts listed per request
+MAX_CONNECTIONS = 32         # concurrent connections; beyond that a 503 is answered at once
+CONNECTION_TIMEOUT = 30.0    # seconds an idle or half-sent request may hold a connection
 MAX_STDERR = 1024 * 1024     # the child's stderr is kept up to this
 MAX_LIBRARY_ROOTS = 16
 MAX_SECONDS = 24 * 3600
@@ -83,12 +87,13 @@ def _group_flags() -> dict:
 
 
 class _Reader(threading.Thread):
-    """Drains one pipe into a bounded buffer; past the bound it keeps counting and drops bytes."""
+    """Drains one binary pipe into a bounded buffer; past the bound (in bytes) it keeps counting and
+    drops what follows. ``text()`` decodes what was kept."""
 
     def __init__(self, pipe, limit: int):
         super().__init__(daemon=True)
         self.pipe, self.limit = pipe, limit
-        self.chunks: list[str] = []
+        self.chunks: list[bytes] = []
         self.size = 0
         self.overflow = False
         self.start()
@@ -115,7 +120,7 @@ class _Reader(threading.Thread):
                 pass
 
     def text(self) -> str:
-        return "".join(self.chunks)
+        return b"".join(self.chunks).decode("utf-8", errors="replace")
 
 
 def _drain(process: subprocess.Popen, timeout: float, jobs: Path) -> tuple[str, str, bool, int]:
@@ -242,10 +247,10 @@ class Plane:
                     break
                 here = Path(directory)
                 rel = here.relative_to(root).as_posix()
-                if "module.json" in files:
+                if "module.json" in files and not (here / "module.json").is_symlink():
                     modules.append(_summary(here / "module.json", rel, "module"))
                     rows += 1
-                if "composition.json" in files:
+                if "composition.json" in files and not (here / "composition.json").is_symlink():
                     compositions.append(_summary(here / "composition.json", rel, "composition"))
                     rows += 1
                 if "mod.ff" in files and not (here / "mod.ff").is_symlink():
@@ -291,10 +296,8 @@ class Plane:
                     except OSError:
                         pass
                 rows.append(row)
-                if len(rows) >= 512:
-                    break
         rows.sort(key=lambda r: r.get("started") or "", reverse=True)
-        return {"jobs": str(self.jobs), "runs": rows}
+        return {"jobs": str(self.jobs), "runs": rows[:MAX_JOB_ROWS], "truncated": len(rows) > MAX_JOB_ROWS}
 
     # ----- runs ------------------------------------------------------------------------
     def _record(self, run: dict) -> None:
@@ -327,6 +330,7 @@ class Plane:
         # leaves nothing behind; every failure below releases it.
         if not self.job_lock.acquire(blocking=False):
             raise Failure(BUSY, "Another action is still running; the plane runs one at a time", "Poll /api/runs and retry after it finishes")
+        run = None
         try:
             self.settled.clear()
             argv = argv_for(action, args, self.library, self.jobs, self.prompt_dir)
@@ -350,6 +354,10 @@ class Plane:
             self.settled.set()
             raise
         except (OSError, RuntimeError) as exc:
+            if run is not None:
+                _remove_prompts(run)
+                with self.lock:
+                    self.runs = [r for r in self.runs if r["run_id"] != run["run_id"]]
             self.job_lock.release()
             self.settled.set()
             raise Failure("operation_failed", f"Could not start the run: {exc}") from exc
@@ -366,7 +374,7 @@ class Plane:
                     return
                 try:
                     process = subprocess.Popen([sys.executable, "-m", "plutonium_agent_toolkit", *run["argv"]],
-                                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=str(self.jobs),
+                                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=str(self.jobs),
                                                stdin=subprocess.DEVNULL, env=child_env(), **_group_flags())
                 except OSError as exc:
                     run.update(status="failed", exit_code=127, finished=now(), result=None, stderr_head=f"could not start: {exc}")
@@ -445,6 +453,16 @@ def _summary(path: Path, rel: str, kind: str) -> dict:
     keys = ("id", "name", "version", "title", "category", "kind", "tags", "bases", "maps", "base", "map", "dependencies",
             "conflicts", "distribution", "menu_route", "modules")
     row = {"path": rel, "kind": kind, **{k: data[k] for k in keys if k in data}}
+    # The shape the format requires before anything else is read; full validation is module plan's.
+    if data.get("schema") != 1:
+        row["error"] = "schema is not 1"
+    elif kind == "module" and (not isinstance(data.get("id"), str) or not compositions.ID.match(data["id"])
+                               or not isinstance(data.get("version"), str) or not compositions.VERSION.match(data["version"])
+                               or ("recipe" in data) == ("seed" in data)):
+        row["error"] = "not a module declaration (id, version and exactly one of recipe or seed are required)"
+    elif kind == "composition" and (not isinstance(data.get("name"), str) or not projects.NAME.match(data["name"])
+                                    or not isinstance(data.get("modules"), list) or not data["modules"]):
+        row["error"] = "not a composition (name and a non-empty modules list are required)"
     row["payload"] = "seed" if "seed" in data else "recipe" if "recipe" in data else None
     if kind == "module" and "seed" in data:
         manifest = path.parent / str(data["seed"])
@@ -468,16 +486,48 @@ def _summary(path: Path, rel: str, kind: str) -> dict:
 
 # ----- HTTP ---------------------------------------------------------------------------------
 
+class PlaneServer(ThreadingHTTPServer):
+    """Loopback server with a bound on concurrent connections: past it a 503 is answered at once
+    and the connection closed, so abandoned or half-sent requests cannot hold every worker."""
+    daemon_threads = True
+    allow_reuse_address = False
+
+    def __init__(self, address, handler, max_connections: int = MAX_CONNECTIONS):
+        super().__init__(address, handler)
+        self._slots = threading.BoundedSemaphore(max_connections)
+
+    def process_request(self, request, client_address):
+        if not self._slots.acquire(blocking=False):
+            try:
+                request.sendall(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            except OSError:
+                pass
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self._slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._slots.release()
+
+
 def make_handler(plane: Plane):
     class Handler(BaseHTTPRequestHandler):
         server_version = f"pat-plane/{__version__}"
+        timeout = CONNECTION_TIMEOUT  # socket timeout: an incomplete request line or header gives up
 
         def log_message(self, *args):  # the receipts are the log
             pass
 
         # ----- helpers -----
         def _json(self, status: int, body: dict) -> None:
-            data = json.dumps(body, indent=2, ensure_ascii=False, allow_nan=False).encode("utf-8")
+            data = json.dumps(body, indent=2, ensure_ascii=True, allow_nan=False).encode("ascii")
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(data)))
@@ -633,10 +683,9 @@ def serve(library: list[str], jobs: str, port: int = 0, seconds: int = 3600, ann
     roots, jobs_dir = validate_roots(library, jobs)
     plane = Plane(roots, jobs_dir)
     try:
-        server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(plane))
+        server = PlaneServer(("127.0.0.1", port), make_handler(plane))
     except OSError as exc:
         raise Failure("busy", f"Cannot bind 127.0.0.1:{port}: {exc.strerror or exc}", "Pass --port 0 for any free port") from exc
-    server.daemon_threads = True
     bound = server.server_address[1]
     url = f"http://127.0.0.1:{bound}/#token={plane.token}"
     announce(f"pat plane: {url}", file=sys.stderr)

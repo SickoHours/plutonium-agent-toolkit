@@ -64,8 +64,14 @@ says why.
 - It runs one action at a time; a second request while one runs is answered `busy` at once and
   leaves nothing on disk. The single-run lock is taken before any parameter is checked.
 - Its catalog is bounded (rows across roots, directories and loose packages per root) and says
-  `truncated` when a bound was reached; a declaration or manifest that is not what the format
-  says is shown with its error, never hidden and never a crash.
+  `truncated` when a bound was reached; a declaration or manifest that is unreadable, not
+  strict JSON, not an object, or missing the fields the format requires first (`schema`, a
+  valid `id` and `version` with exactly one payload, or a composition `name` with members) is
+  shown with its error, never hidden and never a crash; full validation is `module plan`'s.
+  A linked declaration file is not offered, because no action would accept it.
+- It answers at most 32 connections at a time (a 33rd gets an immediate 503) and drops a
+  connection whose request has not arrived within 30 seconds, so nothing can hold every
+  worker; the receipt index keeps the newest 512 rows and says `truncated`.
 - When it stops (deadline or Ctrl-C) it refuses new runs, interrupts a child still running so the
   child writes its cancelled receipt, kills it after a grace period (the whole tree: a process
   group on Linux, a Job Object on Windows), and reports `child_stopped_at_shutdown` in its
@@ -77,8 +83,8 @@ says why.
 ## Reading a run
 
 Each run row carries `argv` (what ran), `exit_code`, `result` (the child's whole JSON document,
-parsed in full; both pipes are read through bounded buffers, and a child that prints more than
-64 MiB is stopped and recorded with `output_overflow: true`, `stdout_head` and `stdout_bytes`)
+parsed in full; both pipes are read as bytes through bounded buffers, and a child that prints more
+than 64 MiB is stopped and recorded with `output_overflow: true`, `stdout_head` and `stdout_bytes`)
 and, for job routes, `output` (the directory holding `receipt.json` and the artifacts). Every
 file the plane reads (declarations, manifests, receipts, request bodies) is strict JSON with a
 size bound; anything else is listed as unreadable, and nothing it returns contains `NaN`. A run

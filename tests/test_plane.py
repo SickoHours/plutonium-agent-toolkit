@@ -12,7 +12,7 @@ import unittest
 import unittest.mock
 import urllib.error
 import urllib.request
-from http.server import ThreadingHTTPServer
+import socket
 from pathlib import Path
 
 from plutonium_agent_toolkit.cli import JOB_GROUPS
@@ -195,6 +195,7 @@ class ArgvTests(unittest.TestCase):
 
 class PlaneServerFixture(DevRouteFixture):
     """A Plane over a temporary library with the examples, served on a free loopback port."""
+    max_connections = 32
 
     def setUp(self):
         super().setUp()
@@ -207,8 +208,7 @@ class PlaneServerFixture(DevRouteFixture):
         shutil.copy(ROOT / "examples" / "registry.json", self.lib / "registry.json")
         self.jobs = self.root / "jobs"
         self.plane = server_module.Plane([self.lib], self.jobs)
-        self.server = ThreadingHTTPServer(("127.0.0.1", 0), server_module.make_handler(self.plane))
-        self.server.daemon_threads = True
+        self.server = server_module.PlaneServer(("127.0.0.1", 0), server_module.make_handler(self.plane), max_connections=self.max_connections)
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.addCleanup(self.plane.shutdown)
         self.addCleanup(self.server.server_close)
@@ -280,10 +280,17 @@ class PlaneServerTests(PlaneServerFixture):
     def test_library_and_actions(self):
         (self.lib / "loose").mkdir()
         (self.lib / "loose" / "mod.ff").write_bytes(b"prebuilt, undeclared")
+        (self.lib / "shape").mkdir()
+        (self.lib / "shape" / "module.json").write_text(json.dumps({"schema": 1, "id": "Bad Id", "version": "1", "recipe": "p.json", "bases": ["stock"], "maps": ["*"]}))
+        if os.name != "nt":
+            (self.lib / "linked").mkdir()
+            (self.lib / "linked" / "module.json").symlink_to(self.lib / "hello-zm" / "module.json")
         status, body = self.call("/api/library")
         self.assertEqual(status, 200)
         root = body["roots"][0]
-        self.assertEqual(sorted(m["id"] for m in root["modules"]), ["hello_zm", "round_announcer"])
+        self.assertEqual(sorted(m["id"] for m in root["modules"] if "error" not in m), ["hello_zm", "round_announcer"])
+        self.assertNotIn("linked", [m["path"] for m in root["modules"]], "a linked declaration is not offered")
+        self.assertIn("not a module declaration", next(m for m in root["modules"] if m["path"] == "shape")["error"])
         self.assertEqual([c["name"] for c in root["compositions"]], ["stock_hello_pack"])
         self.assertEqual(root["modules"][0]["payload"], "recipe")
         self.assertEqual(root["packages"], ["loose/mod.ff"], "loose packages are listed so module declare can take them")
@@ -320,12 +327,25 @@ class PlaneServerTests(PlaneServerFixture):
         self.assertEqual(status, 200)
         row = next(m for m in body["roots"][0]["modules"] if m["path"] == "nan")
         self.assertEqual(row["error"], "unreadable")
+        weird = self.lib / "surrogate"
+        weird.mkdir()
+        (weird / "module.json").write_text('{"schema": 1, "id": "surrogate", "version": "1", "title": "bad \\ud800 title", "recipe": "project.json", "bases": ["stock"], "maps": ["*"]}')
+        status, body = self.call("/api/library")
+        self.assertEqual(status, 200, "an escaped lone surrogate in a declaration does not break the response")
         big = self.jobs / "huge-receipt"
         big.mkdir(parents=True)
         (big / "receipt.json").write_text("{" + " " * (300 * 1024) + "}")
         status, body = self.call("/api/jobs")
         self.assertEqual(status, 200)
         self.assertEqual(next(r for r in body["runs"] if r["directory"] == "huge-receipt")["status"], "unreadable")
+        for i in range(4):
+            d = self.jobs / f"aaa-{i}"
+            d.mkdir()
+            (d / "receipt.json").write_text(json.dumps({"command": "x", "status": "succeeded", "started": f"2026-09-1{i}T00:00:00+00:00"}))
+        with unittest.mock.patch.object(server_module, "MAX_JOB_ROWS", 2):
+            status, body = self.call("/api/jobs")
+        self.assertTrue(body["truncated"])
+        self.assertEqual([r["directory"] for r in body["runs"]], ["aaa-3", "aaa-2"], "the newest receipts survive the bound, whatever their names")
         status, body = self.call("/api/run", {"action": "registry-search", "args": {"words": "x"}}, )
         self.assertEqual(status, 202)
         self.finish(body["run"]["run_id"])
@@ -345,6 +365,14 @@ class PlaneServerTests(PlaneServerFixture):
         self.assertTrue(run["output_overflow"], run)
         self.assertIsNone(run["result"])
         self.assertGreater(run["stdout_bytes"], 20_000)
+        # The bound and the count are bytes, not characters.
+        r, w = os.pipe()
+        with os.fdopen(w, "wb") as writer:
+            writer.write(("é" * 6000).encode("utf-8"))  # 12000 bytes
+        reader = server_module._Reader(os.fdopen(r, "rb"), 10_000)
+        reader.join(5)
+        self.assertTrue(reader.overflow)
+        self.assertEqual(reader.size, 12_000)
         self.assertLessEqual(len(run["stdout_head"]), server_module.MAX_HEAD)
         status, body = self.call("/api/run", {"action": "manifest", "args": {}})
         self.assertEqual(status, 202, "the plane is usable afterwards")
@@ -505,7 +533,44 @@ class PlaneServerTests(PlaneServerFixture):
         self.assertEqual(row["distribution"], "private")
 
 
+class ConnectionBoundTests(PlaneServerFixture):
+    max_connections = 1
+
+    def test_a_half_sent_request_cannot_hold_every_worker(self):
+        # Review finding: abandoned connections consumed unbounded threads. With one slot held by a
+        # connection that never finishes its headers, the next connection is answered 503 at once.
+        holder = socket.create_connection(("127.0.0.1", self.port), timeout=5)
+        holder.sendall(b"GET /api/state HTTP/1.1\r\nHost: 127.0.0.1\r\n")  # no terminating blank line
+        time.sleep(0.3)
+        try:
+            second = socket.create_connection(("127.0.0.1", self.port), timeout=5)
+            second.sendall(b"GET /api/state HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Plane-Token: " + self.plane.token.encode() + b"\r\n\r\n")
+            reply = second.recv(200)
+            second.close()
+            self.assertTrue(reply.startswith(b"HTTP/1.1 503"), reply)
+        finally:
+            holder.close()
+        time.sleep(0.3)
+        self.assertEqual(self.call("/api/state")[0], 200, "the slot is free once the holder is gone")
+        self.assertEqual(server_module.make_handler(self.plane).timeout, server_module.CONNECTION_TIMEOUT)
+
+
 class SequencingTests(PlaneServerFixture):
+    def test_a_failed_first_record_leaves_no_prompt_and_no_running_row(self):
+        original = self.plane._record
+
+        def broken(run):
+            raise OSError("read-only jobs directory")
+        self.plane._record = broken
+        try:
+            status, body = self.call("/api/run", {"action": "agent-send", "confirmed": True, "args": {"thread_id": "t-1", "prompt": "a secret"}})
+        finally:
+            self.plane._record = original
+        self.assertEqual((status, body["error_code"]), (400, "operation_failed"), body)
+        self.assertEqual(self.plane.run_rows(), [])
+        self.assertFalse(any((self.jobs / "plane-prompts").glob("prompt-*.txt")) if (self.jobs / "plane-prompts").exists() else False)
+        self.assertFalse(self.plane.job_lock.locked())
+
     def test_a_finished_record_means_the_next_run_can_start(self):
         # Windows CI finding: the record said finished a few milliseconds before the lock was released,
         # so the next request got busy. The lock is released before the final record is written.
