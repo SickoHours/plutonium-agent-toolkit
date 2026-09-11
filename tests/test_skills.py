@@ -248,9 +248,45 @@ class InstallSkillsTests(SkillsFixture):
             (skills_dir / "pat-build").symlink_to(elsewhere, target_is_directory=True)
         except (OSError, NotImplementedError):
             return
-        reason = skills._apply(skills_dir / "pat-build" / "SKILL.md", b"x", home)
+        reason = skills._apply(skills_dir / "pat-build" / "SKILL.md", b"x", home, None)
         self.assertIn("link", reason)
         self.assertEqual(list(elsewhere.iterdir()), [], "nothing was written through the swapped-in link")
+
+    def test_third_review_round_races_and_linked_source_assets(self):
+        home = self.home.resolve()
+        skills_dir = home / ".codex" / "skills" / "pat-help"
+        skills_dir.mkdir(parents=True)
+        # A foreign file that appears at the destination after the decision is never overwritten.
+        target = skills_dir / "SKILL.md"
+        target.write_bytes(b"somebody else's")
+        reason = skills._apply(target, b"ours", home, None)
+        self.assertIn("not overwritten", reason)
+        self.assertEqual(target.read_bytes(), b"somebody else's")
+        # An update replaces the file only while it still hashes to what this route recorded.
+        reason = skills._apply(target, b"ours", home, skills._sha(b"a different recorded hash"))
+        self.assertIn("changed while installing", reason)
+        self.assertEqual(target.read_bytes(), b"somebody else's")
+        self.assertEqual([p.name for p in skills_dir.iterdir()], ["SKILL.md"], "no temporary file is left behind")
+        reason = skills._apply(target, b"ours", home, skills._sha(b"somebody else's"))
+        self.assertEqual(reason, "")
+        self.assertEqual(target.read_bytes(), b"ours")
+        self.assertEqual([p.name for p in skills_dir.iterdir()], ["SKILL.md"])
+        # A linked directory inside a source skill is refused, not silently dropped.
+        checkout = self.root / "checkout"
+        (checkout / "skills" / "linked").mkdir(parents=True)
+        (checkout / "AGENTS.md").write_text("agents\n")
+        (checkout / "CONTEXT.md").write_text("context\n")
+        (checkout / "skills" / "linked" / "SKILL.md").write_text("---\nname: linked\ndescription: t\n---\n\nBody.\n")
+        outside = self.root / "outside-assets"
+        outside.mkdir()
+        (outside / "reporting.md").write_text("asset")
+        try:
+            (checkout / "skills" / "linked" / "assets").symlink_to(outside, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            return
+        code, row = invoke(["dev", "install-skills", "--home", str(self.home), "--only", "codex", "--source", str(checkout), "--plan"])
+        self.assertEqual(row["error_code"], "input_invalid")
+        self.assertIn("holds a link", row["message"])
 
     def test_no_harness_found_is_a_clean_result_with_a_hint(self):
         empty = self.root / "empty-home"

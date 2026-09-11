@@ -83,9 +83,13 @@ def skills_in(root: Path) -> list[dict]:
         if d.is_symlink() or not d.is_dir() or not (d / "SKILL.md").is_file():
             continue
         files = []
-        for p in sorted(x for x in d.rglob("*") if not x.is_dir()):
-            if p.is_symlink() or not p.is_file():
-                raise Failure(INPUT_INVALID, f"Skill {d.name} holds a link or special file: {p.name}")
+        for p in sorted(d.rglob("*")):
+            if p.is_symlink():
+                raise Failure(INPUT_INVALID, f"Skill {d.name} holds a link: {p.relative_to(d).as_posix()}")
+            if p.is_dir():
+                continue
+            if not p.is_file():
+                raise Failure(INPUT_INVALID, f"Skill {d.name} holds a special file: {p.relative_to(d).as_posix()}")
             if p.stat().st_size > MAX_SKILL_FILE_BYTES:
                 raise Failure(INPUT_LIMIT, f"Skill file exceeds {MAX_SKILL_FILE_BYTES} bytes: {p}")
             files.append(p.relative_to(d).as_posix())
@@ -248,29 +252,53 @@ def _decision(target: Path, data: bytes, recorded: dict, home: Path) -> tuple[st
     return "refused", "exists with different content that this route did not write"
 
 
-def _apply(target: Path, data: bytes, home: Path) -> str:
-    """Write target atomically. The path is checked again after the directories exist and again
-    before the rename, and the temporary file is created without following a link, so a directory
-    swapped for a link by another process of the same user is caught in either window rather than
-    written through. Descriptor-relative writes would close the window entirely; they are not
-    available on Windows, so the check is repeated instead. Returns a reason when refused."""
+_OPEN_NEW = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+
+
+def _apply(target: Path, data: bytes, home: Path, expected_sha: str | None) -> str:
+    """Write target. A new file (``expected_sha`` None) is created exclusively at its final path, so
+    a file another process puts there first makes the create fail and nothing is overwritten; on a
+    failed write the partial file this call created is removed. An update (``expected_sha`` is the
+    hash this route recorded) goes through a temporary file and replaces the target only if the
+    target still hashes to that value at the last check. The path is checked for links again after
+    the directories exist and before the rename. Descriptor-relative operations would close the
+    remaining windows entirely; they are not available on Windows, so the checks are repeated
+    instead. Returns a reason when refused."""
     target.parent.mkdir(parents=True, exist_ok=True)
     blocked = _blocked(target, home)
     if blocked:
         return blocked
+    if expected_sha is None:
+        try:
+            fd = os.open(target, _OPEN_NEW, 0o644)
+        except FileExistsError:
+            return "a file appeared at the destination while installing; it was not overwritten"
+        except OSError as exc:
+            return f"the destination could not be created: {exc.strerror or exc}"
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(data)
+        except OSError as exc:
+            target.unlink(missing_ok=True)
+            return f"the destination could not be written: {exc.strerror or exc}"
+        return ""
     tmp = target.with_name(target.name + "." + uuid.uuid4().hex + ".tmp")
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
-    fd = os.open(tmp, flags, 0o644)
+    fd = os.open(tmp, _OPEN_NEW, 0o644)
+    renamed = False
     try:
         with os.fdopen(fd, "wb") as handle:
             handle.write(data)
         blocked = _blocked(target, home)
         if blocked:
             return blocked
+        if target.is_symlink() or not target.is_file() or target.stat().st_size > MAX_SKILL_FILE_BYTES \
+                or _sha(target.read_bytes()) != expected_sha:
+            return "the destination changed while installing; it was not overwritten"
         os.replace(tmp, target)
+        renamed = True
         return ""
     finally:
-        if tmp.exists() or tmp.is_symlink():
+        if not renamed:
             tmp.unlink(missing_ok=True)
 
 
@@ -297,7 +325,7 @@ def install(*, plan: bool = False, only: list[str] | None = None, home: str | No
                 if reason:
                     entry["reason"] = reason
                 if not plan and action in ("write", "update"):
-                    reason = _apply(target, data, user_home)
+                    reason = _apply(target, data, user_home, None if action == "write" else recorded[str(target)]["sha256"])
                     if reason:
                         action = "refused"
                         entry["action"] = action
