@@ -68,6 +68,34 @@ class DocsConsistencyTests(unittest.TestCase):
         self.assertRegex(text, r"Arch Linux \(Omarchy\)")
         self.assertRegex(text, r"(?m)^\| macOS \|.*untested")
 
+    def test_a_route_with_a_native_receipt_is_available_in_the_manifest(self):
+        # The SUPPORT row and the route's status are two statements of one fact. A row at level
+        # native or game names a receipt; the route it grades must then say `available`, or the
+        # manifest tells an agent the route is unproven while the matrix says it ran. (Found after
+        # a rebase dropped the status flip that came with a receipt.)
+        import plutonium_agent_toolkit.cli  # noqa: F401
+        from plutonium_agent_toolkit.core.discovery import routes
+
+        status = {f"{r.group} {r.action}": r.status for r in routes()}
+        text = read("docs/SUPPORT.md")
+        checked = 0
+        for line in text.splitlines():
+            m = re.match(r"^\| ((?:`[^`]+`(?:, )?)+) \| [^|]+ \| \**([a-z]+)\** \|", line)
+            if not m or m.group(2) not in ("native", "game"):
+                continue
+            for cell in re.findall(r"`([^`]+)`", m.group(1)):
+                # A cell names one route (`dev builtin`) or several actions of one group (`module plan/build/declare`).
+                parts = cell.split(" ", 1)
+                if len(parts) == 1:
+                    continue  # `version`, `manifest`, `describe`: not group/action routes
+                group, actions = parts
+                for action in actions.split("/"):
+                    key = f"{group} {action}"
+                    if key in status:
+                        checked += 1
+                        self.assertEqual(status[key], "available", f"SUPPORT.md grades `{key}` {m.group(2)} but the route is {status[key]}")
+        self.assertGreater(checked, 10, "the matrix parse found too few graded routes; the row format changed")
+
     def test_support_links_only_receipts_that_exist(self):
         text = read("docs/SUPPORT.md")
         for rel in set(re.findall(r"\]\((receipts/[^)]+\.json)\)", text)):

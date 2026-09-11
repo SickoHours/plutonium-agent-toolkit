@@ -79,7 +79,7 @@ PLANNED = [
           status="implemented", owner=OWNER,
           notes="Argument: <owner>/<id>@<40 hex> or https://github.com/<owner>/<repo>@<40 hex> [--path <dir>]. GitHub only, HTTPS tarball, no git, no token. The declaration must name the same repository and commit when it names any."),
     Route("dev", "builtin", "Fetch the built-in modules and packs the toolkit's own registry lists, at their pinned commits, into the toolkit home; a rerun verifies them", "downloads-source",
-          status="implemented", owner="core",
+          status="available", owner="core",
           notes="Arguments: [--plan] [--only <owner/id>]... One HTTPS snapshot per repository and commit, hashed and extracted with the archive "
                 "safety checks; the entry directories (and a pack's members and loads) are laid out under <toolkit home>/modules/builtin/<owner>/<repo>/<commit>/ "
                 "with a receipt per entry. A changed tree is refused with artifact_changed, never overwritten. --plan touches no network. Nothing is installed into the game."),
