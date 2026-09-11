@@ -16,7 +16,7 @@ carries the entry count, the fixed name width (`name_size`) and the name table's
 | Job | How |
 | --- | --- |
 | Find a recording | Match the name table entry by its path; the donor's own alias records name it, and the bank also carries engine suffixes that distinguish loaded from streamed and platform |
-| Carve it | Read the entry's recorded offset and byte count; the data at the offset begins with `fLaC`; write exactly that many bytes |
+| Carve it | Read the entry's recorded offset and byte count; the data at the offset begins with `fLaC`; write exactly the recorded byte count. The next entry's offset is only a sanity bound (padding can sit between entries); `bo3-workshop-formats.md` states the same rule |
 | Convert it | Decode the FLAC to the T6 audio contract's canonical PCM WAV; native T6 streamed FLAC uses 1,024-sample blocks, so set and check that block size |
 | Prove it | Hash every carved file into the sealed index; the prepare step refuses to run if any input hash differs |
 
@@ -36,8 +36,9 @@ mixer fields; those need a live alias pass or the prototype fallback below.
 
 When a family's alias rows were never captured live, there are no donor mixer values to convert.
 Build each T6 alias row on a native prototype row of the same kind — a fire player row, a fire
-NPC row, a foley row — and override the recording path, storage, looping and limits, setting the
-secondary to the port's own alias name so the chain stays intact. The donor's recordings and its
+NPC row, a foley row — and override the recording path, storage, looping and limits, setting
+`Secondary` to the port's *next* rebuilt alias (fire to mechanical, mechanical to low-frequency) and
+leaving it empty on the terminal row, so the donor chain is preserved and no row points at itself. The donor's recordings and its
 fire -> mechanical -> low-frequency grouping remain donor data; the mixer values on a prototype
 row are a documented adaptation, not donor data, and every one belongs in the prepare report.
 When a named recording is absent from the bank, use the nearest recorded layer and record that

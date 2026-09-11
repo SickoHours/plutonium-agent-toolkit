@@ -56,8 +56,9 @@ on Arch Linux with BO3 under Proton; sizes vary per map, formats do not.
 ## The sound banks
 
 - Version 15 banks carry a name table, so each alias resolves to an entry offset. The entry at
-  that offset begins with a FLAC signature; carving from there to the next entry yields a
-  playable FLAC with no transcoding. Loaded banks (`.sabl`) hold the short sounds a weapon
+  that offset begins with a FLAC signature; carving the entry's recorded byte count from there
+  yields a playable FLAC with no transcoding (the next entry's offset is only an upper bound;
+  `bo3-sab-audio.md` has the carve table). Loaded banks (`.sabl`) hold the short sounds a weapon
   needs; streamed banks (`.sabs`) hold music and long voice lines.
 
 ## What only the running game holds
