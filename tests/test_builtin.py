@@ -173,9 +173,10 @@ class DevBuiltinTests(BuiltinFixture):
         shelf_commit = pack_dir.parent.parent
         self.assertFalse((shelf_commit / "README.md").exists(), "only the entries and what their recipes name are kept")
         self.assertTrue((Path(by_name["sickohours/hello_zm"]["module_dir"]) / "scripts" / "hello.gsc").is_file())
+        short = self.commit[:12]
         receipts = sorted(p.name for p in Path(result["receipts"]).glob("*.json"))
-        self.assertEqual(receipts, ["sickohours--hello_zm.json", "sickohours--round_announcer.json", "sickohours--stock_hello_pack.json"])
-        pack_receipt = json.loads((Path(result["receipts"]) / "sickohours--stock_hello_pack.json").read_text())
+        self.assertEqual(receipts, [f"sickohours--hello_zm--{short}.json", f"sickohours--round_announcer--{short}.json", f"sickohours--stock_hello_pack--{short}.json"])
+        pack_receipt = json.loads((Path(result["receipts"]) / f"sickohours--stock_hello_pack--{short}.json").read_text())
         self.assertEqual(pack_receipt["commit"], self.commit)
         self.assertEqual(sorted(pack_receipt["paths"]), ["examples/hello-pack", "examples/hello-zm", "examples/hello-zm-two"],
                          "a pack's receipt covers its member directories in the same snapshot")
@@ -251,6 +252,32 @@ class DevBuiltinTests(BuiltinFixture):
         self.assertEqual(by["sickohours/hello_zm"]["action"], "refuse")
         self.assertEqual(by["sickohours/stock_hello_pack"]["action"], "refuse", "the pack's receipt covers its members too")
         self.assertEqual(by["sickohours/round_announcer"]["action"], "verify")
+
+    def test_a_moved_pin_starts_absent_and_keeps_the_old_snapshot(self):
+        code, row = invoke(["dev", "builtin"])
+        self.assertEqual(code, 0, row)
+        old_dir = Path(row["result"]["results"][0]["module_dir"])
+        # A later release pins a newer commit: the shipped registry lists every entry there.
+        newer = "f" * 40
+        shipped = registry.builtin_registry()
+        moved = dict(shipped, entries=[dict(e, listed={**e["listed"], "commit": newer}) for e in shipped["entries"]])
+        self.served[registry.snapshot_url(shipped["entries"][0]["repository"], newer)] = repo_tarball(newer)
+        with mock.patch.object(registry, "builtin_registry", return_value=moved):
+            code, row = invoke(["dev", "builtin", "--plan"])
+            self.assertEqual(code, 0, row)
+            self.assertEqual({r["state"] for r in row["result"]["results"]}, {"absent"}, "the old receipt is not this pin's receipt")
+            code, row = invoke(["dev", "builtin"])
+            self.assertEqual(code, 0, row)
+            self.assertEqual({r["action"] for r in row["result"]["results"]}, {"installed"})
+            new_dir = Path(row["result"]["results"][0]["module_dir"])
+            self.assertEqual(new_dir.parent.parent.name, newer)
+            code, row = invoke(["dev", "builtin"])
+            self.assertEqual({r["action"] for r in row["result"]["results"]}, {"verified"})
+        self.assertTrue(old_dir.is_dir(), "the previous snapshot stays on the shelf")
+        receipts = sorted(p.name for p in Path(row["result"]["receipts"]).glob("sickohours--hello_zm--*.json"))
+        self.assertEqual(len(receipts), 2, "one receipt per pin")
+        code, row = invoke(["dev", "builtin"])
+        self.assertEqual({r["action"] for r in row["result"]["results"]}, {"verified"}, "the shipped pin still verifies against its own receipt")
 
     def test_lock_and_download_failures_leave_no_partial_shelf(self):
         builtin.shelf_dir().mkdir(parents=True)

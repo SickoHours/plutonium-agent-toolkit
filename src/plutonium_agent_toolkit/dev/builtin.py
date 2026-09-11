@@ -58,8 +58,10 @@ def entry_dir(entry: dict) -> Path:
 
 
 def receipt_path(entry: dict) -> Path:
+    """One receipt per entry and pinned commit. A release that moves a pin writes a new receipt
+    beside the old one, so the previous snapshot stays accounted for and the new pin starts absent."""
     owner, mid = entry["name"].split("/", 1)
-    return _receipts_dir() / f"{owner}--{mid}.json"
+    return _receipts_dir() / f"{owner}--{mid}--{entry['listed']['commit'][:12]}.json"
 
 
 def entries(only: list[str] | None = None) -> list[dict]:
@@ -135,8 +137,11 @@ def _read_receipt(entry: dict) -> dict | None:
         data = json.loads(path.read_text(encoding="utf-8"))
     except ValueError as exc:
         raise Failure(INPUT_INVALID, f"Built-in receipt is not valid JSON: {path}") from exc
-    if not isinstance(data, dict) or not isinstance(data.get("files"), dict):
+    if not isinstance(data, dict) or not isinstance(data.get("files"), dict) or not isinstance(data.get("paths"), list):
         raise Failure(INPUT_INVALID, f"Built-in receipt is malformed: {path}")
+    if data.get("commit") != entry["listed"]["commit"] or data.get("name") != entry["name"]:
+        # A receipt for another pin or another entry is not this entry's; this pin starts absent.
+        return None
     return data
 
 

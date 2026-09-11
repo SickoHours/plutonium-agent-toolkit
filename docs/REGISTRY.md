@@ -58,7 +58,8 @@ modules and packs the release ships as **built-ins**, at the exact commit the re
 `pat dev builtin` fetches them onto the machine: one HTTPS snapshot per repository and commit,
 hashed and extracted with the archive safety checks, laid out under
 `<toolkit home>/modules/builtin/<owner>/<repository>/<commit>/<path>` so a pack's relative member
-paths keep resolving, with a receipt per entry under `modules/builtin/receipts/`. A rerun re-hashes
+paths keep resolving, with a receipt per entry and pinned commit under `modules/builtin/receipts/` (a release that moves a
+pin fetches the new snapshot beside the old one, which stays accounted for). A rerun re-hashes
 every kept file and the recorded directories and answers `verified`; a tree with a changed, missing or added
 file is refused with `artifact_changed` and never overwritten; `--plan` reports the state without touching the network. `registry list`, `search` and
 `show` carry each registry's `origin` (`builtin` or `added`), `search --origin builtin` lists only
