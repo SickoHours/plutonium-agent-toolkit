@@ -74,7 +74,12 @@ KINDS = {"weapons": ("wonder", "firearm", "melee", "launcher", "special"), "perk
          "ui": ("hud", "menu"), "core": ("inventory", "registry", "adapter"), "scripts": ("script",),
          "audio": ("bank", "music"), "tooling": ("tool",), "pack": ("pack",), "module": ()}
 DISTRIBUTIONS = ("source", "seed", "private")
-PROVIDES_KINDS = ("weapons", "perks", "gobblegums", "powerups", "equipment", "localize", "soundbanks", "scripts", "models", "effects")
+PROVIDES_KINDS = ("weapons", "perks", "gobblegums", "powerups", "equipment", "localize", "soundbanks", "scripts", "models", "effects",
+                  "rawfiles")
+# A whole pack declared as one seed lists every asset it embeds; a Beta-era pack carries several
+# hundred models and weapons, so a declaration that narrows provides by copying the manifest block
+# needs room above the per-kind count a hand-written declaration would ever reach.
+MAX_PROVIDES_NAMES = 4096
 MAX_MODULES = 32
 MAX_LIST = 64
 MAX_TAGS = 16
@@ -147,7 +152,7 @@ def _provides(value, owner: str) -> dict:
         raise Failure(INPUT_INVALID, f"{owner}: provides maps kinds {list(PROVIDES_KINDS)} to lists of names")
     out = {}
     for kind, names in value.items():
-        if not isinstance(names, list) or len(names) > 512 or not all(isinstance(n, str) and 0 < len(n) <= 128 for n in names):
+        if not isinstance(names, list) or len(names) > MAX_PROVIDES_NAMES or not all(isinstance(n, str) and 0 < len(n) <= 128 for n in names):
             raise Failure(INPUT_INVALID, f"{owner}: provides.{kind} is a list of names")
         if len(set(names)) != len(names):
             raise Failure(INPUT_INVALID, f"{owner}: duplicate names under provides.{kind}")
