@@ -55,8 +55,10 @@ listed, before anything is sorted or read. The directory to scan must itself be 
 directory, not a link. Every file that was read and every directory listing is an input of the
 job: the receipt lists their hashes and the job re-hashes and re-lists them (names and kinds)
 before it succeeds, so a file changed, added, removed or swapped for another kind after the
-scan fails the job (``input_changed``) instead of leaving a report for an older tree. The job deadline is checked between 1 MiB chunks of every read; a
-filesystem that never returns from a read cannot be interrupted from Python. File names that
+scan fails the job (``input_changed``) instead of leaving a report for an older tree. The job
+deadline is checked between 1 MiB chunks of every read, and again while the receipt re-hashes and
+re-lists that tree, so a scan cannot succeed after its deadline; a filesystem that never returns
+from a read cannot be interrupted from Python. File names that
 are not valid UTF-8 are hashed as their raw bytes and shown with backslash escapes.
 """
 from __future__ import annotations
