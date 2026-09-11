@@ -8,7 +8,9 @@ description: Port a weapon, item or behaviour from a donor game into one T6 Zomb
 A port is a module built alone on a named base from a sealed donor, with every gate that earlier
 ports learned run before a person tests it. Words: `CONTEXT.md`. Facts:
 `docs/knowledge/other-titles.md`, `docs/knowledge/zombies-contracts.md`,
-`docs/knowledge/engine-limits.md`. Steps: `docs/playbooks/port-a-feature.md`.
+`docs/knowledge/engine-limits.md`. Steps: `docs/playbooks/port-a-feature.md`; for a Black Ops III
+Workshop map as the donor, `docs/playbooks/inspect-a-bo3-map.md` first and then
+`docs/playbooks/port-a-bo3-weapon.md` (`docs/knowledge/bo3-workshop-formats.md` has the containers).
 
 ## Before the first command
 
