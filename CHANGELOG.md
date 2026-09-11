@@ -107,8 +107,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
   a security audit, certification, warranty or endorsement. `docs/REGISTRY.md` has the rule
   table; `publish-a-module.md` runs the baseline before listing; glossary term baseline. Tier 1
   of `tools/qualify.py` runs the baseline on `examples/hello-zm` and checks the outcome is
-  `passed`; the regenerated Arch Linux (Omarchy 4.0.3) Tier 1 receipt carries both steps (17
-  steps; the previous receipt is kept as a superseded file), so the route is `available` on
+  `passed`; the regenerated Arch Linux (Omarchy 4.0.3) Tier 1 receipt carries both steps (19
+  steps; the previous receipts are kept as superseded files), so the route is `available` on
   Linux. No Windows receipt yet; expected to pass there. Not measured: real community
   repositories. Files are opened without following links and without blocking, the descriptor
   must be the regular file the listing saw, and bytes count against the tree bound as they are
