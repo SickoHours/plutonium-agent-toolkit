@@ -27,8 +27,11 @@ CHUNK = 1024 * 1024
 FILE_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0) | getattr(os, "O_CLOEXEC", 0)
 
 
-def sha256_file(path: Path, limit: int = MAX_HASH_BYTES) -> str:
-    """Hash the regular file at a name; the final component is never followed as a link."""
+def sha256_file(path: Path, limit: int = MAX_HASH_BYTES, check=None) -> str:
+    """Hash the regular file at a name; the final component is never followed as a link.
+
+    ``check`` is called once per chunk, so a caller with a deadline (a ``Job``) stops a long read
+    instead of finishing it late."""
     p = Path(path)
     if p.is_symlink() or not p.is_file():
         raise Failure(INPUT_MISSING, f"Cannot hash a missing or linked file: {p}")
@@ -36,18 +39,21 @@ def sha256_file(path: Path, limit: int = MAX_HASH_BYTES) -> str:
         fd = os.open(p, FILE_FLAGS)
     except OSError as exc:
         raise Failure(INPUT_MISSING, f"Cannot hash a missing or linked file: {p} ({exc.strerror or exc})") from exc
-    return sha256_descriptor(fd, str(p), limit)
+    return sha256_descriptor(fd, str(p), limit, check)
 
 
-def sha256_descriptor(fd: int, label: str, limit: int = MAX_HASH_BYTES) -> str:
+def sha256_descriptor(fd: int, label: str, limit: int = MAX_HASH_BYTES, check=None) -> str:
     """Hash a regular file through an open descriptor, which this closes. The descriptor must
-    describe a regular file; a link, a pipe or a directory is refused before a byte is read."""
+    describe a regular file; a link, a pipe or a directory is refused before a byte is read.
+    ``check`` is called once per chunk (see ``sha256_file``)."""
     h = hashlib.sha256()
     total = 0
     with os.fdopen(fd, "rb") as stream:
         if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
             raise Failure(INPUT_MISSING, f"Cannot hash a missing or linked file: {label}")
         while block := stream.read(CHUNK):
+            if check is not None:
+                check()
             total += len(block)
             if total > limit:
                 raise Failure(INPUT_LIMIT, f"File exceeds {limit} bytes: {label}")

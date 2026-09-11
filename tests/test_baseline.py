@@ -1132,6 +1132,110 @@ class IncompleteAndBoundsTests(BaselineFixture):
         self.assertEqual(row["error_code"], "backend_timeout")
 
 
+class DeclaredPathTests(BaselineFixture):
+    """A declaration names paths. Reading one must never follow a link or an unreadable ancestor
+    out of the snapshot, and must never abort the report."""
+
+    def test_a_declared_path_under_a_linked_ancestor_is_a_path_escape(self):
+        if os.name == "nt":
+            self.skipTest("symlink creation needs a privilege on Windows")
+        outside = self.root / "outside" / "scripts"
+        outside.mkdir(parents=True)
+        (outside / "round_announcer.gsc").write_text("main() {}\n")
+        directory = self.module(rec={"scripts": [{"source": "linked/round_announcer.gsc", "target": "scripts/zm/x.gsc", "instance": "server"}]})
+        (directory / "scripts").rename(directory / "kept")
+        (directory / "linked").symlink_to(outside, target_is_directory=True)
+        code, row = self.scan(directory)
+        self.assertEqual(code, 0, row)
+        self.assertEqual(row["result"]["outcome"], "needs-fixes")
+        escapes = self.findings(row, "path-escape")
+        self.assertTrue(any("lies under one" in r["evidence"] or "is a link" in r["evidence"] for r in escapes), escapes)
+        self.assertTrue((Path(row["result"]["output"]) / "baseline.json").is_file(), "the report is written")
+
+    def test_a_declared_path_under_an_unreadable_ancestor_is_incomplete(self):
+        if os.name == "nt" or os.geteuid() == 0:
+            self.skipTest("mode bits do not deny reads here")
+        directory = self.module(rec={"scripts": [{"source": "closed/round_announcer.gsc", "target": "scripts/zm/x.gsc", "instance": "server"}]})
+        closed = directory / "closed"
+        closed.mkdir()
+        (closed / "round_announcer.gsc").write_text("main() {}\n")
+        closed.chmod(0)
+        self.addCleanup(closed.chmod, 0o755)
+        code, row = self.scan(directory)
+        self.assertEqual(code, 0, row)
+        self.assertEqual(row["result"]["outcome"], "incomplete")
+        paths = [r["path"] for r in row["result"]["unreadable"]]
+        self.assertIn("closed", paths, "the walk saw the directory")
+        self.assertIn("closed/round_announcer.gsc", paths, "the declared path itself is unread, not 'missing on disk'")
+        self.assertEqual(self.findings(row, "declaration-mismatch"), [], "an unread path is not a mismatch")
+        self.assertTrue((Path(row["result"]["output"]) / "baseline.json").is_file())
+
+    def test_a_linked_composition_member_is_a_path_escape_and_is_not_summarized(self):
+        if os.name == "nt":
+            self.skipTest("symlink creation needs a privilege on Windows")
+        # The member looks like a module from outside the tree; nothing about it may be read.
+        elsewhere = self.root / "elsewhere"
+        elsewhere.mkdir()
+        (elsewhere / "module.json").write_text(json.dumps(declaration(), indent=2))
+        directory = self.pack("pack", ["./member"])
+        (directory / "member").symlink_to(elsewhere, target_is_directory=True)
+        code, row = self.scan(directory)
+        self.assertEqual(code, 0, row)
+        self.assertEqual(row["result"]["outcome"], "needs-fixes")
+        self.assertTrue(self.findings(row, "path-escape"), row["result"]["findings"])
+        member = row["result"]["declaration"]["members"][0]
+        self.assertFalse(member["exists"])
+        self.assertEqual(member.get("state"), "link")
+        self.assertIsNone(member.get("declares"), "a link's contents are never read")
+
+    def test_an_unreadable_composition_member_is_incomplete_not_an_abort(self):
+        if os.name == "nt" or os.geteuid() == 0:
+            self.skipTest("mode bits do not deny reads here")
+        directory = self.pack("pack", ["./member"])
+        member = directory / "member"
+        member.mkdir()
+        (member / "module.json").write_text(json.dumps(declaration(), indent=2))
+        member.chmod(0)
+        self.addCleanup(member.chmod, 0o755)
+        code, row = self.scan(directory)
+        self.assertEqual(code, 0, row)
+        self.assertEqual(row["result"]["outcome"], "incomplete")
+        member_row = row["result"]["declaration"]["members"][0]
+        self.assertEqual(member_row.get("state"), "unreadable", member_row)
+        self.assertIsNone(member_row["declares"], "nothing is claimed about a member that could not be read")
+        self.assertIn("member/module.json", [r["path"] for r in row["result"]["unreadable"]])
+        self.assertTrue((Path(row["result"]["output"]) / "baseline.json").is_file())
+
+
+class DeadlineTests(BaselineFixture):
+    def test_finish_cannot_succeed_after_the_deadline(self):
+        # Recording every scanned file as a job input makes finish() re-hash the tree; that work
+        # is bounded by the same deadline as the scan, checked before each file and inside a read.
+        from plutonium_agent_toolkit.core import jobs as jobs_module
+
+        directory = self.module(files={"big.txt": "x" * 4096})
+        state = {"hashed": 0}
+        real_file, real_fd = jobs_module.sha256_file, jobs_module.sha256_descriptor
+
+        def counted(real):
+            # Re-hashing this tree is what takes the time: after the second file the clock is past
+            # the deadline, which only a check inside the loop can notice. A recorded file is
+            # re-hashed through its ancestors' descriptors where the platform has them, and by
+            # name where it does not, so both spellings count.
+            def run(*args, **kwargs):
+                state["hashed"] += 1
+                return real(*args, **kwargs)
+            return run
+
+        with mock.patch.object(jobs_module, "sha256_file", side_effect=counted(real_file)), \
+                mock.patch.object(jobs_module, "sha256_descriptor", side_effect=counted(real_fd)), \
+                mock.patch.object(jobs_module.time, "monotonic", side_effect=lambda: 10**6 if state["hashed"] >= 2 else 0.0):
+            code, row = self.scan(directory)
+        self.assertGreaterEqual(state["hashed"], 2, "the re-hash ran; the deadline passed inside it")
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "backend_timeout", row)
+
+
 class RouteTests(BaselineFixture):
     def test_baseline_is_a_job_and_the_other_registry_actions_are_not(self):
         directory = self.module()

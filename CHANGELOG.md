@@ -96,7 +96,10 @@ Every entry states what shipped, on which platform it was verified, and what rem
   `curl`/`wget ... | sh`, or a downloaded file started later in the same script; `path-escape`:
   a link anywhere in the tree, an absolute path or Windows drive, a `..` segment in a confined
   declared path, or a member or load resolving outside the scanned directory; a pack is scanned
-  from the directory that holds it and every member it names).
+  from the directory that holds it and every member it names). Every declared path is read one
+  component at a time without following anything, so a path under a link is reported and never
+  read through, and a component the filesystem refuses to describe is `unreadable` rather than
+  an answer; the report is written either way.
   Non-blocking findings `unpinned-acquisition` (a `.zip`, `.tar.gz`/`.tgz`, `.tar.xz`/`.txz`,
   `.tar.bz2`/`.tbz2`, `.7z`, `.rar`, `.ff`, `.ipak`, `.exe` or `.msi` URL without a SHA-256 nearby) and `declaration-mismatch` (repository or commit different from the listing,
   a declared path missing, `bases`/`maps` empty, invalid JSON); capabilities `installer`,
@@ -104,7 +107,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
   `global-tooling`, `bundled-assets` (binary total above 8 MiB) and `large-text`; warning
   `no-resource-contract`. Outcomes `passed`, `review-required`, `needs-fixes` and `incomplete`
   (an unreadable file fails closed); every skipped or unreadable entry is listed. Bounds: 20 000
-  files, 2 GiB, 4 MiB of text per file. The report and the result carry
+  files, 2 GiB, 4 MiB of text per file; the job's deadline is checked while the scan reads and
+  again while the receipt re-hashes the recorded tree, so a scan cannot succeed late. The report and the result carry
   `not_a_security_audit: true` with the sentence that a baseline is a static check of files, not
   a security audit, certification, warranty or endorsement. `docs/REGISTRY.md` has the rule
   table; `publish-a-module.md` runs the baseline before listing; glossary term baseline. Tier 1

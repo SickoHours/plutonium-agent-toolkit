@@ -322,33 +322,39 @@ class Job:
         chain = self._recorded_ancestors(str(path.parent))
         try:
             if not chain:
-                return sha256_file(path)
+                return sha256_file(path, check=self.check_deadline)
             if not DESCRIPTOR_LISTINGS:
                 for directory in chain:
                     if entry_kind(os.lstat(directory)) != "dir":
                         raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {directory} is no longer a directory")
-                return sha256_file(path)
+                return sha256_file(path, check=self.check_deadline)
             fds = self._open_chain(chain)
             try:
                 try:
                     fd = os.open(path.name, FILE_FLAGS, dir_fd=fds[-1])
                 except OSError as exc:
                     raise Failure(INPUT_CHANGED, f"Input changed while the job ran: {key} ({exc.strerror or exc})") from exc
-                return sha256_descriptor(fd, key)
+                return sha256_descriptor(fd, key, check=self.check_deadline)
             finally:
                 for fd in fds:
                     os.close(fd)
         except Failure as exc:
-            if exc.code == INPUT_CHANGED:
+            # A file that cannot be hashed any more is an input change; running out of time or
+            # being cancelled is not, and keeps its own code.
+            if exc.code in (INPUT_CHANGED, BACKEND_TIMEOUT, CANCELLED):
                 raise
             raise Failure(INPUT_CHANGED, f"Input changed while the job ran: {key} ({exc.message})") from exc
 
     def finish(self, result: dict) -> dict:
         self.check_deadline()
+        # Re-hashing a large recorded tree is itself work: the deadline is checked before every
+        # file and every listing, and inside each read, so a job cannot succeed after its deadline.
         for key, digest in self.inputs.items():
+            self.check_deadline()
             if self._rehash(key) != digest:
                 raise Failure(INPUT_CHANGED, f"Input changed while the job ran: {key}")
         for key, digest in self.listings.items():
+            self.check_deadline()
             try:
                 entries = list_entries(Path(key), self._listing_identity.get(key))
             except OSError as exc:

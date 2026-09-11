@@ -322,6 +322,52 @@ def _inside(full: Path, root: Path) -> bool:
     return Path(os.path.normpath(str(full))).is_relative_to(root)
 
 
+def _probe(root: Path, full: Path) -> str:
+    """What a path declared inside the tree is, without following anything.
+
+    Every component from the scanned root down is read with ``lstat``: the first link (or Windows
+    reparse point) answers ``link`` and the walk stops there, so a declaration can never make the
+    scan read through a link to somewhere else, and an ancestor that is not a directory answers
+    ``missing`` rather than a guess. A filesystem that refuses an answer gives ``unreadable``,
+    which the caller records so the outcome is ``incomplete`` instead of a pass over unread files.
+    Answers: ``outside``, ``link``, ``missing``, ``unreadable``, ``dir``, ``file``, ``other``."""
+    target = Path(os.path.normpath(str(full)))
+    try:
+        relative = target.relative_to(root)
+    except ValueError:
+        return "outside"
+    parts = relative.parts
+    current = root
+    for index, part in enumerate(parts):
+        current = current / part
+        try:
+            st = os.lstat(current)
+        except FileNotFoundError:
+            return "missing"
+        except OSError:
+            return "unreadable"
+        if _is_link(st):
+            return "link"
+        if index < len(parts) - 1:
+            if not stat.S_ISDIR(st.st_mode):
+                return "missing"  # an ancestor that is not a directory: nothing can live under it
+            continue
+        return "dir" if stat.S_ISDIR(st.st_mode) else "file" if stat.S_ISREG(st.st_mode) else "other"
+    return "dir"  # the scanned root itself, already opened and checked
+
+
+def _relative(root: Path, full: Path) -> str:
+    """A path inside the tree as the report spells every other path: relative, forward slashes."""
+    return _display(Path(os.path.normpath(str(full))).relative_to(root).as_posix())
+
+
+def _unreadable(sink, path: str, reason: str) -> None:
+    """Record a path the filesystem refused, once; the outcome is then ``incomplete``."""
+    if sink is None or any(row["path"] == path for row in sink):
+        return
+    sink.append({"path": path, "reason": reason})
+
+
 def _line_of(text: str, value) -> int | None:
     pos = text.find(json.dumps(value))
     return None if pos < 0 else text.count("\n", 0, pos) + 1
@@ -398,7 +444,8 @@ def _paths(data, kind: str):
     yield from walk(data, False, 0)
 
 
-def _check_path(rows: Rows, rel: str, text: str, directory: Path, root: Path, field: str, value: str, confined: bool) -> None:
+def _check_path(rows: Rows, rel: str, text: str, directory: Path, root: Path, field: str, value: str, confined: bool,
+                unreadable=None) -> None:
     line = _line_of(text, value)
     if not value.strip():
         rows.add("declaration-mismatch", rel, line, f"{field}: empty path")
@@ -415,12 +462,14 @@ def _check_path(rows: Rows, rel: str, text: str, directory: Path, root: Path, fi
     if field == "target":
         return  # a zone target names a place inside the package, not a file on disk
     full = directory.joinpath(*parts) if parts else directory
-    if not _inside(full, root):
+    kind = _probe(root, full)
+    if kind == "outside":
         rows.add("path-escape", rel, line, f"{field}: {value!r} resolves outside the scanned directory; scan from the directory that holds every member")
-        return
-    if full.is_symlink():
-        rows.add("path-escape", rel, line, f"{field}: {value!r} is a link")
-    elif not full.exists():
+    elif kind == "link":
+        rows.add("path-escape", rel, line, f"{field}: {value!r} is a link, or lies under one")
+    elif kind == "unreadable":
+        _unreadable(unreadable, _relative(root, full), f"named by {field} in {rel}; the filesystem refused to say what it is")
+    elif kind == "missing":
         rows.add("declaration-mismatch", rel, line, f"{field}: {value!r} is missing on disk")
 
 
@@ -450,7 +499,8 @@ def _check_source(rows: Rows, rel: str, text: str, source, expected: dict) -> No
         rows.add("declaration-mismatch", rel, _line_of(text, commit), f"source.commit {commit[:12]} differs from --commit {expected['commit'][:12]}")
 
 
-def _check_declaration(rows: Rows, rel: str, kind: str, text: str, directory: Path, root: Path, expected: dict):
+def _check_declaration(rows: Rows, rel: str, kind: str, text: str, directory: Path, root: Path, expected: dict,
+                       unreadable=None):
     data = _load_json(rows, rel, text)
     if data is None:
         return None
@@ -467,7 +517,7 @@ def _check_declaration(rows: Rows, rel: str, kind: str, text: str, directory: Pa
             _check_source(rows, rel, text, data["source"], expected)
     try:
         for field, value, confined in _paths(data, kind):
-            _check_path(rows, rel, text, directory, root, field, value, confined)
+            _check_path(rows, rel, text, directory, root, field, value, confined, unreadable)
     except TooDeep:
         rows.add("declaration-mismatch", rel, None, f"nested deeper than {MAX_JSON_DEPTH} levels; paths below that depth were not checked")
     return data
@@ -487,7 +537,7 @@ def _module_summary(rel: str, data) -> dict:
             "source": field("source"), "resource_contract": "resource_contract" in data}
 
 
-def _composition_summary(rel: str, data, directory: Path, root: Path) -> dict:
+def _composition_summary(rel: str, data, directory: Path, root: Path, unreadable=None) -> dict:
     if not isinstance(data, dict):
         return {"file": rel, "kind": "composition", "valid": False}
     members = []
@@ -503,9 +553,24 @@ def _composition_summary(rel: str, data, directory: Path, root: Path) -> dict:
         if isinstance(path, str) and path.strip() and not _absolute_or_drive(path):
             full = directory.joinpath(*_parts(path)) if _parts(path) else directory
             row["outside_scan_root"] = not _inside(full, root)
-            if not row["outside_scan_root"]:  # nothing outside the tree is touched
-                row["exists"] = full.is_dir() and not full.is_symlink()
-                row["declares"] = next((n for n in ("module.json", "composition.json") if (full / n).is_file()), None) if row["exists"] else None
+            if not row["outside_scan_root"]:  # nothing outside the tree is opened or followed
+                kind = _probe(root, full)
+                row["exists"] = kind == "dir"
+                row["declares"] = None
+                if kind in ("link", "unreadable"):
+                    # A linked member is already a blocking path-escape from _check_path; either
+                    # way its contents are not read, so nothing about them is summarized.
+                    row["state"] = kind
+                    if kind == "unreadable":
+                        _unreadable(unreadable, _relative(root, full), f"member of {rel}; the filesystem refused to say what it is")
+                for name in ("module.json", "composition.json") if row["exists"] else ():
+                    probed = _probe(root, full / name)
+                    if probed == "file":
+                        row["declares"] = name
+                        break
+                    if probed == "unreadable":
+                        row["state"] = "unreadable"
+                        _unreadable(unreadable, _relative(root, full / name), f"named by a member of {rel}; the filesystem refused to say what it is")
         members.append(row)
     loads = data.get("loads") if isinstance(data.get("loads"), list) else []
     return {"file": rel, "kind": "composition", "valid": True, "name": _shallow(data.get("name")), "title": _shallow(data.get("title")),
@@ -837,10 +902,10 @@ def execute(args, job: Job) -> dict:
     summary = None
     nested = []
     for rel, kind, directory, text in scan.declarations:
-        data = _check_declaration(rows, rel, kind, text, directory, root, expected)
+        data = _check_declaration(rows, rel, kind, text, directory, root, expected, scan.unreadable)
         if kind == "recipe":
             continue
-        row = _module_summary(rel, data) if kind == "module" else _composition_summary(rel, data, directory, root)
+        row = _module_summary(rel, data) if kind == "module" else _composition_summary(rel, data, directory, root, scan.unreadable)
         if directory == root and (kind == "module" or summary is None):
             summary = row
         else:
@@ -848,7 +913,7 @@ def execute(args, job: Job) -> dict:
     if summary is None:
         # A root declaration that was binary, oversized or unreadable still names itself in the summary.
         for name, kind in (("module.json", "module"), ("composition.json", "composition")):
-            if (root / name).is_file() and not (root / name).is_symlink():
+            if _probe(root, root / name) == "file":
                 summary = {"file": name, "kind": kind, "valid": False}
                 break
     nested.sort(key=lambda r: r["file"])
