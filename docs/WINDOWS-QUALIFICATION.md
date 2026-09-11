@@ -8,7 +8,10 @@ sanitized receipts under `docs/receipts/<version>/` and any fixes the run expose
 Tiers 1 and 2 also run on Linux with the same tool (`python tools/qualify.py`), writing
 `linux-tier1-offline.json` and `linux-tier2-backends.json`; add `--media` to Tier 2 to install
 FFmpeg, Blender and Cast and run the `audio` and `model` routes on synthetic inputs. Tier 3 is
-Windows-only. `tools/qualify_windows.py` still works and runs the same code.
+Windows-only. `tools/qualify_windows.py` still works and runs the same code. Tier 4 (`--tier agent`)
+qualifies the `agent` routes against the user's running T3 Code server on either OS; it needs the
+user's configured bearer token under `PAT_HOME` and their `--project`, `--instance` and `--model`
+choices, and creates exactly one proof thread ([AGENT-HOSTS.md](AGENT-HOSTS.md)).
 
 Nothing here is optional and nothing here is a formality. The toolkit was written on Linux
 against fake backends and a fake console. The first native run *will* find defects. Each one

@@ -10,6 +10,7 @@ names the OS (`os`, `platform_token`, `native_windows`, `native_linux`, `compati
 | `<version>/<platform>-tier1-offline.json` | `qualify.py --tier offline` | `native` for discovery, configure, doctor, plan on that platform |
 | `<version>/<platform>-tier2-backends.json` | `qualify.py --tier backends [--media]` | `native` for `dev setup`, `gsc`, `ff`, `project`, `module` with real backends; with `--media`, also `audio` and `model` |
 | `<version>/windows-tier3-game.json` | `qualify.py --tier game --collect` plus human observations | `game` for the `game` routes exercised (Windows only) |
+| `<version>/<platform>-tier4-agent.json` | `qualify.py --tier agent --project … --instance … --model …` | `native` for the `agent` routes against the user's running T3 Code server (one proof thread) |
 
 The `0.1.0a1` receipts predate the platform prefix (`tier1-offline.json` and so on) and were
 produced by `tools/qualify_windows.py`, which is now a shim over `tools/qualify.py`. They are

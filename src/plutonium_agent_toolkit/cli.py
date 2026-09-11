@@ -15,6 +15,7 @@
     pat module declare <mod.ff> --output <new dir>
     pat module fetch <owner/id@commit | https://github.com/o/r@commit> --output <new dir>
     pat registry add <file|url> | list | search [words] [--category ...] | show <owner/id>
+    pat agent probe|hosts|models|dispatch|status|send|interrupt ...   T3 Code (protocol 1) as an agent host
     pat <group> <action> ...          planned routes answer not_implemented
 
 Exit statuses: 0 ok, 1 failure, 2 usage, 130 cancelled. See core/errors.py.
@@ -33,6 +34,7 @@ from .core.envelope import emit, failure, success
 from .core.errors import INVALID_ARGUMENTS, NOT_IMPLEMENTED, OPERATION_FAILED, Failure
 
 # Importing the route modules registers their contracts.
+from .agent import routes as _agent_routes  # noqa: F401
 from .dev import routes as _dev_routes  # noqa: F401
 from .game import routes as _game_routes  # noqa: F401
 from .testing import routes as _testing_routes  # noqa: F401
@@ -94,6 +96,9 @@ def build_parser() -> Parser:
     q = ra.add_parser("search"); q.add_argument("words", nargs="*"); q.add_argument("--category"); q.add_argument("--kind"); q.add_argument("--tag")
     q.add_argument("--base"); q.add_argument("--map"); q.add_argument("--entry-kind", choices=["module", "composition"]); q.add_argument("--json", action="store_true")
     q = ra.add_parser("show"); q.add_argument("name", help="<owner>/<id>"); q.add_argument("--json", action="store_true")
+    from .agent import cli as _agent_cli
+
+    _agent_cli.add_parser(sub)
 
     g = sub.add_parser("game", help="Plutonium T6 Zombies control through the external console")
     g.add_argument("action", choices=sorted(r.action for r in routes() if r.group == "game"))
@@ -103,7 +108,7 @@ def build_parser() -> Parser:
     g.add_argument("--json", action="store_true")
 
     # Planned/deferred groups accept any action so they can answer with a structured refusal.
-    for group in sorted({r.group for r in routes()} - {"dev", "gsc", "ff", "project", "module", "registry", "game", "audio", "image", "lua", "model", "weapon"}):
+    for group in sorted({r.group for r in routes()} - {"dev", "gsc", "ff", "project", "module", "registry", "game", "agent", "audio", "image", "lua", "model", "weapon"}):
         g = sub.add_parser(group)
         g.add_argument("action")
         g.add_argument("rest", nargs=argparse.REMAINDER)
@@ -179,7 +184,8 @@ def run(argv: list[str]) -> dict:
         cfg_state = {}
         try:
             cfg = config.load()
-            cfg_state = {"home": str(config.home()), "config": cfg, "ok": True}
+            shown = {k: ("<set>" if k in config.SECRET_KEYS else v) for k, v in cfg.items()}
+            cfg_state = {"home": str(config.home()), "config": shown, "ok": True}
         except Failure as exc:
             cfg_state = {"home": str(config.home()), "ok": False, "error": exc.to_dict()}
         result = {"platform": info, "configuration": cfg_state}
@@ -230,6 +236,10 @@ def run(argv: list[str]) -> dict:
             return success(command, registry.search(" ".join(args.words), category=args.category, kind=args.kind, tag=args.tag,
                                                         base=args.base, map_id=args.map, entry_kind=args.entry_kind))
         return success(command, registry.show(args.name))
+    if group == "agent":
+        from .agent import cli as agent_cli
+
+        return agent_cli.run(args, command)
 
     route = find(group, args.action)
     hint = ("Deferred by product decision; not part of this release. See docs/SUPPORT.md." if route.status == "deferred"

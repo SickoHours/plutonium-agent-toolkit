@@ -316,6 +316,30 @@ class QualifyToolUnitTests(unittest.TestCase):
         self.assertEqual(self.q.receipt_name("offline", "linux"), "linux-tier1-offline.json")
         self.assertEqual(self.q.receipt_name("backends", "windows"), "windows-tier2-backends.json")
         self.assertEqual(self.q.receipt_name("game", "windows"), "windows-tier3-game.json")
+        self.assertEqual(self.q.receipt_name("agent", "linux"), "linux-tier4-agent.json")
+
+    def test_redactor_covers_t3_code_uuids(self):
+        redact = self.q.redactor()
+        # Synthetic ids built at test time so no real thread or environment id sits in the repository.
+        thread = "-".join(["0" * 8, "0" * 4, "4" + "0" * 3, "8" + "0" * 3, "0" * 12])
+        env = "-".join(["f" * 8, "f" * 4, "4" + "f" * 3, "8" + "f" * 3, "f" * 12])
+        self.assertEqual(redact(f"thread {thread} done"), "thread <uuid> done")
+        self.assertEqual(redact(f"http://127.0.0.1:3773/{env}/<thread-id>"), "http://127.0.0.1:3773/<uuid>/<thread-id>")
+        self.assertEqual(redact("6cb4e87 stays"), "6cb4e87 stays")
+
+    def test_agent_tier_refuses_without_home_or_choices(self):
+        env = {k: v for k, v in os.environ.items() if k != "PAT_HOME"}
+        proc = subprocess.run([sys.executable, str(ROOT / "tools/qualify.py"), "--tier", "agent", "--output", "/tmp/x",
+                               "--project", "p", "--instance", "i", "--model", "m", "--allow-untested-platform"],
+                              capture_output=True, text=True, cwd=ROOT, env=env, timeout=120)
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("PAT_HOME", proc.stderr)
+        with tempfile.TemporaryDirectory() as temp:
+            env2 = dict(os.environ, PAT_HOME=str(Path(temp) / "home"))
+            proc = subprocess.run([sys.executable, str(ROOT / "tools/qualify.py"), "--tier", "agent", "--output", str(Path(temp) / "out"),
+                                   "--allow-untested-platform"], capture_output=True, text=True, cwd=ROOT, env=env2, timeout=120)
+            self.assertEqual(proc.returncode, 2)
+            self.assertIn("--project", proc.stderr)
 
     def test_windows_shim_runs_the_generic_tool(self):
         # docs/WINDOWS-QUALIFICATION.md and the 0.1.0a1 receipts name tools/qualify_windows.py.

@@ -22,6 +22,21 @@ Every entry states what shipped, on which platform it was verified, and what rem
   seed manifest without the package; plans name the missing file. Glossary terms registry, entry,
   reference and catalog; playbook `publish-a-module.md`; a new `downloads-source` effect. No catalog,
   official registry repository, submission workflow or baseline scanner yet (issue #23).
+- **Agent hosts: T3 Code as a thread dispatcher.** New route group `agent` (`probe`, `hosts`,
+  `models`, `dispatch`, `status`, `send`, `interrupt`) drives a running T3 Code server on
+  orchestration protocol 1 (the nightly and stable releases) over its authenticated HTTP API:
+  `dispatch` creates a thread in a project and starts its first turn with the prompt, provider
+  instance, model slug and option choices the caller names (no default model; `models` lists what
+  the machine's T3 Code offers, with each model's reasoning choices), `status` reads the turn and
+  session state with recent messages, `send` adds a turn (refusing with `busy` while one runs
+  unless `--queue`), `interrupt` stops one. The bearer token is issued by the user's own `t3 auth
+  session issue` and stored under the new `t3_bearer_token` configuration key, redacted by
+  `doctor`. An Orchestrator V2 host (protocol 2) is reported by `probe` and refused by every other
+  route with `not_implemented`. `docs/AGENT-HOSTS.md`; glossary terms agent host and dispatch;
+  fourteen tests against an in-process fake server. `tools/qualify.py --tier agent` drives the
+  user's running T3 Code with their configured token and choices, creates one proof thread and
+  writes `<platform>-tier4-agent.json` with every UUID, path and listing row redacted; the Linux
+  receipt against a real `0.0.41-nightly` server makes the group `available` on Linux.
 - **Seeds, base packs and collisions as decisions.** A module's payload may now be a **seed**: an
   already-linked `mod.ff` with its soundbanks and a hashed `seed.json` manifest (embedded,
   referenced and root assets, provides, localized strings). New route `module declare <mod.ff>`

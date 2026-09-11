@@ -77,8 +77,10 @@ These are how the toolkit is built, so that you can extend it without breaking i
 - `error_code: delivery_uncertain` means inspect fresh state, not retry. Never replay an uncertain
   game command.
 - Setup, discovery, `dev`, `gsc`, `ff`, `project`, `module`, `model`, `audio`, `image`, `lua`,
-  `weapon`, `registry` and `game mods`/`install-mod` touch no running game (`registry add` with a
-  URL and `module fetch` read the network, one file or one exact-commit snapshot each). `game launch/info/load-map/select-mod/
+  `weapon`, `registry`, `agent` and `game mods`/`install-mod` touch no running game (`registry add`
+  with a URL and `module fetch` read the network, one file or one exact-commit snapshot each;
+  `agent dispatch`, `send` and `interrupt` write to a T3 Code server, never to the game;
+  `docs/AGENT-HOSTS.md`). `game launch/info/load-map/select-mod/
   reload-mod/fast-restart/map-restart/disconnect/check-load/quit` control the running client and
   need the user's go-ahead for that specific test.
 - The development (file) routes run on Windows and Linux; macOS is untested and not claimed. Game

@@ -22,8 +22,11 @@ KNOWN_KEYS = {
     "plutonium_launcher": "Official plutonium.exe launcher path (optional)",
     "backends_dir": "Directory where pinned backend programs are installed (default: <home>\\backends)",
     "evidence_dir": "Directory for private run evidence (default: <home>\\evidence)",
+    "t3_bearer_token": "Bearer token for a T3 Code server, issued by the user with `t3 auth session issue` (agent routes)",
 }
 MAX_CONFIG_BYTES = 65536
+# Keys whose value is an opaque string rather than an absolute path.
+SECRET_KEYS = {"t3_bearer_token"}
 
 
 def home() -> Path:
@@ -68,7 +71,9 @@ def load() -> dict:
         raise Failure(CONFIG_INVALID, f"Unknown configuration keys: {sorted(unknown)}",
                       f"Known keys: {sorted(KNOWN_KEYS)}")
     for key, item in value.items():
-        if not isinstance(item, str) or not item or not Path(item).is_absolute():
+        if not isinstance(item, str) or not item:
+            raise Failure(CONFIG_INVALID, f"Configuration values must be non-empty strings: {key}")
+        if key not in SECRET_KEYS and not Path(item).is_absolute():
             raise Failure(CONFIG_INVALID, f"Configuration paths must be absolute strings: {key}")
     root = home()
     value.setdefault("backends_dir", str(root / "backends"))
@@ -89,8 +94,10 @@ def save(values: dict) -> Path:
     if unknown:
         raise Failure(CONFIG_INVALID, f"Unknown configuration keys: {sorted(unknown)}")
     for key, item in values.items():
-        if not isinstance(item, str) or not Path(item).is_absolute():
+        if not isinstance(item, str) or not item or (key not in SECRET_KEYS and not Path(item).is_absolute()):
             raise Failure(CONFIG_INVALID, f"Use absolute paths: {key}")
+        if key in SECRET_KEYS and (len(item) > 4096 or any(c.isspace() for c in item)):
+            raise Failure(CONFIG_INVALID, f"{key} must be a single token without whitespace")
     current = {}
     path = config_path()
     if path.exists():

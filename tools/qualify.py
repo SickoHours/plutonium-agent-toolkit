@@ -4,8 +4,14 @@
     python tools/qualify.py --tier offline  --output docs/receipts
     python tools/qualify.py --tier backends --output docs/receipts [--media]
     python tools/qualify.py --tier game     --output docs/receipts --collect     (Windows only)
+    python tools/qualify.py --tier agent    --output docs/receipts --project <T3 Code project id>
     python tools/qualify.py --redact-existing docs/receipts/<version>/<receipt>.json
 
+Tier 4 (``agent``) drives the user's running T3 Code server on this host with the bearer token
+already configured under PAT_HOME: probe, hosts, models, one dispatched proof thread in the named
+project (the prompt asks the agent to reply with one line and stop), status until the turn
+completes, a busy refusal, a queued send, an interrupt. It writes to that T3 Code server and
+nothing else; UUIDs (thread, project, environment, command ids) are redacted like other ids.
 Tiers 1 and 2 run commands themselves on the host they are started on; the receipt names
 that host's OS (``environment.os``) and whether it is native (not Wine, not WSL). Receipts are
 written as ``<platform>-tier<N>-<name>.json``. Tier 3 is Windows-only because game control
@@ -84,6 +90,8 @@ def redactor(extra_paths=()):
         patterns.append((re.compile(r"(?i)(?<![A-Za-z0-9])" + re.escape(host) + r"(?![A-Za-z0-9])"), "<host>"))
     # request/load/job IDs are private; git SHAs (40 hex) are not and must survive intact.
     patterns.append((re.compile(r"(?<![0-9a-f])[a-f0-9]{32}(?![0-9a-f])"), "<id>"))
+    # T3 Code thread, project, environment, command and session ids are UUIDs; private too.
+    patterns.append((re.compile(r"(?<![0-9a-fA-F])[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(?![0-9a-fA-F])"), "<uuid>"))
 
     def redact(value):
         if isinstance(value, str):
@@ -342,8 +350,85 @@ def tier_offline(receipt, home: Path, work: Path):
         step(receipt, "project plan the init recipe", PAT + ["project", "plan", str(work / "init" / "project.json"),
                                                             "--output", str(work / "init-plan"), "--json"])
     step(receipt, "planned route refuses", PAT + ["capture", "start"], expect_ok=False)
+    step(receipt, "agent probe refuses an unreachable host", PAT + ["agent", "probe", "--origin", "http://127.0.0.1:9", "--json"], expect_ok=False)
+    step(receipt, "agent dispatch refuses without a token", PAT + ["agent", "dispatch", "--origin", "http://127.0.0.1:9", "--project", "p", "--title", "t",
+                                                              "--prompt", "p", "--instance", "i", "--model", "m", "--json"], expect_ok=False)
     step(receipt, "private scan", [sys.executable, str(ROOT / "tools/private_scan.py")])
     step(receipt, "release check", [sys.executable, str(ROOT / "tools/release_check.py")])
+
+
+def _prune_agent_listing(row: dict, keep: dict) -> None:
+    """Replace the user's project titles, thread titles, workspace roots and provider labels in a
+    recorded hosts/models step with counts and the named fields only; the receipt proves the route
+    answered, not what the user is working on."""
+    result = ((row.get("json") or {}).get("result")) if row.get("json") else None
+    if not isinstance(result, dict):
+        return
+    for key, fields in keep.items():
+        rows = result.get(key)
+        if isinstance(rows, list):
+            pruned = []
+            for item in rows[:5]:
+                if not isinstance(item, dict):
+                    continue
+                kept = {f: item.get(f) for f in fields if f in item}
+                if "models" in kept and isinstance(kept["models"], list):
+                    kept["models"] = [{"slug": m.get("slug"), "options": [o.get("id") for o in m.get("options", [])]}
+                                      for m in kept["models"][:3] if isinstance(m, dict)]
+                pruned.append(kept)
+            result[key] = pruned
+            result[key + "_count"] = len(rows)
+    result["pruned"] = "titles, workspace roots, display names and all but the first rows were removed before recording"
+
+
+AGENT_PROOF_PROMPT = ("This thread was created by `pat agent dispatch` as a qualification proof. Do exactly one thing "
+                      "and stop: reply with the single word QUALIFIED. Do not edit files, do not run commands, do not "
+                      "touch any game.")
+
+
+def tier_agent(receipt, home: Path, work: Path, project: str, instance: str, model: str, options: list[str], wait: int):
+    """Drive the user's running T3 Code with the token already under PAT_HOME. Writes one thread."""
+    receipt["notes"].append(f"PAT_HOME={home}; the bearer token was issued by the user's own t3 CLI beforehand and is never printed")
+    probe = step(receipt, "agent probe", PAT + ["agent", "probe", "--json"])
+    if not probe["passed"] or probe["json"]["result"]["orchestration_protocol"] != 1:
+        receipt["notes"].append("Probe failed or the host is not protocol 1; the remaining agent steps were not run.")
+        return
+    hosts = step(receipt, "agent hosts", PAT + ["agent", "hosts", "--json"])
+    _prune_agent_listing(hosts, {"projects": ("id",), "threads": ("id", "turn_state", "session_status")})
+    models = step(receipt, "agent models", PAT + ["agent", "models", "--json"])
+    _prune_agent_listing(models, {"instances": ("driver", "enabled", "models")})
+    argv = PAT + ["agent", "dispatch", "--project", project, "--title", "pat qualification proof (safe to archive)",
+                  "--prompt", AGENT_PROOF_PROMPT, "--instance", instance, "--model", model, "--json"]
+    for option in options:
+        argv += ["--option", option]
+    dispatched = step(receipt, "agent dispatch proof thread", argv)
+    if not dispatched["passed"]:
+        return
+    thread = dispatched["json"]["result"]["thread_id"]
+    state, started = None, time.monotonic()
+    while time.monotonic() - started < wait:
+        time.sleep(5)
+        row = run(PAT + ["agent", "status", thread, "--messages", "2", "--json"], timeout=60)
+        state = (row["json"] or {}).get("result", {}).get("turn_state") if row["json"] else None
+        if state in ("completed", "error", "interrupted"):
+            break
+    final = step(receipt, "agent status after the first turn", PAT + ["agent", "status", thread, "--messages", "2", "--json"])
+    result = (final["json"] or {}).get("result", {}) if final["json"] else {}
+    replied = any(m.get("role") == "assistant" and "QUALIFIED" in m.get("text", "") for m in result.get("recent_messages", []))
+    receipt["steps"].append({"name": "first turn completed with the requested reply", "argv": ["(observed)"],
+                             "exit_code": 0 if replied else 1, "passed": bool(replied),
+                             "expected": "turn_state completed and an assistant message containing QUALIFIED",
+                             "observed": {"turn_state": result.get("turn_state"), "session_status": result.get("session_status"),
+                                          "message_count": result.get("message_count"), "waited_seconds": round(time.monotonic() - started, 1)}})
+    print(("PASS " if replied else "FAIL ") + "first turn completed with the requested reply", flush=True)
+    sent = step(receipt, "agent send a second turn", PAT + ["agent", "send", thread, "--prompt",
+                                                            "Second turn. Reply with the single word AGAIN and stop.", "--json"])
+    if sent["passed"]:
+        step(receipt, "agent send while running refuses with busy", PAT + ["agent", "send", thread, "--prompt", "refused", "--json"], expect_ok=False)
+        step(receipt, "agent interrupt", PAT + ["agent", "interrupt", thread, "--json"])
+        time.sleep(5)
+        step(receipt, "agent status after interrupt", PAT + ["agent", "status", thread, "--messages", "1", "--json"])
+    receipt["notes"].append("The proof thread stays on the user's T3 Code server, titled so it can be archived; nothing else was created.")
 
 
 def stage_for_tier3(mod_ff: Path, home: Path) -> Path | None:
@@ -662,13 +747,18 @@ def default_home() -> Path:
 
 def receipt_name(tier: str, token: str) -> str:
     """``<platform>-tier<N>-<tier>.json``; the 0.1.0a1 Windows receipts predate the prefix."""
-    number = {"offline": 1, "backends": 2, "game": 3}[tier]
+    number = {"offline": 1, "backends": 2, "game": 3, "agent": 4}[tier]
     return f"{token}-tier{number}-{tier}.json"
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--tier", choices=["offline", "backends", "game"])
+    ap.add_argument("--tier", choices=["offline", "backends", "game", "agent"])
+    ap.add_argument("--project", help="Tier agent: the T3 Code project id the proof thread is created in (from pat agent hosts)")
+    ap.add_argument("--instance", help="Tier agent: provider instance id (from pat agent models)")
+    ap.add_argument("--model", help="Tier agent: model slug (from pat agent models)")
+    ap.add_argument("--option", action="append", default=[], metavar="ID=VALUE", help="Tier agent: provider option, repeatable")
+    ap.add_argument("--wait", type=int, default=180, help="Tier agent: seconds to wait for the proof turn to complete")
     ap.add_argument("--output", type=Path, help="Directory for receipts, e.g. docs/receipts")
     ap.add_argument("--begin", action="store_true", help="Tier game: write the begin marker before the human-authorized commands")
     ap.add_argument("--collect", action="store_true", help="Tier game: fold saved state into a receipt; runs nothing")
@@ -709,6 +799,13 @@ def main() -> int:
         # A hosted runner is not a user's machine; docs/SUPPORT.md's native level excludes it.
         print(f"This process runs on a CI runner ({runner} is set); receipts are recorded on real hosts only.", file=sys.stderr)
         return 2
+    if args.tier == "agent":
+        # Tier 4 needs the user's real toolkit home (the configured token) and their choices; it never picks a model.
+        if not explicit_home:
+            print("Tier agent uses the bearer token configured under PAT_HOME; set PAT_HOME to the toolkit home that holds it.", file=sys.stderr)
+            return 2
+        if not (args.project and args.instance and args.model):
+            ap.error("--tier agent needs --project, --instance and --model (see pat agent hosts and pat agent models)")
     if not explicit_home and args.tier != "game":
         # Tier 1 runs `configure` against a fake storage path and Tier 2 installs backends. Without
         # an explicit PAT_HOME those must not touch the user's real toolkit home (maintainer
@@ -726,6 +823,8 @@ def main() -> int:
             tier_offline(receipt, home, work)
         elif args.tier == "backends":
             tier_backends(receipt, home, work, media=args.media)
+        elif args.tier == "agent":
+            tier_agent(receipt, home, work, args.project, args.instance, args.model, args.option, args.wait)
         else:
             if args.begin:
                 tier_game_begin(home)
