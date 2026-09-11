@@ -62,18 +62,25 @@ def builtin(name: str, vm: str | None = None) -> dict:
     key = name.lower()
     rows = {v: data[v][key] for v in VMS if key in data[v] and vm in (None, v)}
     also_on = [v for v in VMS if key in data[v] and v not in rows]
-    return {
+    result = {
         "name": key,
         "vm": vm,
-        "verdict": "builtin" if rows else "unknown",
+        "verdict": "builtin" if rows else "not-witnessed",
         "rows": rows,
         "also_on": also_on,
         "corpus": {"layers": len(data.get("layers", [])), "scripts": data.get("scripts"), "counts": data.get("counts")},
         "note": "builtin: a shipped Treyarch script calls this name on that VM with these argument counts and no script "
-                "exports it; an argument count not listed has no witness. unknown: no shipped script calls it on that "
-                "VM, which is not proof of absence; a name a script exports resolves through that script's include, "
-                "not through the engine. Rows with origin plutonium or plugin:<name> need that client or DLL.",
+                "exports it; an argument count not listed has no witness. not-witnessed: no shipped script calls it on "
+                "that VM; a name a script exports resolves through that script's include, not through the engine. "
+                "Rows with origin plutonium or plugin:<name> need that client or DLL.",
     }
+    if not rows:
+        # A caller branches on the verdict; the note gets skipped. Say the inference limit where it is seen.
+        result["caution"] = ("No script shipped in the game's own zones calls this name on that VM. That is absence of "
+                             "evidence, not evidence of absence: the engine may still expose it, and a plugin may add it. "
+                             "Do not delete or rewrite working code on this answer alone."
+                             + (f" It is witnessed on: {', '.join(also_on)}." if also_on else ""))
+    return result
 
 
 def signature(log: Path | None = None, text: str | None = None) -> dict:
