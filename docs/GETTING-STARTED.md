@@ -90,6 +90,20 @@ any other existing file and says which, writes nothing through a link below your
 launches nothing.
 `doctor` then reports, per harness, whether the installed skills are current. Open a new session in
 the harness for it to list them. Run it again after pulling a newer checkout.
+## Create your workspace
+
+```sh
+pat workspace init ~/plutonium-mods --json
+```
+
+The toolkit stays installed where it is; your mods live in a directory of your own. `workspace init`
+creates it with an `AGENTS.md` that tells any coding agent how to work there (it names this checkout,
+so the skills' `docs/` references resolve), the directories for modules, compositions, jobs, receipts,
+registries and sealed donors, an ignore file that keeps packages and job outputs out of version
+control, and a `workspace.json` record. It refuses a directory that already holds anything and a
+location inside the checkout. Open the new directory in your agent and work from there; `pat` runs
+from any directory.
+
 ## Fetch the built-in modules and packs
 
 ```sh

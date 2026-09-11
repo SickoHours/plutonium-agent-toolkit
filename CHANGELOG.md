@@ -30,6 +30,14 @@ Every entry states what shipped, on which platform it was verified, and what rem
   recorded adaptation rather than donor data. `docs/knowledge/README.md` indexes the four pages
   and `docs/playbooks/port-a-bo3-weapon.md` names the step each one gates. Docs only; no route,
   receipt or evidence level changed.
+- **`pat workspace init <dir>`.** The missing half of the environment scaffold: a modding workspace of
+  the person's own, outside the toolkit checkout, holding an `AGENTS.md` that tells any coding agent
+  how to work there and names the checkout the skills refer to, `CLAUDE.md`, a README, an ignore file
+  for packages and job outputs, the `modules/`, `compositions/`, `jobs/`, `receipts/`, `registries/`
+  and `donors/` directories, and a hashed `workspace.json` record. Refuses a non-empty directory and
+  any location inside the checkout; copies, downloads, launches and installs nothing. `SETUP-PROMPT.md`
+  and `docs/GETTING-STARTED.md` make it the step after the skills. Status `implemented`
+  (`docs/SUPPORT.md`).
 
 - **The routes as MCP tools in any harness.** `pat mcp serve --library <dir> --jobs <dir>` speaks
   Model Context Protocol on stdin and stdout, exposing the control plane's typed actions as tools

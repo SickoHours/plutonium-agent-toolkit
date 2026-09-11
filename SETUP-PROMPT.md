@@ -29,10 +29,13 @@ Handle the routine work yourself:
    `pat dev install-skills --plan --json`, show me which harnesses it found, then run it without
    `--plan`. It copies `skills/` into each found harness's skills directory, writes nothing over a
    file it did not write, and launches nothing.
-5. If I am on Windows and want game control later, find my Plutonium T6 storage folder (usually
+5. Create my workspace: `pat workspace init <a directory I name, or ~/plutonium-mods> --json`. My
+   mods, compositions, jobs and receipts go there, not in this repository folder; tell me to open
+   that directory in my agent from now on.
+6. If I am on Windows and want game control later, find my Plutonium T6 storage folder (usually
    `%LOCALAPPDATA%\Plutonium\storage\t6`) and my `plutonium.exe`, and save them with `pat configure`.
    On Linux, game control is out of scope; configure only what the build tools need.
-6. Run `pat doctor --json` and explain, in plain language, what is ready and what is not. `doctor`
+7. Run `pat doctor --json` and explain, in plain language, what is ready and what is not. `doctor`
    reports development-tool readiness separately from whether game control is supported on this host.
 
 Keep this scoped to installation. Do not launch, attach to, query or change the game. Do not install

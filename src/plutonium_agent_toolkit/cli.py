@@ -8,6 +8,7 @@
     pat dev backends
     pat dev setup [--plan] [--only ID ...]
     pat dev install-skills [--plan] [--only HARNESS ...] [--home DIR] [--source CHECKOUT]
+    pat workspace init <directory> [--name ID]   a modding workspace outside the checkout
     pat dev builtin [--plan] [--only owner/id ...]     the built-in modules and packs, fetched onto this machine
     pat gsc compile|decompile <script> --output <new dir>
     pat ff inspect|extract <file.ff> --output <new dir>
@@ -85,6 +86,12 @@ def build_parser() -> Parser:
     k.add_argument("--home", help="Home directory to detect harnesses under (default: the current user's)")
     k.add_argument("--source", help="Toolkit checkout holding skills/ (default: the checkout this installation runs from)")
     k.add_argument("--json", action="store_true")
+    ws = sub.add_parser("workspace", help="A modding workspace for the person and their agent, outside the toolkit checkout")
+    wsa = ws.add_subparsers(dest="action", required=True)
+    q = wsa.add_parser("init", help="Create the workspace directory with AGENTS.md, layout, ignore file and record")
+    q.add_argument("directory", help="New or empty directory to create the workspace in")
+    q.add_argument("--name", help="Workspace name (default: the directory name)")
+    q.add_argument("--json", action="store_true")
     b = dev.add_parser("builtin", help="Fetch the built-in modules and packs the shipped registry lists into the toolkit home; rerun verifies")
     b.add_argument("--plan", action="store_true", help="Report each built-in's state without touching the network")
     b.add_argument("--only", nargs="+", metavar="OWNER/ID", help="Only these built-in entries")
@@ -136,7 +143,7 @@ def build_parser() -> Parser:
     g.add_argument("--json", action="store_true")
 
     # Planned/deferred groups accept any action so they can answer with a structured refusal.
-    for group in sorted({r.group for r in routes()} - {"dev", "gsc", "ff", "project", "module", "registry", "game", "agent", "plane", "mcp", "audio", "image", "lua", "model", "weapon"}):
+    for group in sorted({r.group for r in routes()} - {"dev", "gsc", "ff", "project", "module", "registry", "workspace", "game", "agent", "plane", "mcp", "audio", "image", "lua", "model", "weapon"}):
         g = sub.add_parser(group)
         g.add_argument("action")
         g.add_argument("rest", nargs=argparse.REMAINDER)
@@ -269,6 +276,10 @@ def run(argv: list[str]) -> dict:
         from .dev import builtin
 
         return success(command, builtin.install(plan=args.plan, only=args.only))
+    if group == "workspace" and args.action == "init":
+        from .dev import workspace
+
+        return success(command, workspace.init(args.directory, args.name))
 
     if is_job(group, getattr(args, "action", "")):
         return run_job(args, argv)

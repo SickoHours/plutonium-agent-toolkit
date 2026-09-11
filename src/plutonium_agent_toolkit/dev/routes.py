@@ -17,6 +17,9 @@ AVAILABLE = [
           owner="core",
           notes="Use --plan to list without downloading; --only to select IDs. Runs no vendor installer. "
                 "Pinned downloads are per-platform; where a platform has no pin, supply the tool with PAT_BACKEND_<NAME>."),
+    Route("workspace", "init", "Create a modding workspace directory for the person and their agent: AGENTS.md, module, composition, job, receipt, registry and donor directories, an ignore file and a record", "writes-output",
+          status="implemented", owner="core",
+          notes="Arguments: <directory> [--name <id>]. Refuses a non-empty directory and any location inside the toolkit checkout. Copies nothing; the skills already point at the checkout."),
     Route("dev", "install-skills", "Copy the toolkit's skills into the skills directories of the coding-agent harnesses found on this machine, with a receipt", "writes-config",
           status="available", owner="core",
           notes="Arguments: [--plan] [--only claude codex gemini opencode cursor hermes agents]... [--home <dir>] [--source <checkout>]. "

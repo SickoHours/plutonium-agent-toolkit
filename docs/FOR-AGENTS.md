@@ -31,7 +31,9 @@ demonstration, and `docs/SUPPORT.md` as the strict grade of the routes themselve
    run on their system, set `PAT_BACKEND_<NAME>` to an absolute path (a `.py` override runs through
    the interpreter, for tests). Backends are otherwise downloaded and hash-verified by
    `pat dev setup`.
-   Then `pat dev install-skills` puts the skills under `skills/` where the harnesses on the machine
+   Then `pat workspace init <dir>` creates the person's own modding workspace (their modules,
+   compositions, jobs, receipts and donors live there, never in this checkout; its `AGENTS.md`
+   names the checkout so the skills' paths resolve), and `pat dev install-skills` puts the skills under `skills/` where the harnesses on the machine
    read them (`~/.claude/skills`, `~/.codex/skills`, `~/.gemini/skills`, `~/.config/opencode/skills`,
    `~/.cursor/skills`, `~/.hermes/skills`, `~/.agents/skills`; detected by the home directory, never
    by running the harness), stamped with the checkout path, refusing any file it did not write.
