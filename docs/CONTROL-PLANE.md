@@ -47,8 +47,9 @@ The token is not written anywhere and dies with the process.
 `pat plane actions --json` prints the same table the page uses: each action's route, effect,
 status, whether it is available on this host, its typed parameters, and whether it asks for
 confirmation first. Actions whose route changes the game, queries the engine, writes to the
-agent host or writes the toolkit configuration (`registry add`) always confirm. Windows-only routes are shown but disabled on other hosts; the page
-says why.
+agent host, writes the toolkit configuration (`registry add`) or reaches the network
+(`module fetch`) always confirm. Windows-only routes are shown but disabled on other hosts; the
+page says why.
 
 ## What the page cannot do, on purpose
 
