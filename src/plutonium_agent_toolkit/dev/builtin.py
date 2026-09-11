@@ -192,6 +192,23 @@ def verify(entry: dict) -> dict:
     return {"state": state, "changed": changed, "missing": missing, "added": added, "receipt": receipt}
 
 
+def _destination_is_plain(dst: Path, snapshot: Path) -> None:
+    """Nothing is written at dst unless every component from the shelf root down to it is a real
+    directory or absent, and dst resolves inside the snapshot; a link on the way would carry the
+    copy outside the shelf and a receipt would still be written."""
+    root = shelf_dir()
+    if not _inside(dst, snapshot):
+        raise Failure(INPUT_INVALID, f"Built-in destination escapes its snapshot: {dst}")
+    current = dst
+    while True:
+        if current.is_symlink():
+            raise Failure(INPUT_INVALID, f"Built-in destination has a link on its path: {current}",
+                          "Move the link aside; built-ins are written only through real directories under the toolkit home.")
+        if current == root or current.parent == current:
+            return
+        current = current.parent
+
+
 def _links_under(root: Path) -> list[str]:
     """Every link (file or directory) below root, relative to it; the walk never follows one."""
     found = []
@@ -232,6 +249,7 @@ def _place(entry: dict, extracted: Path, archive_sha: str, archive_bytes: int) -
     for rel in rels:
         src = extracted if rel == "." else extracted / rel
         dst = snapshot if rel == "." else snapshot / rel
+        _destination_is_plain(dst, snapshot)
         if src.is_dir():
             expected = inventory(src)
             keys = {(Path(rel) / sub).as_posix() if rel != "." else sub for sub in expected}
@@ -341,6 +359,26 @@ def install(plan: bool = False, only: list[str] | None = None) -> dict:
                             "hashed into a receipt; nothing built, nothing installed into the game"}
 
 
+def _present(entry: dict) -> bool:
+    """A receipt exists for this entry and pin, and every path it recorded is there, is not a link
+    and holds no link. Cheaper than verify(): no hashing, so doctor and search stay quick; the
+    hashes are checked by dev builtin itself."""
+    try:
+        receipt = _read_receipt(entry)
+    except Failure:
+        return False
+    if receipt is None:
+        return False
+    snapshot = snapshot_dir(entry)
+    for rel in receipt.get("paths", []):
+        p = snapshot if rel == "." else snapshot / rel
+        if p.is_symlink() or not p.exists():
+            return False
+        if p.is_dir() and _links_under(p):
+            return False
+    return entry_dir(entry).is_dir()
+
+
 def status() -> dict:
     """For doctor and registry search: receipt-backed presence per built-in, without re-hashing."""
     try:
@@ -349,20 +387,11 @@ def status() -> dict:
         return {"destination": str(shelf_dir()), "note": exc.message, "entries": []}
     out = []
     for e in rows:
-        receipt = None
-        try:
-            receipt = _read_receipt(e)
-        except Failure:
-            pass
-        present = receipt is not None and entry_dir(e).is_dir()
+        present = _present(e)
         out.append({"name": e["name"], "kind": e["kind"], "present": present, "module_dir": str(entry_dir(e)) if present else None})
     return {"destination": str(shelf_dir()), "entries": out, "present": sum(1 for r in out if r["present"]), "total": len(out),
             "fetch": None if all(r["present"] for r in out) else "pat dev builtin --json"}
 
 
 def module_dir_if_present(entry: dict) -> str | None:
-    try:
-        receipt = _read_receipt(entry)
-    except Failure:
-        return None
-    return str(entry_dir(entry)) if receipt is not None and entry_dir(entry).is_dir() else None
+    return str(entry_dir(entry)) if _present(entry) else None

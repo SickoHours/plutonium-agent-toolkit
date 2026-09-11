@@ -294,6 +294,35 @@ class DevBuiltinTests(BuiltinFixture):
         self.assertEqual(row["result"]["builtin"]["present"], 0)
         self.assertEqual(row["result"]["builtin"]["fetch"], "pat dev builtin --json")
 
+    def test_presence_needs_every_recorded_path_and_placement_never_follows_a_link(self):
+        code, row = invoke(["dev", "builtin"])
+        self.assertEqual(code, 0, row)
+        by = {r["name"]: Path(r["module_dir"]) for r in row["result"]["results"]}
+        # A pack whose member directory was deleted is no longer present, so search and doctor stop pointing at it.
+        shutil.rmtree(by["sickohours/hello_zm"])
+        code, row = invoke(["registry", "search", "--origin", "builtin", "--entry-kind", "composition"])
+        self.assertIsNone(row["result"]["hits"][0]["builtin_dir"], "a pack with a missing member is not present")
+        code, row = invoke(["doctor"])
+        self.assertEqual(row["result"]["builtin"]["present"], 1, "only the untouched module remains present")
+        code, row = invoke(["dev", "builtin", "--plan"])
+        self.assertEqual({r["name"]: r["action"] for r in row["result"]["results"]}["sickohours/stock_hello_pack"], "refuse")
+        # Placement refuses a link on the destination path instead of copying through it.
+        home2 = self.root / "home2"
+        with mock.patch.dict(os.environ, {"PAT_HOME": str(home2)}):
+            snapshot = builtin.snapshot_dir(self.entries[0])
+            snapshot.parent.mkdir(parents=True)
+            elsewhere = self.root / "elsewhere-shelf"
+            elsewhere.mkdir()
+            try:
+                snapshot.symlink_to(elsewhere, target_is_directory=True)
+            except (OSError, NotImplementedError):
+                return
+            code, row = invoke(["dev", "builtin", "--only", "sickohours/hello_zm"])
+            self.assertEqual(row["error_code"], "input_invalid")
+            self.assertIn("link on its path", row["message"])
+            self.assertEqual(list(elsewhere.iterdir()), [], "nothing was copied through the link")
+            self.assertEqual(list((home2 / "modules" / "builtin" / "receipts").glob("*.json")) if (home2 / "modules" / "builtin" / "receipts").exists() else [], [], "no receipt was written")
+
     def test_nesting_matches_the_planner_and_recipe_reads_are_bounded(self):
         # A chain of packs MAX_NESTING deep (the planner's bound) is fetched; one deeper is refused.
         def chain(levels):
