@@ -20,6 +20,7 @@ EFFECTS = (
     "query-engine",        # reads fresh game state through the external console
     "changes-game",        # launches, loads, restarts or stops the game
     "captures-display",    # records or screenshots the game window
+    "serves-local",        # binds a loopback HTTP server that runs other routes on request; each keeps its own effect and receipt
 )
 
 STATUS = ("available", "implemented", "planned", "deferred", "unsupported")

@@ -22,6 +22,7 @@ body:
         - query-engine
         - changes-game
         - captures-display
+        - serves-local
     validations:
       required: true
   - type: textarea

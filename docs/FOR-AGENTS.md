@@ -159,6 +159,9 @@ inventing a result.
   is only a fastfile is declared as a seed first. Collisions the planner lists are yours to decide
   and record, not to skip.
 - Keep build outputs in fresh directories, never overwriting; the receipt ties source to package.
+- When the person wants a page instead of a terminal, `pat plane serve` gives them one whose every
+  control is one of these routes with its own receipt (`docs/CONTROL-PLANE.md`); the judgement calls
+  on that page (collisions, ports, diagnosis, loading on Linux) are dispatched to an agent thread.
 - Record a mod's normal and Pack-a-Punch identity, its maps, and what was actually tested, apart
   from what merely compiled. Untested maps, co-op and performance stay listed as untested.
 

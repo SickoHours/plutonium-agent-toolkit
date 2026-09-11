@@ -39,6 +39,9 @@ verified, installed, launched, playable, captured, accepted. Words are defined i
   `pat agent models` for the instances, models and reasoning choices this machine offers, then
   `pat agent dispatch` with the playbook and target in the prompt and the user's chosen model;
   follow with `pat agent status`. `docs/AGENT-HOSTS.md`. Never pick the model yourself.
+- **The user wants buttons, not a terminal** (a library view, a pack builder, an install and load
+  panel, a dispatch form): `pat plane serve --library <dir> --jobs <dir>` and open the printed URL.
+  Every control is one of the routes above with its own receipt; `docs/CONTROL-PLANE.md`.
 - **Something broke in the game** (menu return, close, dialog): **`pat-diagnose`**. It builds a
   red loop before theorising and ends by adding the gate that would have caught it.
 - **First time on this machine**: `docs/playbooks/first-build.md`, then the setup prompt in the

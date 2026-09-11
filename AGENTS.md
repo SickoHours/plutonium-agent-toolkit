@@ -80,9 +80,10 @@ These are how the toolkit is built, so that you can extend it without breaking i
   `weapon`, `registry`, `agent` and `game mods`/`install-mod` touch no running game (`registry add`
   with a URL and `module fetch` read the network, one file or one exact-commit snapshot each;
   `agent dispatch`, `send` and `interrupt` write to a T3 Code server, never to the game;
-  `docs/AGENT-HOSTS.md`). `game launch/info/load-map/select-mod/
-  reload-mod/fast-restart/map-restart/disconnect/check-load/quit` control the running client and
-  need the user's go-ahead for that specific test.
+  `docs/AGENT-HOSTS.md`; `plane serve` binds a loopback page that runs these same routes as
+  children, each with its own effect and receipt, `docs/CONTROL-PLANE.md`).
+  `game launch/info/load-map/select-mod/reload-mod/fast-restart/map-restart/disconnect/check-load/quit`
+  control the running client and need the user's go-ahead for that specific test.
 - The development (file) routes run on Windows and Linux; macOS is untested and not claimed. Game
   control and capture use the Win32 console and run on native Windows only; off Windows they refuse
   with `unsupported_platform` before acting.

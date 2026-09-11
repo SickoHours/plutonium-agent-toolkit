@@ -36,4 +36,4 @@ plutonium-agent-toolkit = "plutonium_agent_toolkit.cli:entry"
 where = ["src"]
 
 [tool.setuptools.package-data]
-plutonium_agent_toolkit = ["**/*.json", "**/*.gsc", "**/*.md"]
+plutonium_agent_toolkit = ["**/*.json", "**/*.gsc", "**/*.md", "**/*.html", "**/*.js", "**/*.css"]
