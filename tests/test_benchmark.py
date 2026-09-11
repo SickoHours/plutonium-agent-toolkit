@@ -38,7 +38,8 @@ class BenchmarkTests(unittest.TestCase):
 
     def test_tasks_file_is_well_formed_and_prompts_exist(self):
         self.assertEqual([t["id"] for t in self.tasks],
-                         ["bench-01-compile-error", "bench-02-build-hello", "bench-03-extract-rawfile", "bench-04-port-feature"])
+                         ["bench-01-compile-error", "bench-02-build-hello", "bench-03-extract-rawfile", "bench-04-port-feature",
+                          "bench-05-builtin-wrong-vm", "bench-06-classify-then-fix"])
         for t in self.tasks:
             self.assertTrue((ROOT / "tools" / "benchmark" / t["prompt"]).is_file(), t["prompt"])
             self.assertTrue(t["expect"]["routes"])
@@ -131,6 +132,27 @@ class BenchmarkTests(unittest.TestCase):
         row = bench.score_task(task, self.run)
         self.assertFalse(row["checks"]["readback"])
         self.assertEqual(row["detail"]["readback_missing"], ["announce_round"])
+
+    def test_wrong_vm_task_is_scored_on_the_compiled_artifact(self):
+        task = self.by_id["bench-05-builtin-wrong-vm"]
+        job = self.run / task["id"] / "job"
+        receipt(job, "gsc compile", inputs={"/run/bench-05/face_glow.gsc": "a" * 64})
+        compiled = job / "compiled" / "t6" / "face_glow.gsc"
+        compiled.parent.mkdir(parents=True)
+        compiled.write_bytes(b"\x80GSC\x00face_glow_think\x00iprintln\x00")
+        row = bench.score_task(task, self.run)
+        self.assertTrue(all(row["checks"].values()), row)
+        # The call the engine cannot resolve is still in the artifact: compiling is not fixing.
+        compiled.write_bytes(b"\x80GSC\x00face_glow_think\x00setanimknob\x00")
+        row = bench.score_task(task, self.run)
+        self.assertFalse(row["checks"]["artifacts"])
+        self.assertEqual(row["detail"]["artifacts"]["present"], ["setanimknob"])
+        # Gutting the feature is not a fix either.
+        compiled.write_bytes(b"\x80GSC\x00main\x00")
+        self.assertEqual(bench.score_task(task, self.run)["detail"]["artifacts"]["missing"], ["face_glow_think"])
+        # No artifact at all (a failed compile) cannot pass the artifact check.
+        compiled.unlink()
+        self.assertFalse(bench.score_task(task, self.run)["checks"]["artifacts"])
 
     def test_table_row_has_one_cell_per_task_plus_totals(self):
         report = bench.score_run(self.run, bench.DEFAULT_TASKS)

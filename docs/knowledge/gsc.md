@@ -38,7 +38,11 @@ and the *engine* must have those scripts loaded too.
   have, including code paths you think are unreachable.
 - **A donor method that is not a T6 builtin.** A call that exists in Black Ops 1 or 3 may not be
   exposed by this client (`setanimknob` with four parameters was one). Compilation says nothing
-  about builtin availability. Check a native T6 call site before relying on a method.
+  about builtin availability. Check a native T6 call site before relying on a method:
+  `pat knowledge builtin <name> --json` reports the VMs and argument counts shipped Treyarch
+  scripts call a name with (`src/plutonium_agent_toolkit/knowledge/builtins.json`); `unknown`
+  means no shipped script calls it there, not that it is absent, and a name a script exports
+  resolves through that script's include, never through the engine.
 - **Server and client registration order.** Network fields (`clientfield`) must be registered on
   both sides in the same order; both sides having the same assets is not enough.
 - **`waittill_any` semantics.** The native utility waits for its first event and installs `endon`

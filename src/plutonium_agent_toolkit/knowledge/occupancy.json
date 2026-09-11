@@ -1,0 +1,2124 @@
+{
+ "maps": {
+  "zm_asylum": {
+   "assets": {
+    "fx": 405,
+    "image": 2079,
+    "material": 2085,
+    "rawfile": 482,
+    "script": 240,
+    "soundbank": 6,
+    "weapon": 113,
+    "xanim": 2544,
+    "xmodel": 525
+   },
+   "clientfield_bits": {
+    "actor": {
+     "client": 10,
+     "server": 10
+    },
+    "allplayers": {
+     "client": 8,
+     "server": 12
+    },
+    "scriptmover": {
+     "client": 11,
+     "server": 9
+    },
+    "toplayer": {
+     "client": 23,
+     "server": 24
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 0
+    },
+    "world": {
+     "client": 1,
+     "server": 1
+    },
+    "zbarrier": {
+     "client": 3,
+     "server": 3
+    }
+   },
+   "clientfield_unresolved": {
+    "actor": {
+     "client": 0,
+     "server": 0
+    },
+    "allplayers": {
+     "client": 1,
+     "server": 1
+    },
+    "scriptmover": {
+     "client": 0,
+     "server": 0
+    },
+    "toplayer": {
+     "client": 5,
+     "server": 5
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 0
+    },
+    "world": {
+     "client": 2,
+     "server": 2
+    },
+    "zbarrier": {
+     "client": 0,
+     "server": 0
+    }
+   },
+   "foundation": "dlc5-beta2",
+   "incomplete": 0,
+   "limits": {
+    "actor-client-field-set": {
+     "count": 10,
+     "limit": null,
+     "measured_by": "decompiled-text",
+     "spare": null
+    },
+    "assembled-model-bones-dobj": {
+     "count": null,
+     "limit": 160,
+     "measured_by": null,
+     "spare": null
+    },
+    "hud-font-scale": {
+     "count": null,
+     "limit": 1.0,
+     "measured_by": null,
+     "spare": null
+    },
+    "projectile-fx-registrations": {
+     "count": 14,
+     "limit": 40,
+     "measured_by": "weapon-blobs",
+     "spare": 26
+    },
+    "sound-assets": {
+     "count": 6,
+     "limit": 32,
+     "measured_by": "unlinker-listing",
+     "spare": 26
+    },
+    "sound-bank-preload-reservation": {
+     "count": null,
+     "limit": null,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-audio-voices": {
+     "count": null,
+     "limit": 10,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-flac-block": {
+     "count": null,
+     "limit": 1024,
+     "measured_by": null,
+     "spare": null
+    }
+   },
+   "loadfx_distinct": {
+    "client": 130,
+    "server": 211
+   },
+   "projectile_fx_distinct": 14,
+   "weapons": 113,
+   "zones": 5
+  },
+  "zm_buried": {
+   "assets": {
+    "fx": 473,
+    "image": 2318,
+    "material": 2166,
+    "rawfile": 492,
+    "script": 328,
+    "soundbank": 5,
+    "weapon": 110,
+    "xanim": 2219,
+    "xmodel": 1106
+   },
+   "clientfield_bits": {
+    "actor": {
+     "client": 35,
+     "server": 34
+    },
+    "allplayers": {
+     "client": 18,
+     "server": 20
+    },
+    "scriptmover": {
+     "client": 30,
+     "server": 28
+    },
+    "toplayer": {
+     "client": 43,
+     "server": 43
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 0
+    },
+    "world": {
+     "client": 80,
+     "server": 85
+    },
+    "zbarrier": {
+     "client": 4,
+     "server": 4
+    }
+   },
+   "clientfield_unresolved": {
+    "actor": {
+     "client": 0,
+     "server": 0
+    },
+    "allplayers": {
+     "client": 1,
+     "server": 1
+    },
+    "scriptmover": {
+     "client": 0,
+     "server": 0
+    },
+    "toplayer": {
+     "client": 5,
+     "server": 5
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 0
+    },
+    "world": {
+     "client": 5,
+     "server": 5
+    },
+    "zbarrier": {
+     "client": 0,
+     "server": 0
+    }
+   },
+   "foundation": "stock",
+   "incomplete": 0,
+   "limits": {
+    "actor-client-field-set": {
+     "count": 34,
+     "limit": null,
+     "measured_by": "decompiled-text",
+     "spare": null
+    },
+    "assembled-model-bones-dobj": {
+     "count": null,
+     "limit": 160,
+     "measured_by": null,
+     "spare": null
+    },
+    "hud-font-scale": {
+     "count": null,
+     "limit": 1.0,
+     "measured_by": null,
+     "spare": null
+    },
+    "projectile-fx-registrations": {
+     "count": 15,
+     "limit": 40,
+     "measured_by": "weapon-blobs",
+     "spare": 25
+    },
+    "sound-assets": {
+     "count": 5,
+     "limit": 32,
+     "measured_by": "unlinker-listing",
+     "spare": 27
+    },
+    "sound-bank-preload-reservation": {
+     "count": null,
+     "limit": null,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-audio-voices": {
+     "count": null,
+     "limit": 10,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-flac-block": {
+     "count": null,
+     "limit": 1024,
+     "measured_by": null,
+     "spare": null
+    }
+   },
+   "loadfx_distinct": {
+    "client": 179,
+    "server": 261
+   },
+   "projectile_fx_distinct": 15,
+   "weapons": 110,
+   "zones": 5
+  },
+  "zm_cosmodrome": {
+   "assets": {
+    "fx": 434,
+    "image": 2390,
+    "material": 2778,
+    "rawfile": 495,
+    "script": 281,
+    "soundbank": 6,
+    "weapon": 100,
+    "xanim": 2758,
+    "xmodel": 757
+   },
+   "clientfield_bits": {
+    "actor": {
+     "client": 9,
+     "server": 8
+    },
+    "allplayers": {
+     "client": 8,
+     "server": 12
+    },
+    "scriptmover": {
+     "client": 11,
+     "server": 9
+    },
+    "toplayer": {
+     "client": 23,
+     "server": 24
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 0
+    },
+    "world": {
+     "client": 1,
+     "server": 1
+    },
+    "zbarrier": {
+     "client": 3,
+     "server": 3
+    }
+   },
+   "clientfield_unresolved": {
+    "actor": {
+     "client": 0,
+     "server": 0
+    },
+    "allplayers": {
+     "client": 1,
+     "server": 1
+    },
+    "scriptmover": {
+     "client": 0,
+     "server": 0
+    },
+    "toplayer": {
+     "client": 5,
+     "server": 5
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 0
+    },
+    "world": {
+     "client": 2,
+     "server": 2
+    },
+    "zbarrier": {
+     "client": 0,
+     "server": 0
+    }
+   },
+   "foundation": "dlc5-beta2",
+   "incomplete": 2,
+   "limits": {
+    "actor-client-field-set": {
+     "count": 8,
+     "limit": null,
+     "measured_by": "decompiled-text",
+     "spare": null
+    },
+    "assembled-model-bones-dobj": {
+     "count": null,
+     "limit": 160,
+     "measured_by": null,
+     "spare": null
+    },
+    "hud-font-scale": {
+     "count": null,
+     "limit": 1.0,
+     "measured_by": null,
+     "spare": null
+    },
+    "projectile-fx-registrations": {
+     "count": 16,
+     "limit": 40,
+     "measured_by": "weapon-blobs",
+     "spare": 24
+    },
+    "sound-assets": {
+     "count": 6,
+     "limit": 32,
+     "measured_by": "unlinker-listing",
+     "spare": 26
+    },
+    "sound-bank-preload-reservation": {
+     "count": null,
+     "limit": null,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-audio-voices": {
+     "count": null,
+     "limit": 10,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-flac-block": {
+     "count": null,
+     "limit": 1024,
+     "measured_by": null,
+     "spare": null
+    }
+   },
+   "loadfx_distinct": {
+    "client": 135,
+    "server": 214
+   },
+   "projectile_fx_distinct": 16,
+   "weapons": 100,
+   "zones": 5
+  },
+  "zm_factory": {
+   "assets": {
+    "fx": 378,
+    "image": 1982,
+    "material": 2050,
+    "rawfile": 481,
+    "script": 242,
+    "soundbank": 6,
+    "weapon": 103,
+    "xanim": 2308,
+    "xmodel": 506
+   },
+   "clientfield_bits": {
+    "actor": {
+     "client": 8,
+     "server": 7
+    },
+    "allplayers": {
+     "client": 8,
+     "server": 12
+    },
+    "scriptmover": {
+     "client": 10,
+     "server": 8
+    },
+    "toplayer": {
+     "client": 23,
+     "server": 24
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 0
+    },
+    "world": {
+     "client": 1,
+     "server": 1
+    },
+    "zbarrier": {
+     "client": 3,
+     "server": 3
+    }
+   },
+   "clientfield_unresolved": {
+    "actor": {
+     "client": 0,
+     "server": 0
+    },
+    "allplayers": {
+     "client": 1,
+     "server": 1
+    },
+    "scriptmover": {
+     "client": 0,
+     "server": 0
+    },
+    "toplayer": {
+     "client": 5,
+     "server": 5
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 0
+    },
+    "world": {
+     "client": 2,
+     "server": 2
+    },
+    "zbarrier": {
+     "client": 0,
+     "server": 0
+    }
+   },
+   "foundation": "dlc5-beta2",
+   "incomplete": 0,
+   "limits": {
+    "actor-client-field-set": {
+     "count": 7,
+     "limit": null,
+     "measured_by": "decompiled-text",
+     "spare": null
+    },
+    "assembled-model-bones-dobj": {
+     "count": null,
+     "limit": 160,
+     "measured_by": null,
+     "spare": null
+    },
+    "hud-font-scale": {
+     "count": null,
+     "limit": 1.0,
+     "measured_by": null,
+     "spare": null
+    },
+    "projectile-fx-registrations": {
+     "count": 17,
+     "limit": 40,
+     "measured_by": "weapon-blobs",
+     "spare": 23
+    },
+    "sound-assets": {
+     "count": 6,
+     "limit": 32,
+     "measured_by": "unlinker-listing",
+     "spare": 26
+    },
+    "sound-bank-preload-reservation": {
+     "count": null,
+     "limit": null,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-audio-voices": {
+     "count": null,
+     "limit": 10,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-flac-block": {
+     "count": null,
+     "limit": 1024,
+     "measured_by": null,
+     "spare": null
+    }
+   },
+   "loadfx_distinct": {
+    "client": 128,
+    "server": 128
+   },
+   "projectile_fx_distinct": 17,
+   "weapons": 103,
+   "zones": 5
+  },
+  "zm_highrise": {
+   "assets": {
+    "fx": 474,
+    "image": 2476,
+    "material": 2635,
+    "rawfile": 487,
+    "script": 381,
+    "soundbank": 5,
+    "weapon": 111,
+    "xanim": 3441,
+    "xmodel": 1076
+   },
+   "clientfield_bits": {
+    "actor": {
+     "client": 9,
+     "server": 8
+    },
+    "allplayers": {
+     "client": 8,
+     "server": 12
+    },
+    "scriptmover": {
+     "client": 14,
+     "server": 12
+    },
+    "toplayer": {
+     "client": 30,
+     "server": 31
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 0
+    },
+    "world": {
+     "client": 1,
+     "server": 1
+    },
+    "zbarrier": {
+     "client": 3,
+     "server": 3
+    }
+   },
+   "clientfield_unresolved": {
+    "actor": {
+     "client": 0,
+     "server": 0
+    },
+    "allplayers": {
+     "client": 1,
+     "server": 1
+    },
+    "scriptmover": {
+     "client": 0,
+     "server": 0
+    },
+    "toplayer": {
+     "client": 5,
+     "server": 5
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 0
+    },
+    "world": {
+     "client": 2,
+     "server": 2
+    },
+    "zbarrier": {
+     "client": 0,
+     "server": 0
+    }
+   },
+   "foundation": "stock",
+   "incomplete": 0,
+   "limits": {
+    "actor-client-field-set": {
+     "count": 8,
+     "limit": null,
+     "measured_by": "decompiled-text",
+     "spare": null
+    },
+    "assembled-model-bones-dobj": {
+     "count": null,
+     "limit": 160,
+     "measured_by": null,
+     "spare": null
+    },
+    "hud-font-scale": {
+     "count": null,
+     "limit": 1.0,
+     "measured_by": null,
+     "spare": null
+    },
+    "projectile-fx-registrations": {
+     "count": 15,
+     "limit": 40,
+     "measured_by": "weapon-blobs",
+     "spare": 25
+    },
+    "sound-assets": {
+     "count": 5,
+     "limit": 32,
+     "measured_by": "unlinker-listing",
+     "spare": 27
+    },
+    "sound-bank-preload-reservation": {
+     "count": null,
+     "limit": null,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-audio-voices": {
+     "count": null,
+     "limit": 10,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-flac-block": {
+     "count": null,
+     "limit": 1024,
+     "measured_by": null,
+     "spare": null
+    }
+   },
+   "loadfx_distinct": {
+    "client": 133,
+    "server": 209
+   },
+   "projectile_fx_distinct": 15,
+   "weapons": 111,
+   "zones": 5
+  },
+  "zm_moon": {
+   "assets": {
+    "fx": 427,
+    "image": 2296,
+    "material": 2178,
+    "rawfile": 505,
+    "script": 307,
+    "soundbank": 6,
+    "weapon": 108,
+    "xanim": 2594,
+    "xmodel": 724
+   },
+   "clientfield_bits": {
+    "actor": {
+     "client": 11,
+     "server": 12
+    },
+    "allplayers": {
+     "client": 8,
+     "server": 12
+    },
+    "scriptmover": {
+     "client": 11,
+     "server": 13
+    },
+    "toplayer": {
+     "client": 23,
+     "server": 27
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 0
+    },
+    "world": {
+     "client": 1,
+     "server": 1
+    },
+    "zbarrier": {
+     "client": 3,
+     "server": 3
+    }
+   },
+   "clientfield_unresolved": {
+    "actor": {
+     "client": 0,
+     "server": 0
+    },
+    "allplayers": {
+     "client": 1,
+     "server": 1
+    },
+    "scriptmover": {
+     "client": 0,
+     "server": 0
+    },
+    "toplayer": {
+     "client": 5,
+     "server": 5
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 0
+    },
+    "world": {
+     "client": 2,
+     "server": 2
+    },
+    "zbarrier": {
+     "client": 0,
+     "server": 0
+    }
+   },
+   "foundation": "dlc5-beta2",
+   "incomplete": 1,
+   "limits": {
+    "actor-client-field-set": {
+     "count": 12,
+     "limit": null,
+     "measured_by": "decompiled-text",
+     "spare": null
+    },
+    "assembled-model-bones-dobj": {
+     "count": null,
+     "limit": 160,
+     "measured_by": null,
+     "spare": null
+    },
+    "hud-font-scale": {
+     "count": null,
+     "limit": 1.0,
+     "measured_by": null,
+     "spare": null
+    },
+    "projectile-fx-registrations": {
+     "count": 21,
+     "limit": 40,
+     "measured_by": "weapon-blobs",
+     "spare": 19
+    },
+    "sound-assets": {
+     "count": 6,
+     "limit": 32,
+     "measured_by": "unlinker-listing",
+     "spare": 26
+    },
+    "sound-bank-preload-reservation": {
+     "count": null,
+     "limit": null,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-audio-voices": {
+     "count": null,
+     "limit": 10,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-flac-block": {
+     "count": null,
+     "limit": 1024,
+     "measured_by": null,
+     "spare": null
+    }
+   },
+   "loadfx_distinct": {
+    "client": 124,
+    "server": 205
+   },
+   "projectile_fx_distinct": 21,
+   "weapons": 108,
+   "zones": 5
+  },
+  "zm_nuked": {
+   "assets": {
+    "fx": 436,
+    "image": 2056,
+    "material": 2231,
+    "rawfile": 479,
+    "script": 276,
+    "soundbank": 5,
+    "weapon": 101,
+    "xanim": 3141,
+    "xmodel": 899
+   },
+   "clientfield_bits": {
+    "actor": {
+     "client": 8,
+     "server": 7
+    },
+    "allplayers": {
+     "client": 8,
+     "server": 12
+    },
+    "scriptmover": {
+     "client": 10,
+     "server": 8
+    },
+    "toplayer": {
+     "client": 23,
+     "server": 24
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 0
+    },
+    "world": {
+     "client": 2,
+     "server": 2
+    },
+    "zbarrier": {
+     "client": 3,
+     "server": 3
+    }
+   },
+   "clientfield_unresolved": {
+    "actor": {
+     "client": 0,
+     "server": 0
+    },
+    "allplayers": {
+     "client": 1,
+     "server": 1
+    },
+    "scriptmover": {
+     "client": 0,
+     "server": 0
+    },
+    "toplayer": {
+     "client": 5,
+     "server": 5
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 0
+    },
+    "world": {
+     "client": 2,
+     "server": 2
+    },
+    "zbarrier": {
+     "client": 0,
+     "server": 0
+    }
+   },
+   "foundation": "stock",
+   "incomplete": 0,
+   "limits": {
+    "actor-client-field-set": {
+     "count": 7,
+     "limit": null,
+     "measured_by": "decompiled-text",
+     "spare": null
+    },
+    "assembled-model-bones-dobj": {
+     "count": null,
+     "limit": 160,
+     "measured_by": null,
+     "spare": null
+    },
+    "hud-font-scale": {
+     "count": null,
+     "limit": 1.0,
+     "measured_by": null,
+     "spare": null
+    },
+    "projectile-fx-registrations": {
+     "count": 14,
+     "limit": 40,
+     "measured_by": "weapon-blobs",
+     "spare": 26
+    },
+    "sound-assets": {
+     "count": 5,
+     "limit": 32,
+     "measured_by": "unlinker-listing",
+     "spare": 27
+    },
+    "sound-bank-preload-reservation": {
+     "count": null,
+     "limit": null,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-audio-voices": {
+     "count": null,
+     "limit": 10,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-flac-block": {
+     "count": null,
+     "limit": 1024,
+     "measured_by": null,
+     "spare": null
+    }
+   },
+   "loadfx_distinct": {
+    "client": 137,
+    "server": 194
+   },
+   "projectile_fx_distinct": 14,
+   "weapons": 101,
+   "zones": 5
+  },
+  "zm_pentagon": {
+   "assets": {
+    "fx": 353,
+    "image": 2623,
+    "material": 2358,
+    "rawfile": 490,
+    "script": 266,
+    "soundbank": 6,
+    "weapon": 94,
+    "xanim": 2688,
+    "xmodel": 835
+   },
+   "clientfield_bits": {
+    "actor": {
+     "client": 10,
+     "server": 9
+    },
+    "allplayers": {
+     "client": 8,
+     "server": 12
+    },
+    "scriptmover": {
+     "client": 10,
+     "server": 8
+    },
+    "toplayer": {
+     "client": 22,
+     "server": 23
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 0
+    },
+    "world": {
+     "client": 1,
+     "server": 1
+    },
+    "zbarrier": {
+     "client": 3,
+     "server": 3
+    }
+   },
+   "clientfield_unresolved": {
+    "actor": {
+     "client": 0,
+     "server": 0
+    },
+    "allplayers": {
+     "client": 1,
+     "server": 1
+    },
+    "scriptmover": {
+     "client": 0,
+     "server": 0
+    },
+    "toplayer": {
+     "client": 5,
+     "server": 5
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 0
+    },
+    "world": {
+     "client": 2,
+     "server": 2
+    },
+    "zbarrier": {
+     "client": 0,
+     "server": 0
+    }
+   },
+   "foundation": "dlc5-beta2",
+   "incomplete": 0,
+   "limits": {
+    "actor-client-field-set": {
+     "count": 9,
+     "limit": null,
+     "measured_by": "decompiled-text",
+     "spare": null
+    },
+    "assembled-model-bones-dobj": {
+     "count": null,
+     "limit": 160,
+     "measured_by": null,
+     "spare": null
+    },
+    "hud-font-scale": {
+     "count": null,
+     "limit": 1.0,
+     "measured_by": null,
+     "spare": null
+    },
+    "projectile-fx-registrations": {
+     "count": 14,
+     "limit": 40,
+     "measured_by": "weapon-blobs",
+     "spare": 26
+    },
+    "sound-assets": {
+     "count": 6,
+     "limit": 32,
+     "measured_by": "unlinker-listing",
+     "spare": 26
+    },
+    "sound-bank-preload-reservation": {
+     "count": null,
+     "limit": null,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-audio-voices": {
+     "count": null,
+     "limit": 10,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-flac-block": {
+     "count": null,
+     "limit": 1024,
+     "measured_by": null,
+     "spare": null
+    }
+   },
+   "loadfx_distinct": {
+    "client": 113,
+    "server": 187
+   },
+   "projectile_fx_distinct": 14,
+   "weapons": 94,
+   "zones": 5
+  },
+  "zm_prison": {
+   "assets": {
+    "fx": 497,
+    "image": 2323,
+    "material": 2335,
+    "rawfile": 498,
+    "script": 313,
+    "soundbank": 5,
+    "weapon": 89,
+    "xanim": 2396,
+    "xmodel": 855
+   },
+   "clientfield_bits": {
+    "actor": {
+     "client": 17,
+     "server": 16
+    },
+    "allplayers": {
+     "client": 12,
+     "server": 14
+    },
+    "scriptmover": {
+     "client": 20,
+     "server": 18
+    },
+    "toplayer": {
+     "client": 50,
+     "server": 50
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 0
+    },
+    "world": {
+     "client": 14,
+     "server": 14
+    },
+    "zbarrier": {
+     "client": 8,
+     "server": 8
+    }
+   },
+   "clientfield_unresolved": {
+    "actor": {
+     "client": 0,
+     "server": 0
+    },
+    "allplayers": {
+     "client": 1,
+     "server": 1
+    },
+    "scriptmover": {
+     "client": 0,
+     "server": 0
+    },
+    "toplayer": {
+     "client": 6,
+     "server": 6
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 0
+    },
+    "world": {
+     "client": 20,
+     "server": 20
+    },
+    "zbarrier": {
+     "client": 0,
+     "server": 0
+    }
+   },
+   "foundation": "stock",
+   "incomplete": 0,
+   "limits": {
+    "actor-client-field-set": {
+     "count": 16,
+     "limit": null,
+     "measured_by": "decompiled-text",
+     "spare": null
+    },
+    "assembled-model-bones-dobj": {
+     "count": null,
+     "limit": 160,
+     "measured_by": null,
+     "spare": null
+    },
+    "hud-font-scale": {
+     "count": null,
+     "limit": 1.0,
+     "measured_by": null,
+     "spare": null
+    },
+    "projectile-fx-registrations": {
+     "count": 20,
+     "limit": 40,
+     "measured_by": "weapon-blobs",
+     "spare": 20
+    },
+    "sound-assets": {
+     "count": 5,
+     "limit": 32,
+     "measured_by": "unlinker-listing",
+     "spare": 27
+    },
+    "sound-bank-preload-reservation": {
+     "count": null,
+     "limit": null,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-audio-voices": {
+     "count": null,
+     "limit": 10,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-flac-block": {
+     "count": null,
+     "limit": 1024,
+     "measured_by": null,
+     "spare": null
+    }
+   },
+   "loadfx_distinct": {
+    "client": 159,
+    "server": 259
+   },
+   "projectile_fx_distinct": 20,
+   "weapons": 89,
+   "zones": 5
+  },
+  "zm_prototype": {
+   "assets": {
+    "fx": 347,
+    "image": 1776,
+    "material": 1703,
+    "rawfile": 482,
+    "script": 238,
+    "soundbank": 6,
+    "weapon": 89,
+    "xanim": 2195,
+    "xmodel": 460
+   },
+   "clientfield_bits": {
+    "actor": {
+     "client": 8,
+     "server": 8
+    },
+    "allplayers": {
+     "client": 8,
+     "server": 12
+    },
+    "scriptmover": {
+     "client": 11,
+     "server": 9
+    },
+    "toplayer": {
+     "client": 23,
+     "server": 24
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 0
+    },
+    "world": {
+     "client": 1,
+     "server": 1
+    },
+    "zbarrier": {
+     "client": 3,
+     "server": 3
+    }
+   },
+   "clientfield_unresolved": {
+    "actor": {
+     "client": 0,
+     "server": 0
+    },
+    "allplayers": {
+     "client": 1,
+     "server": 1
+    },
+    "scriptmover": {
+     "client": 0,
+     "server": 0
+    },
+    "toplayer": {
+     "client": 5,
+     "server": 5
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 0
+    },
+    "world": {
+     "client": 2,
+     "server": 2
+    },
+    "zbarrier": {
+     "client": 0,
+     "server": 0
+    }
+   },
+   "foundation": "dlc5-beta2",
+   "incomplete": 0,
+   "limits": {
+    "actor-client-field-set": {
+     "count": 8,
+     "limit": null,
+     "measured_by": "decompiled-text",
+     "spare": null
+    },
+    "assembled-model-bones-dobj": {
+     "count": null,
+     "limit": 160,
+     "measured_by": null,
+     "spare": null
+    },
+    "hud-font-scale": {
+     "count": null,
+     "limit": 1.0,
+     "measured_by": null,
+     "spare": null
+    },
+    "projectile-fx-registrations": {
+     "count": 15,
+     "limit": 40,
+     "measured_by": "weapon-blobs",
+     "spare": 25
+    },
+    "sound-assets": {
+     "count": 6,
+     "limit": 32,
+     "measured_by": "unlinker-listing",
+     "spare": 26
+    },
+    "sound-bank-preload-reservation": {
+     "count": null,
+     "limit": null,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-audio-voices": {
+     "count": null,
+     "limit": 10,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-flac-block": {
+     "count": null,
+     "limit": 1024,
+     "measured_by": null,
+     "spare": null
+    }
+   },
+   "loadfx_distinct": {
+    "client": 110,
+    "server": 186
+   },
+   "projectile_fx_distinct": 15,
+   "weapons": 89,
+   "zones": 5
+  },
+  "zm_sumpf": {
+   "assets": {
+    "fx": 367,
+    "image": 1959,
+    "material": 1976,
+    "rawfile": 487,
+    "script": 255,
+    "soundbank": 6,
+    "weapon": 102,
+    "xanim": 2352,
+    "xmodel": 494
+   },
+   "clientfield_bits": {
+    "actor": {
+     "client": 8,
+     "server": 7
+    },
+    "allplayers": {
+     "client": 8,
+     "server": 12
+    },
+    "scriptmover": {
+     "client": 11,
+     "server": 9
+    },
+    "toplayer": {
+     "client": 22,
+     "server": 23
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 0
+    },
+    "world": {
+     "client": 1,
+     "server": 1
+    },
+    "zbarrier": {
+     "client": 3,
+     "server": 3
+    }
+   },
+   "clientfield_unresolved": {
+    "actor": {
+     "client": 0,
+     "server": 0
+    },
+    "allplayers": {
+     "client": 1,
+     "server": 1
+    },
+    "scriptmover": {
+     "client": 0,
+     "server": 0
+    },
+    "toplayer": {
+     "client": 5,
+     "server": 5
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 0
+    },
+    "world": {
+     "client": 2,
+     "server": 2
+    },
+    "zbarrier": {
+     "client": 0,
+     "server": 0
+    }
+   },
+   "foundation": "dlc5-beta2",
+   "incomplete": 0,
+   "limits": {
+    "actor-client-field-set": {
+     "count": 7,
+     "limit": null,
+     "measured_by": "decompiled-text",
+     "spare": null
+    },
+    "assembled-model-bones-dobj": {
+     "count": null,
+     "limit": 160,
+     "measured_by": null,
+     "spare": null
+    },
+    "hud-font-scale": {
+     "count": null,
+     "limit": 1.0,
+     "measured_by": null,
+     "spare": null
+    },
+    "projectile-fx-registrations": {
+     "count": 17,
+     "limit": 40,
+     "measured_by": "weapon-blobs",
+     "spare": 23
+    },
+    "sound-assets": {
+     "count": 6,
+     "limit": 32,
+     "measured_by": "unlinker-listing",
+     "spare": 26
+    },
+    "sound-bank-preload-reservation": {
+     "count": null,
+     "limit": null,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-audio-voices": {
+     "count": null,
+     "limit": 10,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-flac-block": {
+     "count": null,
+     "limit": 1024,
+     "measured_by": null,
+     "spare": null
+    }
+   },
+   "loadfx_distinct": {
+    "client": 112,
+    "server": 196
+   },
+   "projectile_fx_distinct": 17,
+   "weapons": 102,
+   "zones": 5
+  },
+  "zm_temple": {
+   "assets": {
+    "fx": 498,
+    "image": 2486,
+    "material": 2697,
+    "rawfile": 501,
+    "script": 320,
+    "soundbank": 6,
+    "weapon": 125,
+    "xanim": 2890,
+    "xmodel": 893
+   },
+   "clientfield_bits": {
+    "actor": {
+     "client": 9,
+     "server": 8
+    },
+    "allplayers": {
+     "client": 10,
+     "server": 12
+    },
+    "scriptmover": {
+     "client": 11,
+     "server": 9
+    },
+    "toplayer": {
+     "client": 24,
+     "server": 25
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 0
+    },
+    "world": {
+     "client": 1,
+     "server": 1
+    },
+    "zbarrier": {
+     "client": 3,
+     "server": 3
+    }
+   },
+   "clientfield_unresolved": {
+    "actor": {
+     "client": 0,
+     "server": 0
+    },
+    "allplayers": {
+     "client": 1,
+     "server": 1
+    },
+    "scriptmover": {
+     "client": 0,
+     "server": 0
+    },
+    "toplayer": {
+     "client": 5,
+     "server": 5
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 0
+    },
+    "world": {
+     "client": 2,
+     "server": 2
+    },
+    "zbarrier": {
+     "client": 0,
+     "server": 0
+    }
+   },
+   "foundation": "dlc5-beta2",
+   "incomplete": 2,
+   "limits": {
+    "actor-client-field-set": {
+     "count": 8,
+     "limit": null,
+     "measured_by": "decompiled-text",
+     "spare": null
+    },
+    "assembled-model-bones-dobj": {
+     "count": null,
+     "limit": 160,
+     "measured_by": null,
+     "spare": null
+    },
+    "hud-font-scale": {
+     "count": null,
+     "limit": 1.0,
+     "measured_by": null,
+     "spare": null
+    },
+    "projectile-fx-registrations": {
+     "count": 17,
+     "limit": 40,
+     "measured_by": "weapon-blobs",
+     "spare": 23
+    },
+    "sound-assets": {
+     "count": 6,
+     "limit": 32,
+     "measured_by": "unlinker-listing",
+     "spare": 26
+    },
+    "sound-bank-preload-reservation": {
+     "count": null,
+     "limit": null,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-audio-voices": {
+     "count": null,
+     "limit": 10,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-flac-block": {
+     "count": null,
+     "limit": 1024,
+     "measured_by": null,
+     "spare": null
+    }
+   },
+   "loadfx_distinct": {
+    "client": 166,
+    "server": 256
+   },
+   "projectile_fx_distinct": 17,
+   "weapons": 125,
+   "zones": 5
+  },
+  "zm_theater": {
+   "assets": {
+    "fx": 437,
+    "image": 2403,
+    "material": 2656,
+    "rawfile": 494,
+    "script": 272,
+    "soundbank": 6,
+    "weapon": 101,
+    "xanim": 2615,
+    "xmodel": 678
+   },
+   "clientfield_bits": {
+    "actor": {
+     "client": 8,
+     "server": 7
+    },
+    "allplayers": {
+     "client": 8,
+     "server": 12
+    },
+    "scriptmover": {
+     "client": 10,
+     "server": 8
+    },
+    "toplayer": {
+     "client": 22,
+     "server": 23
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 0
+    },
+    "world": {
+     "client": 1,
+     "server": 1
+    },
+    "zbarrier": {
+     "client": 3,
+     "server": 3
+    }
+   },
+   "clientfield_unresolved": {
+    "actor": {
+     "client": 0,
+     "server": 0
+    },
+    "allplayers": {
+     "client": 1,
+     "server": 1
+    },
+    "scriptmover": {
+     "client": 0,
+     "server": 0
+    },
+    "toplayer": {
+     "client": 5,
+     "server": 5
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 0
+    },
+    "world": {
+     "client": 2,
+     "server": 2
+    },
+    "zbarrier": {
+     "client": 0,
+     "server": 0
+    }
+   },
+   "foundation": "dlc5-beta2",
+   "incomplete": 2,
+   "limits": {
+    "actor-client-field-set": {
+     "count": 7,
+     "limit": null,
+     "measured_by": "decompiled-text",
+     "spare": null
+    },
+    "assembled-model-bones-dobj": {
+     "count": null,
+     "limit": 160,
+     "measured_by": null,
+     "spare": null
+    },
+    "hud-font-scale": {
+     "count": null,
+     "limit": 1.0,
+     "measured_by": null,
+     "spare": null
+    },
+    "projectile-fx-registrations": {
+     "count": 16,
+     "limit": 40,
+     "measured_by": "weapon-blobs",
+     "spare": 24
+    },
+    "sound-assets": {
+     "count": 6,
+     "limit": 32,
+     "measured_by": "unlinker-listing",
+     "spare": 26
+    },
+    "sound-bank-preload-reservation": {
+     "count": null,
+     "limit": null,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-audio-voices": {
+     "count": null,
+     "limit": 10,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-flac-block": {
+     "count": null,
+     "limit": 1024,
+     "measured_by": null,
+     "spare": null
+    }
+   },
+   "loadfx_distinct": {
+    "client": 134,
+    "server": 203
+   },
+   "projectile_fx_distinct": 16,
+   "weapons": 101,
+   "zones": 5
+  },
+  "zm_tomb": {
+   "assets": {
+    "fx": 589,
+    "image": 2494,
+    "material": 2367,
+    "rawfile": 509,
+    "script": 399,
+    "soundbank": 5,
+    "weapon": 130,
+    "xanim": 2601,
+    "xmodel": 1133
+   },
+   "clientfield_bits": {
+    "actor": {
+     "client": 35,
+     "server": 34
+    },
+    "allplayers": {
+     "client": 16,
+     "server": 18
+    },
+    "scriptmover": {
+     "client": 39,
+     "server": 37
+    },
+    "toplayer": {
+     "client": 40,
+     "server": 40
+    },
+    "vehicle": {
+     "client": 6,
+     "server": 6
+    },
+    "world": {
+     "client": 63,
+     "server": 63
+    },
+    "zbarrier": {
+     "client": 9,
+     "server": 9
+    }
+   },
+   "clientfield_unresolved": {
+    "actor": {
+     "client": 0,
+     "server": 0
+    },
+    "allplayers": {
+     "client": 1,
+     "server": 1
+    },
+    "scriptmover": {
+     "client": 0,
+     "server": 0
+    },
+    "toplayer": {
+     "client": 7,
+     "server": 7
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 0
+    },
+    "world": {
+     "client": 45,
+     "server": 45
+    },
+    "zbarrier": {
+     "client": 0,
+     "server": 0
+    }
+   },
+   "foundation": "stock",
+   "incomplete": 0,
+   "limits": {
+    "actor-client-field-set": {
+     "count": 34,
+     "limit": null,
+     "measured_by": "decompiled-text",
+     "spare": null
+    },
+    "assembled-model-bones-dobj": {
+     "count": null,
+     "limit": 160,
+     "measured_by": null,
+     "spare": null
+    },
+    "hud-font-scale": {
+     "count": null,
+     "limit": 1.0,
+     "measured_by": null,
+     "spare": null
+    },
+    "projectile-fx-registrations": {
+     "count": 29,
+     "limit": 40,
+     "measured_by": "weapon-blobs",
+     "spare": 11
+    },
+    "sound-assets": {
+     "count": 5,
+     "limit": 32,
+     "measured_by": "unlinker-listing",
+     "spare": 27
+    },
+    "sound-bank-preload-reservation": {
+     "count": null,
+     "limit": null,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-audio-voices": {
+     "count": null,
+     "limit": 10,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-flac-block": {
+     "count": null,
+     "limit": 1024,
+     "measured_by": null,
+     "spare": null
+    }
+   },
+   "loadfx_distinct": {
+    "client": 186,
+    "server": 251
+   },
+   "projectile_fx_distinct": 29,
+   "weapons": 130,
+   "zones": 5
+  },
+  "zm_transit": {
+   "assets": {
+    "fx": 363,
+    "image": 2544,
+    "material": 2871,
+    "rawfile": 531,
+    "script": 308,
+    "soundbank": 4,
+    "weapon": 110,
+    "xanim": 2871,
+    "xmodel": 1003
+   },
+   "clientfield_bits": {
+    "actor": {
+     "client": 9,
+     "server": 8
+    },
+    "allplayers": {
+     "client": 13,
+     "server": 17
+    },
+    "scriptmover": {
+     "client": 12,
+     "server": 10
+    },
+    "toplayer": {
+     "client": 25,
+     "server": 26
+    },
+    "vehicle": {
+     "client": 6,
+     "server": 6
+    },
+    "world": {
+     "client": 1,
+     "server": 1
+    },
+    "zbarrier": {
+     "client": 3,
+     "server": 3
+    }
+   },
+   "clientfield_unresolved": {
+    "actor": {
+     "client": 0,
+     "server": 0
+    },
+    "allplayers": {
+     "client": 1,
+     "server": 1
+    },
+    "scriptmover": {
+     "client": 0,
+     "server": 0
+    },
+    "toplayer": {
+     "client": 5,
+     "server": 5
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 0
+    },
+    "world": {
+     "client": 3,
+     "server": 3
+    },
+    "zbarrier": {
+     "client": 0,
+     "server": 0
+    }
+   },
+   "foundation": "stock",
+   "incomplete": 0,
+   "limits": {
+    "actor-client-field-set": {
+     "count": 8,
+     "limit": null,
+     "measured_by": "decompiled-text",
+     "spare": null
+    },
+    "assembled-model-bones-dobj": {
+     "count": null,
+     "limit": 160,
+     "measured_by": null,
+     "spare": null
+    },
+    "hud-font-scale": {
+     "count": null,
+     "limit": 1.0,
+     "measured_by": null,
+     "spare": null
+    },
+    "projectile-fx-registrations": {
+     "count": 15,
+     "limit": 40,
+     "measured_by": "weapon-blobs",
+     "spare": 25
+    },
+    "sound-assets": {
+     "count": 4,
+     "limit": 32,
+     "measured_by": "unlinker-listing",
+     "spare": 28
+    },
+    "sound-bank-preload-reservation": {
+     "count": null,
+     "limit": null,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-audio-voices": {
+     "count": null,
+     "limit": 10,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-flac-block": {
+     "count": null,
+     "limit": 1024,
+     "measured_by": null,
+     "spare": null
+    }
+   },
+   "loadfx_distinct": {
+    "client": 157,
+    "server": 248
+   },
+   "projectile_fx_distinct": 15,
+   "weapons": 110,
+   "zones": 5
+  },
+  "zm_transit_dr": {
+   "assets": {
+    "fx": 371,
+    "image": 1825,
+    "material": 1836,
+    "rawfile": 528,
+    "script": 283,
+    "soundbank": 5,
+    "weapon": 88,
+    "xanim": 2698,
+    "xmodel": 550
+   },
+   "clientfield_bits": {
+    "actor": {
+     "client": 8,
+     "server": 7
+    },
+    "allplayers": {
+     "client": 11,
+     "server": 16
+    },
+    "scriptmover": {
+     "client": 10,
+     "server": 8
+    },
+    "toplayer": {
+     "client": 24,
+     "server": 25
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 6
+    },
+    "world": {
+     "client": 1,
+     "server": 1
+    },
+    "zbarrier": {
+     "client": 3,
+     "server": 3
+    }
+   },
+   "clientfield_unresolved": {
+    "actor": {
+     "client": 0,
+     "server": 0
+    },
+    "allplayers": {
+     "client": 1,
+     "server": 1
+    },
+    "scriptmover": {
+     "client": 0,
+     "server": 0
+    },
+    "toplayer": {
+     "client": 5,
+     "server": 5
+    },
+    "vehicle": {
+     "client": 0,
+     "server": 0
+    },
+    "world": {
+     "client": 2,
+     "server": 2
+    },
+    "zbarrier": {
+     "client": 0,
+     "server": 0
+    }
+   },
+   "foundation": "stock",
+   "incomplete": 0,
+   "limits": {
+    "actor-client-field-set": {
+     "count": 7,
+     "limit": null,
+     "measured_by": "decompiled-text",
+     "spare": null
+    },
+    "assembled-model-bones-dobj": {
+     "count": null,
+     "limit": 160,
+     "measured_by": null,
+     "spare": null
+    },
+    "hud-font-scale": {
+     "count": null,
+     "limit": 1.0,
+     "measured_by": null,
+     "spare": null
+    },
+    "projectile-fx-registrations": {
+     "count": 8,
+     "limit": 40,
+     "measured_by": "weapon-blobs",
+     "spare": 32
+    },
+    "sound-assets": {
+     "count": 5,
+     "limit": 32,
+     "measured_by": "unlinker-listing",
+     "spare": 27
+    },
+    "sound-bank-preload-reservation": {
+     "count": null,
+     "limit": null,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-audio-voices": {
+     "count": null,
+     "limit": 10,
+     "measured_by": null,
+     "spare": null
+    },
+    "streamed-flac-block": {
+     "count": null,
+     "limit": 1024,
+     "measured_by": null,
+     "spare": null
+    }
+   },
+   "loadfx_distinct": {
+    "client": 156,
+    "server": 221
+   },
+   "projectile_fx_distinct": 8,
+   "weapons": 88,
+   "zones": 5
+  }
+ },
+ "note": "Counts only, per map, from the zones the engine loads for it: assets per listed type (union), server-side clientfield bits per set, distinct loadfx paths, distinct projectile FX across every WeaponDef carried, and each count against the observed limit. incomplete is the number of scripts that refused to decompile although they register client fields; treat those maps' clientfield counts as floors.",
+ "schema": 1,
+ "zones_not_counted": [
+  "localized (<lang>_<map>.ff) zones",
+  "so_* and gump zones",
+  "loose scripts under usermaps/<map>/scripts/zm and raw/scripts/zm",
+  "the mod.ff of a profile"
+ ]
+}

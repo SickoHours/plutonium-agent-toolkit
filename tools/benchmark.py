@@ -12,8 +12,8 @@ answered by ``receipt.json`` files and the output files they inventory.
 Per task: the required routes appear, in order, among the task's top-level invocations; the
 final invocation's status (and error code, when expected) matches; the expected outputs exist in
 the last succeeded receipt of the last required route; readback files contain the expected
-strings; the invocation count is within budget; wall time is first ``started`` to last
-``updated``. A task scores the fraction of its checks that passed. Exit 0 always.
+strings; the produced artifact (compiled scripts, readback) carries and lacks the expected names;
+the invocation count is within budget; wall time is first ``started`` to last ``updated``. A task scores the fraction of its checks that passed. Exit 0 always.
 """
 from __future__ import annotations
 
@@ -98,6 +98,20 @@ def _readback_ok(receipt: dict | None, needles: list[str]) -> tuple[bool, list[s
     return not missing, missing
 
 
+def _artifacts_ok(receipt: dict | None, contains: list[str], excludes: list[str]) -> tuple[bool, dict]:
+    """The files the scored job produced (compiled scripts under compiled/, the package readback under
+    readback/) carry every needle in contains and none in excludes: the fix is judged by what left the
+    artifact, not by the report. No artifact at all fails."""
+    if receipt is None:
+        return False, {"missing": list(contains), "present": list(excludes), "files": 0}
+    root = Path(receipt["_dir"])
+    blobs = [p.read_bytes() for folder in ("compiled", "readback") if (root / folder).is_dir()
+             for p in (root / folder).rglob("*") if p.is_file()]
+    missing = [n for n in contains if not any(n.encode() in blob for blob in blobs)]
+    present = [n for n in excludes if any(n.encode() in blob for blob in blobs)]
+    return bool(blobs) and not missing and not present, {"missing": missing, "present": present, "files": len(blobs)}
+
+
 def _inputs_ok(receipt: dict | None, suffixes: list[str]) -> tuple[bool, list[str]]:
     """Every suffix names a file the job declared as an input (receipt inputs are absolute paths)."""
     if receipt is None:
@@ -159,6 +173,10 @@ def score_task(task: dict, run_dir: Path) -> dict:
         ok, missing = _readback_ok(anchor, expect["readback_contains"])
         checks["readback"] = ok
         detail["readback_missing"] = missing
+    if expect.get("artifact_contains") or expect.get("artifact_excludes"):
+        ok, why = _artifacts_ok(anchor, expect.get("artifact_contains", []), expect.get("artifact_excludes", []))
+        checks["artifacts"] = ok
+        detail["artifacts"] = why
     # The job must have run against the task's own inputs, not an unrelated project or file.
     scored = anchor if anchor is not None else (final if final and final["command"] == anchor_route else None)
     if expect.get("inputs_contain"):

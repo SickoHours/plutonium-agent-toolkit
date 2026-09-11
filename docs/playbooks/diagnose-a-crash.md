@@ -32,7 +32,8 @@ cause. Diagnosis reads; it changes nothing.
    crash `check-load` cannot attach and fails; read the log slice directly. Find the first
    error line, not the last.
 4. Classify with the table in `crashes.md`: script error, load refused, pool exhausted,
-   allocation failure, renderer, host OOM, UI Lua, script panic. One class per failure; a second
+   allocation failure, renderer, host OOM, UI Lua, script panic. `pat knowledge signature --log
+   <slice> --json` matches the slice against the recorded signatures line by line. One class per failure; a second
    failure on the way out (a menu Lua error on disconnect) is recorded separately.
 5. Correlate: what changed since the last good load of the same map (package hash, base, loose
    `raw/` files); whether the same line appears in a playable session (then it is noise); which

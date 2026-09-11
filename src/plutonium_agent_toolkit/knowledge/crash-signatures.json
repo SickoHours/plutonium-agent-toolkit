@@ -1,0 +1,168 @@
+{
+ "note": "Console log lines seen after clean compiles and readbacks, as regexes without the [HH:MM:SS] prefix. `python scripts/t6_knowledge.py lookup log <slice>` matches a slice. The cause beside each is the one found and fixed, not the only possible one. A repair that names a new line adds a row in the same task.",
+ "rows": [
+  {
+   "cause": "Animation-state entry without a compiled tree reference",
+   "class": "asset-parse",
+   "fix": "Add the reference to both compiled aitypes",
+   "id": "animstatedef-missing",
+   "log_text": "BG_AnimStateDef_Parse ... referenced missing <anim>",
+   "regex": "BG_AnimStateDef_Parse.*referenced missing",
+   "source": "docs/knowledge/crashes.md"
+  },
+  {
+   "cause": "Animation-tree leaves wrapped in an anonymous brace block",
+   "class": "asset-parse",
+   "fix": "Emit a bare leaf list",
+   "id": "bad-animtree-token",
+   "log_text": "bad animtree token: '{'",
+   "regex": "bad\\ animtree\\ token:\\ '\\{'",
+   "source": "docs/knowledge/crashes.md"
+  },
+  {
+   "cause": "New actor field bits in an already full composition",
+   "class": "pool-exhausted",
+   "fix": "Remove the bits; reuse existing FX through owned entities",
+   "id": "client-field-set-out-of-space",
+   "log_text": "Trying to assign 1 bits for netfield <name> but Client Field Set actor is out of space.",
+   "regex": "Trying to assign (\\d+) bits for netfield (\\S+) but Client Field Set (\\w+) is out of space",
+   "source": "docs/knowledge/crashes.md"
+  },
+  {
+   "cause": "HUD strings kept accumulating in the shared localized configstring table until it overflowed",
+   "class": "pool-exhausted",
+   "fix": "Bound HUD text churn; reuse strings; Plutonium exposes settextunlimited for HUD text (see plutonium-builtins.json)",
+   "id": "configstring-overflow",
+   "log_text": null,
+   "regex": "G_FindConfigstringIndex: overflow \\((\\d+)\\)",
+   "source": "private repair record of the maintainer"
+  },
+  {
+   "cause": "Tracer reference registered before its default",
+   "class": "asset-order",
+   "fix": "Preserve parent registration order; require the default first",
+   "id": "default-asset-missing",
+   "log_text": "Could not load default asset 'defaulttracer' for asset type 'tracer'.",
+   "regex": "Could not load default asset '([^']+)' for asset type '([^']+)'",
+   "source": "docs/knowledge/crashes.md"
+  },
+  {
+   "cause": "Assembly counted one model, not hands plus attachments",
+   "class": "pool-exhausted",
+   "fix": "Count the full assembly; remove inherited attachments",
+   "id": "dobj-bone-limit",
+   "log_text": "dobj for xmodel '<name>' has more than 160 bones",
+   "regex": "dobj for xmodel '([^']+)' has more than (\\d+) bones",
+   "source": "docs/knowledge/crashes.md"
+  },
+  {
+   "cause": "Aggregate sound assets across map plus mod",
+   "class": "pool-exhausted",
+   "fix": "Merge banks; it is an aggregate-load concern",
+   "id": "exceeded-asset-limit",
+   "log_text": "Exceeded limit of 32 'sound' assets",
+   "regex": "Exceeded limit of (\\d+) '(\\w+)' assets",
+   "source": "docs/knowledge/crashes.md"
+  },
+  {
+   "cause": "The engine script VM panicked, usually on a corrupt or mismatched compiled script",
+   "class": "script-panic",
+   "fix": "Recompile from source with the pinned compiler; compare the compiled bytes with the readback",
+   "id": "havok-script-panic",
+   "log_text": null,
+   "regex": "Havok Script Panic",
+   "source": "docs/knowledge/crashes.md"
+  },
+  {
+   "cause": "A menu Lua path failed, often pre-existing and unrelated to the mod under test",
+   "class": "ui-lua-error",
+   "fix": "Record it separately; do not fold it into the gameplay failure",
+   "id": "lui-error",
+   "log_text": null,
+   "regex": "LUI_ERROR|\\.lua:\\d+",
+   "source": "docs/knowledge/crashes.md"
+  },
+  {
+   "cause": "Preloaded sound-bank reservation plus the fastfile's virtual block",
+   "class": "allocation-failure",
+   "fix": "Stream large samples losslessly; keep critical one-shots loaded",
+   "id": "out-of-memory-dialog",
+   "log_text": "\"Out of memory\" dialog at map load",
+   "regex": "Out of memory",
+   "source": "docs/knowledge/crashes.md"
+  },
+  {
+   "cause": "Registration inserted at different positions on server and client",
+   "class": "registration-order",
+   "fix": "Register at the same relative position on both sides",
+   "id": "registration-order-mismatch",
+   "log_text": "Server registered <tree A> where client registered <tree B>",
+   "regex": "Server registered (\\S+) where client registered (\\S+)",
+   "source": "docs/knowledge/crashes.md"
+  },
+  {
+   "cause": "A script failed to link or threw at runtime",
+   "class": "script-error",
+   "fix": "Read the first error line above it, not the last; fix the script, not the engine",
+   "id": "script-error",
+   "log_text": null,
+   "regex": "script (?:runtime |compile )?error",
+   "source": "docs/knowledge/crashes.md"
+  },
+  {
+   "cause": "Whitespace between quoted tokens lost in an entity edit",
+   "class": "asset-parse",
+   "fix": "Preserve token separators and every original key",
+   "id": "spawnvars-closing-brace",
+   "log_text": "G_ParseSpawnVars: closing brace without data",
+   "regex": "G_ParseSpawnVars:\\ closing\\ brace\\ without\\ data",
+   "source": "docs/knowledge/crashes.md"
+  },
+  {
+   "cause": "The client dropped the match it had just loaded; seen when a match is started from the console rather than a lobby",
+   "class": "load-refused",
+   "fix": "Start the match from the menu path; compare with a playable session before blaming the mod",
+   "id": "sv-shutdown-hostquit",
+   "log_text": null,
+   "regex": "SV_Shutdown: hostquit",
+   "source": "docs/knowledge/crashes.md"
+  },
+  {
+   "cause": "A mod command was issued while a match was running or before the frontend was ready",
+   "class": "load-refused",
+   "fix": "Sequence: disconnect or return to the lobby first, then select the mod, then load the map",
+   "id": "too-early-to-loadmod",
+   "log_text": null,
+   "regex": "too early to loadmod!",
+   "source": "docs/knowledge/crashes.md"
+  },
+  {
+   "cause": "A call compiled because the name was spelled right, but the engine has no builtin or loaded export with that name and arity on that script VM",
+   "class": "script-error",
+   "fix": "Look the name up in builtins.json for the right VM and arity; add the include that exports it, or replace the call; never stub it",
+   "id": "unresolved-external",
+   "log_text": null,
+   "regex": "Unresolved external: (\\w+) with (\\d+) parameters",
+   "source": "docs/knowledge/crashes.md"
+  },
+  {
+   "cause": "Server-only builtin called from a client script",
+   "class": "script-error",
+   "fix": "Remove the client call; keep the server precache",
+   "id": "unresolved-external-client-only-builtin",
+   "log_text": "Unresolved external: precachemodel with 1 parameters",
+   "regex": "Unresolved\\ external:\\ precachemodel\\ with\\ 1\\ parameters",
+   "source": "docs/knowledge/crashes.md"
+  },
+  {
+   "cause": "The include that exports the method was missing",
+   "class": "script-error",
+   "fix": "Add the direct include; resolve helpers per instance",
+   "id": "unresolved-external-missing-include",
+   "log_text": "Unresolved external: setclientfield with 2 parameters",
+   "regex": "Unresolved\\ external:\\ setclientfield\\ with\\ 2\\ parameters",
+   "source": "docs/knowledge/crashes.md"
+  }
+ ],
+ "schema": 1
+}

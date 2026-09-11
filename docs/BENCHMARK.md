@@ -1,6 +1,6 @@
 # Offline benchmark: comparing models and harnesses on receipts
 
-Four repeatable modding tasks, scored only from the receipts an agent's `pat` invocations wrote
+Six repeatable modding tasks, scored only from the receipts an agent's `pat` invocations wrote
 and the files those receipts inventory. No prose is graded and no game is involved. The result
 says how reliably and how economically an agent drives the toolkit to an offline-verified
 outcome; it says nothing about gameplay, and it gates no release.
@@ -13,9 +13,14 @@ outcome; it says nothing about gameplay, and it gates no release.
 | `bench-02-build-hello` | Plan, build and verify `examples/hello-zm` | `project plan`, `project build`, `project verify` in that order, the build declares `examples/hello-zm`'s recipe and script as inputs, `packages/mod.ff` in its outputs, at most 6 |
 | `bench-03-extract-rawfile` | Extract the rawfiles from a built `mod.ff` | one `ff extract` whose input `mod.ff` hash equals the bench-02 build's output hash and whose outputs match `assets/**/*.gsc`, at most 4 |
 | `bench-04-port-feature` | Port `announce_round` from `examples/hello-zm-two` into a copy of `hello-zm`, build, verify | `project build` then `project verify`, a recipe and `scripts/hello.gsc` declared as inputs, `mod.ff` produced, the build's readback contains both `announce_round` and `on_player_spawned`, at most 10 |
+| `bench-05-builtin-wrong-vm` | Fix a server script whose one call exists only on the client VM, then compile | one `gsc compile` of the corrected `face_glow.gsc`, final status `succeeded`, the compiled artifact no longer carries `setanimknob` and still carries `face_glow_think`, at most 4 |
+| `bench-06-classify-then-fix` | Classify a console slice (`Client Field Set actor is out of space`), fix the script that caused it, compile | one `gsc compile` of the corrected `riser_glow.gsc`, final status `succeeded`, the compiled artifact no longer carries the new field `bench_riser_glow` and still carries `riser_glow_think`, at most 4 |
 
 Task definitions are `tools/benchmark/tasks.json`; prompts are `tools/benchmark/prompts/`;
-the broken script is a fixture. `examples/hello-zm-two` exists so the port task has a real
+the broken script, the wrong-VM script and the failed load's script and log slice are fixtures.
+`bench-05` and `bench-06` are the tasks the shipped knowledge data (`pat knowledge builtin`,
+`pat knowledge signature`) exists for: a compiler accepts both fixtures unchanged, so the score
+comes from what the corrected artifact carries, not from a compile passing. `examples/hello-zm-two` exists so the port task has a real
 source and target.
 
 ## Running one model on one harness
@@ -57,6 +62,8 @@ Keep the run directory private (it holds paths from your machine); commit only t
   missing inputs.
 - `failed_invocations` lists jobs that did not succeed; a wasted rebuild shows up here and in the
   count.
+- `artifact_contains` and `artifact_excludes` read the compiled scripts and the readback the scored
+  job produced: a fix scores by what left the artifact, not by what the report says was removed.
 
 What the score does not measure: whether the ported feature works in game, whether the agent's
 report to the user was honest, or anything about a model outside these four tasks. Compare runs on
@@ -64,13 +71,17 @@ the same toolkit version and the same machine.
 
 ## Baseline
 
-| Model | Harness | Date | bench-01 | bench-02 | bench-03 | bench-04 | Total |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| claude-fable-5-1 | Claude Code in T3 Code | 2026-09-10 | 6/6 (1 call) | 6/6 (3 calls) | 6/6 (1 call) | 7/7 (3 calls) | 25/25 (8 calls, 0.8 s) |
+| Model | Harness | Date | bench-01 | bench-02 | bench-03 | bench-04 | bench-05 | bench-06 | Total |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| claude-fable-5-1 | Claude Code in T3 Code | 2026-09-10 | 6/6 (1 call) | 6/6 (3 calls) | 6/6 (1 call) | 7/7 (3 calls) | not run | not run | 25/25 (8 calls, 0.8 s) |
+| claude-fable-5-1 | Claude Code in T3 Code | 2026-09-11 | not run | not run | not run | not run | 6/6 (1 call) | 6/6 (1 call) | 12/12 (2 calls, 0.1 s) |
 
 The baseline row was produced by the agent that wrote the benchmark, in the same session, on
 Arch Linux (Omarchy) with the real backends, following each prompt verbatim. It is a floor for
 effort and a check that the tasks are solvable with the repository's own docs, not an
 independent measurement; its wall time excludes agent thinking because the commands were issued
-back to back. Rows from other models and harnesses are welcome as pull requests with the
+back to back. The second row is the same agent running only the two knowledge tasks it added, with
+the real gsc-tool 1.4.10 through `PAT_BACKEND_GSC`; both fixtures compile unchanged, and the
+unmodified compiles scored 5/6 on each task (only the artifact check failed), which is what the tasks
+are for. Rows from other models and harnesses are welcome as pull requests with the
 `score.json` summary quoted in the body and the run directory kept private.

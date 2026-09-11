@@ -19,6 +19,7 @@
     pat module fetch <owner/id@commit | https://github.com/o/r@commit> --output <new dir>
     pat registry add <file|url> | list | search [words] [--category ...] | show <owner/id>
     pat registry baseline <directory> [--repository <url>] [--commit <40 hex>] --output <new dir>
+    pat knowledge builtin <name> [--vm server|client] | signature --log <file> | limits [--map <zm_map>]   shipped T6 facts
     pat agent probe|hosts|models|dispatch|status|send|interrupt ...   T3 Code (protocol 1) as an agent host
     pat plane actions | serve --library <dir> --jobs <dir>   a local control plane over these routes
     pat mcp tools | serve --library <dir> --jobs <dir>       the same typed actions as MCP tools on stdin and stdout
@@ -125,6 +126,16 @@ def build_parser() -> Parser:
     from .dev import baseline
 
     baseline.add_parser(ra, common)  # registry baseline is a job: --output and --timeout like every other job
+
+    k = sub.add_parser("knowledge", help="Generated T6 facts shipped with the toolkit: builtins per script VM, engine limits with per-map occupancy, crash signatures")
+    ka = k.add_subparsers(dest="action", required=True)
+    q = ka.add_parser("builtin", help="Does this call exist on a script VM, with which argument counts")
+    q.add_argument("name"); q.add_argument("--vm", choices=["server", "client"], help="Only this script VM"); q.add_argument("--json", action="store_true")
+    q = ka.add_parser("signature", help="Match a console log slice against the crash signatures")
+    q.add_argument("--log", help="Console log file or slice to read"); q.add_argument("--text", help="One log line or a short slice")
+    q.add_argument("--json", action="store_true")
+    q = ka.add_parser("limits", help="Observed engine limits, or one map's loaded zones counted against them")
+    q.add_argument("--map", help="Zombies map id, for example zm_transit"); q.add_argument("--json", action="store_true")
     from .agent import cli as _agent_cli
 
     _agent_cli.add_parser(sub)
@@ -143,7 +154,7 @@ def build_parser() -> Parser:
     g.add_argument("--json", action="store_true")
 
     # Planned/deferred groups accept any action so they can answer with a structured refusal.
-    for group in sorted({r.group for r in routes()} - {"dev", "gsc", "ff", "project", "module", "registry", "workspace", "game", "agent", "plane", "mcp", "audio", "image", "lua", "model", "weapon"}):
+    for group in sorted({r.group for r in routes()} - {"dev", "gsc", "ff", "project", "module", "registry", "workspace", "knowledge", "game", "agent", "plane", "mcp", "audio", "image", "lua", "model", "weapon"}):
         g = sub.add_parser(group)
         g.add_argument("action")
         g.add_argument("rest", nargs=argparse.REMAINDER)
@@ -298,6 +309,14 @@ def run(argv: list[str]) -> dict:
             return success(command, registry.search(" ".join(args.words), category=args.category, kind=args.kind, tag=args.tag,
                                                         base=args.base, map_id=args.map, entry_kind=args.entry_kind, origin=args.origin))
         return success(command, registry.show(args.name))
+    if group == "knowledge":
+        from .dev import knowledge
+
+        if args.action == "builtin":
+            return success(command, knowledge.builtin(args.name, args.vm))
+        if args.action == "signature":
+            return success(command, knowledge.signature(Path(args.log) if args.log else None, args.text))
+        return success(command, knowledge.limits(args.map))
     if group == "agent":
         from .agent import cli as agent_cli
 
