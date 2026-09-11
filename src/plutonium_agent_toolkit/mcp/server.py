@@ -25,7 +25,7 @@ import time
 
 from .. import __version__
 from ..core.errors import Failure
-from ..plane.actions import BY_ID, table
+from ..plane.actions import BY_ID, MAX_PROMPT, table
 from ..plane.server import Plane, strict_loads, validate_roots
 
 # MCP protocol versions this bridge implements. The client's is echoed when it is one of these,
@@ -77,8 +77,12 @@ def _schema_for(param) -> dict:
         # The validator's regex, written for JSON Schema: \Z is Python's end-of-string, $ is the
         # same thing in the ECMA-262 dialect a schema is read in.
         schema["pattern"] = param.pattern.pattern.replace("\\Z", "$")
-    if param.limit:
-        schema["maxLength"] = param.limit
+    # The bound the validator applies for this kind, which is not always the parameter's own: a
+    # prompt is measured against MAX_PROMPT, and advertising the dataclass default would refuse a
+    # long prompt the action accepts.
+    limit = MAX_PROMPT if kind == "prompt" else param.limit
+    if limit:
+        schema["maxLength"] = limit
     return schema
 
 
@@ -390,13 +394,19 @@ def _loop(bridge: Bridge, reader, answer, deadline, stop) -> dict:
         run reaches ``Plane.start``, which refuses it with ``busy`` straight away rather than
         letting it wait its turn unseen."""
         nonlocal handled, errors
+        if stop is not None and stop.is_set():
+            return True     # a termination signal stops the child now, not when the route gives up
         while True:
             try:
                 line = reader.lines.get_nowait()
             except queue.Empty:
                 return False
             if line is None:
-                state["eof"] = True             # the loop ends after this call, with its answer sent
+                # The loop ends after this call, with its answer sent. Not a cancellation: stdin
+                # closing is how a batch pipeline (`pat mcp serve < requests.jsonl > answers.jsonl`)
+                # always looks, and a build must not be killed because the requests ran out. A
+                # client that wants the run stopped withdraws it, or sends a signal.
+                state["eof"] = True
                 return False
             if line is _OVERSIZED:
                 errors += 1
@@ -432,12 +442,14 @@ def _loop(bridge: Bridge, reader, answer, deadline, stop) -> dict:
                     return True
 
     while True:
+        # Order is the honest reason the session ended: a client that cannot be written to, then a
+        # signal (which cuts a call short), then the stream running out.
         if state["undeliverable"]:
             return {"stopped": "undeliverable", "messages": handled, "errors": errors}
-        if state["eof"]:
-            return {"stopped": "client", "messages": handled, "errors": errors}
         if stop is not None and stop.is_set():
             return {"stopped": "signal", "messages": handled, "errors": errors}
+        if state["eof"]:
+            return {"stopped": "client", "messages": handled, "errors": errors}
         if deadline is not None and time.monotonic() >= deadline:
             return {"stopped": "deadline", "messages": handled, "errors": errors}
         try:

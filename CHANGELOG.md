@@ -13,7 +13,9 @@ Every entry states what shipped, on which platform it was verified, and what rem
   Model Context Protocol on stdin and stdout, exposing the control plane's typed actions as tools
   with JSON Schemas generated from their parameters, plus two local reads (`library`, `runs`). It is
   the plane's second transport, not a second runtime: the same validation by kind, the same
-  structured `{"root", "path"}` for every path, the same refusal of an action this host cannot run,
+  structured `{"root", "path"}` for every path on this machine (`module fetch`'s `path` is not one
+  of those: it names a directory inside the repository being fetched, and stays a relative string),
+  the same refusal of an action this host cannot run,
   the same `confirmed: true` gate on a state-changing action, the same one-at-a-time `pat` child
   with its own receipt under the jobs directory. There is no tool that takes argv, a shell string or
   an absolute path. `pat mcp tools --json` prints the definitions and serves nothing. stdout carries
@@ -29,8 +31,10 @@ Every entry states what shipped, on which platform it was verified, and what rem
   the harness configuration, the tool table and the stdio contract. A call in progress keeps
   reading its client, so `notifications/cancelled` stops the child at once instead of after the
   route's own timeout, a second call is refused with `busy` while the first is still running
-  rather than waiting unseen for its turn, and a string parameter's schema carries the pattern and
-  length its validator enforces.
+  rather than waiting unseen for its turn, a termination signal stops a running child instead of
+  waiting for the route's timeout, and a string parameter's schema carries the pattern and the
+  length its validator enforces (a prompt's is `MAX_PROMPT`, not the parameter default). Stdin
+  closing deliberately does not stop a running call: a batch pipeline is exactly that shape.
 
 - **Black Ops III Workshop maps as donors.** `docs/knowledge/bo3-workshop-formats.md` records
   what a Workshop item's fastfile, XPAK and sound banks are and how much of each reads offline on
@@ -49,8 +53,12 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 - **Control plane: one run can be stopped without closing the plane.** `Plane.stop_run(run_id)`
   interrupts and kills that run's child, waits for its record and marks it `stopped`, while
-  `shutdown` keeps meaning "stop everything and refuse what comes next". The MCP bridge uses it
-  for a withdrawn request; the page's own shutdown path is unchanged.
+  `shutdown` keeps meaning "stop everything and refuse what comes next". A stop that lands in the
+  window between `start` returning and the worker spawning still takes effect, because the worker
+  reads the request under the same lock it spawns under; and a stopped run is recorded as
+  `stopped` whatever its exit code, since a child that handles the interrupt cleanly exits 0 and
+  `finished` would read as if it had done the work. The MCP bridge uses it for a withdrawn
+  request; the page's own shutdown path is unchanged.
 - **Control plane: `module fetch` confirms.** It reaches the network and writes a snapshot of
   someone else's repository into the library, which is exactly the kind of step the page and the
   bridge gate behind the person's confirmation, and `docs/MCP.md` already said it was gated -- but

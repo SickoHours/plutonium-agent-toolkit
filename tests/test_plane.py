@@ -655,7 +655,9 @@ class ShutdownTests(unittest.TestCase):
             run = plane.start("manifest", {}, False)
             self.assertTrue(plane.stop_run(run["run_id"], grace=5))
             record = next(r for r in plane.run_rows() if r["run_id"] == run["run_id"])
-            self.assertIn(record["status"], ("stopped", "finished"))   # a fast child may beat the stop
+            # Review finding: a child that handles the interrupt cleanly exits 0, and the record
+            # said "finished" -- reading as if the withdrawn action had done its work.
+            self.assertEqual(record["status"], "stopped")
             self.assertEqual(plane.stopped_runs, set(), "the id was taken by the record, not kept")
             self.assertFalse(plane.stopping, "stopping one run does not close the plane")
             self.assertFalse(plane.stop_run("a-run-that-is-not-active"), "nothing to stop, nothing recorded")
@@ -663,6 +665,38 @@ class ShutdownTests(unittest.TestCase):
             second = plane.start("manifest", {}, False)               # the plane still accepts work
             self.assertTrue(plane.settled.wait(60))
             self.assertNotEqual(second["run_id"], run["run_id"])
+
+    def test_a_stop_between_start_and_the_spawn_still_stops_the_run(self):
+        # Review finding: start() returns as soon as the worker thread exists, before that worker
+        # registers the child. A stop landing in that window found nothing active, returned False,
+        # and the action ran anyway with nobody waiting for it. The worker takes the state lock
+        # before it spawns, so an id left there is seen and nothing is spawned. The gate below holds
+        # the worker in exactly that window instead of racing for it.
+        gate, original = threading.Event(), server_module.Plane._execute
+
+        def delayed(plane_self, run, timeout):
+            self.assertTrue(gate.wait(30), "the test released the worker")
+            return original(plane_self, run, timeout)
+
+        with tempfile.TemporaryDirectory() as temp:
+            plane = server_module.Plane([], Path(temp) / "jobs")
+            self.addCleanup(plane.shutdown)
+            answers = []
+            with unittest.mock.patch.object(server_module.Plane, "_execute", delayed):
+                run = plane.start("manifest", {}, False)
+                self.assertIsNone(plane.active, "the child is not registered yet")
+                stopper = threading.Thread(target=lambda: answers.append(plane.stop_run(run["run_id"], grace=5)))
+                stopper.start()
+                gate.set()
+                stopper.join(60)
+            self.assertFalse(stopper.is_alive())
+            self.assertEqual(answers, [True], "the stop took effect in the startup window")
+            record = next(r for r in plane.run_rows() if r["run_id"] == run["run_id"])
+            self.assertEqual(record["status"], "stopped")
+            self.assertIn("before the child started", record["stderr_head"])
+            self.assertIsNone(record["exit_code"], "nothing was spawned to have one")
+            self.assertEqual(plane.stopped_runs, set(), "the id was taken by the record")
+            self.assertFalse(plane.stopping, "and the plane is still open")
 
     def test_a_job_handle_is_terminated_once_however_many_threads_reach_for_it(self):
         # Regression: the thread running a child and the shutdown stopping it both closed the same

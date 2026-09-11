@@ -59,9 +59,11 @@ One tool per typed action, named as the action is (`module-plan`, `game-install-
 Each tool's JSON Schema is generated from the action's parameters, so a harness validates before
 it calls. Three things the schemas make explicit:
 
-- **A path is not a string.** It is `{"root": <index of a library root, or "jobs">, "path":
-  "<relative path>"}`. There is no way to name an absolute path, a parent directory, a link, or a
-  file outside the roots you gave.
+- **A path on this machine is not a string.** It is `{"root": <index of a library root, or
+  "jobs">, "path": "<relative path>"}`. There is no way to name an absolute path, a parent
+  directory, a link, or a file outside the roots you gave. (`module-fetch`'s `path` is not one of
+  these and its schema says so: it names a directory inside the repository being fetched, which is
+  not a place on this machine at all, and stays a plain relative string.)
 - **A state-changing tool requires `confirmed: true`** in its arguments, and says so in its
   description. Installing a package, selecting a mod, loading a map, adding a registry, fetching a
   module and dispatching an agent thread are all in that set. The flag is the bridge's record that
@@ -115,9 +117,14 @@ Lines are read off the stream by a reader thread, so `--seconds` is reached even
 connected harness sits idle, and a tool call that is still running when the deadline passes stops
 waiting and says so rather than outliving it. A call in progress keeps reading the client: a
 `notifications/cancelled` naming that request stops the child and sends no response for it, as the
-protocol requires, and the plane accepts the next call normally afterwards. Anything else that
-arrives is answered while the call runs, which is why a second `tools/call` comes back `busy`
-immediately. The reader holds one message at a time: a harness
+protocol requires, and the plane accepts the next call normally afterwards. A termination signal
+does the same, so shutdown does not wait for the route's own timeout. Anything else that arrives is
+answered while the call runs, which is why a second `tools/call` comes back `busy` immediately.
+
+Stdin closing is not a cancellation. `pat mcp serve < requests.jsonl > answers.jsonl` is exactly
+that shape -- the requests run out long before the answers are read -- so a call already running
+finishes and its answer is written; the session ends after it. To stop a run, withdraw it or send a
+signal. The reader holds one message at a time: a harness
 that keeps sending while a call runs waits in the pipe rather than filling this process's memory.
 Answers are written by a second thread for the same reason in reverse: a harness that stops
 reading stdout blocks that thread, not the loop, and after 30 seconds the session ends

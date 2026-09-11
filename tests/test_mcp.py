@@ -20,6 +20,7 @@ from plutonium_agent_toolkit.cli import entry
 from plutonium_agent_toolkit.core.errors import Failure
 from plutonium_agent_toolkit.mcp import server as mcp
 from plutonium_agent_toolkit.plane import server as plane_server
+from plutonium_agent_toolkit.plane import actions as plane_actions
 from plutonium_agent_toolkit.plane.actions import BY_ID
 from tests.test_dev_routes import DevRouteFixture
 
@@ -414,6 +415,48 @@ class CancellationTests(BridgeFixture):
         self.assertEqual([r["action"] for r in self.plane.run_rows()], ["module-build"], "the refusal started nothing")
 
 
+class SignalDuringACallTests(BridgeFixture):
+    def test_a_termination_signal_stops_the_child_instead_of_waiting_for_the_route(self):
+        # Review finding: a signal could not reach a call in progress, so shutdown waited for the
+        # route's own timeout with a state-changing child still running.
+        self.start()
+        stop = threading.Event()
+
+        def arm():      # the signal has to arrive while the call runs, not before the loop reads it
+            deadline = time.monotonic() + 30
+            while time.monotonic() < deadline and not self.plane.job_lock.locked():
+                time.sleep(0.01)
+            stop.set()
+
+        watcher = threading.Thread(target=arm)
+        watcher.start()
+        self.addCleanup(watcher.join, 30)
+        lines = json.dumps({"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+                            "params": {"name": "module-build",
+                                       "arguments": {"composition": {"root": 0, "path": "hello-pack/composition.json"}}}}) + "\n"
+        sink = io.StringIO()
+        summary = mcp.pump(self.bridge, io.StringIO(lines), sink, deadline=time.monotonic() + 120, stop=stop)
+        self.assertEqual(summary["stopped"], "signal")
+        self.assertEqual(sink.getvalue(), "", "a call the signal cut short is not answered")
+        rows = self.plane.run_rows()
+        self.assertEqual(rows[0]["status"], "stopped", "the child was stopped, not left to the route's timeout")
+
+    def test_stdin_closing_lets_a_running_call_finish(self):
+        # Deliberately not a cancellation: `pat mcp serve < requests.jsonl > answers.jsonl` is
+        # exactly this shape, and a build must not be killed because the requests ran out. The loop
+        # ends after the call, with its answer sent.
+        self.start()
+        lines = json.dumps({"jsonrpc": "2.0", "id": 4, "method": "tools/call",
+                            "params": {"name": "manifest", "arguments": {}}}) + "\n"
+        sink = io.StringIO()
+        summary = mcp.pump(self.bridge, io.StringIO(lines), sink, deadline=time.monotonic() + 120)
+        answers = [json.loads(line) for line in sink.getvalue().splitlines()]
+        self.assertEqual([a["id"] for a in answers], [4], "the answer was written after stdin closed")
+        self.assertFalse(answers[0]["result"]["isError"], answers)
+        self.assertEqual(summary["stopped"], "client")
+        self.assertEqual(self.plane.run_rows()[0]["status"], "finished")
+
+
 class RenderingTests(BridgeFixture):
     def test_a_result_json_cannot_represent_is_an_error_not_the_end_of_the_session(self):
         # Review finding: a number outside JSON's range (1e999 read from a library file) made the
@@ -449,6 +492,10 @@ class SchemaConstraintTests(BridgeFixture):
         self.assertTrue(folder["pattern"].startswith("^") and folder["pattern"].endswith("$"), folder["pattern"])
         self.assertEqual(by_name["registry-show"]["inputSchema"]["properties"]["name"]["maxLength"],
                          BY_ID["registry-show"].params[0].limit)
+        # Review finding: a prompt is measured against MAX_PROMPT, not the parameter default, and
+        # advertising 512 refused prompts the action accepts.
+        self.assertEqual(by_name["agent-dispatch"]["inputSchema"]["properties"]["prompt"]["maxLength"], plane_actions.MAX_PROMPT)
+        self.assertEqual(by_name["agent-send"]["inputSchema"]["properties"]["prompt"]["maxLength"], plane_actions.MAX_PROMPT)
         for tool in by_name.values():
             for name, schema in tool["inputSchema"]["properties"].items():
                 if schema.get("type") == "string" and name != "confirmed":

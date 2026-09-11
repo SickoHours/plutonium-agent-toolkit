@@ -395,8 +395,12 @@ class Plane:
             # Spawn under the state lock so shutdown either sees the child (and stops it) or is seen
             # here first (and nothing is spawned).
             with self.lock:
-                if self.stopping:
-                    run.update(status="stopped", exit_code=None, finished=now(), result=None, stderr_head="the plane stopped before the child started")
+                withdrawn = run["run_id"] in self.stopped_runs
+                self.stopped_runs.discard(run["run_id"])
+                if self.stopping or withdrawn:
+                    run.update(status="stopped", exit_code=None, finished=now(), result=None,
+                               stderr_head=("the run was stopped before the child started" if withdrawn
+                                            else "the plane stopped before the child started"))
                     return
                 try:
                     process = subprocess.Popen([sys.executable, "-m", "plutonium_agent_toolkit", *run["argv"]],
@@ -420,8 +424,9 @@ class Plane:
                     self.active = None
                     # Taken, not read: the set holds a run only between the stop and this record, so
                     # a server that runs for weeks does not grow one entry per cancelled action.
-                    stopped = self.stopping or run["run_id"] in self.stopped_runs
+                    withdrawn = run["run_id"] in self.stopped_runs
                     self.stopped_runs.discard(run["run_id"])
+                    stopped = self.stopping or withdrawn
                 _close_job(job)  # on Windows this also ends anything the child left behind
             if overflow:
                 _stop_process(process, STOP_GRACE, None)
@@ -431,7 +436,7 @@ class Plane:
                     payload = strict_loads(stdout) if stdout.strip() else None
                 except ValueError:
                     payload = None
-            run.update(status="stopped" if stopped and process.returncode != 0 else "finished", exit_code=process.returncode,
+            run.update(status="stopped" if withdrawn or (stopped and process.returncode != 0) else "finished", exit_code=process.returncode,
                        finished=now(), result=payload, stdout_head=None if payload is not None else stdout[:MAX_HEAD],
                        stdout_bytes=stdout_size, output_overflow=overflow, stderr_head=(stderr or "")[:MAX_HEAD])
         finally:
@@ -450,13 +455,21 @@ class Plane:
         """Stop one run's child and wait for its record; True when that run was the one running.
 
         Unlike ``shutdown`` this does not close the plane: a caller that cancels one action (an MCP
-        client withdrawing a request, say) expects the next one to start normally."""
+        client withdrawing a request, say) expects the next one to start normally. A stop that
+        lands between ``start`` returning and the worker spawning still takes effect: the worker
+        sees the id under the same lock and never spawns."""
         with self.lock:
             active = self.active if self.active is not None and self.active[2] == run_id else None
-            if active is not None:
+            # Started but not registered yet: the worker takes this lock before it spawns, so
+            # leaving the id here means it either never spawns or spawns and is stopped below.
+            starting = active is None and not self.settled.is_set()
+            if active is not None or starting:
                 self.stopped_runs.add(run_id)
         if active is None:
-            return False
+            if not starting:
+                return False        # already finished and recorded; there is nothing to stop
+            self.settled.wait(grace + 5)
+            return True
         _stop_process(active[0], grace, active[1])
         self.settled.wait(grace + 5)
         return True
