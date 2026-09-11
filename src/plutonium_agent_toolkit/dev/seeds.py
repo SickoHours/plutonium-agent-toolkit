@@ -34,6 +34,7 @@ from pathlib import Path
 from ..core.errors import INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, Failure
 from ..core.jobs import Job
 from ..core.receipts import sha256_file
+from . import titles
 
 ASSET = re.compile(r"^[a-z0-9_]{1,32},[^\s,][^\r\n,]{0,255}\Z")
 BANK = re.compile(r"^[a-z0-9_.]+\.sab[ls]\Z")
@@ -244,8 +245,10 @@ def declare(package: Path, args, job: Job) -> dict:
     (job.root / "seed.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     weapons = manifest["provides"].get("weapons", [])
     mid = re.sub(r"[^a-z0-9_]", "_", (args.id or (weapons[0] if weapons else src.parent.name)).lower())[:64] or "module"
+    game = getattr(args, "game", None) or titles.DEFAULT_TITLE
+    titles.get(game)  # reject an unknown title before writing the draft
     draft = {
-        "schema": 1, "id": mid, "version": "0.1.0", "title": args.title or mid,
+        "schema": 1, "id": mid, "version": "0.1.0", "game": game, "title": args.title or mid,
         "category": args.category or ("weapons" if weapons else "module"),
         "seed": "seed.json",
         "bases": [args.base] if args.base else ["<the base token this package was built and tested on>"],

@@ -12,9 +12,9 @@ from pathlib import Path
 
 from ..core.errors import BACKEND_FAILED, INPUT_INVALID, Failure
 from ..core.jobs import Job
+from . import titles
 from .backends import executable
 
-GAMES = ("t6",)
 SYSTEMS = ("pc",)
 INSTANCES = ("server", "client")
 MODES = {"compile": ("comp", "compiled"), "decompile": ("decomp", "decompiled")}
@@ -22,11 +22,13 @@ ERROR = re.compile(r"(?im)^\s*(?:error\b|\[error\]|fatal\b)")
 
 
 def add_parser(sub, common):
-    p = sub.add_parser("gsc", help="Compile or decompile T6 scripts with gsc-tool")
+    p = sub.add_parser("gsc", help="Compile or decompile scripts with gsc-tool")
     actions = p.add_subparsers(dest="action", required=True)
     for action in MODES:
         q = actions.add_parser(action)
         q.add_argument("input", help="Script file (.gsc/.csc) or compiled script")
+        q.add_argument("--game", choices=titles.names(), default=titles.DEFAULT_TITLE,
+                       help="Title the script targets; selects the gsc-tool game (default t6)")
         q.add_argument("--instance", choices=INSTANCES, default=None, help="server for .gsc, client for .csc; inferred from the suffix")
         q.add_argument("--includes", help="Directory searched for #include files; hashed into the receipt")
         common(q)
@@ -42,7 +44,7 @@ def execute(args, job: Job) -> dict:
     staged = staged_dir / src.name
     shutil.copyfile(src, staged)
     mode, out_dir = MODES[args.action]
-    argv = [*executable("gsc"), "-m", mode, "-g", "t6", "-s", "pc", "-i", instance]
+    argv = [*executable("gsc"), "-m", mode, "-g", titles.gsc_game(args.game), "-s", "pc", "-i", instance]
     if args.includes:
         include = job.input_tree(Path(args.includes).expanduser())
         argv += ["-w", str(include)]
@@ -57,4 +59,5 @@ def execute(args, job: Job) -> dict:
     if any(p.stat().st_size == 0 for p in produced):
         raise Failure(BACKEND_FAILED, "gsc-tool produced an empty file", log=log.name)
     return {"files": [p.relative_to(job.root).as_posix() for p in produced], "instance": instance,
+            "game": args.game,
             "verification": "compiler exit and log checked; script behavior in game untested"}

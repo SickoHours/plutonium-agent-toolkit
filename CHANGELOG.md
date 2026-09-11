@@ -7,6 +7,31 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+### Added
+
+- **IW5 (Modern Warfare 3) as a second title for the development tools.** A new `dev/titles.py`
+  holds the per-title facts (gsc-tool `-g` token, script instances, the zone stamp `> game,<token>`,
+  mode, localized-strings language and the browse taxonomy) so one code path serves both games
+  instead of forking. `gsc compile|decompile` take `--game {t6,iw5}`; `project init` takes
+  `--game`; `project`/`module` recipes and composition declarations accept a `game` field (default
+  `t6`), and the recipe validator, plan stamp and OAT zone header derive the token from it. A
+  composition refuses members that target another game, and a `kind` is validated against the
+  title's own taxonomy (so IW5 `weapons` kinds are primary/secondary/launcher/melee/special, not
+  wonder). `image convert` gains `--iw5`, and a `plutonium_storage_iw5` config key is registered.
+  New example `examples/hello-iw5`. Verified offline with the fake backends (`tests/test_iw5.py`,
+  9 tests) and **natively on Windows 11 x64** with the pinned gsc-tool 1.4.10 and OpenAssetTools
+  0.33.0: `project build examples/hello-iw5` compiled with `-g iw5`, linked an `IWff` fastfile
+  (distinct from T6's `TAff`) and read it back as `Loaded zone "mod" (IW5)` with the rawfile
+  byte-identical; T6 output is unchanged. A second build carried a `stringtable` (from CSV) and an
+  `image` (from a real MW3 `.iwi`) from source, and `ff link --load` carried `xmodel`, `material`,
+  `sound`, `loadedsound`, `menu` and a `weapon` (`cobra_20mm_mp`) out of the stock `common_mp.ff`
+  and `ui_mp.ff` into a new IWff with their full dependency graphs, read back clean as `Loaded zone
+  "mod" (IW5)`, 0 errors, confirming the IW5 asset-type spellings. The packaging layer was also run
+  natively: `module declare --game iw5` drafted a seed from a real IW5 `mod.ff`, and `module build`
+  composed that seed with a recipe module into one pack. Not qualified: map patches, an asset-rich
+  seed with external base references, a running-game effect and a playtest. `weapons` (a BO3→T6 porter) and game control remain T6-only.
+  See the IW5 note in `docs/SUPPORT.md`.
+
 ### Fixed
 
 - **`provides.rawfiles` is a declared kind.** `module declare` writes a `rawfiles` list into a seed
