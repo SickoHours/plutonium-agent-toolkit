@@ -158,7 +158,11 @@ parent's descriptor, without following links and without blocking, and the open 
 be the regular file or directory the listing saw; Windows has no descriptor-relative opens, so
 every path component is re-checked for reparse points by name just before each open. An entry
 replaced under the scan (by a link, a pipe, another file, or a swapped ancestor directory) is
-`unreadable` and the outcome `incomplete`. Every file read and every directory listing is an
+`unreadable` and the outcome `incomplete`. A declaration that is binary, larger than the text bound or not valid UTF-8 is
+reported as `declaration-mismatch` and still names itself among the declarations, so no declaration in the tree is missing
+from the report. `.git` is git's local bookkeeping whether it is a directory or the one-line file a worktree leaves: it is
+skipped, not scanned, and not part of `tree_sha256`; a link named `.git` is still a link and still blocks.
+Every file read and every directory listing is an
 input of the job: the receipt lists their hashes (`inputs`, `input_listings`; a listing is every
 entry's name and kind) and the job re-hashes and re-lists them before succeeding, through
 no-follow, non-blocking descriptors whose identity must match what the scan walked on POSIX,

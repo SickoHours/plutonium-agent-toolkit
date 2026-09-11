@@ -1235,6 +1235,107 @@ class DeadlineTests(BaselineFixture):
         self.assertEqual(code, 1, row)
         self.assertEqual(row["error_code"], "backend_timeout", row)
 
+    def test_a_receipt_is_not_written_when_the_listings_use_the_last_of_the_time(self):
+        # The recorded directories are re-listed after the files; that work is timed too, so the
+        # time can run out with every check before it already passed.
+        from plutonium_agent_toolkit.core import jobs as jobs_module
+
+        # A flat tree records exactly one directory, so the time runs out inside the last listing
+        # and every check before the loop has already passed.
+        directory = self.root / "flat"
+        directory.mkdir()
+        (directory / "module.json").write_text(json.dumps(declaration(), indent=2))
+        (directory / "project.json").write_text(json.dumps(recipe(scripts=[]), indent=2))
+        state = {"listed": 0}
+        real = jobs_module.list_entries
+
+        def counted(*args, **kwargs):
+            state["listed"] += 1
+            return real(*args, **kwargs)
+
+        with mock.patch.object(jobs_module, "list_entries", side_effect=counted), \
+                mock.patch.object(jobs_module.time, "monotonic", side_effect=lambda: 10**6 if state["listed"] >= 1 else 0.0):
+            code, row = self.scan(directory)
+        self.assertEqual(state["listed"], 1, "one recorded directory, listed once at the receipt")
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "backend_timeout", row)
+
+
+class BoundedWorkTests(BaselineFixture):
+    """A file inside the bounds must not cost the report an object per line or per match."""
+
+    def test_line_numbers_are_right_past_a_checkpoint(self):
+        # The line of a match is found from the nearest checkpoint, not from a list of every line.
+        filler = "// padding\n" * 20_000  # well past the 64 KiB checkpoint spacing
+        directory = self.module(files={"late.ps1": filler + "Invoke-Expression $x\n"})
+        code, row = self.scan(directory)
+        self.assertEqual(code, 0, row)
+        hit = self.findings(row, "download-and-execute")
+        self.assertEqual([r["line"] for r in hit], [filler.count("\n") + 1], hit)
+
+    def test_a_file_of_newlines_is_scanned_without_a_line_per_object(self):
+        directory = self.module(files={"blank.txt": "\n" * 400_000})
+        code, row = self.scan(directory)
+        self.assertEqual(code, 0, row)
+        self.assertEqual(row["result"]["outcome"], "passed")
+        self.assertEqual(baseline._checkpoints("\n" * 400_000)[-1][0] % baseline.CHECKPOINT, 0)
+        self.assertLessEqual(len(baseline._checkpoints("x" * baseline.MAX_TEXT)), baseline.MAX_TEXT // baseline.CHECKPOINT + 1,
+                             "one checkpoint per block, whatever the lines look like")
+
+    def test_many_matches_are_counted_without_being_kept(self):
+        rows = baseline.Rows()
+        for n in range(1, 1001):
+            rows.add("native-plugin", "f.txt", n, "x")
+        self.assertEqual(len(rows.sorted("finding")), baseline.ROWS_PER_FILE_AND_RULE)
+        self.assertEqual(rows.omitted(), [{"file": "f.txt", "id": "native-plugin", "omitted": 1000 - baseline.ROWS_PER_FILE_AND_RULE}])
+        self.assertLessEqual(len(rows._seen), baseline.ROWS_PER_FILE_AND_RULE, "nothing is retained past the bound")
+
+    def test_a_file_full_of_matches_reports_the_bound_and_the_count(self):
+        directory = self.module(files={"many.ps1": "Invoke-Expression $x\n" * 5_000})
+        code, row = self.scan(directory)
+        self.assertEqual(code, 0, row)
+        self.assertEqual(len(self.findings(row, "download-and-execute")), baseline.ROWS_PER_FILE_AND_RULE)
+        omitted = [r for r in row["result"]["truncated"] if r["file"] == "many.ps1"]
+        self.assertEqual(omitted, [{"file": "many.ps1", "id": "download-and-execute", "omitted": 5_000 - baseline.ROWS_PER_FILE_AND_RULE}])
+
+
+class DeclarationReportingTests(BaselineFixture):
+    def test_a_nested_declaration_that_could_not_be_parsed_is_still_listed(self):
+        directory = self.module()
+        for rel, data in (("binary/module.json", b"\x00\x01binary"),
+                          ("bad-utf8/composition.json", b'{"schema": 1, "name": "\xff"}')):
+            p = directory / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(data)
+        code, row = self.scan(directory)
+        self.assertEqual(code, 0, row)
+        nested = {r["file"]: r for r in row["result"]["nested_declarations"]}
+        self.assertEqual(sorted(nested), ["bad-utf8/composition.json", "binary/module.json"])
+        self.assertFalse(nested["binary/module.json"]["valid"])
+        self.assertEqual(nested["binary/module.json"]["kind"], "module")
+        self.assertFalse(nested["bad-utf8/composition.json"]["valid"])
+        self.assertEqual(len(self.findings(row, "declaration-mismatch")), 2)
+
+    def test_an_embedded_nul_in_a_declared_path_is_a_finding_not_a_crash(self):
+        directory = self.module(rec={"scripts": [{"source": "scripts/a\u0000b.gsc", "target": "scripts/zm/x.gsc", "instance": "server"}]})
+        code, row = self.scan(directory)
+        self.assertEqual(code, 0, row)
+        self.assertTrue(any("NUL" in r["evidence"] for r in self.findings(row, "declaration-mismatch")), row["result"]["findings"])
+        self.assertTrue((Path(row["result"]["output"]) / "baseline.json").is_file())
+
+    def test_git_metadata_is_skipped_whether_it_is_a_directory_or_a_file(self):
+        worktree = self.module(name="worktree")
+        (worktree / ".git").write_text("gitdir: /somewhere/else/.git/worktrees/x\n")
+        repository = self.module(name="repository")
+        (repository / ".git").mkdir()
+        (repository / ".git" / "HEAD").write_text("ref: refs/heads/main\n")
+        first, second = self.scan(worktree)[1], self.scan(repository)[1]
+        for row in (first, second):
+            self.assertEqual(row["result"]["outcome"], "passed", row["result"]["findings"])
+            self.assertIn(".git", [r["path"] for r in row["result"]["skipped"]])
+        self.assertEqual(first["result"]["tree_sha256"], second["result"]["tree_sha256"],
+                         "local bookkeeping, of either shape, is outside the snapshot")
+
 
 class RouteTests(BaselineFixture):
     def test_baseline_is_a_job_and_the_other_registry_actions_are_not(self):

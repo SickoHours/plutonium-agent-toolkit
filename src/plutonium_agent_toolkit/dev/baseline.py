@@ -192,8 +192,9 @@ class Rows:
     """Findings, capabilities and warnings: one row per (file, line, id), bounded per file and rule.
 
     Findings keep up to ``ROWS_PER_FILE_AND_RULE`` rows per file; capabilities and warnings are
-    one row per file. Rows beyond the bound are counted under ``truncated`` so nothing is dropped
-    silently."""
+    one row per file. Matches beyond the bound are counted under ``truncated`` so nothing is
+    dropped silently, and nothing about them is retained: a file with a million matches costs the
+    report its count and no memory."""
 
     def __init__(self):
         self.rows: list[dict] = []
@@ -206,14 +207,22 @@ class Rows:
         key = (file, line, rule)
         if key in self._seen:
             return
-        self._seen.add(key)
-        cap = ROWS_PER_FILE_AND_RULE if kind == "finding" else 1
-        count = self._per.get((file, rule), 0)
-        if count >= cap:
-            self.truncated[(file, rule)] = self.truncated.get((file, rule), 0) + 1
+        if self.capped(file, rule):
+            self.omit(file, rule)  # counted, but its key is not kept: the bound bounds memory too
             return
-        self._per[(file, rule)] = count + 1
+        self._seen.add(key)
+        self._per[(file, rule)] = self._per.get((file, rule), 0) + 1
         self.rows.append({"id": rule, "kind": kind, "blocking": rule in BLOCKING, "file": file, "line": line, "evidence": _clip(evidence)})
+
+    def capped(self, file: str, rule: str) -> bool:
+        """Whether this rule has already emitted everything it will for this file. A caller that
+        locates matches asks first, so finding where a match is costs nothing once it cannot be
+        reported."""
+        cap = ROWS_PER_FILE_AND_RULE if _kind(rule) == "finding" else 1
+        return self._per.get((file, rule), 0) >= cap
+
+    def omit(self, file: str, rule: str) -> None:
+        self.truncated[(file, rule)] = self.truncated.get((file, rule), 0) + 1
 
     def sorted(self, kind: str) -> list[dict]:
         return sorted((r for r in self.rows if r["kind"] == kind), key=lambda r: (r["file"], -1 if r["line"] is None else r["line"], r["id"]))
@@ -224,13 +233,50 @@ class Rows:
 
 # ----- text rules -----------------------------------------------------------------------
 
-def _line_starts(text: str) -> list[int]:
-    starts = [0]
-    pos = text.find("\n")
-    while pos != -1:
-        starts.append(pos + 1)
-        pos = text.find("\n", pos + 1)
-    return starts
+CHECKPOINT = 64 * 1024      # one line-number checkpoint per this many characters of a file
+MATCHES_LOCATED = ROWS_PER_FILE_AND_RULE * 50   # matches a rule locates in one file before counting only
+
+
+def _checkpoints(text: str) -> list[tuple[int, int]]:
+    """``(offset, line number at that offset)`` every ``CHECKPOINT`` characters: at most 64 pairs
+    for the largest text this scans, whatever its lines look like. Splitting a file into its lines
+    would instead cost one object per newline, which a file of nothing but newlines turns into
+    hundreds of megabytes."""
+    marks = [(0, 1)]
+    line, pos = 1, 0
+    while True:
+        end = min(pos + CHECKPOINT, len(text))
+        line += text.count("\n", pos, end)
+        pos = end
+        if pos >= len(text):
+            return marks
+        marks.append((pos, line))
+
+
+def _numbered_lines(text: str):
+    """``(1-based number, line)`` for every line, one at a time: the same sequence
+    ``text.split("\n")`` gives, without holding the whole file's lines at once."""
+    number, start, length = 1, 0, len(text)
+    while start <= length:
+        end = text.find("\n", start)
+        if end == -1:
+            yield number, text[start:]
+            return
+        yield number, text[start:end]
+        number += 1
+        start = end + 1
+
+
+def _window(text: str, pos: int, after: int = 5) -> str:
+    """The line holding ``pos`` and the next ``after`` lines, sliced out of the text."""
+    start = text.rfind("\n", 0, pos) + 1
+    end = start
+    for _ in range(after + 1):
+        found = text.find("\n", end)
+        if found == -1:
+            return text[start:]
+        end = found + 1
+    return text[start:end]
 
 
 def _basename(value: str) -> str:
@@ -239,15 +285,27 @@ def _basename(value: str) -> str:
 
 
 def _scan_text(rows: Rows, rel: str, suffix: str, text: str) -> None:
-    lines = text.split("\n")
-    starts = _line_starts(text)
+    marks = _checkpoints(text)
+    located: dict[str, int] = {}
 
     def where(pos: int) -> tuple[int, str, int]:
-        """1-based line number, the line, and the column of an offset into ``text``."""
-        n = bisect_right(starts, pos)
-        return n, lines[n - 1], pos - starts[n - 1]
+        """1-based line number, the line, and the column of an offset into ``text``. The line is
+        sliced out of the text when it is needed; the nearest checkpoint bounds the counting."""
+        index = bisect_right(marks, (pos, len(text))) - 1
+        offset, line = marks[index]
+        n = line + text.count("\n", offset, pos)
+        start = text.rfind("\n", 0, pos) + 1
+        end = text.find("\n", pos)
+        return n, text[start:end if end != -1 else len(text)], pos - start
 
     def add_match(rule: str, m: re.Match) -> None:
+        """Where a match is costs something to work out, so it is worked out only while the rule
+        can still report one for this file: past that the match is counted and nothing else."""
+        seen = located.get(rule, 0)
+        located[rule] = seen + 1
+        if seen >= MATCHES_LOCATED or rows.capped(rel, rule):
+            rows.omit(rel, rule)
+            return
         n, line, col = where(m.start())
         rows.add(rule, rel, n, _excerpt(line, col, col + len(m.group(0))))
 
@@ -263,7 +321,7 @@ def _scan_text(rows: Rows, rel: str, suffix: str, text: str) -> None:
     # later line that names it after Start-Process, & or .\ (./) is the finding. One pass over
     # the lines, no cap on the names collected: every line is analysed.
     downloaded: dict[str, int] = {}
-    for number, line in enumerate(lines, 1):
+    for number, line in _numbered_lines(text):
         targets = []
         if DOWNLOAD_LINE.search(line):
             for m in DOWNLOAD_TARGET.finditer(line):
@@ -286,7 +344,7 @@ def _scan_text(rows: Rows, rel: str, suffix: str, text: str) -> None:
         if not target.endswith(ARCHIVE_SUFFIXES):
             continue
         n, line, col = where(m.start())
-        if SHA256.search("\n".join(lines[n - 1:n + 5])):
+        if SHA256.search(_window(text, m.start())):
             continue
         rows.add("unpinned-acquisition", rel, n, _excerpt(line, col, col + len(m.group(0))))
     if suffix in SCRIPT_SUFFIXES:
@@ -447,6 +505,10 @@ def _paths(data, kind: str):
 def _check_path(rows: Rows, rel: str, text: str, directory: Path, root: Path, field: str, value: str, confined: bool,
                 unreadable=None) -> None:
     line = _line_of(text, value)
+    if "\x00" in value:
+        # os.lstat raises ValueError on an embedded NUL; the path is unusable either way.
+        rows.add("declaration-mismatch", rel, line, f"{field}: path contains an embedded NUL")
+        return
     if not value.strip():
         rows.add("declaration-mismatch", rel, line, f"{field}: empty path")
         return
@@ -740,6 +802,7 @@ class Scan:
         self.root, self.job, self.expected = root, job, expected
         self.rows = Rows()
         self.unreadable: list[dict] = []
+        self.unparsed: list[tuple[str, str]] = []   # declarations seen but not parseable
         self.skipped: list[dict] = []
         self.digests: list[tuple[bytes, str]] = []  # raw relative path, sha256
         self.dirs: list[bytes] = []  # raw relative path of every directory walked below the root
@@ -814,7 +877,9 @@ class Scan:
                 kind = "a link to a directory" if stat.S_ISDIR(listed.st_mode) else "a link"
                 self.rows.add("path-escape", rel, None, f"{kind}; not followed")
                 self.skipped.append({"path": rel, "reason": "link; not followed"})
-            elif entry.name == ".git" and stat.S_ISDIR(listed.st_mode):
+            elif entry.name == ".git":
+                # A directory, or the one-line file a worktree or submodule leaves: either way it
+                # is local bookkeeping, never part of the snapshot, and nothing here reads it.
                 self.skipped.append({"path": rel, "reason": "git metadata; never part of a snapshot, not scanned"})
             elif stat.S_ISDIR(listed.st_mode):
                 if len(here) > MAX_DEPTH:
@@ -868,12 +933,14 @@ class Scan:
             self.binary_total += size
             if name in DECLARATIONS:
                 self.rows.add("declaration-mismatch", rel, None, "declaration is not a text file")
+                self.unparsed.append((rel, DECLARATIONS[name]))
             return
         counts["text_files"] += 1
         if content is None:
             self.rows.add("large-text", rel, None, f"{size} bytes of text; larger than {MAX_TEXT} bytes, not pattern-scanned")
             if name in DECLARATIONS:
                 self.rows.add("declaration-mismatch", rel, None, f"declaration larger than {MAX_TEXT} bytes; not checked")
+                self.unparsed.append((rel, DECLARATIONS[name]))
             return
         try:
             text = content.decode("utf-8")
@@ -883,6 +950,7 @@ class Scan:
             text = content.decode("utf-8", errors="replace")
             if name in DECLARATIONS:
                 self.rows.add("declaration-mismatch", rel, None, f"declaration is not valid UTF-8 at byte {exc.start}")
+                self.unparsed.append((rel, DECLARATIONS[name]))
                 _scan_text(self.rows, rel, suffix, text)
                 return
         _scan_text(self.rows, rel, suffix, text)
@@ -910,8 +978,20 @@ def execute(args, job: Job) -> dict:
             summary = row
         else:
             nested.append(row)
+    # A declaration that was binary, oversized or not UTF-8 was found but not parsed: it still
+    # names itself, at the root as the summary and below it among the nested ones, so a consumer
+    # of this report never misses a declaration the tree contains.
+    listed = {row["file"] for row in nested} | ({summary["file"]} if summary else set())
+    for rel, kind in scan.unparsed:
+        if kind == "recipe" or rel in listed:
+            continue
+        row = {"file": rel, "kind": kind, "valid": False}
+        if "/" not in rel and summary is None:
+            summary = row
+        else:
+            nested.append(row)
     if summary is None:
-        # A root declaration that was binary, oversized or unreadable still names itself in the summary.
+        # An unreadable root declaration (never opened, so never among unparsed) names itself too.
         for name, kind in (("module.json", "module"), ("composition.json", "composition")):
             if _probe(root, root / name) == "file":
                 summary = {"file": name, "kind": kind, "valid": False}

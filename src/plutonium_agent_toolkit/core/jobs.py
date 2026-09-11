@@ -361,6 +361,8 @@ class Job:
                 raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {key} ({exc.strerror or exc})") from exc
             if listing_digest(entries) != digest:
                 raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {key}")
+        # Listing the last recorded directory can itself use the remaining time.
+        self.check_deadline()
         # The periodic scan during run() can miss a final burst; recheck before declaring success.
         self._watch_output()
         outputs = {rel: digest for rel, digest in inventory(self.root).items() if rel != "receipt.json"}
