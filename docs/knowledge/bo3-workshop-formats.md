@@ -66,9 +66,12 @@ Structured assets (weapon definitions, model skeletons and skinning, animation c
 materials) are pointer graphs the engine rebuilds in memory; they are not recoverable from the
 zone bytes with a general tool. Reading them means reading the loaded game once, read-only,
 under the contract in `docs/playbooks/inspect-a-bo3-map.md`: BO3 under Proton is an ordinary
-Linux process whose memory the same user can read through `/proc/<pid>/mem` with no permission
-change, but the asset-pool table and string-table addresses are properties of one executable
-build and must be probed and verified before a byte is trusted. The saved result is a
+Linux process, and the same user can read its memory through `/proc/<pid>/mem` when the kernel's
+ptrace attach check allows it (Yama `ptrace_scope` 0 or 1 for a process you own, and the process
+dumpable; the receipt host had scope 1 and needed no change). Where the host denies it, the
+capture is not available and nothing here says to relax the scope. The asset-pool table and
+string-table addresses are properties of one executable build and must be probed and verified
+before a byte is trusted. The saved result is a
 `bo3-page-capture-v1` manifest with hashed 4096 byte pages, the format `pat weapon catalog`
 inventories (`docs/WEAPONS.md`).
 

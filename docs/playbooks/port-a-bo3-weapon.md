@@ -15,6 +15,11 @@ BO3 containers and a running BO3 process; the general playbook's gates still app
 - A destination module with a recipe that builds alone on the named foundation
   (`first-build.md`, `docs/knowledge/foundations.md`), and the toolkit's `gsc` and `oat`
   backends present (`pat doctor --json`).
+- The build goes through a composition, not a bare recipe: a `module.json` beside the recipe and
+  a one-member `composition.json` whose `loads` name the target map's stock zones
+  (`docs/MODULES.md`). `pat project build` links only what the recipe carries and cannot check
+  references against the base; `pat module build` links against every load, and its `ff inspect`
+  readback is what the unresolved-reference check in step 7 reads.
 
 ## Steps
 
@@ -62,18 +67,26 @@ BO3 containers and a running BO3 process; the general playbook's gates still app
    weapon, sets the level's start weapon so native spawn logic hands it out; developer-menu
    metadata beside it. No native script edited, no pack namespace. Proof: the script compiles
    alone (`add-a-script.md`) and `preflight-scripts.md` passes.
-7. Build with refusal on any gap: link against the loaded stock zones, then require that every
-   embedded asset is the module's own or a dependency the linker copied from a loaded zone,
-   that no reference is unresolved, and that both definitions, every clip, material, skin,
-   alias row and localized string read back equal.
+7. Build with refusal on any gap. Link the one-member composition against the target map's
+   stock zones named in its `loads`, then compute the unresolved set yourself and refuse on it:
    ```sh
-   pat project build <module>/project.json --output ../jobs/<module>-build-NNN --json
+   pat module build <pack>/composition.json --output ../jobs/<module>-build-NNN --json
    pat project verify ../jobs/<module>-build-NNN/receipt.json --inputs --output ../jobs/<module>-verify-NNN --json
-   pat ff inspect ../jobs/<module>-build-NNN/packages/mod.ff --output ../jobs/<module>-inspect-NNN --json
+   pat module declare ../jobs/<module>-build-NNN/packages/mod.ff --load <each stock zone> --output ../jobs/<module>-readback-NNN --json
    ```
-   Proof: `ok: true` on all three; the inspect listing minus the provided list minus the
-   module's own assets is empty. Expect the first link to fail on a missing native dependency
-   (an accuracy graph was the one here); add the native file and link again.
+   What each proves, and no more: `module build` compiled, linked against the loads, and
+   byte-compared every rawfile (`rawfiles_verified`); `project verify` re-hashed inputs and
+   outputs; `module declare` read the package back and wrote `seed.json` with two lists,
+   `embedded` (what the package carries) and `referenced` (what it expects the base to load).
+   The unresolved set is `referenced` minus the provided list from step 2; the gate is that it
+   is empty and that every `embedded` row is the module's own or a native dependency the linker
+   copied. None of the three commands computes that difference or compares definition fields:
+   the agent does, from the two lists and the extracted files, and records the comparison. The
+   per-field equality of both definitions, clips, materials, alias rows and strings is the
+   readback in step 5, repeated on the linked package with `pat ff extract`. Expect the first
+   link to fail on a missing native dependency (an accuracy graph was the one here); add the
+   native file to the module and link again. Proof: `ok: true` on all three, `rawfiles_verified`
+   equal to the recipe's count, and the recorded empty unresolved set.
 8. Install under the user's lock, load through their runner or by their own hand, and read
    the evidence: the console log shows the registration script's init line and no missing
    asset for the module's namespace, the sound bank header loaded, a playable spawn holding
@@ -99,13 +112,14 @@ BO3 containers and a running BO3 process; the general playbook's gates still app
 - A reference outside the provided list that no native dependency satisfies: stop; do not
   widen the loads to make it resolve.
 - Any readback inequality or preflight failure: stop, fix that item, rerun it.
-- Build, verify and inspect pass with an empty unresolved set: the offline part is complete;
-  everything after needs the user's go per command.
+- Build, verify and readback pass with a recorded empty unresolved set: the offline part is
+  complete; everything after needs the user's go per command. A clean `ok: true` without that
+  recorded set is not offline verified for a port.
 
 ## Report
 
-State separately: **offline verified** (build and verify receipts, package hash, the empty
-unresolved set, every per-kind equality check); the foundation and map; each asset marked
+State separately: **offline verified** (build and verify receipts, package hash, the `referenced`
+minus provided set recorded as empty, every per-kind equality check); the foundation and map; each asset marked
 retained, adapted (native substitute, baked charge clip, dropped sleeve bones) or unsupported;
 **installed**, **launched**, **loaded**, **playable** as observed with the log lines and the
 screenshot named; and what stays unverified until a person plays it (sound and animation

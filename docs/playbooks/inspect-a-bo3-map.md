@@ -12,11 +12,16 @@ contract that cannot change it. Formats: `docs/knowledge/bo3-workshop-formats.md
   subscription. Nothing here downloads, logs in or bypasses anything (`find-prior-art.md`
   step 5 governs acquisition).
 - Linux host with Python 3.11+, the community script decompiler the toolkit pins as its `gsc`
-  backend (`pat dev setup --only gsc --json`), and a scratch directory outside any source tree
-  for everything recovered.
+  backend (`pat dev setup --only gsc --json` installs it; `pat doctor --json` prints its path),
+  and a scratch directory outside any source tree for everything recovered. `pat gsc decompile`
+  itself is a T6 route and does not take a game flag, so step 3 runs the pinned binary directly
+  with the T7 flags and records the exact command; a `pat gsc` T7 mode is not a route today.
 - For the capture step only: the user runs BO3 under Proton themselves, has the map loaded to
   the point where the asset is in use, and has said this specific read may happen. No launch,
-  no map change and no input is sent by the agent; the game is the user's.
+  no map change and no input is sent by the agent; the game is the user's. The host's ptrace
+  attach check must already allow a same-user read of `/proc/<pid>/mem` (Yama `ptrace_scope` 0
+  or 1); if it does not, the capture is unavailable on this host and that is reported, never
+  worked around by changing the scope or the process.
 - The private nature of the result is understood: everything recovered is study material on
   the user's machine, not a payload to publish.
 
@@ -30,9 +35,12 @@ contract that cannot change it. Formats: `docs/knowledge/bo3-workshop-formats.md
    lengths and zlib end, and carve the compiled scripts by their serialized record pattern.
    Proof: a recovery manifest with the zone's size and hash, the block count, and one row per
    recovered script (name, kind, size, hash).
-3. Decompile the recovered scripts with the pinned `gsc` backend in T7 decompile mode. Proof:
-   the decompiled tree, plus the list of scripts that failed and their errors; a few failures
-   on map-specific scripts are normal and are recorded, not hidden.
+3. Decompile the recovered scripts by running the pinned `gsc` binary directly in T7 decompile
+   mode (the same program `pat gsc` drives for T6: `<gsc-tool> -m decomp -g t7 -s pc <file>`),
+   one file per invocation, into the scratch directory. Proof: the decompiled tree, the exact
+   command line and the binary's SHA-256 recorded in the recovery manifest, plus the list of
+   scripts that failed and their errors; a few failures on map-specific scripts are normal and
+   are recorded, not hidden.
 4. Read the roster from the zone and the language fastfile without decoding assets: weapon
    names, perk specialties, FX paths, rawfiles, localized strings, sound alias names. Proof:
    a `roster.json` with the counts and the lists.
