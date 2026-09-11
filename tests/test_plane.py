@@ -3,6 +3,7 @@
 import http.client
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -533,6 +534,68 @@ class PlaneServerTests(PlaneServerFixture):
         self.assertEqual(row["payload"], "seed")
         self.assertFalse(row["package_present"])
         self.assertEqual(row["distribution"], "private")
+
+
+class StyleTests(unittest.TestCase):
+    """The page's colours, checked from the stylesheet so no browser is needed.
+
+    The first version drew every badge as a tint at 13% alpha over whatever the browser painted
+    and gave the page no background of its own. On a dark scheme those tints read; on a light one
+    a result, a warning and a failure all came out as near-identical pale boxes, which is the
+    colour carrying no meaning at all.
+    """
+
+    CSS = ROOT / "src" / "plutonium_agent_toolkit" / "plane" / "static" / "plane.css"
+    # (foreground, background, the ratio the pair must reach). 4.5 is WCAG AA for normal text.
+    PAIRS = (("fg", "bg", 7.0), ("fg", "panel", 7.0), ("field-fg", "field-bg", 7.0),
+             ("muted", "bg", 4.5), ("muted", "panel", 4.5), ("chip-fg", "chip-bg", 4.5),
+             ("ok-fg", "ok-bg", 4.5), ("bad-fg", "bad-bg", 4.5), ("warn-fg", "warn-bg", 4.5))
+
+    @staticmethod
+    def _luminance(value: str) -> float:
+        channels = [int(value[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+        channels = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in channels]
+        return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+
+    @classmethod
+    def _ratio(cls, one: str, other: str) -> float:
+        high, low = sorted((cls._luminance(one), cls._luminance(other)), reverse=True)
+        return (high + 0.05) / (low + 0.05)
+
+    def _schemes(self) -> dict[str, dict[str, str]]:
+        text = self.CSS.read_text(encoding="utf-8")
+        base, _, rest = text.partition("@media (prefers-color-scheme: dark)")
+        self.assertTrue(rest, "the stylesheet defines a dark scheme as well as a light one")
+        find = lambda part: dict(re.findall(r"--([a-z-]+):\s*(#[0-9a-f]{6})\b", part))  # noqa: E731
+        return {"light": find(base), "dark": find(rest)}
+
+    def test_every_palette_pair_is_readable_in_both_schemes(self):
+        for scheme, palette in self._schemes().items():
+            for foreground, background, least in self.PAIRS:
+                self.assertIn(foreground, palette, f"{scheme}: {foreground} is not defined")
+                self.assertIn(background, palette, f"{scheme}: {background} is not defined")
+                ratio = self._ratio(palette[foreground], palette[background])
+                self.assertGreaterEqual(round(ratio, 2), least,
+                                        f"{scheme}: {foreground} on {background} is {ratio:.2f}:1, under {least}:1")
+
+    def test_meaning_is_never_carried_by_transparency(self):
+        # A colour with an alpha channel, or faded text, depends on whatever is behind it; the one
+        # exception each way is a dialog's backdrop and a disabled control, neither of which
+        # carries information a reader needs.
+        for number, line in enumerate(self.CSS.read_text(encoding="utf-8").splitlines(), 1):
+            code = line.split("/*")[0]
+            if re.search(r"#[0-9a-f]{4}\b|#[0-9a-f]{8}\b", code):
+                self.fail(f"plane.css:{number}: a colour with an alpha channel: {line.strip()}")
+            if "rgba(" in code and "backdrop" not in code:
+                self.fail(f"plane.css:{number}: rgba outside the dialog backdrop: {line.strip()}")
+            if re.search(r"\bopacity:", code) and ":disabled" not in code:
+                self.fail(f"plane.css:{number}: faded text; give it a colour instead: {line.strip()}")
+
+    def test_the_page_asks_for_both_schemes_and_paints_its_own_background(self):
+        text = self.CSS.read_text(encoding="utf-8")
+        self.assertIn("color-scheme: light dark", text)
+        self.assertRegex(text, r"body\s*\{[^}]*background: var\(--bg\)[^}]*color: var\(--fg\)",
+                         "the page paints its own background and text, never the user agent's")
 
 
 class ConnectionBoundTests(PlaneServerFixture):

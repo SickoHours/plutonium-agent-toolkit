@@ -24,6 +24,15 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Fixed
 
+- **The control plane's status colours barely showed on a light background.** Every badge was a
+  tint at 13% alpha over whatever the browser happened to paint, so on a light scheme the
+  difference between a result, a warning and a failure came out as three near-identical pale
+  boxes, and the page relied on the user agent for its own background and text. The stylesheet
+  now carries an explicit palette per colour scheme, every foreground and background pair at
+  WCAG AA or better (body text 7:1 or above, badges and secondary text 4.5:1 or above), the page
+  paints its own surfaces, and nothing that carries meaning is drawn with opacity or an alpha
+  channel. `tests/test_plane.py` computes the ratios from the stylesheet, so a regression fails
+  without a browser.
 - **Control plane: the over-capacity 503 reaches the client on Windows.** Past the connection
   bound the server sent a 503 and closed the socket while the request bytes were still unread,
   which makes the kernel reset the connection; on Windows the client saw the connection aborted
