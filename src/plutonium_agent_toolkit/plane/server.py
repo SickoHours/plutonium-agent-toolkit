@@ -418,7 +418,10 @@ class Plane:
             finally:
                 with self.lock:
                     self.active = None
+                    # Taken, not read: the set holds a run only between the stop and this record, so
+                    # a server that runs for weeks does not grow one entry per cancelled action.
                     stopped = self.stopping or run["run_id"] in self.stopped_runs
+                    self.stopped_runs.discard(run["run_id"])
                 _close_job(job)  # on Windows this also ends anything the child left behind
             if overflow:
                 _stop_process(process, STOP_GRACE, None)

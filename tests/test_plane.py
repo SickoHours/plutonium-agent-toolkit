@@ -645,6 +645,25 @@ class ShutdownTests(unittest.TestCase):
             self.assertEqual(ctx.exception.code, "busy")
             plane.job_lock.release()
 
+    def test_stopping_one_run_records_it_and_leaves_the_plane_open(self):
+        # The MCP bridge stops a single run when a client withdraws its request: that run's record
+        # must say stopped, the next run must still start, and the id must not be kept afterwards
+        # (review finding: the set grew by one per cancelled action for the life of the server).
+        with tempfile.TemporaryDirectory() as temp:
+            plane = server_module.Plane([], Path(temp) / "jobs")
+            self.addCleanup(plane.shutdown)
+            run = plane.start("manifest", {}, False)
+            self.assertTrue(plane.stop_run(run["run_id"], grace=5))
+            record = next(r for r in plane.run_rows() if r["run_id"] == run["run_id"])
+            self.assertIn(record["status"], ("stopped", "finished"))   # a fast child may beat the stop
+            self.assertEqual(plane.stopped_runs, set(), "the id was taken by the record, not kept")
+            self.assertFalse(plane.stopping, "stopping one run does not close the plane")
+            self.assertFalse(plane.stop_run("a-run-that-is-not-active"), "nothing to stop, nothing recorded")
+            self.assertEqual(plane.stopped_runs, set())
+            second = plane.start("manifest", {}, False)               # the plane still accepts work
+            self.assertTrue(plane.settled.wait(60))
+            self.assertNotEqual(second["run_id"], run["run_id"])
+
     def test_a_job_handle_is_terminated_once_however_many_threads_reach_for_it(self):
         # Regression: the thread running a child and the shutdown stopping it both closed the same
         # Windows Job Object handle. The second close destroyed whatever object had taken the
