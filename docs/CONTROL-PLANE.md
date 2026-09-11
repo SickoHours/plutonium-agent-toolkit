@@ -92,6 +92,13 @@ that could not start a child (`stderr_head`), or exceeded the action's deadline 
 timeout`), is recorded the same way. The plane's own summary at exit counts runs and says
 `game_touched: false`, because it touched nothing itself.
 
+## The same actions without a browser
+
+`pat mcp serve` speaks Model Context Protocol on stdin and stdout over this same runtime, so a
+harness that loads MCP servers gets every action here as a native tool with a generated JSON
+Schema. Same validation, same child processes, same receipts, same confirmation gate.
+`docs/MCP.md`.
+
 ## Not here
 
 - No live event stream: the page polls a run until it finishes.

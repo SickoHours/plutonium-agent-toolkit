@@ -9,6 +9,18 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Added
 
+- **The routes as MCP tools in any harness.** `pat mcp serve --library <dir> --jobs <dir>` speaks
+  Model Context Protocol on stdin and stdout, exposing the control plane's typed actions as tools
+  with JSON Schemas generated from their parameters, plus two local reads (`library`, `runs`). It is
+  the plane's second transport, not a second runtime: the same validation by kind, the same
+  structured `{"root", "path"}` for every path, the same refusal of an action this host cannot run,
+  the same `confirmed: true` gate on a state-changing action, the same one-at-a-time `pat` child
+  with its own receipt under the jobs directory. There is no tool that takes argv, a shell string or
+  an absolute path. `pat mcp tools --json` prints the definitions and serves nothing. stdout carries
+  only the protocol (everything else goes to stderr) and the invocation's own JSON document is the
+  last line after the client disconnects. New effect `serves-stdio`; `docs/MCP.md` has the harness
+  configuration, the tool table and the stdio contract.
+
 - **Black Ops III Workshop maps as donors.** `docs/knowledge/bo3-workshop-formats.md` records
   what a Workshop item's fastfile, XPAK and sound banks are and how much of each reads offline on
   Linux (an unencrypted fastfile's scripts, asset names and strings; the XPAK index; bank name

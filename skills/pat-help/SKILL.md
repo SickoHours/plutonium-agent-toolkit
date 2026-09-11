@@ -41,6 +41,9 @@ verified, installed, launched, playable, captured, accepted. Words are defined i
 - **The user names a feature and no donor is on disk**: `docs/playbooks/find-prior-art.md`
   before `pat-grill`. Someone has usually ported or extracted it for some game; a lead found,
   fetched, hashed and inspected is a donor, and a search not run is a port built from nothing.
+- **The user wants these routes inside their own agent** ("can my editor call this directly"):
+  `pat mcp serve --library <dir> --jobs <dir>` is an MCP server over the same typed actions as the
+  control plane; `pat mcp tools --json` shows what it would expose. `docs/MCP.md`.
 - **Hand a task to a T3 Code thread** (a GUI button, a scheduled job, another agent's plan):
   `pat agent models` for the instances, models and reasoning choices this machine offers, then
   `pat agent dispatch` with the playbook and target in the prompt and the user's chosen model;

@@ -42,6 +42,7 @@ See [AGENTS.md](AGENTS.md) and [docs/FOR-AGENTS.md](docs/FOR-AGENTS.md).
 | --- | --- | --- |
 | Development (Windows, Linux) | `dev`, `gsc`, `ff`, `project`, `module`, `model`, `audio`, `image`, `lua`, `weapon` | Scripts, fastfiles, models, media, saved-asset recipes and compositions of declared modules through pinned upstream backends. Verified on Windows 11 and Arch Linux (Omarchy); macOS untested |
 | Built-ins (Windows, Linux) | `dev builtin`, `registry` | The modules and packs the release ships, listed by the toolkit's own registry and fetched onto the machine at their pinned commits with receipts; every registry on the machine carries its origin, built-in or added. [docs/REGISTRY.md](docs/REGISTRY.md) |
+| Any harness, natively (Windows, Linux) | `mcp` | The same typed actions as Model Context Protocol tools on stdin and stdout, with generated JSON Schemas, for a harness that loads MCP servers. [docs/MCP.md](docs/MCP.md) |
 | Agent hosts (Windows, Linux) | `agent` | Hand a prompt to a running T3 Code server as a new thread with the caller's model and reasoning choice; read the thread back. Orchestration protocol 1 (nightly and stable); V2 hosts are detected and refused. [docs/AGENT-HOSTS.md](docs/AGENT-HOSTS.md) |
 | Game control (Windows) | `game` | Launch T6 Zombies, select mods, load maps, verify loads through the external Win32 console. Native Windows only |
 | Testing | `capture`, `test` | **Deferred to a later release.** Contracts registered; routes refuse with `not_implemented` |

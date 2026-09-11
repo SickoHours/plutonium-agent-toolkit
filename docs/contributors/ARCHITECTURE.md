@@ -10,6 +10,8 @@ pat <group> <action> [options]
         ├── game/        status · info · launch · select-mod · load-map · reload-mod · check-load · mods · quit
         ├── agent/       probe · hosts · models · dispatch · status · send · interrupt (T3 Code as an agent host)
         ├── plane/       actions · serve (a loopback page whose every control is one of the routes above)
+        ├── plane/       actions (the typed table) · server (loopback page) · cli
+        ├── mcp/         server (Model Context Protocol over stdio, the same actions) · cli
         └── testing/     capture start/status/screenshot/mark/save-clip/stop · test plan/start/status/cancel/report
 ```
 
