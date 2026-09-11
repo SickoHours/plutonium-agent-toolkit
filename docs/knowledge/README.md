@@ -18,6 +18,10 @@ uses are defined once in [`../../CONTEXT.md`](../../CONTEXT.md); read it before 
 | [other-titles.md](other-titles.md) | Someone asks about Black Ops 1, World at War or Modern Warfare 3 |
 | [prior-art.md](prior-art.md) | You were asked for a feature and no donor or source is on disk |
 | [bo3-workshop-formats.md](bo3-workshop-formats.md) | A Black Ops III Workshop map is the donor: what its fastfile, XPAK and sound banks are and how much reads offline on Linux |
+| [weapon-camo.md](weapon-camo.md) | You port a Pack-a-Punch camo, or a ported gun renders the wrong camo |
+| [weapon-aim.md](weapon-aim.md) | A ported gun aims wrong: blurry when aiming, no zoom, or sights that do not line up |
+| [weapon-attachments.md](weapon-attachments.md) | A ported BO3 weapon has no iron sight picture, or carries a sight or optic |
+| [bo3-sab-audio.md](bo3-sab-audio.md) | You recover a BO3 donor weapon's sounds offline, or rebuild its alias rows |
 | [engine-limits.md](engine-limits.md) | A build compiled and linked but the engine rejected it at load; you are about to design to a number |
 
 Every fact here was learned on a real T6 Zombies install with real ports. Where a number is a
