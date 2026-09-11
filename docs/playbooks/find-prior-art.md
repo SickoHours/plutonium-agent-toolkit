@@ -11,8 +11,9 @@ Where ports usually live, by origin and container: `docs/knowledge/prior-art.md`
 - The request names the thing (a weapon, item, character, behaviour, HUD element) and its origin
   title, or enough to identify both. Settle the other decisions in a `pat-grill` round after this
   playbook, not before it: the leads change the answers.
-- No donor is on disk for it. If one is (a `pat weapon catalog` receipt, a fastfile, an extracted
-  folder the user points at), skip to `port-a-feature.md`.
+- No donor is on disk for it. If one is (a `pat weapon catalog` receipt together with the
+  `--capture` manifest and captured pages it inventoried, a fastfile, an extracted folder the
+  user points at), skip to `port-a-feature.md`. A receipt whose bytes are gone is not a donor.
 - Your harness can fetch web pages, or you will say that it cannot and hand the search brief to
   the user at step 1. A search you cannot run is reported, never invented.
 

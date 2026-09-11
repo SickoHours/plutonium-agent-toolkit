@@ -28,7 +28,7 @@ verified, installed, launched, playable, captured, accepted. Words are defined i
 
 - **The user names a feature and no donor is on disk**: `docs/playbooks/find-prior-art.md`
   before `pat-grill`. Someone has usually ported or extracted it for some game; a lead found,
-  fetched and hashed is a donor, and a search not run is a port built from nothing.
+  fetched, hashed and inspected is a donor, and a search not run is a port built from nothing.
 - **Something broke in the game** (menu return, close, dialog): **`pat-diagnose`**. It builds a
   red loop before theorising and ends by adding the gate that would have caught it.
 - **First time on this machine**: `docs/playbooks/first-build.md`, then the setup prompt in the
