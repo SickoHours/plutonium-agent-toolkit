@@ -59,7 +59,9 @@ class BaselineFixture(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        # Resolved, because the route resolves the scan root and walks from it: on a Windows runner
+        # the temp directory is an 8.3 short name and the entries the route sees are the long form.
+        self.root = Path(self.temp.name).resolve()
         self.saved = os.environ.get("PAT_HOME")
         os.environ["PAT_HOME"] = str(self.root / "home")
         self.addCleanup(self._restore)
@@ -104,13 +106,17 @@ class BaselineFixture(unittest.TestCase):
         "not a link"; every other entry is real. This is the race the open-side checks exist for: the
         directory listing saw a regular file, and what is on disk by the time it is opened differs."""
         real_lstat, real_is_link = baseline._lstat, baseline._is_link
+        wanted = os.path.normcase(str(target))
+
+        def is_target(entry):
+            return os.path.normcase(str(entry)) == wanted
 
         def fake_lstat(entry):
             st = real_lstat(entry)
-            return replacement(st) if entry == target else st
+            return replacement(st) if is_target(entry) else st
 
         def fake_is_link(entry):
-            return False if entry == target else real_is_link(entry)
+            return False if is_target(entry) else real_is_link(entry)
         stack = contextlib.ExitStack()
         stack.enter_context(mock.patch.object(baseline, "_lstat", side_effect=fake_lstat))
         stack.enter_context(mock.patch.object(baseline, "_is_link", side_effect=fake_is_link))
@@ -546,8 +552,8 @@ class IncompleteAndBoundsTests(BaselineFixture):
         with mock.patch.object(baseline, "MAX_BYTES", 4096), self.listing_of(directory / "grow.bin", lambda st: stat_with(st, st_size=10)):
             code, row = self.scan(directory)
         self.assertEqual(code, 1, row)
-        self.assertEqual(row["error_code"], "input_limit")
-        self.assertIn("grew", row["hint"])
+        self.assertEqual(row["error_code"], "input_limit", row)
+        self.assertIn("grew", row.get("hint", ""), "the read-time bound, not the listing-time one, must have refused")
         self.assertFalse((Path(row["receipt"]).parent / "baseline.json").exists(), "nothing was judged")
 
     def test_same_tree_scanned_twice_yields_identical_reports(self):

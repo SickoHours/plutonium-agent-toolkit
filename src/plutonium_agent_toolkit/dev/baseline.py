@@ -487,7 +487,9 @@ def _read(path: Path, info: os.stat_result, budget: int) -> tuple[str, bytes, in
         opened = os.fstat(fd)
         if not stat.S_ISREG(opened.st_mode):
             raise Replaced(None, "not a regular file when opened")
-        if os.name != "nt" and (opened.st_ino, opened.st_dev) != (info.st_ino, info.st_dev):
+        # Identity check on POSIX only: Windows lstat and fstat do not agree on st_ino/st_dev for one
+        # file, and a filesystem that reports inode 0 has no identity to compare.
+        if os.name != "nt" and info.st_ino and (opened.st_ino, opened.st_dev) != (info.st_ino, info.st_dev):
             raise Replaced(None, "replaced between listing and reading")
     except BaseException:
         os.close(fd)
