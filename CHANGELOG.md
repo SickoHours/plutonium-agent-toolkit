@@ -24,6 +24,13 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Fixed
 
+- **Control plane: the over-capacity 503 reaches the client on Windows.** Past the connection
+  bound the server sent a 503 and closed the socket while the request bytes were still unread,
+  which makes the kernel reset the connection; on Windows the client saw the connection aborted
+  instead of the reply (the unit test for this bound failed intermittently on the Windows
+  runners). The server now answers at once and hands the orderly close (stop sending, drain under a
+  total deadline, close) to a short-lived thread, so neither the accept loop nor a worker waits on
+  an over-capacity client.
 - **`provides.rawfiles` is a declared kind.** `module declare` writes a `rawfiles` list into a seed
   manifest for every rawfile the package embeds, and `module plan` merges it into the module's
   provides, but `docs/MODULES.md` and the declaration validator did not know the kind, so a
