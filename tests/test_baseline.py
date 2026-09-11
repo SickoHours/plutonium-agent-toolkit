@@ -1035,6 +1035,56 @@ class IncompleteAndBoundsTests(BaselineFixture):
         code, removed = self.scan(directory)
         self.assertEqual(removed["result"]["tree_sha256"], first["result"]["tree_sha256"])
 
+    def test_an_ancestor_swapped_for_a_link_before_the_receipt_is_refused_before_any_byte_is_read(self):
+        # scripts/ is swapped for a link to an outside directory holding a same-named file with other
+        # bytes. The receipt re-hashes every recorded file relative to its recorded ancestors, opened
+        # without following links, so the swap is refused at the directory and the outside file is
+        # never opened: no by-name hash of it, no open naming it after the swap.
+        if os.name == "nt":
+            self.skipTest("descriptor-relative opens are POSIX")
+        from plutonium_agent_toolkit.core import jobs
+
+        directory = self.module()
+        outside = self.root / "outside-scripts"
+        outside.mkdir()
+        (outside / "round_announcer.gsc").write_text("main()\n{\n    replaceFunc( level.x, ::y );\n}\n")
+        real = baseline.execute
+        swapped = [False]
+        opened_after_swap = []
+        real_open = os.open
+
+        def spy_open(path, flags, mode=0o777, *args, **kwargs):
+            if swapped[0]:
+                opened_after_swap.append(os.fspath(path))
+            return real_open(path, flags, mode, *args, **kwargs)
+
+        def scan_then_swap(args, job):
+            result = real(args, job)
+            (directory / "scripts" / "round_announcer.gsc").unlink()
+            (directory / "scripts").rmdir()
+            os.symlink(outside, directory / "scripts")
+            swapped[0] = True
+            return result
+        with mock.patch.object(baseline, "execute", side_effect=scan_then_swap), \
+                mock.patch.object(jobs, "sha256_file", wraps=jobs.sha256_file) as by_name, \
+                mock.patch.object(os, "open", side_effect=spy_open):
+            code, row = self.scan(directory)
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "input_changed")
+        self.assertIn("Directory changed", row["message"])
+        self.assertEqual([c.args[0] for c in by_name.call_args_list if "round_announcer" in str(c.args[0])], [],
+                         "a recorded file is never re-hashed by name")
+        self.assertEqual([p for p in opened_after_swap if str(p).endswith("round_announcer.gsc") or str(outside) in str(p)], [],
+                         "nothing under the swapped directory was opened")
+        # The by-name path Windows uses re-checks every recorded ancestor first and refuses the link too.
+        with mock.patch.object(baseline, "execute", side_effect=scan_then_swap), mock.patch.object(jobs, "DESCRIPTOR_LISTINGS", False):
+            os.unlink(directory / "scripts")
+            (directory / "scripts").mkdir()
+            (directory / "scripts" / "round_announcer.gsc").write_text("main()\n{\n}\n")
+            code, row = self.scan(directory)
+        self.assertEqual(row["error_code"], "input_changed")
+        self.assertIn("no longer a directory", row["message"])
+
     def test_entries_of_every_kind_count_against_the_file_bound_before_sorting(self):
         # Links are never read, but a directory of them is still listed entry by entry; the bound
         # applies while listing, so a huge directory is refused before it is materialized.

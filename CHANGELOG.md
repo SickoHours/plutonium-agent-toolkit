@@ -118,7 +118,9 @@ Every entry states what shipped, on which platform it was verified, and what rem
   against the tree bound as they are read and directory entries of every kind against the file
   bound as they are listed, the directory given must not be a link, every file read and every
   directory listing (names and kinds) is an input of the job, re-hashed and re-listed at the
-  receipt through no-follow descriptors whose identity must match the walk on POSIX (a change,
+  receipt through no-follow descriptors whose identity must match the walk on POSIX, each file
+  opened relative to its recorded ancestors so no swapped ancestor can redirect the re-hash
+  outside the tree (a change,
   an addition, an entry swapped for a link of the same name or a directory replaced by a link
   to a look-alike after the scan is `input_changed`), the deadline is
   checked between chunks of every read, and file names that are not UTF-8 are hashed as bytes
@@ -126,7 +128,7 @@ Every entry states what shipped, on which platform it was verified, and what rem
   declaration nested past the parser or past 64 levels is a `declaration-mismatch`, never
   `operation_failed`; so is a declaration that is not UTF-8 or carries `1e9999` or `NaN`. A link
   named `.git` blocks like any link; the root is opened without following links after its
-  by-name check. Verified by 51 unit tests on synthetic trees on Linux; CI runs them on
+  by-name check. Verified by 52 unit tests on synthetic trees on Linux; CI runs them on
   Windows.
 - **Registries and fetch by name.** `docs/REGISTRY.md` specifies `registry.json`: a file anyone can
   host that lists module and composition repositories at exact commits and holds no bytes; entries

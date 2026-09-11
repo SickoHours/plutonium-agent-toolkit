@@ -21,7 +21,7 @@ from pathlib import Path
 from .envelope import now
 from .errors import (BACKEND_FAILED, BACKEND_TIMEOUT, BACKEND_UNAVAILABLE, CANCELLED, INPUT_CHANGED,
                      INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, OUTPUT_LIMIT, Failure)
-from .receipts import MAX_FILES, inventory, new_output_dir, sha256_file
+from .receipts import FILE_FLAGS, MAX_FILES, inventory, new_output_dir, sha256_descriptor, sha256_file
 
 MAX_LOG = 4 * 1024 * 1024
 MAX_OUTPUT = 8 * 1024**3
@@ -270,14 +270,83 @@ class Job:
                 raise Failure(OUTPUT_LIMIT, "Backend exceeded the output file count or size bound")
 
     # ----- completion --------------------------------------------------------------
+    def _recorded_ancestors(self, parent: str) -> list[Path]:
+        """The recorded directories from the topmost recorded ancestor of ``parent`` down to
+        ``parent`` itself; empty when ``parent`` was never recorded."""
+        chain = []
+        path = Path(parent)
+        while str(path) in self.listings:
+            chain.append(path)
+            if path.parent == path:
+                break
+            path = path.parent
+        chain.reverse()
+        return chain
+
+    def _identity_ok(self, key: str, opened: os.stat_result) -> None:
+        if not stat.S_ISDIR(opened.st_mode):
+            raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {key} is no longer a directory")
+        identity = self._listing_identity.get(key)
+        if identity is not None and identity[1] and (opened.st_dev, opened.st_ino) != identity:
+            raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {key} was replaced")
+
+    def _open_chain(self, chain: list[Path]) -> list[int]:
+        """Descriptors for the recorded ancestors, the first opened by name and each next relative
+        to the previous, none following links, each a directory with the identity recorded when it
+        was walked. The caller closes every descriptor returned."""
+        fds: list[int] = []
+        try:
+            for i, directory in enumerate(chain):
+                fd = os.open(directory, DIR_FLAGS) if i == 0 else os.open(directory.name, DIR_FLAGS, dir_fd=fds[-1])
+                fds.append(fd)
+                self._identity_ok(str(directory), os.fstat(fd))
+        except OSError as exc:
+            for fd in fds:
+                os.close(fd)
+            raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {chain[len(fds)]} ({exc.strerror or exc})") from exc
+        except Failure:
+            for fd in fds:
+                os.close(fd)
+            raise
+        return fds
+
+    def _rehash(self, key: str) -> str:
+        """The current hash of a recorded input. A file whose parent directory is a recorded
+        listing is opened relative to its recorded ancestors (``_open_chain``), so no ancestor can
+        redirect the open outside the tree and every ancestor is checked before a byte is read;
+        an input declared by name alone (``input``) is re-hashed by name, its final component
+        never followed as a link. Windows has no descriptor-relative opens: every recorded ancestor
+        is re-checked by name for links immediately before the open, and the moment between that
+        check and the open is the window it leaves."""
+        path = Path(key)
+        chain = self._recorded_ancestors(str(path.parent))
+        try:
+            if not chain:
+                return sha256_file(path)
+            if not DESCRIPTOR_LISTINGS:
+                for directory in chain:
+                    if entry_kind(os.lstat(directory)) != "dir":
+                        raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {directory} is no longer a directory")
+                return sha256_file(path)
+            fds = self._open_chain(chain)
+            try:
+                try:
+                    fd = os.open(path.name, FILE_FLAGS, dir_fd=fds[-1])
+                except OSError as exc:
+                    raise Failure(INPUT_CHANGED, f"Input changed while the job ran: {key} ({exc.strerror or exc})") from exc
+                return sha256_descriptor(fd, key)
+            finally:
+                for fd in fds:
+                    os.close(fd)
+        except Failure as exc:
+            if exc.code == INPUT_CHANGED:
+                raise
+            raise Failure(INPUT_CHANGED, f"Input changed while the job ran: {key} ({exc.message})") from exc
+
     def finish(self, result: dict) -> dict:
         self.check_deadline()
         for key, digest in self.inputs.items():
-            try:
-                current = sha256_file(Path(key))
-            except Failure as exc:
-                raise Failure(INPUT_CHANGED, f"Input changed while the job ran: {key} ({exc.message})") from exc
-            if current != digest:
+            if self._rehash(key) != digest:
                 raise Failure(INPUT_CHANGED, f"Input changed while the job ran: {key}")
         for key, digest in self.listings.items():
             try:

@@ -162,9 +162,10 @@ replaced under the scan (by a link, a pipe, another file, or a swapped ancestor 
 input of the job: the receipt lists their hashes (`inputs`, `input_listings`; a listing is every
 entry's name and kind) and the job re-hashes and re-lists them before succeeding, through
 no-follow, non-blocking descriptors whose identity must match what the scan walked on POSIX,
-so a file changed, added, removed or swapped for a link or a pipe of the same name after the
-scan, or a directory replaced by a link to a look-alike, is `input_changed`, never a report for
-an older tree. The job deadline (`--timeout`) is checked
+each file opened relative to its recorded ancestors so a swapped ancestor is refused before a
+byte is read, so a file changed, added, removed or swapped for a link or a pipe of the same
+name after the scan, or a directory replaced by a link to a look-alike, is `input_changed`,
+never a report for an older tree. The job deadline (`--timeout`) is checked
 between chunks of every read. File names that are not UTF-8 are hashed as their bytes and
 shown with backslash escapes. The result and
 `baseline.json` carry `policy_version`, `enforcement`, `outcome`, the three row lists,
