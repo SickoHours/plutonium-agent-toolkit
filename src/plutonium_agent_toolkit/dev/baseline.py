@@ -53,9 +53,9 @@ read, so a file that grows after the listing cannot push the tree past ``MAX_BYT
 (``input_limit``); directory entries of every kind count against the file bound as they are
 listed, before anything is sorted or read. The directory to scan must itself be a real
 directory, not a link. Every file that was read and every directory listing is an input of the
-job: the receipt lists their hashes and the job re-hashes and re-lists them before it succeeds,
-so a file changed or added after the scan fails the job (``input_changed``) instead of leaving
-a report for an older tree. The job deadline is checked between 1 MiB chunks of every read; a
+job: the receipt lists their hashes and the job re-hashes and re-lists them (names and kinds)
+before it succeeds, so a file changed, added, removed or swapped for another kind after the
+scan fails the job (``input_changed``) instead of leaving a report for an older tree. The job deadline is checked between 1 MiB chunks of every read; a
 filesystem that never returns from a read cannot be interrupted from Python. File names that
 are not valid UTF-8 are hashed as their raw bytes and shown with backslash escapes.
 """
@@ -70,7 +70,7 @@ from bisect import bisect_right
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from ..core.errors import INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, Failure
-from ..core.jobs import Job
+from ..core.jobs import Job, entry_kind
 
 POLICY_VERSION = "1"
 ENFORCEMENT = "selective"
@@ -653,8 +653,13 @@ class Scan:
             self.unreadable.append({"path": _display("/".join(parts)) or ".", "reason": exc.strerror or str(exc)})
             return
         entries.sort(key=lambda e: e.name)
-        # The listing is an input of the job: a file added after the scan fails the job at finish.
-        self.job.record_listing(self.root.joinpath(*parts), [e.name for e in entries])
+        # The listing, names and kinds, is an input of the job: an entry added, removed or swapped
+        # for another kind under the same name after the scan fails the job at finish.
+        try:
+            self.job.record_listing(self.root.joinpath(*parts), [(e.name, entry_kind(e.stat(follow_symlinks=False))) for e in entries])
+        except OSError as exc:
+            self.unreadable.append({"path": _display("/".join(parts)) or ".", "reason": exc.strerror or str(exc)})
+            return
         for entry in entries:
             here = parts + (entry.name,)
             rel = _display("/".join(here))

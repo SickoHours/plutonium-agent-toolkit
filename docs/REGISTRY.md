@@ -150,8 +150,9 @@ be the regular file or directory the listing saw; Windows has no descriptor-rela
 every path component is re-checked for reparse points by name just before each open. An entry
 replaced under the scan (by a link, a pipe, another file, or a swapped ancestor directory) is
 `unreadable` and the outcome `incomplete`. Every file read and every directory listing is an
-input of the job: the receipt lists their hashes (`inputs`, `input_listings`) and the job
-re-hashes and re-lists them before succeeding, so a file changed or added after the scan is
+input of the job: the receipt lists their hashes (`inputs`, `input_listings`; a listing is every
+entry's name and kind) and the job re-hashes and re-lists them before succeeding, so a file
+changed, added, removed or swapped for a link of the same name after the scan is
 `input_changed`, never a report for an older tree. The job deadline (`--timeout`) is checked
 between chunks of every read. File names that are not UTF-8 are hashed as their bytes and
 shown with backslash escapes. The result and

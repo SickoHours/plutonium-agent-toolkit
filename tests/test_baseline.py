@@ -756,6 +756,46 @@ class IncompleteAndBoundsTests(BaselineFixture):
         receipt = json.loads(Path(row["result"]["receipt"]).read_text(encoding="utf-8"))
         self.assertEqual(len(receipt["input_listings"]), 2)
 
+    def test_a_scanned_directory_swapped_for_a_link_of_the_same_name_fails_the_job(self):
+        # The listing records each entry's kind beside its name: scripts/ replaced by a link to a
+        # directory holding an identical script (every file hash still matches) is input_changed at
+        # finish, never a passed report whose bytes came through a link nobody scanned.
+        try:
+            os.symlink(self.root, self.root / "probe")
+        except (OSError, NotImplementedError):
+            self.skipTest("this host cannot create links")
+        directory = self.module()
+        elsewhere = self.root / "elsewhere"
+        elsewhere.mkdir()
+        (elsewhere / "round_announcer.gsc").write_bytes((directory / "scripts" / "round_announcer.gsc").read_bytes())
+        real = baseline.execute
+
+        def scan_then_swap(args, job):
+            result = real(args, job)
+            (directory / "scripts" / "round_announcer.gsc").unlink()
+            (directory / "scripts").rmdir()
+            os.symlink(elsewhere, directory / "scripts")
+            return result
+        with mock.patch.object(baseline, "execute", side_effect=scan_then_swap):
+            code, row = self.scan(directory)
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "input_changed")
+        self.assertIn("Directory changed", row["message"])
+        # A scanned file swapped for a link to identical bytes is caught the same way.
+        os.unlink(directory / "scripts")
+        (directory / "scripts").mkdir()
+        (directory / "scripts" / "round_announcer.gsc").write_bytes((elsewhere / "round_announcer.gsc").read_bytes())
+
+        def scan_then_link_file(args, job):
+            result = real(args, job)
+            (directory / "scripts" / "round_announcer.gsc").unlink()
+            os.symlink(elsewhere / "round_announcer.gsc", directory / "scripts" / "round_announcer.gsc")
+            return result
+        with mock.patch.object(baseline, "execute", side_effect=scan_then_link_file):
+            code, row = self.scan(directory)
+        self.assertEqual(code, 1, row)
+        self.assertIn(row["error_code"], ("input_changed", "input_missing"), "a linked input is never re-hashed as the original")
+
     def test_entries_of_every_kind_count_against_the_file_bound_before_sorting(self):
         # Links are never read, but a directory of them is still listed entry by entry; the bound
         # applies while listing, so a huge directory is refused before it is materialized.

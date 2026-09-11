@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import stat
 import subprocess
 import sys
 import time
@@ -30,12 +31,35 @@ MAX_TREES = 64
 CHILD_LAUNCH_FAILED = 127  # returned by _child.py when the backend itself cannot start
 
 
-def listing_digest(names) -> str:
-    """One hash for a directory's entry names, order-independent, raw bytes so any name works."""
+REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+
+
+def entry_kind(st) -> str:
+    """What a directory entry is from its own ``lstat``: ``link`` (a symbolic link on any OS or a
+    Windows reparse point), ``dir``, ``file`` or ``other``. Recorded beside the name so an entry
+    swapped for another kind under the same name is a change."""
+    if stat.S_ISLNK(st.st_mode) or ((getattr(st, "st_file_attributes", 0) or 0) & REPARSE_POINT):
+        return "link"
+    if stat.S_ISDIR(st.st_mode):
+        return "dir"
+    if stat.S_ISREG(st.st_mode):
+        return "file"
+    return "other"
+
+
+def listing_digest(entries) -> str:
+    """One hash for a directory's entries as ``(name, kind)`` pairs, order-independent, raw name
+    bytes so any name works."""
     h = hashlib.sha256()
-    for name in sorted(os.fsencode(n) for n in names):
-        h.update(len(name).to_bytes(4, "big") + name)
+    for name, kind in sorted((os.fsencode(n), k) for n, k in entries):
+        h.update(len(name).to_bytes(4, "big") + name + b"\0" + kind.encode("ascii") + b"\0")
     return h.hexdigest()
+
+
+def list_entries(directory: Path) -> list[tuple[str, str]]:
+    """``(name, kind)`` for every entry of a directory, from each entry's own ``lstat``."""
+    with os.scandir(directory) as it:
+        return [(e.name, entry_kind(e.stat(follow_symlinks=False))) for e in it]
 
 
 def _write(path: Path, data: dict) -> None:
@@ -121,9 +145,11 @@ class Job:
                 raise Failure(INPUT_LIMIT, "Too many declared inputs")
             self.inputs[key] = digest
 
-    def record_listing(self, path: Path, names: list[str]) -> None:
-        """Register a directory listing the caller enumerated. ``finish`` lists the directory again
-        and compares, so an entry added or removed after the caller looked fails the job."""
+    def record_listing(self, path: Path, entries) -> None:
+        """Register a directory listing the caller enumerated, as ``(name, kind)`` pairs (see
+        ``entry_kind``). ``finish`` lists the directory again and compares, so an entry added,
+        removed or swapped for another kind under the same name after the caller looked fails
+        the job, as does the directory itself becoming a link or disappearing."""
         p = Path(path).absolute()
         if p.is_relative_to(self.root):
             raise Failure(INPUT_INVALID, "Inputs must live outside the job's output directory")
@@ -131,7 +157,7 @@ class Job:
         if key not in self.listings:
             if len(self.listings) >= MAX_FILES:
                 raise Failure(INPUT_LIMIT, "Too many declared inputs")
-            self.listings[key] = listing_digest(names)
+            self.listings[key] = listing_digest(entries)
 
     def input_tree(self, root: Path) -> Path:
         root = Path(root).resolve()
@@ -217,10 +243,12 @@ class Job:
                 raise Failure(INPUT_CHANGED, f"Input changed while the job ran: {key}")
         for key, digest in self.listings.items():
             try:
-                names = os.listdir(key)
+                if entry_kind(os.lstat(key)) != "dir":
+                    raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {key} is no longer a directory")
+                entries = list_entries(Path(key))
             except OSError as exc:
                 raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {key} ({exc.strerror or exc})") from exc
-            if listing_digest(names) != digest:
+            if listing_digest(entries) != digest:
                 raise Failure(INPUT_CHANGED, f"Directory changed while the job ran: {key}")
         # The periodic scan during run() can miss a final burst; recheck before declaring success.
         self._watch_output()
