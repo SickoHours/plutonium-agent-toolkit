@@ -13,6 +13,7 @@ import sys
 import threading
 import time
 import unittest
+import unittest.mock
 from pathlib import Path
 
 from plutonium_agent_toolkit.cli import entry
@@ -287,6 +288,77 @@ class PumpTests(BridgeFixture):
         self.assertEqual(summary["stopped"], "client", "the stream stayed open")
 
 
+class BoundsTests(BridgeFixture):
+    def test_a_result_too_large_is_refused_without_building_the_whole_document(self):
+        # Review finding: the payload was serialized in full before its size was checked, so a
+        # library listing of hundreds of MiB became a string beside itself before being refused.
+        # The encoder is abandoned at the bound: an entry past it is never reached, and an entry
+        # that cannot be serialized at all proves the walk stopped short of it.
+        payload = {"rows": ["x" * 1000 for _ in range(50)] + [object()]}
+        self.assertIsNone(mcp._render(payload, 1000), "abandoned at the bound, not at the bad entry")
+        self.assertEqual(json.loads(mcp._render({"ok": True}, 1000)), {"ok": True})
+        with self.assertRaises(TypeError):   # without a bound in the way, the bad entry is reached
+            mcp._render(payload, 10 ** 9)
+
+    def test_a_message_is_bounded_in_bytes_not_characters(self):
+        # Review finding: the bound was counted in characters, so a message of astral characters
+        # could be four times the advertised 4 MiB and still be accepted.
+        ping = '{"jsonrpc": "2.0", "id": 1, "method": "ping"}'    # 45 characters, 45 bytes: inside the bound
+        reader = mcp._Lines(io.StringIO("𝄞" * 20 + "\n" + ping + "\n"), 60)
+        self.assertIs(reader.lines.get(timeout=5), mcp._OVERSIZED, "20 astral characters are 80 bytes, past the bound")
+        self.assertIn('"ping"', reader.lines.get(timeout=5), "the message after it is still read")
+
+    def test_the_reader_holds_one_message_so_a_client_cannot_queue_hundreds(self):
+        # Review finding: 64 queued messages of up to 4 MiB each is a quarter of a GiB of a client's
+        # choosing while the loop is busy in a call. One in hand means the rest wait in the pipe.
+        self.assertEqual(mcp._Lines(io.StringIO(""), 100).lines.maxsize, 1)
+
+
+class UndeliverableAnswerTests(BridgeFixture):
+    class _Deaf:
+        """A client that has stopped reading: the pipe is full and the write never returns."""
+
+        def __init__(self):
+            self.blocked = threading.Event()
+
+        def write(self, text):
+            self.blocked.set()
+            threading.Event().wait(60)
+
+        def flush(self):
+            pass
+
+    def test_an_answer_the_client_will_not_take_ends_the_session(self):
+        # Review finding: a client that stops reading stdout blocked the write, and with it the
+        # deadline, the signal and the shutdown that stops a running child.
+        sink = self._Deaf()
+        lines = "\n".join(json.dumps({"jsonrpc": "2.0", "id": n, "method": "ping"}) for n in (1, 2, 3)) + "\n"
+        with unittest.mock.patch.object(mcp, "WRITE_GRACE", 0.3):
+            started = time.monotonic()
+            summary = mcp.pump(self.bridge, io.StringIO(lines), sink)
+            elapsed = time.monotonic() - started
+        self.assertTrue(sink.blocked.is_set(), "the client was written to")
+        self.assertEqual(summary["stopped"], "undeliverable")
+        self.assertLess(elapsed, 30, "the loop did not wait on the write")
+
+    def test_a_closed_stdout_ends_the_session_before_the_next_call_runs(self):
+        # The same guarantee for a client that is gone rather than idle: no queued call runs once
+        # an answer could not be delivered.
+        class Closed:
+            def write(self, text):
+                raise OSError(32, "broken pipe")
+
+            def flush(self):
+                pass
+
+        self.start()
+        lines = "\n".join(json.dumps({"jsonrpc": "2.0", "id": n, "method": "tools/call",
+                                      "params": {"name": "manifest", "arguments": {}}}) for n in (1, 2)) + "\n"
+        summary = mcp.pump(self.bridge, io.StringIO(lines), Closed())
+        self.assertEqual(summary["stopped"], "undeliverable")
+        self.assertEqual(summary["messages"], 1, "the second call never ran")
+
+
 class DeadlineDuringACallTests(BridgeFixture):
     def test_the_serve_deadline_ends_a_wait_and_shutdown_stops_the_child(self):
         # Review finding: a long tool call must not outlive --seconds. With the deadline already
@@ -317,7 +389,12 @@ class StdioProcessTests(BridgeFixture):
         env = dict(os.environ, PYTHONPATH=str(ROOT / "src") + os.pathsep + os.environ.get("PYTHONPATH", ""))
         child = subprocess.Popen([sys.executable, "-m", "plutonium_agent_toolkit", "mcp", "serve",
                                   "--library", str(self.lib), "--jobs", str(self.root / "stdio-jobs"), "--seconds", "60", "--json"],
-                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
+                                 # An MCP client speaks UTF-8 on both pipes. Without this the client
+                                 # side of the test would inherit the host's console encoding, which
+                                 # is not UTF-8 on a Windows runner, and the protocol is not the
+                                 # console: the round trip below would be testing the locale.
+                                 encoding="utf-8", errors="strict")
         try:
             for message in ({"jsonrpc": "2.0", "id": 1, "method": "initialize",
                              "params": {"protocolVersion": "2025-06-18", "clientInfo": {"name": "härness ✓", "version": "1"}}},
@@ -345,7 +422,8 @@ class StdioProcessTests(BridgeFixture):
         self.assertEqual(document["result"]["stopped"], "client")
         self.assertEqual(document["result"]["messages"], 3)
         # Non-ASCII survived the real pipe in both directions: the streams are UTF-8, not the console's encoding.
-        self.assertEqual(document["result"]["client"]["name"], "härness ✓")
+        self.assertEqual(document["result"]["client"]["name"], "härness ✓",
+                         ascii(document["result"]["client"]["name"]))   # ascii(): a console that cannot render it must not hide which side changed
         self.assertFalse(document["result"]["game_touched"])
 
 

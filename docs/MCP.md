@@ -94,8 +94,12 @@ you would keep the command's stdout: that pair is the receipt.
 
 stdout carries the protocol and nothing else: while the bridge runs, anything the process would
 otherwise print is sent to stderr. Messages are JSON-RPC 2.0, one per line, UTF-8, bounded at
-4 MiB each; a longer message is refused and its tail drained so the stream stays in frame, and
+4 MiB of encoded bytes each (not characters, so a message of astral characters is measured as it
+is sent); a longer message is refused and its tail drained so the stream stays in frame, and
 text that nests deeply enough to exhaust the parser is a parse error, not the end of the session.
+A tool result is bounded at 1 MiB and is encoded in chunks, so a result too large to carry back is
+refused with `output_limit` rather than built in full first; its receipt on disk still holds
+everything.
 Both streams are read and written as UTF-8 with `\n` endings whatever the console's encoding is.
 The bridge implements `initialize` (negotiating from `2025-06-18`, `2025-03-26`, `2024-11-05`),
 `notifications/initialized`, `ping`, `tools/list` and `tools/call`; a message without
@@ -104,7 +108,12 @@ request before `initialize` is refused.
 
 Lines are read off the stream by a reader thread, so `--seconds` is reached even while a
 connected harness sits idle, and a tool call that is still running when the deadline passes stops
-waiting and says so rather than outliving it. When the harness closes stdin, the deadline passes,
+waiting and says so rather than outliving it. The reader holds one message at a time: a harness
+that keeps sending while a call runs waits in the pipe rather than filling this process's memory.
+Answers are written by a second thread for the same reason in reverse: a harness that stops
+reading stdout blocks that thread, not the loop, and after 30 seconds the session ends
+(`stopped: undeliverable`) with the running child stopped -- an answer that cannot be delivered
+means the next one cannot either, so no message still in hand is run. When the harness closes stdin, the deadline passes,
 or a termination signal arrives, the bridge stops a running child, waits for its record, and
 writes the invocation's own JSON document (library roots, jobs directory, tool count, messages
 handled, how it stopped) as the last thing on stdout, after the protocol stream has ended.

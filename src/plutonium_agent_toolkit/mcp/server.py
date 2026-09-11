@@ -32,10 +32,11 @@ from ..plane.server import Plane, strict_loads, validate_roots
 # otherwise the newest is returned and the client decides whether to continue (the spec's rule).
 SUPPORTED_PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
 SERVER_NAME = "plutonium-agent-toolkit"
-MAX_LINE = 4 * 1024 * 1024      # one JSON-RPC message
-MAX_RESULT = 1 * 1024 * 1024    # the text a tool result carries back
+MAX_LINE = 4 * 1024 * 1024      # one JSON-RPC message, in UTF-8 bytes
+MAX_RESULT = 1 * 1024 * 1024    # the text a tool result carries back (JSON escapes to ASCII, so bytes)
 RUN_POLL = 0.05
 RUN_SLACK = 30                  # seconds past an action's own timeout before the bridge gives up waiting
+WRITE_GRACE = 30                # seconds an answer may wait on a client that has stopped reading stdout
 
 # Two tools read the bridge's own state instead of starting a child.
 LOCAL_TOOLS = {
@@ -205,13 +206,28 @@ class Bridge:
             except (OSError, ValueError, RuntimeError) as exc:  # never let a traceback replace the protocol
                 payload, is_error = {"ok": False, "error_code": "operation_failed",
                                      "message": f"{type(exc).__name__}: {str(exc)[:400]}"}, True
-            text = json.dumps(payload, indent=2, allow_nan=False)
-            if len(text) > MAX_RESULT:
+            text = _render(payload, MAX_RESULT)
+            if text is None:
                 text = json.dumps({"ok": False, "error_code": "output_limit",
                                    "message": f"{name} produced more than {MAX_RESULT} bytes; read its receipt or run it in a terminal"}, indent=2)
                 is_error = True
             return _result(request_id, {"content": [{"type": "text", "text": text}], "isError": is_error})
         return _error(request_id, -32601, f"Unknown method {method!r}")
+
+
+def _render(payload, limit: int) -> str | None:
+    """The payload as JSON text, or None when it passes *limit*.
+
+    Encoded in chunks and abandoned at the bound, so a library listing too large to carry back is
+    refused without the whole document ever existing as a string beside the data it came from.
+    JSON escapes non-ASCII, so a character here is a byte."""
+    chunks, size = [], 0
+    for chunk in json.JSONEncoder(indent=2, allow_nan=False).iterencode(payload):
+        size += len(chunk)
+        if size > limit:
+            return None
+        chunks.append(chunk)
+    return "".join(chunks)
 
 
 def _result(request_id, result: dict) -> dict | None:
@@ -237,7 +253,9 @@ class _Lines(threading.Thread):
     def __init__(self, source, limit: int):
         super().__init__(daemon=True)
         self.source, self.limit = source, limit
-        self.lines: queue.Queue = queue.Queue(maxsize=64)
+        # One message at a time: while the loop is busy in a call, a client that keeps writing
+        # fills the pipe and waits there instead of filling this process's memory.
+        self.lines: queue.Queue = queue.Queue(maxsize=1)
         self.start()
 
     def run(self) -> None:
@@ -246,7 +264,9 @@ class _Lines(threading.Thread):
                 line = self.source.readline(self.limit + 1)
                 if not line:
                     break
-                if len(line) > self.limit:
+                # The read is capped in characters; the bound is bytes, and a character outside the
+                # basic plane is four of them, so the encoded length decides.
+                if len(line) > self.limit or len(line.encode("utf-8", errors="replace")) > self.limit:
                     while not line.endswith("\n"):
                         line = self.source.readline(self.limit + 1)
                         if not line:
@@ -260,11 +280,74 @@ class _Lines(threading.Thread):
             self.lines.put(None)
 
 
+class _Answers(threading.Thread):
+    """Writes answers to the sink from its own thread.
+
+    A client that stops reading stdout fills the pipe, and the write blocks. On this thread that
+    costs an answer; on the loop it would cost the deadline, the signal and the shutdown, leaving a
+    child running with nobody to stop it. ``send`` waits a bounded time for the answer to be
+    written and reports whether it was. Daemon: a thread stuck on a dead client dies with the
+    process."""
+
+    def __init__(self, sink):
+        super().__init__(daemon=True)
+        self.sink = sink
+        self.queue: queue.Queue = queue.Queue(maxsize=1)
+        self.failed: Exception | None = None
+        self.start()
+
+    def run(self) -> None:
+        while True:
+            message, written = self.queue.get()
+            if message is None:
+                return
+            try:
+                _write(self.sink, message)
+            except (OSError, ValueError) as exc:   # the client closed stdout, or it was detached
+                self.failed = exc
+                written.set()
+                return
+            written.set()
+
+    def send(self, message: dict, grace: float = WRITE_GRACE) -> bool:
+        """True once the answer is on the sink. False when the client is not reading or has gone;
+        either way the session is over, because the next answer would not arrive either."""
+        if self.failed is not None:
+            return False
+        written = threading.Event()
+        limit = time.monotonic() + max(0.0, grace)
+        try:
+            self.queue.put((message, written), timeout=max(0.0, limit - time.monotonic()))
+        except queue.Full:
+            return False
+        return written.wait(max(0.0, limit - time.monotonic())) and self.failed is None
+
+    def close(self) -> None:
+        try:
+            self.queue.put_nowait((None, threading.Event()))
+        except queue.Full:
+            pass
+
+
 def pump(bridge: Bridge, source, sink, deadline: float | None = None, stop: threading.Event | None = None) -> dict:
     """Answer newline-delimited JSON-RPC from source on sink until the client closes it, the
     deadline passes or ``stop`` is set. Returns a summary."""
     handled, errors = 0, 0
     reader = _Lines(source, MAX_LINE)
+    answers = _Answers(sink)
+
+    def answer(message: dict) -> bool:
+        grace = WRITE_GRACE if deadline is None else min(WRITE_GRACE, max(0.0, deadline - time.monotonic()))
+        return answers.send(message, grace)
+
+    try:
+        return _loop(bridge, reader, answer, deadline, stop)
+    finally:
+        answers.close()
+
+
+def _loop(bridge: Bridge, reader, answer, deadline, stop) -> dict:
+    handled, errors = 0, 0
     while True:
         if stop is not None and stop.is_set():
             return {"stopped": "signal", "messages": handled, "errors": errors}
@@ -278,7 +361,8 @@ def pump(bridge: Bridge, source, sink, deadline: float | None = None, stop: thre
             return {"stopped": "client", "messages": handled, "errors": errors}
         if line is _OVERSIZED:
             errors += 1
-            _write(sink, {"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": f"message exceeds {MAX_LINE} characters"}})
+            if not answer({"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": f"message exceeds {MAX_LINE} bytes"}}):
+                return {"stopped": "undeliverable", "messages": handled, "errors": errors}
             continue
         text = line.strip()
         if not text:
@@ -289,19 +373,23 @@ def pump(bridge: Bridge, source, sink, deadline: float | None = None, stop: thre
                 raise ValueError("not an object")
         except (ValueError, RecursionError):   # nesting deep enough to exhaust the stack is a parse error too
             errors += 1
-            _write(sink, {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "parse error"}})
+            if not answer({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "parse error"}}):
+                return {"stopped": "undeliverable", "messages": handled, "errors": errors}
             continue
         handled += 1
         try:
-            answer = bridge.handle(message, deadline)
+            response = bridge.handle(message, deadline)
         except Failure as exc:
-            answer = _error(message.get("id"), -32603, exc.message)
+            response = _error(message.get("id"), -32603, exc.message)
         except RecursionError:
-            answer = _error(message.get("id"), -32603, "the request nests too deeply to answer")
-        if answer is not None:
-            if answer.get("error"):
+            response = _error(message.get("id"), -32603, "the request nests too deeply to answer")
+        if response is not None:
+            if response.get("error"):
                 errors += 1
-            _write(sink, answer)
+            # An answer the client will not take ends the session: the next one would not arrive
+            # either, and a queued call must not run with nowhere to report.
+            if not answer(response):
+                return {"stopped": "undeliverable", "messages": handled, "errors": errors}
 
 
 def _write(sink, message: dict) -> None:

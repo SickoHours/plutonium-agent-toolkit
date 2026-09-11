@@ -49,6 +49,10 @@ class ActionTableTests(unittest.TestCase):
                 self.assertTrue(action.confirm, f"{action.id} writes to the agent host and must confirm")
             if route and route.effect == "writes-config":
                 self.assertTrue(action.confirm, f"{action.id} writes the toolkit configuration and must confirm")
+            # Review finding: module fetch reached the network and wrote a snapshot without the gate
+            # every other state-changing action has, and the docs said it had one.
+            if route and route.effect in ("downloads-source", "downloads-backends"):
+                self.assertTrue(action.confirm, f"{action.id} reaches the network and must confirm")
         self.assertTrue(all(a.screen in ("library", "pack", "install", "agent", "registry") for a in ACTIONS), "every action has a screen the page renders")
 
     def test_table_marks_windows_routes_unavailable_off_windows(self):

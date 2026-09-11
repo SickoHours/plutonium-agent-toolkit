@@ -20,8 +20,13 @@ Every entry states what shipped, on which platform it was verified, and what rem
   only the protocol (everything else goes to stderr) and the invocation's own JSON document is the
   last line after the client disconnects; a reader thread keeps `--seconds` reachable while a
   harness is idle, a call still running at the deadline stops waiting, and a termination signal
-  still stops the child and records it. New effect `serves-stdio`; `docs/MCP.md` has the harness
-  configuration, the tool table and the stdio contract.
+  still stops the child and records it. The transport is bounded in both directions: a message is
+  measured in encoded bytes against the 4 MiB it advertises, the reader holds one message at a time
+  so a client that keeps sending waits in the pipe instead of in memory, a result too large to
+  carry back is refused while it is being encoded rather than after, and a client that stops
+  reading stdout blocks the writer thread instead of the loop -- the session then ends with the
+  child stopped, and no message still in hand is run. New effect `serves-stdio`; `docs/MCP.md` has
+  the harness configuration, the tool table and the stdio contract.
 
 - **Black Ops III Workshop maps as donors.** `docs/knowledge/bo3-workshop-formats.md` records
   what a Workshop item's fastfile, XPAK and sound banks are and how much of each reads offline on
@@ -38,6 +43,12 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Fixed
 
+- **Control plane: `module fetch` confirms.** It reaches the network and writes a snapshot of
+  someone else's repository into the library, which is exactly the kind of step the page and the
+  bridge gate behind the person's confirmation, and `docs/MCP.md` already said it was gated -- but
+  the action was not marked `confirm`, so a harness could fetch without one. It is marked now, and
+  the rule the action table is tested against covers every network effect rather than only the
+  game, the agent host and the configuration.
 - **Control plane: a stopped child's Job Object handle is closed once.** On Windows the thread
   running a child and the shutdown stopping it both terminated and closed the same Job Object
   handle. Windows recycles handle values, so the second close destroyed whatever kernel object had
