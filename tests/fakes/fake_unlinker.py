@@ -21,10 +21,27 @@ if data.get("readback_fail"):
     print("error loading fixture asset; continuing")
     sys.exit(0)
 if "--list" in args:
+    print(f'Loaded zone "{data.get("zone", ff.stem)}" (T6)')
+    print("Content:")
     for rel in data["rawfiles"]:
-        print("rawfile", rel)
+        print("rawfile,", rel)
+    for row in data.get("assets", []):
+        kind, name = row.split(",", 1)
+        print(f"{kind}, {name}")
+    for row in data.get("referenced", []):
+        kind, name = row.split(",", 1)
+        print(f"{kind}, ,{name}")
     sys.exit(0)
 out = Path(args[args.index("--output-folder") + 1])
+if "--include-assets" in args and args[args.index("--include-assets") + 1] == "localize":
+    rows = data.get("strings", {})
+    if rows:
+        p = out / "english" / "localizedstrings" / "mod.str"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        body = "".join(f"REFERENCE {k}\nLANG_ENGLISH {json.dumps(v)}\n\n" for k, v in rows.items())
+        p.write_text('VERSION "1"\nCONFIG ""\nFILENOTES ""\n\n' + body + "ENDMARKER\n")
+    print("Extracted", len(rows))
+    sys.exit(0)
 for rel, blob in data["rawfiles"].items():
     p = out / rel
     p.parent.mkdir(parents=True, exist_ok=True)

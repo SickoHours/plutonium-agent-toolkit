@@ -42,14 +42,30 @@ _Avoid_: menu mod, global mod
 loads explicitly.
 _Avoid_: config, build script, manifest
 
-**Declaration**: The `module.json` beside a recipe that states what the module is and needs:
-id, version, the bases and maps it was built for, dependencies, conflicts and its resource
-contract. Facts for composing, never evidence (`docs/MODULES.md`).
+**Declaration**: The `module.json` beside a module's payload (a recipe or a seed) that states what
+the module is and needs: id, version, category and kind, the bases and maps it was built for,
+dependencies, conflicts, what it provides and its resource contract. Facts for composing, never
+evidence (`docs/MODULES.md`).
 _Avoid_: manifest, metadata, package file
 
-**Composition recipe**: The `composition.json` that names a base, one map, the module
-directories and an optional resource budget; `module plan` resolves it and `module build`
-produces one `mod.ff` from it.
+**Seed**: A module payload that is an already-linked `mod.ff` with its soundbanks and a hashed
+manifest (`seed.json`) listing what it embeds, references and provides. A pack links against it
+and names its roots; `module declare` writes the manifest from the package.
+_Avoid_: prebuilt, binary module, blob
+
+**Base pack**: The composition everything else in a new pack attaches to, named with
+`"role": "base"`. It is an ordinary member: its modules are staged first and it is the first
+thing a person names when they say "add X to Y".
+_Avoid_: parent, template, upstream pack
+
+**Decision**: A collision two modules produce (the same file, the same weapon or string name)
+that `module plan` lists and that the composition recipe records with an owner. Identical bytes
+need none; `module build` refuses while one is undecided.
+_Avoid_: conflict (that is a declared incompatibility), override, merge rule
+
+**Composition recipe**: The `composition.json` that names a base, one map, the members (module
+directories, other compositions, or pinned references), the recorded decisions and an optional
+resource budget; `module plan` resolves it and `module build` produces one `mod.ff` from it.
 _Avoid_: pack file, modpack config, bundle
 
 **Plan**: A validated, hashed preview of a recipe that runs no backend. It proves the inputs,

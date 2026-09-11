@@ -17,6 +17,7 @@ command, then run it. Read `docs/knowledge/` once for the facts behind the steps
 | [diagnose-a-crash.md](diagnose-a-crash.md) | The game dropped to the menu, closed or the player said "crashed" |
 | [qualify-on-this-host.md](qualify-on-this-host.md) | `docs/SUPPORT.md` has no receipt from your host for a route you rely on, or a real program differed from the fake here |
 | [compose-a-pack.md](compose-a-pack.md) | Several declared modules should become one mod on a named base and map |
+| [attach-to-a-pack.md](attach-to-a-pack.md) | One module should be added to an existing pack, which becomes the base member of a new composition |
 | [package-and-install.md](package-and-install.md) | A build is verified and should go into the client's storage folder |
 
 Every playbook has the same five sections: **Preconditions** (what must already be true),

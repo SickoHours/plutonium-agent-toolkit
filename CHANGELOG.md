@@ -9,6 +9,25 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Added
 
+- **Seeds, base packs and collisions as decisions.** A module's payload may now be a **seed**: an
+  already-linked `mod.ff` with its soundbanks and a hashed `seed.json` manifest (embedded,
+  referenced and root assets, provides, localized strings). New route `module declare <mod.ff>`
+  writes the manifest and a draft declaration from any T6 mod package with OpenAssetTools, so a
+  community pack becomes composable without its author doing anything. `module build` links a
+  pack against every seed and load, names every seed root in the zone, merges the seeds' strings
+  into the pack's string table, copies the soundbanks beside the package and checks every root is
+  in the result. Compositions gain members that are other compositions (flattened; same base and
+  map; bounded nesting), one member with `role: base` (the pack everything else attaches to,
+  staged first), pinned references (`name` plus `commit` beside the fetched `path`), `loads`
+  that may live beside the pack, `zone_header` lines for bases that need linker metadata, a
+  `title` and `tags`. Collisions are no longer refusals: `module plan` lists every shared file,
+  provided name or seed asset under `undecided` with the modules and the way to record an owner,
+  identical bytes dedupe with no decision, and `module build` refuses while any remains; the
+  composition's `decisions` list is part of the plan. Declarations gain `kind` (a fixed list per
+  category), `tags`, `provides` and `distribution` (`source`, `seed`, `private`). `docs/MODULES.md`
+  is rewritten; `docs/playbooks/attach-to-a-pack.md` is new; glossary terms seed, base pack and
+  decision. The Linux Tier 2 receipt now declares the hello-zm package as a seed and composes it
+  as a base member with the second example, so `module declare` is `available` on Linux.
 - **Modules and compositions.** `docs/MODULES.md` specifies two files: a `module.json`
   declaration beside a mod's `project.json` (id, version, the bases and maps it was built for,
   dependencies, conflicts, resource contract, menu route, source repository and commit) and a
