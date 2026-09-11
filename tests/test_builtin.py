@@ -294,6 +294,46 @@ class DevBuiltinTests(BuiltinFixture):
         self.assertEqual(row["result"]["builtin"]["present"], 0)
         self.assertEqual(row["result"]["builtin"]["fetch"], "pat dev builtin --json")
 
+    def test_nesting_matches_the_planner_and_recipe_reads_are_bounded(self):
+        # A chain of packs MAX_NESTING deep (the planner's bound) is fetched; one deeper is refused.
+        def chain(levels):
+            buf = io.BytesIO()
+            with tarfile.open(fileobj=buf, mode="w:gz") as t:
+                root = "repo-" + self.commit[:7]
+                for rel in ("examples/hello-zm", "examples/hello-zm-two"):
+                    for f in sorted((ROOT / rel).rglob("*")):
+                        if f.is_file():
+                            body = f.read_bytes(); info = tarfile.TarInfo(f"{root}/{rel}/{f.relative_to(ROOT / rel).as_posix()}"); info.size = len(body); info.mode = 0o644
+                            t.addfile(info, io.BytesIO(body))
+                for level in range(levels):
+                    name = "examples/hello-pack" if level == 0 else f"examples/level{level}"
+                    member = f"../level{level + 1}" if level + 1 < levels else "../hello-zm"
+                    body = json.dumps({"schema": 1, "name": "stock_hello_pack", "base": "stock", "map": "zm_transit", "modules": [member, "../hello-zm-two"]}).encode()
+                    info = tarfile.TarInfo(f"{root}/{name}/composition.json"); info.size = len(body); info.mode = 0o644
+                    t.addfile(info, io.BytesIO(body))
+            return buf.getvalue()
+        self.served[self.url] = chain(builtin.MAX_NESTING + 1)   # depth 0..MAX_NESTING
+        code, row = invoke(["dev", "builtin", "--only", "sickohours/stock_hello_pack"])
+        self.assertEqual(code, 0, row)
+        self.served[self.url] = chain(builtin.MAX_NESTING + 2)
+        home2 = self.root / "home2"
+        with mock.patch.dict(os.environ, {"PAT_HOME": str(home2)}):
+            code, row = invoke(["dev", "builtin", "--only", "sickohours/stock_hello_pack"])
+        self.assertEqual(row["error_code"], "input_invalid")
+        self.assertIn("nests deeper", row["message"])
+        # A recipe above the size bound is refused before it is parsed.
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz") as t:
+            root = "repo-" + self.commit[:7]
+            body = b"{" + b" " * (builtin.MAX_RECIPE_BYTES + 1) + b"}"
+            info = tarfile.TarInfo(f"{root}/examples/hello-pack/composition.json"); info.size = len(body); info.mode = 0o644
+            t.addfile(info, io.BytesIO(body))
+        self.served[self.url] = buf.getvalue()
+        home3 = self.root / "home3"
+        with mock.patch.dict(os.environ, {"PAT_HOME": str(home3)}):
+            code, row = invoke(["dev", "builtin", "--only", "sickohours/stock_hello_pack"])
+        self.assertEqual(row["error_code"], "input_limit")
+
     def test_a_pack_whose_recipe_escapes_its_snapshot_is_refused(self):
         buf = io.BytesIO()
         with tarfile.open(fileobj=buf, mode="w:gz") as t:

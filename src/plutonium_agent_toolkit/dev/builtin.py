@@ -31,7 +31,8 @@ from ..core.receipts import inventory, sha256_file
 from . import backends, registry
 
 MAX_ENTRY_FILES = 4096
-MAX_NESTING = 4
+MAX_NESTING = 4          # the same bound load_composition applies: depth 0 is the pack itself
+MAX_RECIPE_BYTES = 256 * 1024
 
 
 def shelf_dir() -> Path:
@@ -96,8 +97,10 @@ def needed_paths(snapshot: Path, path: str, depth: int = 0) -> list[str]:
     recipe = base / "composition.json"
     if not recipe.is_file():
         return found
-    if depth >= MAX_NESTING:
+    if depth > MAX_NESTING:
         raise Failure(INPUT_INVALID, f"Built-in pack nests deeper than {MAX_NESTING}: {path}")
+    if recipe.is_symlink() or recipe.stat().st_size > MAX_RECIPE_BYTES:
+        raise Failure(INPUT_LIMIT, f"Built-in pack recipe is a link or exceeds {MAX_RECIPE_BYTES} bytes: {path}/composition.json")
     try:
         data = json.loads(recipe.read_text(encoding="utf-8"))
     except (ValueError, OSError) as exc:
@@ -231,7 +234,8 @@ def _place(entry: dict, extracted: Path, archive_sha: str, archive_bytes: int) -
         dst = snapshot if rel == "." else snapshot / rel
         if src.is_dir():
             expected = inventory(src)
-            if len(files) + len(expected) > MAX_ENTRY_FILES:
+            keys = {(Path(rel) / sub).as_posix() if rel != "." else sub for sub in expected}
+            if len(files.keys() | keys) > MAX_ENTRY_FILES:
                 raise Failure(INPUT_LIMIT, f"Built-in {entry['name']} exceeds {MAX_ENTRY_FILES} files")
             if dst.exists():
                 # Shared with an entry placed earlier from the same snapshot: it must still equal the
