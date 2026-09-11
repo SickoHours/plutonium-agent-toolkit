@@ -15,6 +15,7 @@ import json
 import os
 import re
 import secrets
+import signal
 import subprocess
 import sys
 import threading
@@ -36,6 +37,10 @@ MAX_RUNS = 200
 MAX_OUTPUT = 4 * 1024 * 1024
 MAX_LIBRARY_ROOTS = 16
 MAX_SECONDS = 24 * 3600
+MAX_CATALOG_ROWS = 2000      # declarations and compositions across every root, per request
+MAX_PACKAGES = 512           # loose mod.ff files listed per root for module declare
+MAX_DIRECTORIES = 4096       # directories walked per root
+STOP_GRACE = 10.0            # seconds a child gets to stop cleanly at shutdown
 NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}\Z")
 
 
@@ -58,43 +63,93 @@ def child_env() -> dict:
     return env
 
 
+def _group_flags() -> dict:
+    """The child leads its own process group so a stop reaches it and what it started."""
+    if os.name == "nt":
+        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+    return {"start_new_session": True}
+
+
+def _stop_process(process: subprocess.Popen, grace: float) -> None:
+    """Interrupt the child so it writes its cancelled receipt and stops its backends, then kill it."""
+    if process.poll() is not None:
+        return
+    try:
+        if os.name == "nt":
+            process.terminate()
+        else:
+            os.killpg(process.pid, signal.SIGINT)
+    except (ProcessLookupError, PermissionError, OSError):
+        pass
+    try:
+        process.wait(timeout=grace)
+    except subprocess.TimeoutExpired:
+        try:
+            if os.name == "nt":
+                process.kill()
+            else:
+                os.killpg(process.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError, OSError):
+            pass
+        try:
+            process.wait(timeout=grace)
+        except subprocess.TimeoutExpired:
+            pass
+
+
 class Plane:
     """State shared by the handler threads: roots, token, runs, the single-job lock."""
 
     def __init__(self, library: list[Path], jobs: Path):
-        self.library = library
-        self.jobs = jobs
+        self.library = [Path(p).resolve() for p in library]
+        self.jobs = Path(jobs).resolve()
         self.token = secrets.token_urlsafe(32)
         self.started = now()
         self.runs: list[dict] = []
         self.lock = threading.Lock()
         self.job_lock = threading.Lock()
         self.counter = 0
+        self.active: subprocess.Popen | None = None
+        self.stopping = False
+        self.stop_requested = False
         self.prompt_dir = jobs / "plane-prompts"
         (jobs / "plane-runs").mkdir(parents=True, exist_ok=True)
         self.platform = platform.describe()
 
     # ----- library ---------------------------------------------------------------------
     def catalog(self) -> dict:
-        """Declarations, compositions and seed manifests under the library roots, read as files."""
+        """Declarations, compositions, seed manifests and loose packages under the library roots, read as
+        files. Bounded per root (directories, packages) and across roots (rows); a bound reached says so."""
         roots = []
+        rows = 0
+        truncated = False
         for index, root in enumerate(self.library):
-            modules, compositions = [], []
+            modules, compositions, packages = [], [], []
             count = 0
+            root_truncated = False
             for directory, dirs, files in os.walk(root, followlinks=False):
                 dirs[:] = sorted(d for d in dirs if not d.startswith(".") and not (Path(directory) / d).is_symlink())
                 count += 1
-                if count > 4096:
+                if count > MAX_DIRECTORIES or rows >= MAX_CATALOG_ROWS:
+                    root_truncated = truncated = True
                     break
                 here = Path(directory)
                 rel = here.relative_to(root).as_posix()
                 if "module.json" in files:
                     modules.append(_summary(here / "module.json", rel, "module"))
+                    rows += 1
                 if "composition.json" in files:
                     compositions.append(_summary(here / "composition.json", rel, "composition"))
+                    rows += 1
+                if "mod.ff" in files and not (here / "mod.ff").is_symlink():
+                    if len(packages) < MAX_PACKAGES:
+                        packages.append((here / "mod.ff").relative_to(root).as_posix())
+                    else:
+                        root_truncated = truncated = True
             roots.append({"index": index, "root": str(root), "modules": modules, "compositions": compositions,
-                          "truncated": count > 4096})
-        return {"roots": roots, "jobs": str(self.jobs)}
+                          "packages": packages, "truncated": root_truncated})
+        return {"roots": roots, "jobs": str(self.jobs), "truncated": truncated,
+                "bounds": {"rows": MAX_CATALOG_ROWS, "directories_per_root": MAX_DIRECTORIES, "packages_per_root": MAX_PACKAGES}}
 
     def job_index(self) -> dict:
         """Every receipt.json under the jobs directory, one row each, newest first."""
@@ -112,9 +167,19 @@ class Plane:
                 if not isinstance(data, dict):
                     continue
                 result = data.get("result") if isinstance(data.get("result"), dict) else {}
-                rows.append({"directory": child.name, "command": data.get("command"), "status": data.get("status"),
-                             "started": data.get("started"), "finished": data.get("finished"), "job_id": data.get("job_id"),
-                             "mod_ff": result.get("mod_ff"), "name": result.get("name"), "error": (data.get("error") or {}).get("message")})
+                row = {"directory": child.name, "command": data.get("command"), "status": data.get("status"),
+                       "started": data.get("started"), "finished": data.get("finished"), "job_id": data.get("job_id"),
+                       "mod_ff": result.get("mod_ff"), "name": result.get("name"), "error": (data.get("error") or {}).get("message")}
+                fetched = result.get("module_dir")
+                if data.get("command") == "module fetch" and isinstance(fetched, str) and result.get("kind") in ("module", "composition"):
+                    # A fetched snapshot's declaration or composition is selectable from the jobs root.
+                    target = Path(fetched) / (result["kind"] + ".json")
+                    try:
+                        if target.is_file() and not target.is_symlink() and target.resolve().is_relative_to(self.jobs):
+                            row[result["kind"]] = target.resolve().relative_to(self.jobs).as_posix()
+                    except OSError:
+                        pass
+                rows.append(row)
                 if len(rows) >= 512:
                     break
         rows.sort(key=lambda r: r.get("started") or "", reverse=True)
@@ -145,25 +210,32 @@ class Plane:
                           + (", requires native Windows" if row["requires_windows"] else "") + ")")
         if action.confirm and confirmed is not True:
             raise Failure(INPUT_INVALID, f"{action.id} changes state; send confirmed: true after the person confirmed it")
-        argv = argv_for(action, args, self.library, self.jobs, self.prompt_dir)
-        with self.lock:
-            self.counter += 1
-            number = self.counter
-        output = None
-        if action.job:
-            output = self.jobs / f"{action.id}-{number:04d}"
-            if output.exists() or output.is_symlink():
-                raise Failure(OUTPUT_EXISTS, f"{output} already exists; choose another jobs directory")
-            argv += ["--output", str(output)]
-        argv.append("--json")
-        run = {"run_id": uuid.uuid4().hex, "number": number, "action": action.id, "route": action.route, "argv": argv,
-               "output": str(output) if output else None, "status": "running", "started": now(), "finished": None,
-               "exit_code": None, "result": None}
+        if self.stopping:
+            raise Failure(BUSY, "The plane is shutting down; nothing was started")
+        # The single-run lock is taken before any argument touches the disk, so a busy request
+        # leaves nothing behind; every failure below releases it.
         if not self.job_lock.acquire(blocking=False):
             raise Failure(BUSY, "Another action is still running; the plane runs one at a time", "Poll /api/runs and retry after it finishes")
         try:
+            argv = argv_for(action, args, self.library, self.jobs, self.prompt_dir)
+            with self.lock:
+                self.counter += 1
+                number = self.counter
+            output = None
+            if action.job:
+                output = self.jobs / f"{action.id}-{number:04d}"
+                if output.exists() or output.is_symlink():
+                    raise Failure(OUTPUT_EXISTS, f"{output} already exists; choose another jobs directory")
+                argv += ["--output", str(output)]
+            argv.append("--json")
+            run = {"run_id": uuid.uuid4().hex, "number": number, "action": action.id, "route": action.route, "argv": argv,
+                   "output": str(output) if output else None, "status": "running", "started": now(), "finished": None,
+                   "exit_code": None, "result": None}
             self._record(run)
             threading.Thread(target=self._execute, args=(run, action.timeout), daemon=True).start()
+        except Failure:
+            self.job_lock.release()
+            raise
         except (OSError, RuntimeError) as exc:
             self.job_lock.release()
             raise Failure("operation_failed", f"Could not start the run: {exc}") from exc
@@ -171,23 +243,55 @@ class Plane:
 
     def _execute(self, run: dict, timeout: int) -> None:
         try:
-            proc = subprocess.run([sys.executable, "-m", "plutonium_agent_toolkit", *run["argv"]], capture_output=True,
-                                  text=True, timeout=timeout, cwd=str(self.jobs), stdin=subprocess.DEVNULL, env=child_env())
-            stdout = proc.stdout[:MAX_OUTPUT]
+            try:
+                process = subprocess.Popen([sys.executable, "-m", "plutonium_agent_toolkit", *run["argv"]],
+                                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=str(self.jobs),
+                                           stdin=subprocess.DEVNULL, env=child_env(), **_group_flags())
+            except OSError as exc:
+                run.update(status="failed", exit_code=127, finished=now(), result=None, stderr_head=f"could not start: {exc}")
+                return
+            with self.lock:
+                self.active = process
+            try:
+                stdout, stderr = process.communicate(timeout=timeout)
+                stopped = False
+            except subprocess.TimeoutExpired:
+                _stop_process(process, STOP_GRACE)
+                stdout, stderr = process.communicate()
+                run.update(status="timeout", exit_code=process.returncode, finished=now(), result=None,
+                           stderr_head=f"exceeded {timeout} seconds and was stopped; " + (stderr or "")[:2000])
+                return
+            finally:
+                with self.lock:
+                    self.active = None
+                    stopped = self.stopping
+            stdout = (stdout or "")[:MAX_OUTPUT]
             try:
                 payload = json.loads(stdout) if stdout.strip() else None
             except ValueError:
                 payload = None
-            run.update(status="finished", exit_code=proc.returncode, finished=now(), result=payload,
-                       stdout_head=None if payload is not None else stdout[:4000], stderr_head=proc.stderr[:4000])
-        except subprocess.TimeoutExpired as exc:
-            run.update(status="timeout", exit_code=124, finished=now(), result=None,
-                       stderr_head=f"exceeded {timeout} seconds; " + str(exc.stderr or "")[:2000])
-        except OSError as exc:
-            run.update(status="failed", exit_code=127, finished=now(), result=None, stderr_head=f"could not start: {exc}")
+            run.update(status="stopped" if stopped and process.returncode != 0 else "finished", exit_code=process.returncode,
+                       finished=now(), result=payload, stdout_head=None if payload is not None else stdout[:4000],
+                       stderr_head=(stderr or "")[:4000])
         finally:
-            self._record(run)
-            self.job_lock.release()
+            try:
+                self._record(run)
+            except OSError as exc:
+                print(f"warning: run record could not be saved ({exc})", file=sys.stderr)
+            finally:
+                self.job_lock.release()
+
+    def shutdown(self, grace: float = STOP_GRACE) -> dict:
+        """Refuse new runs, stop the running child (interrupt, then kill) and wait for its record."""
+        with self.lock:
+            self.stopping = True
+            process = self.active
+        if process is not None:
+            _stop_process(process, grace)
+        deadline = time.monotonic() + grace + 5
+        while self.job_lock.locked() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        return {"child_stopped": process is not None, "still_running": self.job_lock.locked()}
 
     def run_rows(self) -> list[dict]:
         with self.lock:
@@ -213,12 +317,16 @@ def _summary(path: Path, rel: str, kind: str) -> dict:
         if manifest.is_file() and not manifest.is_symlink():
             try:
                 seed = json.loads(manifest.read_text(encoding="utf-8"))
-                files = seed.get("files") or {}
-                row["package_present"] = all((path.parent / n).is_file() for n in files) if isinstance(files, dict) else None
-                row["embedded"] = len(seed.get("embedded") or [])
-                row["roots"] = len(seed.get("roots") or [])
             except (OSError, ValueError):
+                seed = None
+            if not isinstance(seed, dict):
                 row["package_present"] = None
+                row["seed_error"] = "seed manifest is not a JSON object"
+            else:
+                files = seed.get("files") or {}
+                row["package_present"] = all((path.parent / n).is_file() for n in files) if isinstance(files, dict) and files else None
+                row["embedded"] = len(seed.get("embedded") or []) if isinstance(seed.get("embedded"), list) else 0
+                row["roots"] = len(seed.get("roots") or []) if isinstance(seed.get("roots"), list) else 0
     return row
 
 
@@ -259,9 +367,12 @@ def make_handler(plane: Plane):
             return True
 
         def _body(self) -> dict:
-            length = int(self.headers.get("Content-Length") or 0)
-            if length > MAX_BODY:
-                raise Failure(INPUT_LIMIT, f"Request body exceeds {MAX_BODY} bytes")
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError as exc:
+                raise Failure(INPUT_INVALID, "Content-Length is not a number") from exc
+            if length < 0 or length > MAX_BODY:
+                raise Failure(INPUT_LIMIT, f"Request body is 0 to {MAX_BODY} bytes")
             raw = self.rfile.read(length) if length else b""
             try:
                 value = json.loads(raw or b"{}")
@@ -403,7 +514,7 @@ def serve(library: list[str], jobs: str, port: int = 0, seconds: int = 3600, ann
     try:
         while time.monotonic() < deadline:
             time.sleep(0.2)
-            if getattr(plane, "stop", False):
+            if plane.stop_requested:
                 stopped = "requested"
                 break
     except KeyboardInterrupt:
@@ -411,8 +522,11 @@ def serve(library: list[str], jobs: str, port: int = 0, seconds: int = 3600, ann
     finally:
         server.shutdown()
         server.server_close()
+        child = plane.shutdown()
     runs = plane.run_rows()
     return {"origin": f"http://127.0.0.1:{bound}", "library": [str(r) for r in roots], "jobs": str(jobs_dir), "stopped": stopped,
             "runs": len(runs), "runs_finished": sum(1 for r in runs if r["status"] != "running"),
+            "child_stopped_at_shutdown": child["child_stopped"], "child_still_running": child["still_running"],
             "run_records": str(jobs_dir / "plane-runs"), "game_touched": False,
-            "verification": "served on loopback with a per-start token; every action ran as a pat child with its own receipt; nothing here is game evidence"}
+            "verification": "served on loopback with a per-start token; every action ran as a pat child with its own receipt; "
+                            "a child still running at shutdown was interrupted, then killed, and its run recorded as stopped; nothing here is game evidence"}

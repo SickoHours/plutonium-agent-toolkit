@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 import uuid
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from ..core.discovery import find
 from ..core.errors import INPUT_INVALID, INPUT_MISSING, Failure
@@ -20,7 +20,7 @@ from ..core.errors import INPUT_INVALID, INPUT_MISSING, Failure
 ID = re.compile(r"^[a-z0-9_]{1,64}\Z")
 FOLDER = re.compile(r"^[A-Za-z0-9_.-]{1,100}\Z")
 HOST_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z")
-OPTION = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}=[A-Za-z0-9][A-Za-z0-9_.-]{0,63}\Z")
+OPTION = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}=[^\x00-\x1f\x7f]{1,512}\Z")  # the value range pat agent accepts
 REFERENCE = re.compile(r"^(?:[a-z0-9][a-z0-9-]{0,38}/[a-z0-9_]{1,64}|https://github\.com/[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100})@[0-9a-f]{40}\Z")
 ENTRY = re.compile(r"^[a-z0-9][a-z0-9-]{0,38}/[a-z0-9_]{1,64}\Z")
 BASE = re.compile(r"^[a-z0-9]{1,16}\Z")
@@ -68,7 +68,7 @@ class Action:
     note: str = ""
 
 
-COMPOSITION = Param("composition", "path", "A composition.json under a library root or the jobs directory (a pack the plane wrote)",
+COMPOSITION = Param("composition", "path", "A composition.json under a library root, or inside a snapshot that module fetch placed under the jobs directory",
                     required=True, file="composition.json", roots=("library", "jobs"))
 PROMPT = Param("prompt", "prompt", "The prompt text; the page offers playbook templates, the person edits and sends", required=True)
 THREAD = Param("thread_id", "host_id", "A thread id from agent hosts or a dispatch result", required=True, pattern=HOST_ID)
@@ -135,7 +135,7 @@ ACTIONS: tuple[Action, ...] = (
         Param("title", "text", "Thread title", required=True, flag="--title", limit=200),
         PROMPT,
         Param("instance", "host_id", "Provider instance id from agent models", required=True, flag="--instance", pattern=HOST_ID),
-        Param("model", "host_id", "Model slug from agent models", required=True, flag="--model", pattern=HOST_ID),
+        Param("model", "text", "Model slug from agent models (any printable slug pat agent accepts)", required=True, flag="--model", limit=MAX_TEXT),
         Param("options", "options", "Reasoning choices as id=value rows from agent models", flag="--option"),
         Param("runtime_mode", "enum", "Runtime mode", flag="--runtime-mode", choices=RUNTIME_MODES),
         Param("interaction_mode", "enum", "Interaction mode", flag="--interaction-mode", choices=INTERACTION_MODES),
@@ -171,17 +171,25 @@ def table(platform_info: dict) -> list[dict]:
 
 # ----- validation -----------------------------------------------------------------------------
 
+def _is_absolute(text: str) -> bool:
+    """Absolute in either path flavour, so a Windows drive or a POSIX root is refused on every host."""
+    return PurePosixPath(text).is_absolute() or PureWindowsPath(text).is_absolute() or bool(PureWindowsPath(text).drive)
+
+
 def _regular_path(root: Path, relative: str, what: str) -> Path:
     if not isinstance(relative, str) or not relative or len(relative) > 4096 or "\\" in relative or relative != relative.strip():
         raise Failure(INPUT_INVALID, f"{what}: a forward-slash path relative to its root")
-    parts = Path(relative).parts
-    if Path(relative).is_absolute() or not parts or any(p in ("..", ".") for p in parts):
+    parts = PurePosixPath(relative).parts
+    if _is_absolute(relative) or not parts or any(p in ("..", ".") for p in parts):
         raise Failure(INPUT_INVALID, f"{what}: the path stays inside its root")
     current = root
-    for part in parts:
-        current = current / part
-        if current.is_symlink():
-            raise Failure(INPUT_INVALID, f"{what}: linked paths are not accepted")
+    try:
+        for part in parts:
+            current = current / part
+            if current.is_symlink():
+                raise Failure(INPUT_INVALID, f"{what}: linked paths are not accepted")
+    except OSError as exc:
+        raise Failure(INPUT_INVALID, f"{what}: cannot read {relative}: {exc.strerror or exc}") from exc
     return current
 
 
@@ -203,14 +211,17 @@ def resolve_path(value, param: Param, library_roots: list[Path], jobs_root: Path
     else:
         raise Failure(INPUT_INVALID, f"{what}: unknown root {root_key!r}")
     full = _regular_path(root, value["path"], what)
-    if param.directory:
-        if not full.is_dir() or (param.file and not (full / param.file).is_file()):
-            raise Failure(INPUT_MISSING, f"{what}: no directory holding {param.file} at {value['path']}")
-        return full
-    if param.file and full.name != param.file:
-        raise Failure(INPUT_INVALID, f"{what}: the path ends in {param.file}")
-    if not full.is_file():
-        raise Failure(INPUT_MISSING, f"{what}: no file at {value['path']} under its root")
+    try:
+        if param.directory:
+            if not full.is_dir() or (param.file and not (full / param.file).is_file()):
+                raise Failure(INPUT_MISSING, f"{what}: no directory holding {param.file} at {value['path']}")
+            return full
+        if param.file and full.name != param.file:
+            raise Failure(INPUT_INVALID, f"{what}: the path ends in {param.file}")
+        if not full.is_file():
+            raise Failure(INPUT_MISSING, f"{what}: no file at {value['path']} under its root")
+    except OSError as exc:
+        raise Failure(INPUT_INVALID, f"{what}: cannot read {value['path']}: {exc.strerror or exc}") from exc
     return full
 
 
@@ -252,8 +263,9 @@ def argv_for(action: Action, args: dict, library_roots: list[Path], jobs_root: P
                 raise Failure(INPUT_INVALID, f"parameter {param.name}: one of {list(param.choices)}")
             text = value
         elif param.kind == "prompt":
-            if not isinstance(value, str) or not value.strip() or len(value) > MAX_PROMPT or not PRINTABLE.match(value.replace("\n", "").replace("\t", "")):
-                raise Failure(INPUT_INVALID, f"parameter {param.name}: prompt text of 1 to {MAX_PROMPT} characters")
+            if not isinstance(value, str) or not value.strip() or len(value) > MAX_PROMPT or len(value.encode("utf-8")) > MAX_PROMPT \
+                    or not PRINTABLE.match(value.replace("\n", "").replace("\t", "")):
+                raise Failure(INPUT_INVALID, f"parameter {param.name}: prompt text of 1 to {MAX_PROMPT} characters and bytes")
             prompts.append((len(argv) + 1, value))
             argv += ["--prompt", "<prompt file>"]
             continue

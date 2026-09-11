@@ -1,10 +1,15 @@
 """``pat plane``: the typed action table, argument validation, and the loopback server driving
 ``pat`` children against the fake backends. No real backend, no network beyond 127.0.0.1, no game."""
+import http.client
 import json
 import os
+import subprocess
+import sys
+import tempfile
 import threading
 import time
 import unittest
+import unittest.mock
 import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
@@ -13,7 +18,6 @@ from pathlib import Path
 from plutonium_agent_toolkit.cli import JOB_GROUPS
 from plutonium_agent_toolkit.core.discovery import find, routes
 from plutonium_agent_toolkit.core.errors import Failure
-from plutonium_agent_toolkit.plane import actions as actions_module
 from plutonium_agent_toolkit.plane import server as server_module
 from plutonium_agent_toolkit.plane.actions import ACTIONS, BY_ID, argv_for, table
 from tests.test_dev_routes import DevRouteFixture, invoke
@@ -65,8 +69,6 @@ class ActionTableTests(unittest.TestCase):
 
 class ArgvTests(unittest.TestCase):
     def setUp(self):
-        import tempfile
-
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
@@ -86,6 +88,7 @@ class ArgvTests(unittest.TestCase):
         argv = self.argv("module-plan", {"composition": {"root": 0, "path": "pack/composition.json"}})
         self.assertEqual(argv, ["module", "plan", str(self.lib / "pack" / "composition.json")])
         for bad in ({"root": 0, "path": "../pack/composition.json"}, {"root": 0, "path": "/etc/composition.json"},
+                    {"root": 0, "path": "C:/pack/composition.json"}, {"root": 0, "path": "//share/pack/composition.json"},
                     {"root": 0, "path": "pack/../pack/composition.json"}, {"root": 1, "path": "pack/composition.json"},
                     {"root": "jobs", "path": "build-1/receipt.json"}, "pack/composition.json", {"path": "pack/composition.json"},
                     {"root": 0, "path": "pack\\composition.json"}, {"root": True, "path": "pack/composition.json"}):
@@ -100,13 +103,23 @@ class ArgvTests(unittest.TestCase):
         with self.assertRaises(Failure):
             self.argv("project-verify", {"receipt": {"root": 0, "path": "pack/composition.json"}})
 
-    def test_links_are_refused(self):
+    def test_links_and_unreadable_directories_are_refused_as_input_errors(self):
         if os.name == "nt":
-            self.skipTest("symlink creation needs a privilege on Windows")
+            self.skipTest("symlinks and POSIX modes")
         (self.lib / "linked").symlink_to(self.lib / "pack")
         with self.assertRaises(Failure) as ctx:
             self.argv("module-plan", {"composition": {"root": 0, "path": "linked/composition.json"}})
         self.assertEqual(ctx.exception.code, "input_invalid")
+        if os.geteuid() == 0:
+            self.skipTest("root reads everything")
+        closed = self.lib / "closed"
+        (closed / "inner").mkdir(parents=True)
+        (closed / "inner" / "composition.json").write_text("{}")
+        closed.chmod(0)
+        self.addCleanup(closed.chmod, 0o700)
+        with self.assertRaises(Failure) as ctx:  # a Failure, never an OSError that drops the connection
+            self.argv("module-plan", {"composition": {"root": 0, "path": "closed/inner/composition.json"}})
+        self.assertIn(ctx.exception.code, ("input_invalid", "input_missing"))
 
     def test_unknown_required_and_typed_parameters(self):
         with self.assertRaises(Failure) as ctx:
@@ -140,7 +153,27 @@ class ArgvTests(unittest.TestCase):
         with self.assertRaises(Failure):
             self.argv("agent-send", {"thread_id": "t", "prompt": "x", "options": ["bad option"]})
         with self.assertRaises(Failure):
-            self.argv("agent-dispatch", {"project": "p", "title": "t", "prompt": "x", "instance": "i", "model": "m", "options": ["effort=high;rm"]})
+            self.argv("agent-dispatch", {"project": "p", "title": "t", "prompt": "x", "instance": "i", "model": "m", "options": ["effort=high\x00"]})
+
+    def test_model_slugs_and_option_values_accept_what_pat_agent_accepts(self):
+        # Review finding: slugs like provider/model-name and option values with spaces or 512 characters are
+        # valid for pat agent dispatch; the plane must not be stricter than the route it fronts.
+        argv = self.argv("agent-dispatch", {"project": "p", "title": "t", "prompt": "x", "instance": "opencode",
+                                            "model": "openai/gpt-5.1-codex (preview)", "options": ["reasoningEffort=x-high", "thinking=on; budget 8k"]})
+        self.assertIn("openai/gpt-5.1-codex (preview)", argv)
+        self.assertEqual(argv[-4:], ["--option", "reasoningEffort=x-high", "--option", "thinking=on; budget 8k"])
+        with self.assertRaises(Failure):
+            self.argv("agent-dispatch", {"project": "p", "title": "t", "prompt": "x", "instance": "i", "model": "m", "options": ["=novalue"]})
+        with self.assertRaises(Failure):
+            self.argv("agent-dispatch", {"project": "p", "title": "t", "prompt": "x", "instance": "i", "model": "m", "options": ["effort=" + "v" * 513]})
+
+    def test_prompt_is_bounded_in_bytes_and_a_refused_prompt_leaves_no_file(self):
+        big = "é" * 150_000  # 150k characters, 300k UTF-8 bytes: pat agent would refuse it
+        with self.assertRaises(Failure):
+            self.argv("agent-dispatch", {"project": "p", "title": "t", "prompt": big, "instance": "i", "model": "m"})
+        with self.assertRaises(Failure):  # valid prompt, invalid later parameter: nothing written
+            self.argv("agent-dispatch", {"project": "p", "title": "t", "prompt": "fine", "instance": "i", "model": "m", "runtime_mode": "nope"})
+        self.assertFalse(self.prompts.exists())
 
     def test_registry_source_is_a_library_file_or_https(self):
         (self.lib / "registry.json").write_text("{}")
@@ -168,9 +201,11 @@ class PlaneServerFixture(DevRouteFixture):
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), server_module.make_handler(self.plane))
         self.server.daemon_threads = True
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.addCleanup(self.plane.shutdown)
         self.addCleanup(self.server.server_close)
         self.addCleanup(self.server.shutdown)
-        self.origin = f"http://127.0.0.1:{self.server.server_address[1]}"
+        self.port = self.server.server_address[1]
+        self.origin = f"http://127.0.0.1:{self.port}"
 
     def call(self, path, body=None, token=None, host=None, origin=None):
         data = json.dumps(body).encode() if body is not None else None
@@ -200,7 +235,7 @@ class PlaneServerFixture(DevRouteFixture):
 
 
 class PlaneServerTests(PlaneServerFixture):
-    def test_guards_token_host_and_origin(self):
+    def test_guards_token_host_origin_and_body(self):
         self.assertEqual(self.call("/api/state", token="")[0], 401)
         self.assertEqual(self.call("/api/state", token="x" * 43)[0], 401)
         self.assertEqual(self.call("/api/state", host="evil.example:80")[0], 403)
@@ -221,16 +256,50 @@ class PlaneServerTests(PlaneServerFixture):
             self.assertIn("javascript", response.getheader("Content-Type"))
         self.assertEqual(self.call("/api/nothing")[0], 404)
         self.assertEqual(self.call("/api/run", {"action": "module-plan"}, token="")[0], 401)
+        # A negative or absurd Content-Length is refused before any read (review finding).
+        for length in ("-1", "99999999", "abc"):
+            conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+            conn.putrequest("POST", "/api/run")
+            conn.putheader("X-Plane-Token", self.plane.token)
+            conn.putheader("Content-Length", length)
+            conn.endheaders()
+            response = conn.getresponse()
+            self.assertEqual(response.status, 400, length)
+            response.read()
+            conn.close()
 
     def test_library_and_actions(self):
+        (self.lib / "loose").mkdir()
+        (self.lib / "loose" / "mod.ff").write_bytes(b"prebuilt, undeclared")
         status, body = self.call("/api/library")
         self.assertEqual(status, 200)
         root = body["roots"][0]
         self.assertEqual(sorted(m["id"] for m in root["modules"]), ["hello_zm", "round_announcer"])
         self.assertEqual([c["name"] for c in root["compositions"]], ["stock_hello_pack"])
         self.assertEqual(root["modules"][0]["payload"], "recipe")
+        self.assertEqual(root["packages"], ["loose/mod.ff"], "loose packages are listed so module declare can take them")
+        self.assertFalse(body["truncated"])
         status, body = self.call("/api/actions")
         self.assertEqual([a["id"] for a in body["actions"]], [a.id for a in ACTIONS])
+
+    def test_catalog_is_bounded_and_tolerates_bad_manifests(self):
+        for i in range(5):
+            d = self.lib / f"odd{i}"
+            d.mkdir()
+            (d / "module.json").write_text(json.dumps({"schema": 1, "id": f"odd{i}", "version": "1", "seed": "seed.json",
+                                                        "bases": "b2", "maps": ["zm_factory"], "tags": "scalar"}))
+            (d / "seed.json").write_text("[]" if i % 2 else "not json")
+        with unittest.mock.patch.object(server_module, "MAX_CATALOG_ROWS", 4):
+            status, body = self.call("/api/library")
+        self.assertEqual(status, 200)
+        self.assertTrue(body["truncated"])
+        self.assertTrue(body["roots"][0]["truncated"])
+        self.assertLessEqual(len(body["roots"][0]["modules"]) + len(body["roots"][0]["compositions"]), 4)
+        status, body = self.call("/api/library")
+        rows = {m["id"]: m for m in body["roots"][0]["modules"]}
+        self.assertEqual(rows["odd1"]["seed_error"], "seed manifest is not a JSON object")
+        self.assertIsNone(rows["odd0"]["package_present"])
+        self.assertEqual(rows["odd0"]["bases"], "b2", "the page normalises scalars; the server reports the file as it is")
 
     def test_plan_build_verify_and_the_receipt_index(self):
         status, body = self.call("/api/run", {"action": "module-plan", "args": {"composition": {"root": 0, "path": "hello-pack/composition.json"}}})
@@ -240,7 +309,7 @@ class PlaneServerTests(PlaneServerFixture):
         self.assertEqual(run["exit_code"], 0)
         self.assertTrue(run["result"]["ok"], run)
         self.assertEqual([m["id"] for m in run["result"]["result"]["modules"]], ["hello_zm", "round_announcer"])
-        self.assertEqual(run["argv"][-3:], ["--output", str(self.jobs / "module-plan-0001"), "--json"])
+        self.assertEqual(run["argv"][-3:], ["--output", str(self.jobs.resolve() / "module-plan-0001"), "--json"])
         self.assertTrue((self.jobs / "module-plan-0001" / "receipt.json").is_file())
         self.assertTrue((self.jobs / "plane-runs" / f"{run['run_id']}.json").is_file())
 
@@ -255,31 +324,60 @@ class PlaneServerTests(PlaneServerFixture):
         run = self.finish(body["run"]["run_id"])
         self.assertTrue(run["result"]["ok"], run)
 
+        # A fetched snapshot under jobs exposes its composition or declaration to the path selects.
+        fetched = self.jobs / "module-fetch-0009"
+        (fetched / "repository" / "pack").mkdir(parents=True)
+        (fetched / "repository" / "pack" / "composition.json").write_text("{}")
+        (fetched / "receipt.json").write_text(json.dumps({"schema_version": 1, "command": "module fetch", "status": "succeeded",
+                                                          "started": "2026-09-11T00:00:00+00:00",
+                                                          "result": {"kind": "composition", "module_dir": str(fetched / "repository" / "pack")}}))
         status, body = self.call("/api/jobs")
         rows = {r["directory"]: r for r in body["runs"]}
         self.assertEqual(rows[build_dir.name]["status"], "succeeded")
         self.assertEqual(rows[build_dir.name]["mod_ff"], "packages/mod.ff")
         self.assertEqual(rows["module-plan-0001"]["command"], "module plan")
+        self.assertEqual(rows["module-fetch-0009"]["composition"], "module-fetch-0009/repository/pack/composition.json")
         status, body = self.call("/api/runs")
         self.assertEqual([r["number"] for r in body["runs"]], [3, 2, 1])
         self.assertFalse(body["running"])
 
-    def test_one_run_at_a_time_and_a_failed_child_is_recorded(self):
+    def test_one_run_at_a_time_busy_leaves_nothing_and_a_failed_child_is_recorded(self):
         args = {"composition": {"root": 0, "path": "hello-pack/composition.json"}}
         status, first = self.call("/api/run", {"action": "module-build", "args": args})
         self.assertEqual(status, 202)
-        status, second = self.call("/api/run", {"action": "module-plan", "args": args})
+        status, second = self.call("/api/run", {"action": "agent-send", "confirmed": True, "args": {"thread_id": "t-1", "prompt": "x" * 1000}})
         self.assertEqual(status, 409)
         self.assertEqual(second["error_code"], "busy")
+        self.assertFalse((self.jobs / "plane-prompts").exists(), "a busy dispatch writes no prompt file")
         self.finish(first["run"]["run_id"])
         # A child that fails structurally is a finished run with the child's error, not a server error.
         status, body = self.call("/api/run", {"action": "game-install-mod", "confirmed": True,
-                                              "args": {"package": {"root": "jobs", "path": first["run"]["output"].rsplit("/", 1)[-1] + "/packages/mod.ff"}, "folder": "stock_hello_pack"}})
+                                              "args": {"package": {"root": "jobs", "path": Path(first["run"]["output"]).name + "/packages/mod.ff"}, "folder": "stock_hello_pack"}})
         self.assertEqual(status, 202, body)
         run = self.finish(body["run"]["run_id"])
         self.assertEqual(run["status"], "finished")
         self.assertEqual(run["exit_code"], 1)
         self.assertEqual(run["result"]["error_code"], "config_missing", "no storage is configured in this fixture")
+
+    def test_lock_is_released_even_when_the_run_record_cannot_be_written(self):
+        args = {"composition": {"root": 0, "path": "hello-pack/composition.json"}}
+        status, first = self.call("/api/run", {"action": "module-plan", "args": args})
+        self.assertEqual(status, 202)
+        original = self.plane._record
+
+        def broken(run):
+            if run["status"] != "running":
+                raise OSError("disk full")
+            original(run)
+        self.plane._record = broken
+        deadline = time.monotonic() + 60
+        while self.plane.job_lock.locked() and time.monotonic() < deadline:
+            time.sleep(0.1)
+        self.assertFalse(self.plane.job_lock.locked(), "the lock outlives a failed record")
+        self.plane._record = original
+        status, second = self.call("/api/run", {"action": "module-plan", "args": args})
+        self.assertEqual(status, 202, second)
+        self.finish(second["run"]["run_id"])
 
     def test_refusals_before_any_child_starts(self):
         args = {"composition": {"root": 0, "path": "hello-pack/composition.json"}}
@@ -299,6 +397,7 @@ class PlaneServerTests(PlaneServerFixture):
             self.assertEqual((got_status, got.get("error_code")), (status, code), (body, got))
         self.assertEqual(self.call("/api/runs")[1]["runs"], [], "nothing was started")
         self.assertFalse((self.jobs / "plane-prompts").exists(), "no prompt file for a refused dispatch")
+        self.assertFalse(self.plane.job_lock.locked(), "a refusal releases the run lock")
         too_big = self.call("/api/run", {"action": "module-plan", "args": {"composition": {"root": 0, "path": "x" * 5000}}})
         self.assertEqual(too_big[0], 400)
 
@@ -326,10 +425,28 @@ class PlaneServerTests(PlaneServerFixture):
         self.assertEqual(row["distribution"], "private")
 
 
+class ShutdownTests(unittest.TestCase):
+    def test_shutdown_stops_a_running_child_and_refuses_new_runs(self):
+        # Review finding: a child must not outlive the plane. A sleeping python stands in for a build.
+        with tempfile.TemporaryDirectory() as temp:
+            plane = server_module.Plane([], Path(temp) / "jobs")
+            process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], stdin=subprocess.DEVNULL,
+                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **server_module._group_flags())
+            plane.job_lock.acquire()
+            plane.active = process
+            started = time.monotonic()
+            summary = plane.shutdown(grace=2)
+            self.assertTrue(summary["child_stopped"])
+            self.assertIsNotNone(process.poll(), "the child was stopped")
+            self.assertLess(time.monotonic() - started, 15)
+            with self.assertRaises(Failure) as ctx:
+                plane.start("manifest", {}, False)
+            self.assertEqual(ctx.exception.code, "busy")
+            plane.job_lock.release()
+
+
 class ServeEntryTests(unittest.TestCase):
     def test_serve_validates_roots_and_stops_on_its_deadline(self):
-        import tempfile
-
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             (root / "lib").mkdir()
@@ -347,6 +464,7 @@ class ServeEntryTests(unittest.TestCase):
             self.assertEqual(result["stopped"], "deadline")
             self.assertEqual(result["runs"], 0)
             self.assertFalse(result["game_touched"])
+            self.assertFalse(result["child_stopped_at_shutdown"])
             self.assertTrue(announced[0].startswith("pat plane: http://127.0.0.1:"))
             self.assertIn("#token=", announced[0])
             self.assertTrue((root / "jobs" / "plane-runs").is_dir())

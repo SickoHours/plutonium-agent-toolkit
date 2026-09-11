@@ -36,11 +36,11 @@ The token is not written anywhere and dies with the process.
 
 | Screen | Controls | Routes behind them |
 | --- | --- | --- |
-| Library | Every declaration and composition under the library roots: id, kind, category, bases, maps, tags, payload, whether a seed's package is present; declare a `mod.ff` as a seed | files; `module declare` |
+| Library | Every declaration and composition under the library roots: id, kind, category, bases, maps, tags, payload, whether a seed's package is present; every loose `mod.ff` under a root, declared or not, offered to `module declare` | files; `module declare` |
 | Pack | Plan a composition (collisions come back as decisions), build it, verify a build receipt | `module plan`, `module build`, `project verify` |
 | Install | Installed mod folders, file-only install of a built package, game status, engine info, launch, select a mod, load a map, check a load | `game mods`, `game install-mod`, `game status`, `game info`, `game launch`, `game select-mod`, `game load-map`, `game check-load` |
 | Agent | Probe the local T3 Code server, list its projects and threads, list this machine's provider instances, models and reasoning choices, dispatch a prompt, read a thread, send a follow-up, interrupt | `agent probe`, `agent hosts`, `agent models`, `agent dispatch`, `agent status`, `agent send`, `agent interrupt` |
-| Registry | Registries recorded on this machine, search, show an entry, record a registry file, fetch a module or pack at its exact commit | `registry list`, `registry search`, `registry show`, `registry add`, `module fetch` |
+| Registry | Registries recorded on this machine, search, show an entry, record a registry file (one under a library root, or an https URL typed in), fetch a module or pack at its exact commit; a fetched snapshot's declaration or composition then appears in the Pack selects | `registry list`, `registry search`, `registry show`, `registry add`, `module fetch` |
 | Runs | Every action this plane started (argv, exit status, the child's JSON) and every `receipt.json` under the jobs directory | files |
 
 `pat plane actions --json` prints the same table the page uses: each action's route, effect,
@@ -60,7 +60,14 @@ says why.
   and the person chooses; `dispatch` refuses without an instance and a model.
 - It never reads the bearer token. Agent actions are `pat agent` children, which load it from the
   toolkit configuration themselves and send it to the local server only.
-- It runs one action at a time; a second request while one runs is answered `busy` at once.
+- It runs one action at a time; a second request while one runs is answered `busy` at once and
+  leaves nothing on disk. The single-run lock is taken before any parameter is checked.
+- Its catalog is bounded (rows across roots, directories and loose packages per root) and says
+  `truncated` when a bound was reached; a declaration or manifest that is not what the format
+  says is shown with its error, never hidden and never a crash.
+- When it stops (deadline or Ctrl-C) it refuses new runs, interrupts a child still running so the
+  child writes its cancelled receipt, kills it after a grace period, and reports
+  `child_stopped_at_shutdown` in its summary; the run is recorded as `stopped`.
 - It is not evidence. A green row is the child's `ok: true`; the six build facts (offline
   verified, installed, launched, loaded, playable, accepted) are stated by the receipts and the
   person, never by the page.

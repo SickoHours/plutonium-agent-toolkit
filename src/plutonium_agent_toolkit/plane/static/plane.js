@@ -27,6 +27,8 @@ async function api(path, options) {
 }
 
 function badge(text, tone) { return el("span", { class: "badge " + (tone || ""), text }); }
+// A declaration field that should be a list, tolerated when a hand-written file made it a scalar.
+const list = (value, single) => Array.isArray(value) ? value.map(String) : value !== undefined && value !== null ? [String(value)] : single !== undefined && single !== null ? [String(single)] : [];
 
 function confirmRun(action, argsPreview) {
   const dialog = $("#confirm");
@@ -132,11 +134,14 @@ function pathSelect(param) {
   if (state.library) {
     for (const root of state.library.roots) {
       if (!param.roots.includes("library")) continue;
-      const rows = param.file === "composition.json" ? root.compositions : param.file === "module.json" ? root.modules
-        : param.file === "mod.ff" ? root.modules.filter((m) => m.payload === "seed" && m.package_present) : [];
+      const rows = param.file === "composition.json" ? root.compositions : param.file === "module.json" ? root.modules : [];
       for (const row of rows) {
         const rel = row.path ? row.path + "/" + param.file : param.file;
         select.append(el("option", { value: JSON.stringify({ root: root.index, path: rel }), text: `${root.root}/${rel}` }));
+      }
+      if (param.file === "mod.ff") {
+        // Every loose package under the root, declared or not; the server lists them by file name.
+        for (const rel of root.packages || []) select.append(el("option", { value: JSON.stringify({ root: root.index, path: rel }), text: `${root.root}/${rel}` }));
       }
       if (param.file === "registry.json") {
         select.append(el("option", { value: JSON.stringify({ root: root.index, path: "registry.json" }), text: `${root.root}/registry.json` }));
@@ -145,7 +150,7 @@ function pathSelect(param) {
   }
   if (param.roots.includes("jobs") && state.jobs) {
     for (const run of state.jobs.runs) {
-      if (param.file === "composition.json" && run.command === "module plan") continue;
+      if (param.file === "composition.json" && run.composition) select.append(el("option", { value: JSON.stringify({ root: "jobs", path: run.composition }), text: `${run.composition} (fetched)` }));
       if (param.file === "receipt.json") select.append(el("option", { value: JSON.stringify({ root: "jobs", path: run.directory + "/receipt.json" }), text: `${run.directory}/receipt.json (${run.command}, ${run.status})` }));
       if (param.file === "mod.ff" && run.mod_ff) select.append(el("option", { value: JSON.stringify({ root: "jobs", path: run.directory + "/" + run.mod_ff }), text: `${run.directory}/${run.mod_ff} (${run.name || run.command})` }));
     }
@@ -154,7 +159,12 @@ function pathSelect(param) {
 }
 
 function control(param) {
-  if (param.kind === "path" || param.kind === "registry_source") return pathSelect(Object.assign({ roots: ["library"], file: "registry.json" }, param));
+  if (param.kind === "path") return pathSelect(param);
+  if (param.kind === "registry_source") {
+    const select = pathSelect(Object.assign({}, param, { roots: ["library"], file: "registry.json" }));
+    const url = el("input", { type: "url", name: param.name + "_url", placeholder: "or an https:// URL to a registry.json", autocomplete: "off" });
+    return el("div", { class: "prompt" }, select, url);
+  }
   if (param.kind === "flag") return el("input", { type: "checkbox", name: param.name });
   if (param.kind === "enum") {
     const select = el("select", { name: param.name }, el("option", { value: "", text: "— default —" }));
@@ -180,9 +190,16 @@ function readForm(form, action) {
     if (!node) continue;
     if (param.kind === "flag") { if (node.checked) args[param.name] = true; continue; }
     const raw = node.value;
+    if (param.kind === "registry_source") {
+      const url = form.elements[param.name + "_url"];
+      if (url && url.value.trim()) { args[param.name] = url.value.trim(); continue; }
+    }
     if (raw === "" || raw === null) continue;
     if (param.kind === "path") args[param.name] = JSON.parse(raw);
-    else if (param.kind === "registry_source") args[param.name] = raw.startsWith("{") ? JSON.parse(raw) : raw;
+    else if (param.kind === "registry_source") {
+      const url = form.elements[param.name + "_url"];
+      args[param.name] = url && url.value.trim() ? url.value.trim() : JSON.parse(raw);
+    }
     else if (param.kind === "int") args[param.name] = Number(raw);
     else if (param.kind === "options") args[param.name] = raw.split(/\s+/).filter(Boolean);
     else args[param.name] = raw;
@@ -198,7 +215,7 @@ function actionForm(action) {
   for (const param of action.params) {
     form.append(el("label", { for: action.id + "-" + param.name, text: param.name + (param.required ? " *" : "") }));
     const node = control(param);
-    const field = node.tagName === "DIV" ? node.querySelector("textarea") : node;
+    const field = node.tagName === "DIV" ? node.querySelector("textarea, select, input") : node;
     field.id = action.id + "-" + param.name;
     field.title = param.help;
     form.append(node);
@@ -227,7 +244,7 @@ function renderLibrary() {
   if (!state.library) return;
   for (const root of state.library.roots) {
     const box = tableBox;
-    box.append(el("h3", { text: root.root }));
+    box.append(el("h3", {}, root.root, " ", root.truncated ? badge("truncated at the catalog bound", "warn") : null));
     const table = el("table", {}, el("thead", {}, el("tr", {}, ...["id / name", "kind", "category", "bases", "maps", "tags", "payload", "package"].map((h) => el("th", { text: h })))));
     const body = el("tbody");
     for (const m of root.modules.concat(root.compositions)) {
@@ -235,11 +252,12 @@ function renderLibrary() {
         el("td", {}, el("strong", { text: m.id || m.name || "?" }), " ", el("span", { class: "muted", text: m.title || "" }), el("br"), el("code", { text: m.path || "." })),
         el("td", { text: m.kind === "composition" ? "composition" : (m.kind || "module") }),
         el("td", { text: m.category || "" }),
-        el("td", { text: (m.bases || (m.base ? [m.base] : [])).join(", ") }),
-        el("td", { text: (m.maps || (m.map ? [m.map] : [])).join(", ") }),
-        el("td", { text: (m.tags || []).join(", ") }),
-        el("td", { text: m.payload || (m.modules ? `${m.modules.length} members` : "") }),
-        el("td", {}, m.error ? badge(m.error, "bad") : m.payload === "seed" ? badge(m.package_present ? "present" : "not here (private)", m.package_present ? "ok" : "warn") : "")));
+        el("td", { text: list(m.bases, m.base).join(", ") }),
+        el("td", { text: list(m.maps, m.map).join(", ") }),
+        el("td", { text: list(m.tags).join(", ") }),
+        el("td", { text: m.payload || (Array.isArray(m.modules) ? `${m.modules.length} members` : "") }),
+        el("td", {}, m.error ? badge(m.error, "bad") : m.seed_error ? badge(m.seed_error, "bad")
+          : m.payload === "seed" ? badge(m.package_present ? "present" : "not here (private)", m.package_present ? "ok" : "warn") : "")));
     }
     table.append(body);
     box.append(table);
@@ -264,7 +282,7 @@ function refreshSelects() {
       if (param.kind !== "path" && param.kind !== "registry_source") continue;
       const current = form.elements[param.name];
       if (!current) continue;
-      const fresh = control(param);
+      const fresh = param.kind === "path" ? pathSelect(param) : pathSelect(Object.assign({}, param, { roots: ["library"], file: "registry.json" }));
       fresh.id = current.id;
       fresh.title = current.title;
       fresh.value = current.value;
