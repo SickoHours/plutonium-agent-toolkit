@@ -15,6 +15,7 @@ EFFECTS = (
     "inert",               # discovery only
     "writes-config",       # user configuration under the toolkit home
     "downloads-backends",  # pinned HTTPS downloads into the backends directory
+    "downloads-source",    # one HTTPS download of a repository snapshot at an exact commit into a new output directory
     "writes-output",       # new output directory with artifacts and receipt
     "query-engine",        # reads fresh game state through the external console
     "changes-game",        # launches, loads, restarts or stops the game

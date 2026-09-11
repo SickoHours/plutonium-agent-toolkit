@@ -12,6 +12,9 @@
     pat ff link <project dir> --zone <name> --output <new dir>
     pat project init|plan|build|verify ... --output <new dir>
     pat module plan|build <composition.json> --output <new dir>
+    pat module declare <mod.ff> --output <new dir>
+    pat module fetch <owner/id@commit | https://github.com/o/r@commit> --output <new dir>
+    pat registry add <file|url> | list | search [words] [--category ...] | show <owner/id>
     pat <group> <action> ...          planned routes answer not_implemented
 
 Exit statuses: 0 ok, 1 failure, 2 usage, 130 cancelled. See core/errors.py.
@@ -84,6 +87,14 @@ def build_parser() -> Parser:
     models.add_parser(sub, common)
     weapons.add_parser(sub, common)
 
+    r = sub.add_parser("registry", help="Registries of published modules and packs (files anyone can host)")
+    ra = r.add_subparsers(dest="action", required=True)
+    q = ra.add_parser("add"); q.add_argument("source", help="Path or https URL to a registry.json"); q.add_argument("--json", action="store_true")
+    q = ra.add_parser("list"); q.add_argument("--json", action="store_true")
+    q = ra.add_parser("search"); q.add_argument("words", nargs="*"); q.add_argument("--category"); q.add_argument("--kind"); q.add_argument("--tag")
+    q.add_argument("--base"); q.add_argument("--map"); q.add_argument("--entry-kind", choices=["module", "composition"]); q.add_argument("--json", action="store_true")
+    q = ra.add_parser("show"); q.add_argument("name", help="<owner>/<id>"); q.add_argument("--json", action="store_true")
+
     g = sub.add_parser("game", help="Plutonium T6 Zombies control through the external console")
     g.add_argument("action", choices=sorted(r.action for r in routes() if r.group == "game"))
     g.add_argument("argument", nargs="?", help="Mod folder ID, map ID, load ID or (install-mod) mod.ff path")
@@ -92,7 +103,7 @@ def build_parser() -> Parser:
     g.add_argument("--json", action="store_true")
 
     # Planned/deferred groups accept any action so they can answer with a structured refusal.
-    for group in sorted({r.group for r in routes()} - {"dev", "gsc", "ff", "project", "module", "game", "audio", "image", "lua", "model", "weapon"}):
+    for group in sorted({r.group for r in routes()} - {"dev", "gsc", "ff", "project", "module", "registry", "game", "audio", "image", "lua", "model", "weapon"}):
         g = sub.add_parser(group)
         g.add_argument("action")
         g.add_argument("rest", nargs=argparse.REMAINDER)
@@ -207,6 +218,18 @@ def run(argv: list[str]) -> dict:
 
     if group == "game":
         return run_game(args)
+
+    if group == "registry":
+        from .dev import registry
+
+        if args.action == "add":
+            return success(command, registry.add(args.source))
+        if args.action == "list":
+            return success(command, registry.listing())
+        if args.action == "search":
+            return success(command, registry.search(" ".join(args.words), category=args.category, kind=args.kind, tag=args.tag,
+                                                        base=args.base, map_id=args.map, entry_kind=args.entry_kind))
+        return success(command, registry.show(args.name))
 
     route = find(group, args.action)
     hint = ("Deferred by product decision; not part of this release. See docs/SUPPORT.md." if route.status == "deferred"

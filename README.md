@@ -93,7 +93,9 @@ words are defined once in [CONTEXT.md](CONTEXT.md).
 [docs/playbooks/](docs/playbooks/README.md) holds finite recipes for the common tasks: first build,
 add a script, port a feature, four preflights, diagnose a crash, compose a pack, package and install.
 [docs/MODULES.md](docs/MODULES.md) specifies the module declaration and composition recipe that
-let an agent compose several mods, from local directories or cloned repositories, into one pack.
+let an agent compose several mods, from local directories or fetched repositories, into one pack;
+[docs/REGISTRY.md](docs/REGISTRY.md) specifies the registry file that lists them by name at exact
+commits, with `pat registry` and `pat module fetch`. `examples/registry.json` lists the examples.
 [docs/TRACK-RECORD.md](docs/TRACK-RECORD.md) records what that workflow has produced, and the
 workflows that went beyond the packaged routes.
 
@@ -125,6 +127,7 @@ python tools/release_check.py
 | `src/plutonium_agent_toolkit/testing/` | Capture and test routes |
 | `examples/hello-zm/` | The bundled first-run mod used by the qualification loop |
 | `examples/hello-pack/` | The smallest composition: both example modules on the stock game as one `mod.ff`; formats in `docs/MODULES.md` |
+| `examples/registry.json` | A registry listing the examples at an exact commit; format in `docs/REGISTRY.md` |
 | `docs/` | User guide, packaged route qualification, contributor docs, engineering history |
 | `docs/TRACK-RECORD.md`, `docs/track-record.json` | Generated track record: accepted modules by category, milestones with the scope of each verdict, workflows completed without a packaged route |
 | `CONTEXT.md` | The vocabulary every doc, receipt and skill uses, one definition each |

@@ -131,8 +131,11 @@ def write_strings(rows: dict[str, str]) -> str:
     return 'VERSION "1"\nCONFIG ""\nFILENOTES ""\n\n' + body + "ENDMARKER\n"
 
 
-def load_manifest(directory: Path, relative: str, job: Job, owner: str) -> dict:
-    """Validate a seed manifest named by a declaration and hash every file it lists."""
+def load_manifest(directory: Path, relative: str, job: Job, owner: str, allow_missing_files: bool = False) -> dict:
+    """Validate a seed manifest named by a declaration and hash every file it lists.
+
+    With ``allow_missing_files`` (a ``private`` module) a listed file may be absent; the manifest
+    is still validated and the result says ``private: True`` so a plan can name what is missing."""
     if not isinstance(relative, str) or not relative or "\\" in relative or Path(relative).is_absolute() \
             or ".." in Path(relative).parts:
         raise Failure(INPUT_INVALID, f"{owner}: seed is a forward-slash relative path inside the module directory")
@@ -159,6 +162,7 @@ def load_manifest(directory: Path, relative: str, job: Job, owner: str) -> dict:
                       "A T6 fastfile is bound to its file name; a seed built as another zone cannot be linked against as mod.")
     seed_dir = src.parent
     hashed: dict[str, Path] = {}
+    missing: list[str] = []
     for name, digest in files.items():
         if not isinstance(name, str) or not (name == "mod.ff" or BANK.match(name)):
             raise Failure(INPUT_INVALID, f"{owner}: seed files are mod.ff and soundbanks (.sabl/.sabs): {name!r}")
@@ -166,6 +170,9 @@ def load_manifest(directory: Path, relative: str, job: Job, owner: str) -> dict:
             raise Failure(INPUT_INVALID, f"{owner}: seed file {name} needs a 64-hex sha256")
         p = seed_dir / name
         if p.is_symlink() or not p.is_file():
+            if allow_missing_files:
+                missing.append(name)
+                continue
             raise Failure(INPUT_MISSING, f"{owner}: seed file is missing: {name}",
                           "A seed ships its package beside the manifest; a module published without it is distribution: private.")
         actual = sha256_file(job.input(p, limit=MAX_PACKAGE))
@@ -194,9 +201,9 @@ def load_manifest(directory: Path, relative: str, job: Job, owner: str) -> dict:
     provides = data.get("provides", {})
     if not isinstance(provides, dict) or any(not isinstance(v, list) or not all(isinstance(x, str) for x in v) for v in provides.values()):
         raise Failure(INPUT_INVALID, f"{owner}: seed provides maps kinds to lists of names")
-    return {"manifest": src, "directory": seed_dir, "package": hashed["mod.ff"], "files": hashed,
+    return {"manifest": src, "directory": seed_dir, "package": hashed.get("mod.ff"), "files": hashed,
             "roots": list(data["roots"]), "embedded": list(data["embedded"]), "referenced": list(data["referenced"]),
-            "provides": provides, "strings": strings}
+            "provides": provides, "strings": strings, "private": bool(missing), "missing": missing}
 
 
 def declare(package: Path, args, job: Job) -> dict:

@@ -28,6 +28,10 @@ verified, installed, launched, playable, captured, accepted. Words are defined i
 
 ## On-ramps
 
+- **The user names a published module or pack** ("add the round announcer from the registry", a
+  GitHub link): `pat registry search <words>` or `show <owner/id>`, then `pat module fetch
+  <owner/id@commit> --output <new dir>` and name `module_dir` as a reference member of the
+  composition. `docs/REGISTRY.md`; publishing your own: `docs/playbooks/publish-a-module.md`.
 - **The user names a feature and no donor is on disk**: `docs/playbooks/find-prior-art.md`
   before `pat-grill`. Someone has usually ported or extracted it for some game; a lead found,
   fetched, hashed and inspected is a donor, and a search not run is a port built from nothing.

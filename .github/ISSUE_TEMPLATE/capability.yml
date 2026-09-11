@@ -17,6 +17,7 @@ body:
         - inert
         - writes-config
         - downloads-backends
+        - downloads-source
         - writes-output
         - query-engine
         - changes-game
