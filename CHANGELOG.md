@@ -28,8 +28,9 @@ Every entry states what shipped, on which platform it was verified, and what rem
   and `ui_mp.ff` into a new IWff with their full dependency graphs, read back clean as `Loaded zone
   "mod" (IW5)`, 0 errors, confirming the IW5 asset-type spellings. The packaging layer was also run
   natively: `module declare --game iw5` drafted a seed from a real IW5 `mod.ff`, and `module build`
-  composed that seed with a recipe module into one pack. Not qualified: map patches, an asset-rich
-  seed with external base references, a running-game effect and a playtest. `weapons` (a BO3→T6 porter) and game control remain T6-only.
+  composed that seed with a recipe module into one pack. A weapon seed (`cobra_20mm_mp`, 20 roots,
+  18 external base references) also composed against a loaded `common_mp.ff` with every reference
+  resolved. Not qualified: map patches, a running-game effect and a playtest. `weapons` (a BO3→T6 porter) and game control remain T6-only.
   See the IW5 note in `docs/SUPPORT.md`.
 
 ### Fixed
