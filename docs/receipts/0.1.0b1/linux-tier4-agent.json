@@ -11,14 +11,14 @@
     "native_windows": false,
     "native_linux": true,
     "compatibility_layer": null,
-    "at": "2026-09-11T00:00:54+00:00",
+    "at": "2026-09-11T02:11:02+00:00",
     "os_release": {
       "pretty_name": "Omarchy",
       "id": "omarchy",
       "id_like": "arch",
       "version_id": "4.0.3"
     },
-    "git_head": "6cb4e872ba6cef3d0069ea80fd92f8cc483a4ebf",
+    "git_head": "16dd753222379893c9ac1048604d4542c5d1346a",
     "git_dirty": true,
     "pat_home_isolated": true
   },
@@ -30,14 +30,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.071,
+      "elapsed_seconds": 0.072,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "agent probe",
         "request_id": "<id>",
-        "at": "2026-09-11T00:00:54+00:00",
+        "at": "2026-09-11T02:11:02+00:00",
         "result": {
           "origin": "http://127.0.0.1:3773",
           "server_version": "0.0.41-nightly.20260910.1507",
@@ -101,14 +101,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.102,
+      "elapsed_seconds": 0.113,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "agent hosts",
         "request_id": "<id>",
-        "at": "2026-09-11T00:00:54+00:00",
+        "at": "2026-09-11T02:11:02+00:00",
         "result": {
           "probe": {
             "origin": "http://127.0.0.1:3773",
@@ -196,10 +196,10 @@
               "session_status": "stopped"
             }
           ],
-          "snapshot_sequence": 142609,
+          "snapshot_sequence": 144789,
           "game_touched": false,
           "projects_count": 11,
-          "threads_count": 152,
+          "threads_count": 154,
           "pruned": "titles, workspace roots, display names and all but the first rows were removed before recording"
         }
       },
@@ -216,14 +216,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.066,
+      "elapsed_seconds": 0.065,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "agent models",
         "request_id": "<id>",
-        "at": "2026-09-11T00:00:55+00:00",
+        "at": "2026-09-11T02:11:02+00:00",
         "result": {
           "home": "<userprofile>/.t3",
           "manifest_updated_at": "2026-09-04T19:10:48Z",
@@ -315,19 +315,23 @@
         "claude_personal_pool",
         "--model",
         "claude-sonnet-5",
+        "--runtime-mode",
+        "approval-required",
+        "--interaction-mode",
+        "plan",
         "--json",
         "--option",
         "effort=low"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.117,
+      "elapsed_seconds": 0.126,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "agent dispatch",
         "request_id": "<id>",
-        "at": "2026-09-11T00:00:55+00:00",
+        "at": "2026-09-11T02:11:02+00:00",
         "result": {
           "probe": {
             "origin": "http://127.0.0.1:3773",
@@ -349,20 +353,20 @@
               }
             ]
           },
-          "runtime_mode": "full-access",
-          "interaction_mode": "default",
+          "runtime_mode": "approval-required",
+          "interaction_mode": "plan",
           "worktree_path": null,
           "branch": null,
           "commands": [
             {
               "command_id": "<uuid>",
               "type": "thread.create",
-              "sequence": 142610
+              "sequence": 144790
             },
             {
               "command_id": "<uuid>",
               "type": "thread.turn.start",
-              "sequence": 142612
+              "sequence": 144792
             }
           ],
           "thread_url": "http://127.0.0.1:3773/<uuid>/<uuid>",
@@ -387,14 +391,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.072,
+      "elapsed_seconds": 0.076,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "agent status",
         "request_id": "<id>",
-        "at": "2026-09-11T00:01:00+00:00",
+        "at": "2026-09-11T02:11:07+00:00",
         "result": {
           "probe": {
             "origin": "http://127.0.0.1:3773",
@@ -451,15 +455,15 @@
               }
             ]
           },
-          "runtime_mode": "full-access",
-          "interaction_mode": "default",
+          "runtime_mode": "approval-required",
+          "interaction_mode": "plan",
           "worktree_path": null,
           "branch": null,
           "turn_state": "completed",
           "turn_id": "<uuid>",
-          "turn_requested_at": "2026-09-11T00:00:55.164Z",
-          "turn_started_at": "2026-09-11T00:00:55.164Z",
-          "turn_completed_at": "2026-09-11T00:00:58.121Z",
+          "turn_requested_at": "2026-09-11T02:11:02.793Z",
+          "turn_started_at": "2026-09-11T02:11:02.793Z",
+          "turn_completed_at": "2026-09-11T02:11:06.174Z",
           "session_status": "ready",
           "session_error": null,
           "provider": "claudeAgent",
@@ -472,14 +476,14 @@
               "id": "<uuid>",
               "role": "user",
               "streaming": false,
-              "created_at": "2026-09-11T00:00:55.164Z",
+              "created_at": "2026-09-11T02:11:02.793Z",
               "text": "This thread was created by `pat agent dispatch` as a qualification proof. Do exactly one thing and stop: reply with the single word QUALIFIED. Do not edit files, do not run commands, do not touch any game."
             },
             {
               "id": "assistant:<uuid>",
               "role": "assistant",
               "streaming": false,
-              "created_at": "2026-09-11T00:00:58.094Z",
+              "created_at": "2026-09-11T02:11:06.131Z",
               "text": "QUALIFIED"
             }
           ],
@@ -505,7 +509,7 @@
         "turn_state": "completed",
         "session_status": "ready",
         "message_count": 2,
-        "waited_seconds": 5.1
+        "waited_seconds": 5.2
       }
     },
     {
@@ -514,18 +518,18 @@
         "send",
         "<uuid>",
         "--prompt",
-        "Second turn. Reply with the single word AGAIN and stop.",
+        "Second turn. Count slowly from one to twenty, one number per line, then reply AGAIN and stop.",
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.099,
+      "elapsed_seconds": 0.083,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "agent send",
         "request_id": "<id>",
-        "at": "2026-09-11T00:01:00+00:00",
+        "at": "2026-09-11T02:11:08+00:00",
         "result": {
           "thread_id": "<uuid>",
           "message_id": "<uuid>",
@@ -533,10 +537,10 @@
           "command": {
             "command_id": "<uuid>",
             "type": "thread.turn.start",
-            "sequence": 142633
+            "sequence": 144812
           },
           "thread_url": "http://127.0.0.1:3773/<uuid>/<uuid>",
-          "prompt_chars": 55,
+          "prompt_chars": 93,
           "game_touched": false
         }
       },
@@ -556,7 +560,7 @@
         "--json"
       ],
       "exit_code": 1,
-      "elapsed_seconds": 0.08,
+      "elapsed_seconds": 0.071,
       "json": {
         "ok": false,
         "error_code": "busy",
@@ -569,7 +573,7 @@
         "toolkit_version": "0.1.0b1",
         "command": "agent send",
         "request_id": "<id>",
-        "at": "2026-09-11T00:01:00+00:00"
+        "at": "2026-09-11T02:11:08+00:00"
       },
       "stdout_head": null,
       "stderr_head": "",
@@ -585,14 +589,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.09,
+      "elapsed_seconds": 0.094,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "agent interrupt",
         "request_id": "<id>",
-        "at": "2026-09-11T00:01:00+00:00",
+        "at": "2026-09-11T02:11:08+00:00",
         "result": {
           "thread_id": "<uuid>",
           "turn_id": "<uuid>",
@@ -600,7 +604,7 @@
           "command": {
             "command_id": "<uuid>",
             "type": "thread.turn.interrupt",
-            "sequence": 142637
+            "sequence": 144816
           },
           "game_touched": false,
           "verification": "The interrupt was accepted. Read agent status to see the turn leave running."
@@ -622,14 +626,14 @@
         "--json"
       ],
       "exit_code": 0,
-      "elapsed_seconds": 0.076,
+      "elapsed_seconds": 0.072,
       "json": {
         "ok": true,
         "schema_version": 1,
         "toolkit_version": "0.1.0b1",
         "command": "agent status",
         "request_id": "<id>",
-        "at": "2026-09-11T00:01:05+00:00",
+        "at": "2026-09-11T02:11:13+00:00",
         "result": {
           "probe": {
             "origin": "http://127.0.0.1:3773",
@@ -686,15 +690,15 @@
               }
             ]
           },
-          "runtime_mode": "full-access",
-          "interaction_mode": "default",
+          "runtime_mode": "approval-required",
+          "interaction_mode": "plan",
           "worktree_path": null,
           "branch": null,
           "turn_state": "interrupted",
           "turn_id": "<uuid>",
-          "turn_requested_at": "2026-09-11T00:01:00.395Z",
-          "turn_started_at": "2026-09-11T00:01:00.395Z",
-          "turn_completed_at": "2026-09-11T00:01:00.589Z",
+          "turn_requested_at": "2026-09-11T02:11:08.032Z",
+          "turn_started_at": "2026-09-11T02:11:08.032Z",
+          "turn_completed_at": "2026-09-11T02:11:08.294Z",
           "session_status": "stopped",
           "session_error": null,
           "provider": "claudeAgent",
@@ -707,8 +711,8 @@
               "id": "<uuid>",
               "role": "user",
               "streaming": false,
-              "created_at": "2026-09-11T00:01:00.395Z",
-              "text": "Second turn. Reply with the single word AGAIN and stop."
+              "created_at": "2026-09-11T02:11:08.032Z",
+              "text": "Second turn. Count slowly from one to twenty, one number per line, then reply AGAIN and stop."
             }
           ],
           "thread_url": "http://127.0.0.1:3773/<uuid>/<uuid>",
@@ -719,7 +723,8 @@
       "stderr_head": "",
       "name": "agent status after interrupt",
       "passed": true,
-      "expected": "success"
+      "expected": "turn_state interrupted (or completed when the turn finished before the interrupt landed)",
+      "observed_turn_state": "interrupted"
     }
   ],
   "notes": [
@@ -727,7 +732,7 @@
     "PAT_HOME=<pat-home>; the bearer token was issued by the user's own t3 CLI beforehand and is never printed",
     "The proof thread stays on the user's T3 Code server, titled so it can be archived; nothing else was created.",
     {
-      "superseded": "linux-tier4-agent.superseded-20260911T000105Z.json"
+      "superseded": "linux-tier4-agent.superseded-20260911T021113Z.json"
     }
   ],
   "passed": true,

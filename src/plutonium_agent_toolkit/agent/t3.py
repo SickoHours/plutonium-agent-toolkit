@@ -82,12 +82,33 @@ def origin_for(argument: str | None) -> tuple[str, dict | None]:
     return normalize_origin(state["origin"]), state
 
 
+LOOPBACK = ("127.0.0.1", "::1", "localhost")
+
+
 def normalize_origin(text: str) -> str:
     parsed = urllib.parse.urlsplit(text if "://" in text else "http://" + text)
-    if parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.path not in ("", "/") or parsed.query:
+    try:
+        host, port = parsed.hostname, parsed.port
+    except ValueError as exc:
+        raise Failure(INPUT_INVALID, f"Server origin has an invalid port: {text!r}") from exc
+    if parsed.scheme not in ("http", "https") or not host or parsed.path not in ("", "/") or parsed.query or parsed.fragment:
         raise Failure(INPUT_INVALID, f"Server origin must be http(s)://host[:port] without a path: {text!r}")
-    port = f":{parsed.port}" if parsed.port else ""
-    return f"{parsed.scheme}://{parsed.hostname}{port}"
+    authority = f"[{host}]" if ":" in host else host
+    return f"{parsed.scheme}://{authority}" + (f":{port}" if port is not None else "")
+
+
+def is_loopback(origin: str) -> bool:
+    host = urllib.parse.urlsplit(origin).hostname or ""
+    return host.lower() in LOOPBACK or host.startswith("127.")
+
+
+def require_token_safe_origin(origin: str, state: dict | None) -> None:
+    """The bearer goes only to this machine: a loopback origin, or the origin the running server
+    recorded in its own runtime file. A remote host would receive the user's credential."""
+    if is_loopback(origin) or (state and normalize_origin(state["origin"]) == origin):
+        return
+    raise Failure(INPUT_INVALID, f"Refusing to send the bearer token to {origin}: only a loopback origin, or the origin the local T3 Code server recorded, may receive it",
+                  "Remote T3 Code hosts are not supported by this release; run pat on the machine the server runs on.")
 
 
 # ----- HTTP -----------------------------------------------------------------------------
@@ -250,8 +271,13 @@ def models(home: Path | None = None) -> dict:
                       "Set T3CODE_HOME to the T3 Code data directory this server runs from, or pass --home.")
     settings = _small_json(settings_path)
     manifest = _small_json(manifest_path).get("manifest", {}) if manifest_path.is_file() else {}
+    provider_instances = settings.get("providerInstances", {})
+    if provider_instances is None:
+        provider_instances = {}
+    if not isinstance(provider_instances, dict):
+        raise Failure(INPUT_INVALID, f"{settings_path}: providerInstances is not an object; this T3 Code settings file is not readable by this release")
     instances = []
-    for instance_id, row in (settings.get("providerInstances") or {}).items():
+    for instance_id, row in provider_instances.items():
         if not isinstance(row, dict):
             continue
         driver = row.get("driver")
@@ -360,7 +386,12 @@ def dispatch(origin: str, bearer: str, *, project_id: str, title: str, prompt: s
     create = {"type": "thread.create", "commandId": str(uuid.uuid4()), "threadId": thread_id, "projectId": project_id,
               "title": title.strip(), "modelSelection": selection, "runtimeMode": runtime_mode,
               "interactionMode": interaction_mode, "branch": branch, "worktreePath": worktree_path, "createdAt": stamp}
-    created = _dispatch(origin, bearer, create, "dispatch thread.create")
+    try:
+        created = _dispatch(origin, bearer, create, "dispatch thread.create")
+    except Failure as exc:
+        exc.details.update(thread_id=thread_id, command_id=create["commandId"],
+                           note="The thread may exist although its creation was not confirmed; read agent hosts before creating another.")
+        raise
     message_id = str(uuid.uuid4())
     start = {"type": "thread.turn.start", "commandId": str(uuid.uuid4()), "threadId": thread_id,
              "message": {"messageId": message_id, "role": "user", "text": prompt, "attachments": []},
@@ -369,7 +400,7 @@ def dispatch(origin: str, bearer: str, *, project_id: str, title: str, prompt: s
     try:
         started = _dispatch(origin, bearer, start, "dispatch thread.turn.start")
     except Failure as exc:
-        exc.details.update(thread_id=thread_id, thread_created=created,
+        exc.details.update(thread_id=thread_id, command_id=start["commandId"], message_id=message_id, thread_created=created,
                            note="The thread exists but its first turn was not confirmed; send the prompt again with pat agent send after checking status.")
         raise
     return {"probe": {k: info[k] for k in ("origin", "server_version", "environment_id", "orchestration_protocol")},

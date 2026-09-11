@@ -327,13 +327,26 @@ class QualifyToolUnitTests(unittest.TestCase):
         self.assertEqual(redact(f"http://127.0.0.1:3773/{env}/<thread-id>"), "http://127.0.0.1:3773/<uuid>/<thread-id>")
         self.assertEqual(redact("6cb4e87 stays"), "6cb4e87 stays")
 
-    def test_agent_tier_refuses_without_home_or_choices(self):
-        env = {k: v for k, v in os.environ.items() if k != "PAT_HOME"}
-        proc = subprocess.run([sys.executable, str(ROOT / "tools/qualify.py"), "--tier", "agent", "--output", "/tmp/x",
-                               "--project", "p", "--instance", "i", "--model", "m", "--allow-untested-platform"],
-                              capture_output=True, text=True, cwd=ROOT, env=env, timeout=120)
-        self.assertEqual(proc.returncode, 2)
-        self.assertIn("PAT_HOME", proc.stderr)
+    def test_agent_tier_refuses_without_choices_and_fails_without_a_server(self):
+        with tempfile.TemporaryDirectory() as temp:
+            # Without --project/--instance/--model the tier is a usage error, whatever the home.
+            env2 = dict(os.environ, PAT_HOME=str(Path(temp) / "home"))
+            proc = subprocess.run([sys.executable, str(ROOT / "tools/qualify.py"), "--tier", "agent", "--output", str(Path(temp) / "out"),
+                                   "--allow-untested-platform"], capture_output=True, text=True, cwd=ROOT, env=env2, timeout=120)
+            self.assertEqual(proc.returncode, 2)
+            self.assertIn("--project", proc.stderr)
+            # With the choices but no server recorded under an isolated T3 home, the probe step fails and the receipt does not pass.
+            env3 = dict(env2, T3CODE_HOME=str(Path(temp) / "t3"))
+            proc = subprocess.run([sys.executable, str(ROOT / "tools/qualify.py"), "--tier", "agent", "--output", str(Path(temp) / "out2"),
+                                   "--project", "p", "--instance", "i", "--model", "m", "--allow-untested-platform"],
+                                  capture_output=True, text=True, cwd=ROOT, env=env3, timeout=120)
+            self.assertEqual(proc.returncode, 1, proc.stdout[-800:] + proc.stderr[-800:])
+            receipt = json.loads(next((Path(temp) / "out2").rglob("*-tier4-agent.json")).read_text())
+            self.assertFalse(receipt["passed"])
+            self.assertEqual(receipt["steps"][0]["name"], "agent probe")
+            self.assertFalse(receipt["steps"][0]["passed"])
+            self.assertEqual(receipt["steps"][1]["name"], "host speaks orchestration protocol 1")
+            self.assertFalse(receipt["steps"][1]["passed"])
         with tempfile.TemporaryDirectory() as temp:
             env2 = dict(os.environ, PAT_HOME=str(Path(temp) / "home"))
             proc = subprocess.run([sys.executable, str(ROOT / "tools/qualify.py"), "--tier", "agent", "--output", str(Path(temp) / "out"),

@@ -105,6 +105,10 @@ def save(values: dict) -> Path:
     current.update(values)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + "." + uuid.uuid4().hex + ".tmp")
+    # The file may hold a bearer token: create it owner-only before any byte is written.
+    tmp.touch(mode=0o600)
+    if os.name != "nt":
+        os.chmod(tmp, 0o600)
     tmp.write_text(json.dumps(current, indent=2) + "\n", encoding="utf-8")
     tmp.replace(path)
     return path

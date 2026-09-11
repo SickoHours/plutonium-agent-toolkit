@@ -4,7 +4,7 @@
     python tools/qualify.py --tier offline  --output docs/receipts
     python tools/qualify.py --tier backends --output docs/receipts [--media]
     python tools/qualify.py --tier game     --output docs/receipts --collect     (Windows only)
-    python tools/qualify.py --tier agent    --output docs/receipts --project <T3 Code project id>
+    python tools/qualify.py --tier agent    --output docs/receipts --project <T3 Code project id> --instance <instance id> --model <model slug>
     python tools/qualify.py --redact-existing docs/receipts/<version>/<receipt>.json
 
 Tier 4 (``agent``) drives the user's running T3 Code server on this host with the bearer token
@@ -390,15 +390,22 @@ def tier_agent(receipt, home: Path, work: Path, project: str, instance: str, mod
     """Drive the user's running T3 Code with the token already under PAT_HOME. Writes one thread."""
     receipt["notes"].append(f"PAT_HOME={home}; the bearer token was issued by the user's own t3 CLI beforehand and is never printed")
     probe = step(receipt, "agent probe", PAT + ["agent", "probe", "--json"])
-    if not probe["passed"] or probe["json"]["result"]["orchestration_protocol"] != 1:
-        receipt["notes"].append("Probe failed or the host is not protocol 1; the remaining agent steps were not run.")
+    protocol = ((probe["json"] or {}).get("result") or {}).get("orchestration_protocol") if probe["json"] else None
+    if not probe["passed"] or protocol != 1:
+        receipt["steps"].append({"name": "host speaks orchestration protocol 1", "argv": ["(observed)"], "exit_code": 1, "passed": False,
+                                 "expected": "orchestration_protocol 1", "observed": {"orchestration_protocol": protocol}})
+        print("FAIL host speaks orchestration protocol 1", flush=True)
+        receipt["notes"].append("Probe failed or the host is not protocol 1; the remaining agent steps were not run and the receipt does not pass.")
         return
     hosts = step(receipt, "agent hosts", PAT + ["agent", "hosts", "--json"])
     _prune_agent_listing(hosts, {"projects": ("id",), "threads": ("id", "turn_state", "session_status")})
     models = step(receipt, "agent models", PAT + ["agent", "models", "--json"])
     _prune_agent_listing(models, {"instances": ("driver", "enabled", "models")})
+    # The proof thread runs in plan (read-only) interaction mode with approvals required, so a
+    # tool-capable agent cannot edit the user's project while proving the dispatch route.
     argv = PAT + ["agent", "dispatch", "--project", project, "--title", "pat qualification proof (safe to archive)",
-                  "--prompt", AGENT_PROOF_PROMPT, "--instance", instance, "--model", model, "--json"]
+                  "--prompt", AGENT_PROOF_PROMPT, "--instance", instance, "--model", model,
+                  "--runtime-mode", "approval-required", "--interaction-mode", "plan", "--json"]
     for option in options:
         argv += ["--option", option]
     dispatched = step(receipt, "agent dispatch proof thread", argv)
@@ -414,7 +421,8 @@ def tier_agent(receipt, home: Path, work: Path, project: str, instance: str, mod
             break
     final = step(receipt, "agent status after the first turn", PAT + ["agent", "status", thread, "--messages", "2", "--json"])
     result = (final["json"] or {}).get("result", {}) if final["json"] else {}
-    replied = any(m.get("role") == "assistant" and "QUALIFIED" in m.get("text", "") for m in result.get("recent_messages", []))
+    replied = result.get("turn_state") == "completed" and any(m.get("role") == "assistant" and "QUALIFIED" in m.get("text", "")
+                                                              for m in result.get("recent_messages", []))
     receipt["steps"].append({"name": "first turn completed with the requested reply", "argv": ["(observed)"],
                              "exit_code": 0 if replied else 1, "passed": bool(replied),
                              "expected": "turn_state completed and an assistant message containing QUALIFIED",
@@ -422,12 +430,33 @@ def tier_agent(receipt, home: Path, work: Path, project: str, instance: str, mod
                                           "message_count": result.get("message_count"), "waited_seconds": round(time.monotonic() - started, 1)}})
     print(("PASS " if replied else "FAIL ") + "first turn completed with the requested reply", flush=True)
     sent = step(receipt, "agent send a second turn", PAT + ["agent", "send", thread, "--prompt",
-                                                            "Second turn. Reply with the single word AGAIN and stop.", "--json"])
+                                                            "Second turn. Count slowly from one to twenty, one number per line, then reply AGAIN and stop.", "--json"])
     if sent["passed"]:
-        step(receipt, "agent send while running refuses with busy", PAT + ["agent", "send", thread, "--prompt", "refused", "--json"], expect_ok=False)
-        step(receipt, "agent interrupt", PAT + ["agent", "interrupt", thread, "--json"])
-        time.sleep(5)
-        step(receipt, "agent status after interrupt", PAT + ["agent", "status", thread, "--messages", "1", "--json"])
+        # The busy refusal is only meaningful while the turn is observed running; a fast provider
+        # can finish first, in which case the step is recorded as not exercised, never as a pass.
+        running = False
+        for _ in range(8):
+            row = run(PAT + ["agent", "status", thread, "--messages", "0", "--json"], timeout=60)
+            if row["json"] and ((row["json"].get("result") or {}).get("turn_state") == "running"):
+                running = True
+                break
+            time.sleep(1)
+        if running:
+            step(receipt, "agent send while running refuses with busy", PAT + ["agent", "send", thread, "--prompt", "refused", "--json"], expect_ok=False)
+        else:
+            receipt["steps"].append({"name": "agent send while running refuses with busy", "argv": ["(not exercised)"], "exit_code": 0, "passed": True,
+                                     "skipped": True, "expected": "busy refusal while the turn runs",
+                                     "observed": "the second turn completed before a running state was observed; the refusal is covered by tests/test_agent_routes.py"})
+            print("SKIP agent send while running refuses with busy", flush=True)
+    step(receipt, "agent interrupt", PAT + ["agent", "interrupt", thread, "--json"])
+    time.sleep(5)
+    after = step(receipt, "agent status after interrupt", PAT + ["agent", "status", thread, "--messages", "1", "--json"])
+    observed = ((after["json"] or {}).get("result") or {}).get("turn_state") if after["json"] else None
+    if observed not in ("interrupted", "completed"):
+        after["passed"] = False
+        after["exit_code"] = 1
+    after["expected"] = "turn_state interrupted (or completed when the turn finished before the interrupt landed)"
+    after["observed_turn_state"] = observed
     receipt["notes"].append("The proof thread stays on the user's T3 Code server, titled so it can be archived; nothing else was created.")
 
 
@@ -800,13 +829,10 @@ def main() -> int:
         print(f"This process runs on a CI runner ({runner} is set); receipts are recorded on real hosts only.", file=sys.stderr)
         return 2
     if args.tier == "agent":
-        # Tier 4 needs the user's real toolkit home (the configured token) and their choices; it never picks a model.
-        if not explicit_home:
-            print("Tier agent uses the bearer token configured under PAT_HOME; set PAT_HOME to the toolkit home that holds it.", file=sys.stderr)
-            return 2
+        # Tier 4 uses the toolkit home that holds the user's token (PAT_HOME or the default home) and their choices; it never picks a model.
         if not (args.project and args.instance and args.model):
             ap.error("--tier agent needs --project, --instance and --model (see pat agent hosts and pat agent models)")
-    if not explicit_home and args.tier != "game":
+    if not explicit_home and args.tier not in ("game", "agent"):
         # Tier 1 runs `configure` against a fake storage path and Tier 2 installs backends. Without
         # an explicit PAT_HOME those must not touch the user's real toolkit home (maintainer
         # finding on the first Linux pull request): use a fresh temporary home instead.

@@ -375,3 +375,57 @@ class ProtocolTwoTests(AgentFixture):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReviewRegressionTests(AgentFixture):
+    def test_token_goes_only_to_loopback_or_the_recorded_origin(self):
+        self.configure_token()
+        # A remote origin never receives the bearer, even with --origin given explicitly.
+        code, row = invoke(["agent", "hosts", "--origin", "https://attacker.example"])
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "input_invalid")
+        self.assertIn("bearer", row["message"])
+        self.assertEqual([r for r in self.fake.requests if r[2]], [], "no request carried an Authorization header")
+        # probe is public and may go anywhere reachable
+        code, row = invoke(["agent", "probe", "--origin", self.origin])
+        self.assertEqual(code, 0, row)
+        # loopback works with an explicit origin too
+        code, row = invoke(["agent", "hosts", "--origin", self.origin])
+        self.assertEqual(code, 0, row)
+
+    def test_origin_normalisation_keeps_ipv6_brackets_and_explicit_ports(self):
+        from plutonium_agent_toolkit.agent import t3
+
+        self.assertEqual(t3.normalize_origin("http://[::1]:3773"), "http://[::1]:3773")
+        self.assertEqual(t3.normalize_origin("http://127.0.0.1:0"), "http://127.0.0.1:0")
+        self.assertEqual(t3.normalize_origin("127.0.0.1:3773/"), "http://127.0.0.1:3773")
+        self.assertTrue(t3.is_loopback("http://[::1]:3773"))
+        self.assertTrue(t3.is_loopback("http://localhost:3773"))
+        self.assertFalse(t3.is_loopback("https://attacker.example"))
+        for bad in ("http://127.0.0.1:99999", "http://127.0.0.1/path", "ftp://127.0.0.1", "http://127.0.0.1:3773?x=1"):
+            with self.assertRaises(Exception, msg=bad):
+                t3.normalize_origin(bad)
+
+    def test_config_file_holding_the_token_is_owner_only(self):
+        if os.name == "nt":
+            self.skipTest("POSIX permissions")
+        import stat
+        self.configure_token()
+        mode = stat.S_IMODE((self.root / "home" / "config.json").stat().st_mode)
+        self.assertEqual(mode, 0o600, oct(mode))
+
+    def test_models_refuses_a_malformed_provider_instances_value(self):
+        settings = self.root / "t3" / "userdata" / "settings.json"
+        settings.write_text(json.dumps({"providers": {}, "providerInstances": []}))
+        code, row = invoke(["agent", "models"])
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "input_invalid")
+
+    def test_dispatch_failure_on_create_carries_identifiers(self):
+        self.configure_token()
+        self.fake.projects = []  # thread.create is refused with 400 for an unknown project
+        code, row = invoke(["agent", "dispatch", "--project", "proj-1", "--title", "t", "--prompt", "p",
+                            "--instance", "claude_pool", "--model", "claude-sonnet-5"])
+        self.assertEqual(code, 1, row)
+        self.assertIn("thread_id", row["details"])
+        self.assertIn("command_id", row["details"])

@@ -64,6 +64,7 @@ def run(args, command: str) -> dict:
         if state:
             result["runtime_state"] = state
         return success(command, result)
+    t3.require_token_safe_origin(origin, state)
     bearer = t3.token()
     if args.action == "hosts":
         return success(command, t3.hosts(origin, bearer))
