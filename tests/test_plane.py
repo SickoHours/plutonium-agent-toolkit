@@ -641,6 +641,28 @@ class ShutdownTests(unittest.TestCase):
             self.assertEqual(ctx.exception.code, "busy")
             plane.job_lock.release()
 
+    def test_a_job_handle_is_terminated_once_however_many_threads_reach_for_it(self):
+        # Regression: the thread running a child and the shutdown stopping it both closed the same
+        # Windows Job Object handle. The second close destroyed whatever object had taken the
+        # recycled handle value over -- on the 3.13 runner, a thread's semaphore, which ended the
+        # interpreter mid-suite rather than the run.
+        closed, ready = [], threading.Barrier(8)
+        job = server_module._Job("handle", lambda handle: closed.append(handle))
+
+        def stop():
+            ready.wait(5)
+            job.close()
+
+        threads = [threading.Thread(target=stop) for _ in range(8)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(10)
+            self.assertFalse(thread.is_alive())
+        self.assertEqual(closed, ["handle"])
+        job.close()
+        self.assertEqual(closed, ["handle"], "a later close is still a no-op")
+
     def test_a_run_accepted_just_before_shutdown_never_spawns(self):
         # Review finding: start() returned, shutdown() saw no active child, and the thread then
         # spawned one anyway. The spawn happens under the state lock and rechecks stopping.

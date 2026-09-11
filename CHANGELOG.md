@@ -38,6 +38,14 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Fixed
 
+- **Control plane: a stopped child's Job Object handle is closed once.** On Windows the thread
+  running a child and the shutdown stopping it both terminated and closed the same Job Object
+  handle. Windows recycles handle values, so the second close destroyed whatever kernel object had
+  taken the value over in between: on the 3.13 runner that was a thread's semaphore, and the
+  interpreter died with `_PySemaphore_Wakeup: ReleaseSemaphore failed` rather than the run ending.
+  The handle now has one owner that terminates and closes it exactly once, and a handle that is
+  created but never assigned to a child is closed instead of leaked. Found by the new MCP test that
+  stops a child the moment it starts, which is the only path that reached for the handle twice.
 - **Control plane: the over-capacity 503 reaches the client on Windows.** Past the connection
   bound the server sent a 503 and closed the socket while the request bytes were still unread,
   which makes the kernel reset the connection; on Windows the client saw the connection aborted

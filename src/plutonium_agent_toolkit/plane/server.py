@@ -153,25 +153,48 @@ def _remove_prompts(run: dict) -> None:
                 pass
 
 
+class _Job:
+    """A Windows Job Object handle that is terminated and closed exactly once.
+
+    The thread running a child and whoever stops it both hold this handle, so both reach for it
+    when the child ends. Closing a Windows handle twice is not a harmless no-op: the value is
+    recycled, so the second close can destroy whatever kernel object took it over in the
+    meantime -- a thread's semaphore, say, which ends the interpreter rather than this run."""
+
+    def __init__(self, handle, terminate) -> None:
+        self.handle = handle
+        self._terminate = terminate
+        self._lock = threading.Lock()
+        self._closed = False
+
+    def close(self) -> None:
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+        self._terminate(self.handle)
+
+
 def _job_for(process: subprocess.Popen):
     """On Windows, a Job Object (kill on close) holding the child and everything it starts."""
     if os.name != "nt":
         return None
     from ..core import _winjob
 
+    handle = None
     try:
         handle = _winjob.create_job()
         _winjob.assign(handle, process)
-        return handle
+        return _Job(handle, _winjob.terminate)
     except Failure:
+        if handle is not None:
+            _winjob.terminate(handle)  # created but never assigned: close it here or it leaks
         return None
 
 
 def _close_job(job) -> None:
     if job is not None:
-        from ..core import _winjob
-
-        _winjob.terminate(job)
+        job.close()
 
 
 def _stop_process(process: subprocess.Popen, grace: float, job=None) -> None:
