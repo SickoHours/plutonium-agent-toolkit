@@ -327,6 +327,15 @@ class ReviewFindingTests(BaselineFixture):
         page = self.module("page", files={"README.md": "See https://example.invalid/docs/index.html for the guide.\n"})
         code, row = self.scan(page)
         self.assertEqual(row["result"]["findings"], [], "only archive, package and installer URLs count")
+        # Every documented suffix counts, including the tar.xz form the toolkit's own backends ship as.
+        for suffix in baseline.ARCHIVE_SUFFIXES:
+            self.assertIn(suffix, (ROOT / "docs/REGISTRY.md").read_text(encoding="utf-8"), f"{suffix} is not in the rule table")
+        every = self.module("every", files={"README.md": "".join(f"https://example.invalid/pkg{suffix}\n\n\n\n\n\n\n" for suffix in baseline.ARCHIVE_SUFFIXES)})
+        code, row = self.scan(every)
+        self.assertEqual(len(self.findings(row, "unpinned-acquisition")), len(baseline.ARCHIVE_SUFFIXES))
+        xz = self.module("xz", files={"README.md": "Get https://example.invalid/tools/gsc-tool.tar.xz and unpack it.\n"})
+        code, row = self.scan(xz)
+        self.assertEqual(self.ids(row, "findings"), ["unpinned-acquisition"])
 
     def test_declaration_mismatch_against_the_listing(self):
         directory = self.module(decl={"source": {"repository": REPOSITORY, "commit": COMMIT}})

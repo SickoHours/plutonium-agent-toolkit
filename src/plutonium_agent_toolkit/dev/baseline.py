@@ -127,7 +127,9 @@ DOWNLOAD_TARGET = re.compile(r"(?:^|\s)(?:-o|--output|-OutFile|-Destination)\s+[
 # A file started by name: Start-Process [-FilePath] <x>, & <x>, ./<x> or .\<x>; the file name is the last path part.
 STARTED = re.compile(r"(?:start-process\s+(?:-filepath\s+)?|&\s*|\.[\\/])[\"']?((?:[^\s\"']*[\\/])?[^\s\"'&|;)]+)", re.I)
 URL = re.compile(r"https?://[^\s\"'<>()\[\]]+", re.I)
-ARCHIVE_SUFFIXES = (".zip", ".tar.gz", ".tgz", ".7z", ".rar", ".ff", ".ipak", ".exe", ".msi")
+# Every archive form the toolkit itself downloads (zip, tar.gz, tar.xz) plus the common ones a mod
+# page links, the two package types, and installers.
+ARCHIVE_SUFFIXES = (".zip", ".tar.gz", ".tgz", ".tar.xz", ".txz", ".tar.bz2", ".tbz2", ".7z", ".rar", ".ff", ".ipak", ".exe", ".msi")
 SHA256 = re.compile(r"(?<![0-9a-fA-F])[0-9a-fA-F]{64}(?![0-9a-fA-F])")
 SCRIPT_RULES = (
     ("file-io", re.compile(r"\bfs_(?:fopen|write|writeline|read|readline|remove|listfiles|fclose)\b", re.I)),

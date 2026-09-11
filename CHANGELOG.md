@@ -97,8 +97,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
   a link anywhere in the tree, an absolute path or Windows drive, a `..` segment in a confined
   declared path, or a member or load resolving outside the scanned directory; a pack is scanned
   from the directory that holds it and every member it names).
-  Non-blocking findings `unpinned-acquisition` (an archive, package or installer URL without a
-  SHA-256 nearby) and `declaration-mismatch` (repository or commit different from the listing,
+  Non-blocking findings `unpinned-acquisition` (a `.zip`, `.tar.gz`/`.tgz`, `.tar.xz`/`.txz`,
+  `.tar.bz2`/`.tbz2`, `.7z`, `.rar`, `.ff`, `.ipak`, `.exe` or `.msi` URL without a SHA-256 nearby) and `declaration-mismatch` (repository or commit different from the listing,
   a declared path missing, `bases`/`maps` empty, invalid JSON); capabilities `installer`,
   `bundled-package`, `lua-ui`, `file-io`, `client-dvar`, `function-replacement`, `command-hook`,
   `global-tooling`, `bundled-assets` (binary total above 8 MiB) and `large-text`; warning
