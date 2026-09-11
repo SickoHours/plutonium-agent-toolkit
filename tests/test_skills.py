@@ -59,6 +59,7 @@ class InstallSkillsTests(SkillsFixture):
         self.assertEqual(result["summary"]["found"], 3)
         self.assertFalse((self.home / ".claude" / "skills").exists(), "plan writes nothing")
         self.assertIsNone(result["receipt"])
+        self.assertFalse(Path(os.environ["PAT_HOME"]).exists(), "a plan creates nothing under the toolkit home either")
 
         code, row = self.install()
         self.assertEqual(code, 0, row)
@@ -71,8 +72,10 @@ class InstallSkillsTests(SkillsFixture):
         self.assertTrue(text.startswith("---\nname: pat-build\n"), "frontmatter is preserved verbatim")
         self.assertIn("Installed by `pat dev install-skills`", text)
         self.assertIn(str(ROOT), text, "the note names the checkout the relative paths refer to")
+        source = source.replace("\r\n", "\n")
         body = source[source.index("\n---\n") + 5:].lstrip("\n")
         self.assertTrue(text.endswith(body), "the skill's own text is unchanged after the note")
+        self.assertNotIn(b"\r\n", installed.read_bytes(), "installed bytes are LF on every platform")
         for name in self.names:
             for harness in (".claude", ".codex", ".gemini"):
                 self.assertTrue((self.home / harness / "skills" / name / "SKILL.md").is_file(), (harness, name))
@@ -195,8 +198,13 @@ class InstallSkillsTests(SkillsFixture):
             (self.home / ".config" / "opencode").symlink_to(elsewhere, target_is_directory=True)
             code, row = self.install("--only", "opencode", "--plan")
             self.assertEqual(row["error_code"], "input_missing", "a linked harness home directory is not detected as a harness")
-        # A malformed install record is a structured failure, never a traceback.
-        record = Path(skills.state_dir()) / "installed.json"
+        # A malformed or oversized install record is a structured failure, never a traceback or an unbounded read.
+        record = Path(skills.state_dir(create=True)) / "installed.json"
+        with record.open("wb") as handle:
+            handle.truncate(skills.MAX_RECORD_BYTES + 1)
+        code, row = self.install("--only", "codex", "--plan")
+        self.assertEqual(row["error_code"], "input_limit")
+        self.assertIn("was not read", row["message"])
         record.write_text(json.dumps({"schema": 1, "files": {str(big): None}}))
         code, row = self.install("--only", "codex")
         self.assertEqual(code, 1)
@@ -215,13 +223,18 @@ class InstallSkillsTests(SkillsFixture):
         (checkout / "skills" / "two-file").mkdir(parents=True)
         (checkout / "AGENTS.md").write_text("agents\n")
         (checkout / "CONTEXT.md").write_text("context\n")
+        # Written with the platform's line endings on purpose: a Windows checkout may carry CRLF.
         (checkout / "skills" / "two-file" / "SKILL.md").write_text("---\nname: two-file\ndescription: test\n---\n\nBody.\n")
+        crlf = checkout / "skills" / "crlf"
+        crlf.mkdir()
+        (crlf / "SKILL.md").write_bytes(b"---\r\nname: crlf\r\ndescription: test\r\n---\r\n\r\nBody.\r\n")
         (checkout / "skills" / "two-file" / "reporting.md").write_text("asset\n")
         code, row = invoke(["dev", "install-skills", "--home", str(self.home), "--only", "codex", "--source", str(checkout)])
         self.assertEqual(code, 0, row)
         report = skills.status(str(self.home), source=str(checkout))
         codex = next(h for h in report["harnesses"] if h["id"] == "codex")
-        self.assertEqual((codex["current"], codex["ok"]), (1, True))
+        self.assertEqual((codex["current"], codex["ok"]), (2, True))
+        self.assertTrue((self.home / ".codex" / "skills" / "crlf" / "SKILL.md").read_text(encoding="utf-8").startswith("---\nname: crlf\n"))
         (self.home / ".codex" / "skills" / "two-file" / "reporting.md").unlink()
         codex = next(h for h in skills.status(str(self.home), source=str(checkout))["harnesses"] if h["id"] == "codex")
         self.assertEqual((codex["current"], codex["missing"], codex["ok"]), (0, 1, False), "a skill with an asset missing is not current")

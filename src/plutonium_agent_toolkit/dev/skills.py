@@ -98,7 +98,10 @@ def skills_in(root: Path) -> list[dict]:
 
 
 def stamp(text: str, root: Path, name: str) -> str:
-    """The installed SKILL.md: the checkout's file with one paragraph after the frontmatter naming the checkout."""
+    """The installed SKILL.md: the checkout's file with one paragraph after the frontmatter naming the
+    checkout. Line endings are normalised to LF first, so a checkout that converted them (Windows
+    autocrlf) installs the same bytes as any other and the frontmatter is found either way."""
+    text = text.replace("\r\n", "\n")
     if not text.startswith("---\n"):
         raise Failure(INPUT_INVALID, f"Skill {name}: SKILL.md must start with YAML frontmatter")
     end = text.find("\n---\n", 4)
@@ -127,9 +130,15 @@ def rendered(skill: dict, root: Path) -> dict[str, bytes]:
 
 # ----- state under the toolkit home ------------------------------------------------------------
 
-def state_dir() -> Path:
+MAX_RECORD_BYTES = 8 * 1024 * 1024
+
+
+def state_dir(create: bool = False) -> Path:
+    """``<toolkit home>/skills``. Created only when something is about to be written there, so a
+    plan or a status read leaves a fresh (or read-only) home untouched."""
     p = config.home() / "skills"
-    p.mkdir(parents=True, exist_ok=True)
+    if create:
+        p.mkdir(parents=True, exist_ok=True)
     return p
 
 
@@ -139,8 +148,11 @@ def _manifest_path() -> Path:
 
 def read_manifest() -> dict:
     path = _manifest_path()
-    if not path.is_file():
+    if path.is_symlink() or not path.is_file():
         return {"schema": 1, "files": {}}
+    if path.stat().st_size > MAX_RECORD_BYTES:
+        raise Failure(INPUT_LIMIT, f"Skill install record exceeds {MAX_RECORD_BYTES} bytes and was not read: {path}",
+                      "Move the record aside; the next install writes a fresh one and refuses files it cannot account for.")
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except ValueError as exc:
@@ -301,6 +313,7 @@ def install(*, plan: bool = False, only: list[str] | None = None, home: str | No
                 row["files"].append(entry)
     receipt_path = None
     if not plan:
+        state_dir(create=True)
         _write_json(_manifest_path(), {"schema": 1, "updated": now(), "files": recorded})
         receipts = state_dir() / "receipts"
         receipts.mkdir(exist_ok=True)
