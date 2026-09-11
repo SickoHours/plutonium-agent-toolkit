@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "game": "iw5",
+  "mode": "mp",
+  "name": "hello_iw5",
+  "scripts": [
+    {
+      "source": "scripts/hello.gsc",
+      "target": "scripts/mp/hello_iw5.gsc",
+      "instance": "server"
+    }
+  ],
+  "assets": [],
+  "loads": []
+}

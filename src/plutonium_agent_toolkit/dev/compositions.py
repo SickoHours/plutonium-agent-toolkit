@@ -53,7 +53,7 @@ from types import SimpleNamespace
 from ..core.errors import BACKEND_FAILED, INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, Failure
 from ..core.jobs import Job
 from ..core.receipts import sha256_file
-from . import fastfiles, projects, scripts, seeds
+from . import fastfiles, projects, scripts, seeds, titles
 from .backends import executable
 
 ID = re.compile(r"^[a-z0-9_]{1,64}\Z")
@@ -117,6 +117,7 @@ def add_parser(sub, common):
     q = actions.add_parser("declare", help="Read a prebuilt mod.ff back and draft its seed manifest and declaration")
     q.add_argument("package", help="Path to a mod.ff (soundbanks beside it are hashed too)")
     q.add_argument("--load", action="append", default=[], help="Base fastfile the package references; repeat as needed")
+    q.add_argument("--game", choices=titles.names(), default=titles.DEFAULT_TITLE, help="Title the package targets (default t6)")
     q.add_argument("--id", help="Module id for the draft declaration")
     q.add_argument("--title", help="Display title for the draft")
     q.add_argument("--category", help="Category for the draft (weapons, perks, ...)")
@@ -234,12 +235,15 @@ def load_declaration(directory: Path, job: Job) -> dict:
     except ValueError as exc:
         raise Failure(INPUT_INVALID, f"module.json is not valid JSON: {src}") from exc
     where = f"module.json in {directory.name}"
-    projects._fields(data, {"schema", "id", "version", "title", "category", "kind", "tags", "recipe", "seed", "bases", "maps",
+    projects._fields(data, {"schema", "id", "version", "game", "title", "category", "kind", "tags", "recipe", "seed", "bases", "maps",
                             "dependencies", "conflicts", "provides", "resource_contract", "menu_route", "distribution", "source",
                             "origin", "donor"},
                      {"schema", "id", "version", "bases", "maps"}, where)
     if data["schema"] != 1:
         raise Failure(INPUT_INVALID, f"{where}: expected schema 1")
+    game = data.get("game", titles.DEFAULT_TITLE)
+    if game not in titles.names():
+        raise Failure(INPUT_INVALID, f"{where}: game is one of {', '.join(titles.names())}")
     mid = data["id"]
     if not isinstance(mid, str) or not ID.match(mid):
         raise Failure(INPUT_INVALID, f"{where}: id uses lowercase letters, digits and underscore")
@@ -252,8 +256,9 @@ def load_declaration(directory: Path, job: Job) -> dict:
     kind = data.get("kind")
     if kind is not None and (not isinstance(kind, str) or not CATEGORY.match(kind)):
         raise Failure(INPUT_INVALID, f"{mid}: kind is a lowercase identifier that narrows the category (melee, wonder, perk, ...)")
-    if kind is not None and category in KINDS and KINDS[category] and kind not in KINDS[category]:
-        raise Failure(INPUT_INVALID, f"{mid}: kind {kind!r} is not one of {list(KINDS[category])} for category {category!r}",
+    title_kinds = titles.kinds(game)
+    if kind is not None and category in title_kinds and title_kinds[category] and kind not in title_kinds[category]:
+        raise Failure(INPUT_INVALID, f"{mid}: kind {kind!r} is not one of {list(title_kinds[category])} for category {category!r} in game {game}",
                       "Use a listed kind so packs and catalogs group modules the same way, or drop kind and keep only tags.")
     tags = data.get("tags", [])
     if not isinstance(tags, list) or len(tags) > MAX_TAGS or not all(isinstance(t, str) and TAG.match(t) for t in tags) \
@@ -308,7 +313,7 @@ def load_declaration(directory: Path, job: Job) -> dict:
                               "A seed's manifest is the fact for what the package embeds; a declaration may narrow that list, never add to it.")
         for pkind, names in seed["provides"].items():
             provides.setdefault(pkind, list(names))
-    return {"id": mid, "version": data["version"], "title": title, "category": category, "kind": kind, "tags": list(tags),
+    return {"id": mid, "version": data["version"], "game": game, "title": title, "category": category, "kind": kind, "tags": list(tags),
             "directory": directory, "recipe": recipe, "seed": seed, "distribution": distribution,
             "bases": list(bases), "maps": list(maps),
             "dependencies": _ids(data.get("dependencies", []), "dependencies", mid),
@@ -382,11 +387,14 @@ def load_composition(path: Path, job: Job, depth: int = 0, seen: tuple = ()) -> 
         data = json.loads(src.read_text(encoding="utf-8"))
     except ValueError as exc:
         raise Failure(INPUT_INVALID, f"Composition is not valid JSON: {src}") from exc
-    projects._fields(data, {"schema", "name", "base", "map", "modules", "loads", "budget", "decisions", "title", "tags", "zone_header",
+    projects._fields(data, {"schema", "name", "game", "base", "map", "modules", "loads", "budget", "decisions", "title", "tags", "zone_header",
                             "origin", "donor", "base_owned"},
                      {"schema", "name", "base", "map", "modules"}, "composition")
     if data["schema"] != 1:
         raise Failure(INPUT_INVALID, "Expected a schema 1 composition")
+    game = data.get("game", titles.DEFAULT_TITLE)
+    if game not in titles.names():
+        raise Failure(INPUT_INVALID, f"Composition game is one of {', '.join(titles.names())}")
     base = data["base"]
     if not isinstance(base, str) or not BASE.match(base):
         raise Failure(INPUT_INVALID, "Composition base is a short token of lowercase letters and digits (stock, or the base release's short name)")
@@ -438,6 +446,8 @@ def load_composition(path: Path, job: Job, depth: int = 0, seen: tuple = ()) -> 
                       "reference": {"name": row["name"], "commit": row["commit"]} if "name" in row else None}
         elif nested.is_file() and not nested.is_symlink():
             inner = load_composition(nested, job, depth + 1, seen + (key,))
+            if inner["game"] != game:
+                raise Failure(INPUT_INVALID, f"Nested composition {inner['name']} is for game {inner['game']!r}, not {game!r}")
             if inner["base"] != base:
                 raise Failure(INPUT_INVALID, f"Nested composition {inner['name']} is for base {inner['base']!r}, not {base!r}")
             if inner["map"] != map_id:
@@ -463,7 +473,7 @@ def load_composition(path: Path, job: Job, depth: int = 0, seen: tuple = ()) -> 
     header = data.get("zone_header", [])
     if not isinstance(header, list) or len(header) > 32 or not all(isinstance(h, str) and re.fullmatch(r">[A-Za-z0-9_.@]+,[A-Za-z0-9_.-]{0,64}", h) for h in header):
         raise Failure(INPUT_INVALID, "zone_header is a list of at most 32 linker metadata lines such as >level.ipak_read,common_zm")
-    return {"name": name, "title": title, "tags": list(tags), "base": base, "map": map_id, "members": members,
+    return {"name": name, "title": title, "tags": list(tags), "game": game, "base": base, "map": map_id, "members": members,
             "origin": _origin(data.get("origin"), name), "donor": _donor(data.get("donor"), name),
             "zone_header": list(header), "loads": loads, "budget": _contract(data["budget"], "budget") if "budget" in data else None,
             "decisions": _decisions(data.get("decisions"), name), "base_owned": base_owned, "source": src}
@@ -662,6 +672,10 @@ def execute(args, job: Job) -> dict:
         return seeds.declare(Path(args.package).expanduser(), args, job)
     comp = load_composition(Path(args.composition), job)
     modules, loads, decisions, header = flatten(comp, job)
+    mixed = sorted({m["id"] for m in modules if m.get("game", titles.DEFAULT_TITLE) != comp["game"]})
+    if mixed:
+        raise Failure(INPUT_INVALID, f"Composition targets game {comp['game']} but these members target another game: {mixed}",
+                      "Every module in a composition targets the same game; split the pack or fix the members' module.json game.")
     resolved = resolve(comp, modules)
     loaded = {m["id"]: projects.load_recipe(m["recipe"], job) for m in modules if m["recipe"] is not None}
     by_id = {m["id"]: m for m in modules}
@@ -682,7 +696,8 @@ def execute(args, job: Job) -> dict:
     plan = {
         "schema_version": 1, "name": comp["name"], "title": comp["title"], "tags": comp["tags"], "base": comp["base"],
         "map": comp["map"], "origin": comp["origin"], "donor": comp["donor"],
-        "game": "t6", "mode": "zm", "base_member": base_ids[0] if base_ids else None,
+        "game": comp["game"], "mode": titles.zone(comp["game"])["mode"],
+        "base_member": base_ids[0] if base_ids else None,
         "modules": rows, "order": resolved["order"],
         "scripts": [{"source": str(p), "target": t.as_posix(), "instance": i} for p, t, i in compiled],
         "assets": [{"source": str(p), "target": t.as_posix(), "type": k, "name": n} for p, t, k, n in loose],
@@ -723,11 +738,14 @@ def _build_composition(comp: dict, plan: dict, compiled, loose, seed_modules, lo
     # Decided file collisions: only the owner's copy is staged.
     losers = {(d["collision"], mid) for d in decided if d["kind"] == "file" for mid in d["modules"] if mid != d["owner"]}
     owner_of = {d["collision"]: d["owner"] for d in decided if d["kind"] == "file"}
+    game = comp["game"]
+    zone = titles.zone(game)
+    zone_name = zone["name"]
     base = job.root / "project"
     raw, zone_dir = base / "raw", base / "zone_source"
     raw.mkdir(parents=True)
     zone_dir.mkdir()
-    lines = ["> game,T6", "> name,mod", *header]
+    lines = [f"> game,{zone['game_token']}", f"> name,{zone_name}", *header]
     rawfiles = []
     staged_targets: set[str] = set()
     module_of_source = {}
@@ -749,7 +767,7 @@ def _build_composition(comp: dict, plan: dict, compiled, loose, seed_modules, lo
                     timeout=max(1, int(job.deadline - __import__("time").monotonic())))
         try:
             result = scripts.execute(SimpleNamespace(action="compile", input=str(source), instance=instance,
-                                                     includes=str(source.parent), timeout=args.timeout), child)
+                                                     game=game, includes=str(source.parent), timeout=args.timeout), child)
             child.finish(result)
         except Failure as exc:
             child.fail(exc)
@@ -791,11 +809,11 @@ def _build_composition(comp: dict, plan: dict, compiled, loose, seed_modules, lo
                                   "Rename the string in one module, or drop one module from the pack.")
                 strings[key] = value
     if strings:
-        (raw / "english" / "localizedstrings").mkdir(parents=True, exist_ok=True)
-        (raw / "english" / "localizedstrings" / "mod.str").write_text(seeds.write_strings(strings), encoding="utf-8")
-        lines.insert(2 + len(header), "localize,mod")
-    (zone_dir / "mod.zone").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    link = fastfiles.execute(SimpleNamespace(action="link", project=str(base), zone="mod",
+        (raw / zone["language"] / "localizedstrings").mkdir(parents=True, exist_ok=True)
+        (raw / zone["language"] / "localizedstrings" / f"{zone_name}.str").write_text(seeds.write_strings(strings), encoding="utf-8")
+        lines.insert(2 + len(header), f"localize,{zone_name}")
+    (zone_dir / f"{zone_name}.zone").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    link = fastfiles.execute(SimpleNamespace(action="link", project=str(base), zone=zone_name,
                                              load=[str(p) for p in seed_loads] + [str(p) for p in loads],
                                              assets=[], timeout=args.timeout), job)
     if len(link["packages"]) != 1:

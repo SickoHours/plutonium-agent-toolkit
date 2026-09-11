@@ -25,7 +25,7 @@ from types import SimpleNamespace
 from ..core.errors import BACKEND_FAILED, INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, Failure
 from ..core.jobs import Job
 from ..core.receipts import sha256_file, verify_outputs
-from . import fastfiles, scripts
+from . import fastfiles, scripts, titles
 from .backends import executable
 
 NAME = re.compile(r"^[a-z0-9_]{1,64}\Z")
@@ -58,10 +58,12 @@ on_player_spawned()
 
 
 def add_parser(sub, common):
-    p = sub.add_parser("project", help="Declarative T6 mod recipes: init, plan, build, verify")
+    p = sub.add_parser("project", help="Declarative mod recipes (t6 or iw5): init, plan, build, verify")
     actions = p.add_subparsers(dest="action", required=True)
     q = actions.add_parser("init", help="Create a minimal recipe and source in a new directory")
     q.add_argument("--name", default="my_mod", help="Mod name: lowercase letters, digits, underscore")
+    q.add_argument("--game", choices=titles.names(), default=titles.DEFAULT_TITLE,
+                   help="Title the recipe targets (default t6)")
     common(q)
     for action, help_text in (("plan", "Validate a recipe and hash inputs; runs no backend"),
                               ("build", "Compile, link, read back and compare")):
@@ -107,12 +109,13 @@ def load_recipe(path: Path, job: Job) -> tuple[dict, list, list, list]:
     except ValueError as exc:
         raise Failure(INPUT_INVALID, f"Recipe is not valid JSON: {src}") from exc
     _fields(data, {"schema", "game", "name", "scripts", "assets", "loads", "mode"}, {"schema", "game", "name"}, "recipe")
-    if data["schema"] != 1 or data["game"] != "t6":
-        raise Failure(INPUT_INVALID, "Expected a schema 1 recipe for game t6")
+    if data["schema"] != 1 or data["game"] not in titles.names():
+        raise Failure(INPUT_INVALID, f"Expected a schema 1 recipe for one of games {', '.join(titles.names())}")
     if not isinstance(data["name"], str) or not NAME.match(data["name"]):
         raise Failure(INPUT_INVALID, "Recipe name uses lowercase letters, digits and underscore")
-    if data.get("mode", "zm") not in ("zm",):
-        raise Failure(INPUT_INVALID, "Only mode 'zm' is supported by this release")
+    allowed_modes = titles.modes(data["game"])
+    if data.get("mode", allowed_modes[0]) not in allowed_modes:
+        raise Failure(INPUT_INVALID, f"Game {data['game']} supports modes {', '.join(allowed_modes)}")
     scripts_rows, asset_rows, load_rows = data.get("scripts", []), data.get("assets", []), data.get("loads", [])
     if not all(isinstance(x, list) for x in (scripts_rows, asset_rows, load_rows)):
         raise Failure(INPUT_INVALID, "scripts, assets and loads must be lists")
@@ -165,7 +168,8 @@ def _plan(data, compiled, loose, loads, job: Job) -> dict:
         except Failure as exc:
             checks.append({"id": name, "available": False, "message": exc.message})
     plan = {
-        "schema_version": 1, "name": data["name"], "game": data["game"], "mode": data.get("mode", "zm"),
+        "schema_version": 1, "name": data["name"], "game": data["game"],
+        "mode": data.get("mode", titles.modes(data["game"])[0]),
         "scripts": [{"source": str(p), "target": t.as_posix(), "instance": i} for p, t, i in compiled],
         "assets": [{"source": str(p), "target": t.as_posix(), "type": k, "name": n} for p, t, k, n in loose],
         "loads": [str(p) for p in loads],
@@ -181,22 +185,25 @@ def _build(data, compiled, loose, loads, plan, args, job: Job) -> dict:
     missing = [c["id"] for c in plan["backends"] if not c["available"]]
     if missing:
         raise Failure("backend_unavailable", f"Required backends are not installed: {missing}", "Run: pat dev setup")
+    game = data["game"]
+    zone = titles.zone(game)
+    zone_name = zone["name"]
     base = job.root / "project"
     raw, zone_dir = base / "raw", base / "zone_source"
     raw.mkdir(parents=True)
     zone_dir.mkdir()
-    # Plutonium loads mods/<folder>/mod.ff, and a T6 fastfile is bound to its file name (the zone
-    # name keys its compressed streams), so the zone is always linked as "mod". The recipe name is
-    # the install folder only. Native Tier 3 finding: a hello_zm.ff renamed to mod.ff could not be
-    # inflated by OpenAssetTools and hung the Plutonium client on load.
-    lines = ["> game,T6", "> name,mod"]
+    # Plutonium loads mods/<folder>/mod.ff, and a CoD fastfile is bound to its file name (the zone
+    # name keys its compressed streams), so the zone is always linked as its canonical name ("mod"
+    # for both T6 and IW5). The recipe name is the install folder only. Native Tier 3 finding: a
+    # hello_zm.ff renamed to mod.ff could not be inflated by OpenAssetTools and hung the client.
+    lines = [f"> game,{zone['game_token']}", f"> name,{zone_name}"]
     rawfiles = []
     for index, (source, target, instance) in enumerate(compiled):
         child = Job(job.root / f"script-{index:03d}", "gsc compile", ["pat", "gsc", "compile", str(source)],
                     timeout=max(1, int(job.deadline - __import__("time").monotonic())))
         try:
             result = scripts.execute(SimpleNamespace(action="compile", input=str(source), instance=instance,
-                                                     includes=str(source.parent), timeout=args.timeout), child)
+                                                     game=game, includes=str(source.parent), timeout=args.timeout), child)
             child.finish(result)
         except Failure as exc:
             child.fail(exc)
@@ -214,8 +221,8 @@ def _build(data, compiled, loose, loads, plan, args, job: Job) -> dict:
         lines.append(f"{asset_type},{name}")
         if asset_type == "rawfile":
             rawfiles.append(target)
-    (zone_dir / "mod.zone").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    link = fastfiles.execute(SimpleNamespace(action="link", project=str(base), zone="mod", load=[str(p) for p in loads],
+    (zone_dir / f"{zone_name}.zone").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    link = fastfiles.execute(SimpleNamespace(action="link", project=str(base), zone=zone_name, load=[str(p) for p in loads],
                                              assets=[], timeout=args.timeout), job)
     if len(link["packages"]) != 1:
         raise Failure(BACKEND_FAILED, "A recipe must produce exactly one fastfile")
@@ -227,8 +234,8 @@ def _build(data, compiled, loose, loads, plan, args, job: Job) -> dict:
         restored = job.root / "readback" / rel
         if not restored.is_file() or sha256_file(raw / rel) != sha256_file(restored):
             raise Failure(BACKEND_FAILED, f"Rawfile did not round-trip through the fastfile: {rel.as_posix()}")
-    return {**link, "plan": "plan.json", "rawfiles_verified": len(rawfiles), "mod_ff": link["packages"][0]["path"],
-            "install_hint": f"pat game install-mod <output>/{link['packages'][0]['path']} {data['name']}  (keeps the name mod.ff; a renamed T6 fastfile cannot be read). Loading it in game is a separate, authorized step"}
+    return {**link, "plan": "plan.json", "game": game, "rawfiles_verified": len(rawfiles), "mod_ff": link["packages"][0]["path"],
+            "install_hint": f"pat game install-mod <output>/{link['packages'][0]['path']} {data['name']}  (keeps the name mod.ff; a renamed fastfile cannot be read). Loading it in game is a separate, authorized step"}
 
 
 def _verify(args, job: Job) -> dict:
@@ -263,11 +270,12 @@ def execute(args, job: Job) -> dict:
     if args.action == "init":
         if not NAME.match(args.name):
             raise Failure(INPUT_INVALID, "Name uses lowercase letters, digits and underscore")
+        mode = titles.modes(args.game)[0]
         (job.root / "scripts").mkdir()
         (job.root / "scripts" / f"{args.name}.gsc").write_text(INIT_SCRIPT.replace("{name}", args.name), encoding="utf-8")
         (job.root / "README.txt").write_text(f"{args.name}: created by pat project init.\n", encoding="utf-8")
-        recipe = {"schema": 1, "game": "t6", "mode": "zm", "name": args.name,
-                  "scripts": [{"source": f"scripts/{args.name}.gsc", "target": f"scripts/zm/{args.name}.gsc", "instance": "server"}],
+        recipe = {"schema": 1, "game": args.game, "mode": mode, "name": args.name,
+                  "scripts": [{"source": f"scripts/{args.name}.gsc", "target": f"scripts/{mode}/{args.name}.gsc", "instance": "server"}],
                   "assets": [{"source": "README.txt", "target": "README.txt", "type": "rawfile"}], "loads": []}
         (job.root / "project.json").write_text(json.dumps(recipe, indent=2) + "\n", encoding="utf-8")
         return {"recipe": "project.json", "next": ["pat project plan <dir>/project.json --output <new dir>"]}
