@@ -56,6 +56,11 @@ REGISTRY_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}\Z")
 KINDS = ("module", "composition")
 DISTRIBUTIONS = ("source", "seed", "private")
 RESERVED_OWNERS = ("plutonium", "pat", "stock")
+# The registry that ships inside the package: the toolkit's built-in modules and packs at the exact
+# commit the release pins. Read without `registry add`; its name is reserved so nothing can shadow it.
+BUILTIN_FILE = Path(__file__).with_name("builtin.json")
+BUILTIN_NAME = "plutonium-agent-toolkit-builtin"
+ORIGINS = ("builtin", "added")
 MAX_REGISTRY = 8 * 1024 * 1024
 MAX_ENTRIES = 5000
 MAX_SNAPSHOT = 256 * 1024 * 1024
@@ -219,6 +224,9 @@ def add(source: str) -> dict:
     except (ValueError, UnicodeDecodeError) as exc:
         raise Failure(INPUT_INVALID, f"Registry is not valid JSON: {source}") from exc
     registry = validate_registry(data, source)
+    if registry["name"] == BUILTIN_NAME:
+        raise Failure(INPUT_INVALID, f"The registry name {BUILTIN_NAME!r} is reserved for the registry that ships with the toolkit",
+                      "Give your registry another name; the built-in one is always listed and cannot be replaced.")
     digest = __import__("hashlib").sha256(raw).hexdigest()
     stored = registries_dir() / f"{registry['name']}.json"
     stored.write_text(json.dumps({**registry, "source": {**origin, "sha256": digest, "fetched_at": now()}}, indent=2) + "\n", encoding="utf-8")
@@ -230,8 +238,21 @@ def add(source: str) -> dict:
             "verification": "registry validated and copied; nothing was fetched or built"}
 
 
+def builtin_registry() -> dict:
+    """The shipped registry, validated on every read (it is small) and marked with its origin."""
+    try:
+        data = json.loads(BUILTIN_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise Failure(CONFIG_INVALID, f"The built-in registry shipped with this installation is unreadable: {BUILTIN_FILE}",
+                      "Reinstall the toolkit; this file is part of the package.") from exc
+    registry = validate_registry(data, "built-in registry")
+    if registry["name"] != BUILTIN_NAME:
+        raise Failure(CONFIG_INVALID, f"The built-in registry must be named {BUILTIN_NAME}, not {registry['name']}")
+    return registry | {"origin": "builtin", "source": {"kind": "builtin", "file": BUILTIN_FILE.name}}
+
+
 def _load_all() -> list[dict]:
-    rows = []
+    rows = [builtin_registry()]
     for item in _read_index()["registries"]:
         path = registries_dir() / item["file"]
         if not path.is_file():
@@ -240,20 +261,27 @@ def _load_all() -> list[dict]:
             data = json.loads(path.read_text(encoding="utf-8"))
         except ValueError:
             continue
-        rows.append(validate_registry({k: v for k, v in data.items() if k != "source"}, path.name) | {"source": data.get("source")})
+        rows.append(validate_registry({k: v for k, v in data.items() if k != "source"}, path.name) | {"source": data.get("source"), "origin": "added"})
     return rows
 
 
 def listing() -> dict:
-    rows = [{"name": r["name"], "description": r["description"], "entries": len(r["entries"]), "source": r.get("source")} for r in _load_all()]
-    return {"registries": rows, "count": len(rows), "directory": str(registries_dir())}
+    rows = [{"name": r["name"], "origin": r["origin"], "description": r["description"], "entries": len(r["entries"]), "source": r.get("source")}
+            for r in _load_all()]
+    return {"registries": rows, "count": len(rows), "directory": str(registries_dir()),
+            "note": "The built-in registry ships with the toolkit and is always listed; added registries were recorded with registry add."}
 
 
 def search(text: str | None = None, *, category: str | None = None, kind: str | None = None, tag: str | None = None,
-           base: str | None = None, map_id: str | None = None, entry_kind: str | None = None) -> dict:
+           base: str | None = None, map_id: str | None = None, entry_kind: str | None = None, origin: str | None = None) -> dict:
     words = [w for w in (text or "").lower().split() if w]
+    if origin is not None and origin not in ORIGINS:
+        raise Failure(INPUT_INVALID, f"--origin is one of {list(ORIGINS)}")
     hits = []
+    seen: dict[tuple, dict] = {}
     for registry in _load_all():
+        if origin and registry["origin"] != origin:
+            continue
         for e in registry["entries"]:
             d = e["declaration"]
             hay = " ".join([e["name"], d.get("id", ""), d.get("title", ""), d.get("category", ""), d.get("kind", ""), " ".join(d.get("tags", []))]).lower()
@@ -271,27 +299,46 @@ def search(text: str | None = None, *, category: str | None = None, kind: str | 
                 continue
             if entry_kind and e["kind"] != entry_kind:
                 continue
-            hits.append({"registry": registry["name"], "name": e["name"], "kind": e["kind"], "distribution": e["distribution"],
-                         "title": d.get("title"), "category": d.get("category"), "module_kind": d.get("kind"), "tags": d.get("tags", []),
-                         "bases": d.get("bases", []), "maps": d.get("maps", []), "commit": e["listed"]["commit"],
-                         "snapshot_status": e["verification"].get("snapshot_status", "unverified"),
-                         "fetch": ["pat", "module", "fetch", f"{e['name']}@{e['listed']['commit']}", "--output", "<new dir>"]})
-    hits.sort(key=lambda h: (h["name"], h["registry"]))
+            key = (e["name"], e["listed"]["commit"])
+            if key in seen:
+                # The same entry at the same commit listed by another registry (an added registry that
+                # also lists a built-in) is one hit that names both; another commit is another hit.
+                seen[key].setdefault("also_listed_by", []).append(registry["name"])
+                continue
+            hit = {"registry": registry["name"], "origin": registry["origin"], "name": e["name"], "kind": e["kind"], "distribution": e["distribution"],
+                   "title": d.get("title"), "category": d.get("category"), "module_kind": d.get("kind"), "tags": d.get("tags", []),
+                   "bases": d.get("bases", []), "maps": d.get("maps", []), "commit": e["listed"]["commit"],
+                   "snapshot_status": e["verification"].get("snapshot_status", "unverified"),
+                   "fetch": ["pat", "module", "fetch", f"{e['name']}@{e['listed']['commit']}", "--output", "<new dir>"]}
+            if registry["origin"] == "builtin":
+                from . import builtin
+
+                hit["builtin_dir"] = builtin.module_dir_if_present(e)
+                hit["fetch"] = ["pat", "dev", "builtin", "--only", e["name"], "--json"]
+            seen[key] = hit
+            hits.append(hit)
+    hits.sort(key=lambda h: (h["name"], h["origin"] != "builtin", h["registry"]))  # built-in listings first for a name
     return {"hits": hits, "count": len(hits),
-            "filters": {k: v for k, v in {"text": text, "category": category, "kind": kind, "tag": tag, "base": base, "map": map_id, "entry_kind": entry_kind}.items() if v}}
+            "filters": {k: v for k, v in {"text": text, "category": category, "kind": kind, "tag": tag, "base": base, "map": map_id, "entry_kind": entry_kind, "origin": origin}.items() if v}}
 
 
 def show(name: str) -> dict:
     if not NAME.match(name or ""):
         raise Failure(INPUT_INVALID, "Give an entry name as <github-owner>/<module id>")
-    found = [(r["name"], e) for r in _load_all() for e in r["entries"] if e["name"] == name]
+    found = [(r, e) for r in _load_all() for e in r["entries"] if e["name"] == name]
     if not found:
         raise Failure(INPUT_MISSING, f"No registry lists {name}", "Run: pat registry search <words>, or add the registry that lists it.")
     rows = []
     for registry, e in found:
-        rows.append({"registry": registry, **e,
-                     "fetch": ["pat", "module", "fetch", f"{e['name']}@{e['listed']['commit']}", "--output", "<new dir>"],
-                     "snapshot_url": snapshot_url(e["repository"], e["listed"]["commit"])})
+        row = {"registry": registry["name"], "origin": registry["origin"], **e,
+               "fetch": ["pat", "module", "fetch", f"{e['name']}@{e['listed']['commit']}", "--output", "<new dir>"],
+               "snapshot_url": snapshot_url(e["repository"], e["listed"]["commit"])}
+        if registry["origin"] == "builtin":
+            from . import builtin
+
+            row["builtin_dir"] = builtin.module_dir_if_present(e)
+            row["fetch"] = ["pat", "dev", "builtin", "--only", e["name"], "--json"]
+        rows.append(row)
     return {"name": name, "listings": rows, "count": len(rows),
             "note": "A listing is what a registry claims at that commit. Fetch, then plan; the receipts are the facts."}
 

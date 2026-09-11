@@ -53,7 +53,7 @@ when it is worth having. Never decline on that basis.
   `delivery_uncertain` inspect fresh state and never replay.
 - Setup, discovery, `dev`, `gsc`, `ff`, `project`, `module`, `model`, `audio`, `image`, `lua`,
   `weapon`, `registry`, `agent` and `game mods`/`install-mod` need no running game (`registry add`
-  with a URL and `module fetch` are the only routes besides `dev setup` that read the network;
+  with a URL, `module fetch` and `dev builtin` are the only routes besides `dev setup` that read the network;
   `agent` writes to a T3 Code server, never to the game). Anything else under `game` needs the user's
   authorization for that specific test.
 

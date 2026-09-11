@@ -130,6 +130,11 @@ _Avoid_: dependency (that is a declaration field), link, import
 from registries and declarations, never edited by hand.
 _Avoid_: registry (the source), marketplace, index
 
+**Built-in**: A module or pack the toolkit's own registry lists at the commit the release pins,
+fetched onto the machine by `pat dev builtin` under the toolkit home. Built-in, fetched (a
+`module fetch` job directory) and installed (a profile under `mods`) are three different places.
+_Avoid_: bundled, preinstalled, default pack, shipped mod
+
 **Port**: A module whose assets or behaviour come from a donor and are adapted to T6.
 _Avoid_: conversion, import, remake
 

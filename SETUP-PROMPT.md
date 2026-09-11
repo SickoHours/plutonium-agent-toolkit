@@ -22,6 +22,9 @@ Handle the routine work yourself:
    Where a pinned download exists for my OS, run `pat dev setup --json` to fetch and verify it. Where
    it reports `override-required` (no pinned build for my OS), find or install the tool and point the
    toolkit at it with an absolute path in `PAT_BACKEND_<NAME>` (for example `PAT_BACKEND_GSC`).
+   Then run `pat dev builtin --json` so the built-in modules and packs the toolkit ships are on my
+   machine (one pinned snapshot over HTTPS, receipts under the toolkit home; nothing is installed
+   into the game).
 4. Install the skills so any agent I open on this machine knows this toolkit: run
    `pat dev install-skills --plan --json`, show me which harnesses it found, then run it without
    `--plan`. It copies `skills/` into each found harness's skills directory, writes nothing over a

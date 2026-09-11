@@ -50,13 +50,36 @@ The **catalog** is a generated, browseable projection of one or more registries 
 plus pages); it is not part of this release. The official registry repository, its issue forms
 and its verification workflows are described in issue #23 and follow the same file.
 
+## The registry that ships with the toolkit
+
+One registry is always present without `registry add`: the toolkit's own, named
+`plutonium-agent-toolkit-builtin` (a copy is kept at `examples/registry.json`). It lists the
+modules and packs the release ships as **built-ins**, at the exact commit the release pins.
+`pat dev builtin` fetches them onto the machine: one HTTPS snapshot per repository and commit,
+hashed and extracted with the archive safety checks, laid out under
+`<toolkit home>/modules/builtin/<owner>/<repository>/<commit>/<path>` so a pack's relative member
+paths keep resolving, with a receipt per entry under `modules/builtin/receipts/`. A rerun re-hashes
+every kept file and answers `verified`; a changed tree is refused with `artifact_changed` and never
+overwritten; `--plan` reports the state without touching the network. `registry list`, `search` and
+`show` carry each registry's `origin` (`builtin` or `added`), `search --origin builtin` lists only
+the built-ins, and a built-in hit carries `builtin_dir` once it is fetched. The name is reserved:
+`registry add` refuses a file that claims it. An added registry that lists a built-in at the same
+commit (the official registry does) adds its name under the hit's `also_listed_by` rather than a
+second hit; a listing at another commit is its own hit.
+
+Built-in, fetched and installed are three places (`CONTEXT.md`): the shelf under the toolkit home,
+the `module fetch` job directories you chose, and the profiles under Plutonium's `mods`. A built-in
+is planned and built like any other module (`pat module plan <builtin_dir>/composition.json`);
+nothing under `dev builtin` installs anything into the game.
+
 ## Routes
 
 | Command | What it does | Result to keep |
 | --- | --- | --- |
 | `pat registry add <file or https URL>` | Validates the registry and copies it under the toolkit home (`registries/`). Re-adding a name replaces the copy | `name`, `entries`, `sha256` |
-| `pat registry list` | The registries recorded on this machine | `registries[]` |
-| `pat registry search [words] [--category …] [--kind …] [--tag …] [--base …] [--map …] [--entry-kind module|composition]` | Matches the declaration summaries in every recorded registry; offline | `hits[].name`, `hits[].commit`, `hits[].fetch` |
+| `pat registry list` | The registries on this machine: the built-in one first, then the ones you added, each with its `origin` | `registries[]` |
+| `pat registry search [words] [--category …] [--kind …] [--tag …] [--base …] [--map …] [--entry-kind module|composition] [--origin builtin|added]` | Matches the declaration summaries in the built-in and every recorded registry; offline | `hits[].name`, `hits[].commit`, `hits[].fetch`, `hits[].builtin_dir` |
+| `pat dev builtin [--plan] [--only <owner/id>]…` | Fetches the built-in modules and packs at their pinned commits under the toolkit home with a receipt per entry; a rerun verifies, a changed tree is refused | `results[].module_dir`, `results[].action`, `downloads[]` |
 | `pat registry show <owner/id>` | Every listing of one name, with its fetch command and snapshot URL | `listings[]` |
 | `pat module fetch <owner/id@commit> --output <new dir>` | Resolves the name through the recorded registries (the commit must equal the listed one), downloads the exact-commit tarball over HTTPS, hashes it, extracts it with the archive safety checks, and confirms `module.json` or `composition.json` is at the entry's path. The fetched declaration must name the same repository and commit when it names any | `module_dir`, `commit`, `archive_sha256`, `facts` |
 | `pat module fetch <https://github.com/owner/repo@commit> [--path <dir>] --output <new dir>` | The same for a repository no registry lists; say so in your report | same |
@@ -86,7 +109,9 @@ cannot be published is `distribution: private`.
 
 ## What is not here
 
-- No catalog generation, no official registry repository, no submission workflow, no baseline
-  scanner: those are the next steps in issue #23.
+- No catalog generation and no baseline scanner in this version; issue #23 tracks them. The
+  official registry repository is `github.com/SickoHours/plutonium-module-registry`: add it with
+  `pat registry add https://raw.githubusercontent.com/SickoHours/plutonium-module-registry/main/registry.json`
+  and submit entries through its issue form.
 - No non-GitHub hosts, no git protocol, no authentication: public repositories only.
 - No version constraints, no automatic updates, no popularity signals.
