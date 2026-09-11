@@ -74,7 +74,17 @@ KINDS = {"weapons": ("wonder", "firearm", "melee", "launcher", "special"), "perk
          "ui": ("hud", "menu"), "core": ("inventory", "registry", "adapter"), "scripts": ("script",),
          "audio": ("bank", "music"), "tooling": ("tool",), "pack": ("pack",), "module": ()}
 DISTRIBUTIONS = ("source", "seed", "private")
-PROVIDES_KINDS = ("weapons", "perks", "gobblegums", "powerups", "equipment", "localize", "soundbanks", "scripts", "models", "effects")
+PROVIDES_KINDS = ("weapons", "perks", "gobblegums", "powerups", "equipment", "localize", "soundbanks", "scripts", "models", "effects",
+                  "rawfiles")
+# A whole pack declared as one seed lists every asset it embeds; a Beta-era pack carries several
+# hundred models and weapons, so a declaration that narrows provides by copying the manifest block
+# needs room above the per-kind count a hand-written declaration would ever reach.
+MAX_PROVIDES_NAMES = 4096
+# The kinds a seed manifest derives from the package listing (seeds.provides_of). For these the
+# manifest is the fact: a non-private seed's declaration may only narrow them, and a name the
+# manifest does not list (including every name when the manifest lists none) is a contradiction.
+# Kinds the listing cannot see (perks, gobblegums, powerups, equipment, scripts) stay the declaration's.
+MANIFEST_KINDS = ("weapons", "localize", "soundbanks", "rawfiles", "models", "effects")
 MAX_MODULES = 32
 MAX_LIST = 64
 MAX_TAGS = 16
@@ -147,7 +157,7 @@ def _provides(value, owner: str) -> dict:
         raise Failure(INPUT_INVALID, f"{owner}: provides maps kinds {list(PROVIDES_KINDS)} to lists of names")
     out = {}
     for kind, names in value.items():
-        if not isinstance(names, list) or len(names) > 512 or not all(isinstance(n, str) and 0 < len(n) <= 128 for n in names):
+        if not isinstance(names, list) or len(names) > MAX_PROVIDES_NAMES or not all(isinstance(n, str) and 0 < len(n) <= 128 for n in names):
             raise Failure(INPUT_INVALID, f"{owner}: provides.{kind} is a list of names")
         if len(set(names)) != len(names):
             raise Failure(INPUT_INVALID, f"{owner}: duplicate names under provides.{kind}")
@@ -261,9 +271,12 @@ def load_declaration(directory: Path, job: Job) -> dict:
     if seed and not seed.get("private"):
         # The manifest is the fact; a declaration may narrow it, never contradict it.
         for pkind, names in provides.items():
+            if pkind not in MANIFEST_KINDS:
+                continue
             listed = set(seed["provides"].get(pkind, []))
-            if listed and not set(names) <= listed:
-                raise Failure(INPUT_INVALID, f"{mid}: provides.{pkind} names {sorted(set(names) - listed)} which the seed manifest does not list")
+            if not set(names) <= listed:
+                raise Failure(INPUT_INVALID, f"{mid}: provides.{pkind} names {sorted(set(names) - listed)} which the seed manifest does not list",
+                              "A seed's manifest is the fact for what the package embeds; a declaration may narrow that list, never add to it.")
         for pkind, names in seed["provides"].items():
             provides.setdefault(pkind, list(names))
     return {"id": mid, "version": data["version"], "title": title, "category": category, "kind": kind, "tags": list(tags),
@@ -491,6 +504,10 @@ def collisions(modules: list[dict], loaded: dict[str, tuple], decisions: list[di
     name_owners: dict[str, list[str]] = {}
     for m in modules:
         for pkind, names in m["provides"].items():
+            if pkind == "rawfiles":
+                # A provided rawfile is a file target: the file collision above already lists it (for a
+                # seed, from its manifest's embedded rows) and the build resolves that one record.
+                continue
             for name in names:
                 name_owners.setdefault(f"{pkind}:{name}", []).append(m["id"])
         if m["seed"] and not m["seed"].get("private"):

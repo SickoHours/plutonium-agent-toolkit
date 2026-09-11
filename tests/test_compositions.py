@@ -351,6 +351,61 @@ class SeedTests(SeedFixture):
         code, row = invoke(["module", "declare", str(other), "--output", self.out()])
         self.assertEqual(row["error_code"], "input_invalid")
 
+    def test_a_declaration_may_copy_its_manifest_provides_block_including_rawfiles(self):
+        # docs/MODULES.md: a seed's manifest fills provides in and a declaration may narrow it by
+        # copying the block. The manifest lists the rawfiles the package embeds under `rawfiles`, so
+        # the copied block must be accepted as written (found declaring ten pack-sized hub seeds).
+        d, _ = self.seed_module("penetrator")
+        manifest = json.loads((d / "seed.json").read_text())
+        self.assertEqual(manifest["provides"]["rawfiles"], ["scripts/zm/penetrator_seeded.gsc"])
+        decl = json.loads((d / "module.json").read_text())
+        decl["provides"] = manifest["provides"]
+        (d / "module.json").write_text(json.dumps(decl))
+        code, row = invoke(["module", "plan", str(self.composition(["penetrator"], zone_header=[">level.ipak_read,common_zm"])), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        plan = json.loads((Path(row["result"]["output"]) / "plan.json").read_text())
+        planned = plan["modules"][0]
+        self.assertEqual(planned["provides"]["rawfiles"], ["scripts/zm/penetrator_seeded.gsc"])
+        self.assertEqual(planned["provides"]["weapons"], ["halo_penetrator_zm"])
+        # A seed declaration cannot claim a rawfile, weapon or model its manifest does not list, and an
+        # empty manifest list is no licence: the manifest is the fact for the kinds it derives.
+        for claim in ({"rawfiles": ["scripts/zm/not_in_package.gsc"]}, {"weapons": ["invented_zm"]},
+                      {"rawfiles": ["scripts/zm/penetrator_seeded.gsc", "scripts/zm/extra.gsc"]}):
+            decl["provides"] = claim
+            (d / "module.json").write_text(json.dumps(decl))
+            code, row = invoke(["module", "plan", str(self.composition(["penetrator"], zone_header=[">level.ipak_read,common_zm"])), "--output", self.out()])
+            self.assertEqual(row["error_code"], "input_invalid", claim)
+            self.assertIn("does not list", row["message"])
+        # Kinds the listing cannot see stay the declaration's (a perk seed names its perk).
+        decl["provides"] = {"perks": ["specialty_penetration"]}
+        (d / "module.json").write_text(json.dumps(decl))
+        code, row = invoke(["module", "plan", str(self.composition(["penetrator"], zone_header=[">level.ipak_read,common_zm"])), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        # Two seeds embedding the same rawfile are one file collision, never also a rawfiles name collision.
+        decl["provides"] = manifest["provides"]
+        (d / "module.json").write_text(json.dumps(decl))
+        self.seed_module("pen_twin", weapons=("twin_zm",), banks=("twin.all.sabl",))
+        twin = self.root / "modules" / "pen_twin"
+        package = json.loads((twin / "mod.ff").read_text())
+        package["rawfiles"]["scripts/zm/penetrator_seeded.gsc"] = package["rawfiles"].pop("scripts/zm/pen_twin_seeded.gsc")
+        (twin / "mod.ff").write_text(json.dumps(package))
+        code, row = invoke(["module", "declare", str(twin / "mod.ff"), "--id", "pen_twin", "--base", "stock", "--map", "zm_transit", "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        (twin / "seed.json").write_bytes((Path(row["result"]["output"]) / "seed.json").read_bytes())
+        code, row = invoke(["module", "plan", str(self.composition(["penetrator", "pen_twin"], name="stock_twins_test", zone_header=[">level.ipak_read,common_zm"])), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        shared = [u for u in row["result"]["undecided"] if "penetrator_seeded.gsc" in u["collision"]]
+        self.assertEqual([(u["kind"], u["collision"]) for u in shared], [("file", "scripts/zm/penetrator_seeded.gsc")])
+        self.assertFalse(any(u["collision"].startswith("rawfiles:") for u in row["result"]["undecided"]))
+        # A whole pack declared as one seed embeds several hundred models; the per-kind limit has
+        # room for that, and still has a ceiling.
+        self.module("big", provides={"models": [f"model_{n}" for n in range(600)]})
+        code, row = invoke(["module", "plan", str(self.composition(["big"], name="stock_big_test")), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        self.module("huge", provides={"models": [f"model_{n}" for n in range(4097)]})
+        code, row = invoke(["module", "plan", str(self.composition(["huge"], name="stock_huge_test")), "--output", self.out()])
+        self.assertEqual(row["error_code"], "input_invalid")
+
     def test_seed_module_composes_with_a_recipe_module_and_the_roots_are_verified(self):
         self.seed_module("penetrator")
         self.module("announcer")

@@ -7,6 +7,21 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+### Fixed
+
+- **`provides.rawfiles` is a declared kind.** `module declare` writes a `rawfiles` list into a seed
+  manifest for every rawfile the package embeds, and `module plan` merges it into the module's
+  provides, but `docs/MODULES.md` and the declaration validator did not know the kind, so a
+  declaration that narrowed `provides` by copying its manifest block (the documented way) was
+  refused with `provides maps kinds [...]`. `rawfiles` is now in the list, and the per-kind name
+  limit is 4096 instead of 512, because a whole pack declared as one seed embeds several hundred
+  models and weapons and a copied block was close to the old ceiling. Found while declaring ten
+  pack-sized seeds with the route. Two rules tightened with it: for the kinds a manifest derives
+  (weapons, localize, soundbanks, rawfiles, models, effects) a non-private seed's declaration may
+  only narrow the manifest's list, and a name it does not list is refused even when the manifest
+  lists none of that kind; and a provided rawfile is never a second, `rawfiles:` name collision
+  beside the file collision the build resolves.
+
 ### Added
 
 - **Registries and fetch by name.** `docs/REGISTRY.md` specifies `registry.json`: a file anyone can
