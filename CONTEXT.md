@@ -135,6 +135,11 @@ fetched onto the machine by `pat dev builtin` under the toolkit home. Built-in, 
 `module fetch` job directory) and installed (a profile under `mods`) are three different places.
 _Avoid_: bundled, preinstalled, default pack, shipped mod
 
+**Baseline**: The deterministic, static check of a module or composition directory that a
+registry runs before listing it and a submitter runs first; it reads files, executes nothing,
+and is not a security audit, certification, warranty or endorsement (`docs/REGISTRY.md`).
+_Avoid_: scan (say baseline), audit, security check, approval
+
 **Port**: A module whose assets or behaviour come from a donor and are adapted to T6.
 _Avoid_: conversion, import, remake
 

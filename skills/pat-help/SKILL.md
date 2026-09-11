@@ -33,7 +33,9 @@ verified, installed, launched, playable, captured, accepted. Words are defined i
   <owner/id@commit> --output <new dir>` and name `module_dir` as a reference member of the
   composition. A hit with `origin: builtin` is one the toolkit ships: `pat dev builtin` puts it on
   the machine and the hit's `builtin_dir` is the member path. `docs/REGISTRY.md`; publishing your
-  own: `docs/playbooks/publish-a-module.md`.
+  own: `docs/playbooks/publish-a-module.md`, which runs `pat registry baseline <directory>
+  --output <new dir>` first (a static check of the files a registry will repeat; blocking rows
+  must be fixed before listing; it is not a security audit).
 - **The donor is a Black Ops III Workshop map** ("port the pistol from that map"):
   `docs/playbooks/inspect-a-bo3-map.md` reads the map from its own compiled data on Linux and,
   when a structured asset is needed, captures once read-only from the user's running BO3; then

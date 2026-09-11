@@ -83,6 +83,30 @@ Every entry states what shipped, on which platform it was verified, and what rem
   pack from the shelf, so the route is `available` on Linux. Built-in, fetched and installed are
   three different places; nothing here touches the game.
 
+- **Registry baseline.** New route `registry baseline <directory> [--repository <url>]
+  [--commit <40 hex>] --output <new dir>`: the deterministic, static check a registry runs on a
+  snapshot before listing it and a submitter's agent runs offline first. It reads every file
+  under the directory and nothing else: nothing in the tree is executed, no backend runs, no
+  model and no network are used, and the same bytes always give the same `baseline.json`
+  (`tree_sha256` compares two scans). Policy version `1`, enforcement `selective`: exactly three
+  finding ids block (`native-plugin`: PE, ELF or Mach-O headers under any name, or text naming
+  Plutonium's plugins folder; `download-and-execute`: `iex (iwr ...)`, `Invoke-Expression`,
+  `curl`/`wget ... | sh`, or a downloaded file started later in the same script; `path-escape`:
+  a link anywhere in the tree, an absolute path or a `..` segment in a confined declared path).
+  Non-blocking findings `unpinned-acquisition` (an archive, package or installer URL without a
+  SHA-256 nearby) and `declaration-mismatch` (repository or commit different from the listing,
+  a declared path missing, `bases`/`maps` empty, invalid JSON); capabilities `installer`,
+  `bundled-package`, `lua-ui`, `file-io`, `client-dvar`, `function-replacement`, `command-hook`,
+  `global-tooling`, `bundled-assets` (binary total above 8 MiB) and `large-text`; warning
+  `no-resource-contract`. Outcomes `passed`, `review-required`, `needs-fixes` and `incomplete`
+  (an unreadable file fails closed); every skipped or unreadable entry is listed. Bounds: 20 000
+  files, 2 GiB, 4 MiB of text per file. The report and the result carry
+  `not_a_security_audit: true` with the sentence that a baseline is a static check of files, not
+  a security audit, certification, warranty or endorsement. `docs/REGISTRY.md` has the rule
+  table; `publish-a-module.md` runs the baseline before listing; glossary term baseline. Tier 1
+  of `tools/qualify.py` runs the baseline on `examples/hello-zm` and checks the outcome is
+  `passed`. Not measured: real community repositories. Verified by 24 unit tests on synthetic
+  trees on Linux; CI runs them on Windows.
 - **Registries and fetch by name.** `docs/REGISTRY.md` specifies `registry.json`: a file anyone can
   host that lists module and composition repositories at exact commits and holds no bytes; entries
   are `<github-owner>/<id>` and ownership is the repository living under that owner. New routes

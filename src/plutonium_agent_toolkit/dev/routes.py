@@ -90,6 +90,15 @@ PLANNED = [
           status="implemented", owner=OWNER, notes="Arguments: [words]... [--category --kind --tag --base --map --entry-kind --origin builtin|added]. Reads local copies only; a built-in hit carries builtin_dir once dev builtin fetched it."),
     Route("registry", "show", "Show every listing of one entry name with its fetch command", "inert",
           status="implemented", owner=OWNER, notes="Argument: <owner>/<id>."),
+    Route("registry", "baseline", "Static, deterministic check of a module or composition directory before it is listed: "
+          "executable headers, download-and-execute, links and path escapes, unpinned archives, declaration mismatches, "
+          "and the capabilities a reviewer should know about", "writes-output",
+          status="implemented", owner=OWNER,
+          notes="Argument: <directory> [--repository <https url>] [--commit <40 hex>]. Reads files only: nothing in the tree is "
+                "executed, no backend, no network, no model. Policy version 1, enforcement selective: native-plugin, "
+                "download-and-execute and path-escape block; everything else is reported for review. Outcomes passed, "
+                "review-required, needs-fixes, incomplete (unreadable files fail closed). Writes baseline.json. Not a security "
+                "audit, certification, warranty or endorsement. Rules: docs/REGISTRY.md."),
     Route("module", "build", "Compile every module's scripts, stage every asset, link one mod.ff, read it back and compare every rawfile",
           "writes-output", status="available", owner=OWNER,
           notes="Same backends and readback as project build; the composition's fit and budget come from declarations, not from the game."),

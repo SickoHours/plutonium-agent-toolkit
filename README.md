@@ -98,9 +98,11 @@ add a script, port a feature, four preflights, diagnose a crash, compose a pack,
 [docs/MODULES.md](docs/MODULES.md) specifies the module declaration and composition recipe that
 let an agent compose several mods, from local directories or fetched repositories, into one pack;
 [docs/REGISTRY.md](docs/REGISTRY.md) specifies the registry file that lists them by name at exact
-commits, with `pat registry` and `pat module fetch`; the toolkit ships its own registry of built-in
-modules and packs, which `pat dev builtin` fetches onto the machine, and the official community
-registry lives at [SickoHours/plutonium-module-registry](https://github.com/SickoHours/plutonium-module-registry).
+commits, with `pat registry` and `pat module fetch`, and the static baseline a registry runs
+before listing (`pat registry baseline`; a check of files, not a security audit); the toolkit
+ships its own registry of built-in modules and packs, which `pat dev builtin` fetches onto the
+machine, and the official community registry lives at
+[SickoHours/plutonium-module-registry](https://github.com/SickoHours/plutonium-module-registry).
 [docs/CONTROL-PLANE.md](docs/CONTROL-PLANE.md) describes `pat plane serve`, a local page over those routes
 and the agent-host routes, where the person picks the model and an agent thread does the work.
 [docs/TRACK-RECORD.md](docs/TRACK-RECORD.md) records what that workflow has produced, and the
