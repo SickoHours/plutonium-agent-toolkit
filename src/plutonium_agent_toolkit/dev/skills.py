@@ -17,9 +17,12 @@ Each installed ``SKILL.md`` is the checkout's file plus one paragraph after its 
 names the checkout it came from, because the skills refer to ``docs/`` and ``CONTEXT.md`` by
 paths relative to that checkout. ``<toolkit home>/skills/installed.json`` records every file this
 route wrote with its hash. A later run rewrites a file only when its bytes still match that
-record, refuses a file that differs (someone edited it) or that it never wrote, never follows a
-linked destination, and writes a receipt for every run under ``<toolkit home>/skills/receipts/``.
-Refused files fail the invocation with ``output_exists`` after everything else was written.
+record, refuses a file that differs (someone edited it) or that it never wrote, and writes a
+receipt for every run under ``<toolkit home>/skills/receipts/``. The home directory is resolved
+once (a home that is itself a link is used at its real location, and the result names both);
+below it nothing is written through a link, and a path component that is not a directory
+refuses the file. Refused files fail the invocation with ``output_exists`` after everything else
+was written. Every file the route reads or hashes is bounded by ``MAX_SKILL_FILE_BYTES``.
 """
 from __future__ import annotations
 
@@ -140,6 +143,11 @@ def read_manifest() -> dict:
         raise Failure(INPUT_INVALID, f"Skill install record is not valid JSON: {path}") from exc
     if not isinstance(data, dict) or not isinstance(data.get("files"), dict):
         raise Failure(INPUT_INVALID, f"Skill install record is malformed: {path}")
+    for target, entry in data["files"].items():
+        if (not isinstance(target, str) or not isinstance(entry, dict) or not isinstance(entry.get("sha256"), str)
+                or len(entry["sha256"]) != 64):
+            raise Failure(INPUT_INVALID, f"Skill install record has a malformed entry for {target!r}: {path}",
+                          "Move the record aside; the next install writes a fresh one and refuses files it cannot account for.")
     return data
 
 
@@ -155,15 +163,18 @@ def _sha(data: bytes) -> str:
 
 # ----- detection and decisions -------------------------------------------------------------------
 
-def _home(explicit: str | None) -> Path:
+def _home(explicit: str | None) -> tuple[Path, Path]:
+    """(home as given, home resolved). Detection and every write use the resolved path, so a home
+    that is itself a link is used at its real location and no link above it is walked again."""
     if explicit:
         p = Path(explicit).expanduser()
         if not p.is_absolute():
             raise Failure(INPUT_INVALID, "--home must be an absolute path")
-        if not p.is_dir():
-            raise Failure(INPUT_MISSING, f"--home is not a directory: {p}")
-        return p
-    return Path.home()
+    else:
+        p = Path.home()
+    if not p.is_dir():
+        raise Failure(INPUT_MISSING, f"Home is not a directory: {p}")
+    return p, p.resolve()
 
 
 def detect(home: Path, only: list[str] | None = None) -> list[dict]:
@@ -188,26 +199,31 @@ def detect(home: Path, only: list[str] | None = None) -> list[dict]:
     return rows
 
 
-def _linked(path: Path, stop: Path) -> bool:
-    """True when path or any ancestor up to (and including) stop is a symbolic link."""
-    current = path
-    while True:
+def _blocked(target: Path, home: Path) -> str:
+    """Why nothing may be written at target: a link at any component from the resolved home down,
+    or a component that exists and is not a directory. Empty when the path is writable."""
+    parts = target.relative_to(home).parts
+    current = home
+    for index, part in enumerate(parts):
+        current = current / part
         if current.is_symlink():
-            return True
-        if current == stop:
-            return False
-        if current.parent == current:
-            return False
-        current = current.parent
+            return "the destination or one of its directories is a link"
+        last = index == len(parts) - 1
+        if not last and current.exists() and not current.is_dir():
+            return "a directory on the destination path is a file"
+    return ""
 
 
-def _decision(target: Path, data: bytes, recorded: dict, skills_dir: Path) -> tuple[str, str]:
-    if _linked(target, skills_dir):
-        return "refused", "the destination or one of its directories is a link"
+def _decision(target: Path, data: bytes, recorded: dict, home: Path) -> tuple[str, str]:
+    blocked = _blocked(target, home)
+    if blocked:
+        return "refused", blocked
     if not target.exists():
         return "write", ""
     if not target.is_file():
         return "refused", "the destination exists and is not a regular file"
+    if target.stat().st_size > MAX_SKILL_FILE_BYTES:
+        return "refused", f"the destination is larger than any skill file ({MAX_SKILL_FILE_BYTES} bytes) and was not read"
     current = _sha(target.read_bytes())
     if current == _sha(data):
         return "unchanged", ""
@@ -226,7 +242,7 @@ def _apply(target: Path, data: bytes) -> None:
 def install(*, plan: bool = False, only: list[str] | None = None, home: str | None = None, source: str | None = None) -> dict:
     root = source_root(source)
     skills = skills_in(root)
-    user_home = _home(home)
+    given_home, user_home = _home(home)
     manifest = read_manifest()
     recorded = manifest["files"]
     harnesses = detect(user_home, only)
@@ -241,7 +257,7 @@ def install(*, plan: bool = False, only: list[str] | None = None, home: str | No
         for skill in skills:
             for rel, data in rendered_by_skill[skill["name"]].items():
                 target = skills_dir / skill["name"] / rel
-                action, reason = _decision(target, data, recorded, skills_dir)
+                action, reason = _decision(target, data, recorded, user_home)
                 entry = {"skill": skill["name"], "path": str(target), "action": action, "sha256": _sha(data)}
                 if reason:
                     entry["reason"] = reason
@@ -264,8 +280,8 @@ def install(*, plan: bool = False, only: list[str] | None = None, home: str | No
         _write_json(receipt_path, {"schema_version": 1, "command": "dev install-skills", "at": now(), "source_root": str(root),
                                    "toolkit_version": __version__, "home": str(user_home), "harnesses": harnesses,
                                    "summary": counts, "game_touched": False})
-    result = {"plan": plan, "source": str(root), "toolkit_version": __version__, "home": str(user_home),
-              "skills": [s["name"] for s in skills], "harnesses": harnesses, "summary": counts,
+    result = {"plan": plan, "source": str(root), "toolkit_version": __version__, "home": str(given_home),
+              "home_resolved": str(user_home), "skills": [s["name"] for s in skills], "harnesses": harnesses, "summary": counts,
               "receipt": str(receipt_path) if receipt_path else None, "record": str(_manifest_path()),
               "game_touched": False,
               "verification": "files compared by hash and written under the user's home; no harness was launched, so each "
@@ -289,7 +305,7 @@ def status(home: str | None = None) -> dict:
         return {"source": None, "note": exc.message, "harnesses": []}
     try:
         skills = skills_in(root)
-        user_home = _home(home)
+        _, user_home = _home(home)
         recorded = read_manifest()["files"]
     except Failure as exc:
         return {"source": str(root), "note": exc.message, "harnesses": []}
@@ -302,7 +318,7 @@ def status(home: str | None = None) -> dict:
         for skill in skills:
             target = skills_dir / skill["name"] / "SKILL.md"
             data = rendered(skill, root)["SKILL.md"]
-            action, _ = _decision(target, data, recorded, skills_dir)
+            action, _ = _decision(target, data, recorded, user_home)
             summary[{"unchanged": "current", "update": "stale", "refused": "foreign", "write": "missing"}[action]] += 1
         rows.append({"id": row["id"], "label": row["label"], "directory": row["directory"], **summary,
                      "ok": summary["current"] == len(skills)})

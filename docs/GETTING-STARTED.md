@@ -86,7 +86,8 @@ The route detects a harness by its home directory (`~/.claude`, `~/.codex`, `~/.
 `~/.config/opencode`, `~/.cursor`, `~/.hermes`, and the shared `~/.agents`) and copies the seven
 skills under `skills/` into that harness's user-level skills directory, each `SKILL.md` stamped with
 the checkout its `docs/` paths point at. It writes absent files and files it wrote before, refuses
-any other existing file and says which, never follows a linked destination, and launches nothing.
+any other existing file and says which, writes nothing through a link below your (resolved) home, and
+launches nothing.
 `doctor` then reports, per harness, whether the installed skills are current. Open a new session in
 the harness for it to list them. Run it again after pulling a newer checkout.
 

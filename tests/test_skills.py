@@ -145,12 +145,61 @@ class InstallSkillsTests(SkillsFixture):
         self.assertEqual(row["error_code"], "input_invalid")
         code, row = invoke(["dev", "install-skills", "--home", "relative/home"])
         self.assertEqual(row["error_code"], "input_invalid")
+        code, row = invoke(["dev", "install-skills", "--home", str(self.root / "no-such-home")])
+        self.assertEqual(row["error_code"], "input_missing")
         for source in ("relative/checkout", str(self.root / "not-a-checkout")):
             code, row = invoke(["dev", "install-skills", "--home", str(self.home), "--source", source])
             self.assertEqual(row["error_code"], "input_invalid" if source.startswith("relative") else "input_missing", source)
         (self.root / "not-a-checkout").mkdir()
         code, row = invoke(["dev", "install-skills", "--home", str(self.home), "--source", str(self.root / "not-a-checkout")])
         self.assertEqual(row["error_code"], "input_missing", "an existing directory that is not a toolkit checkout")
+
+    def test_review_findings_files_in_the_way_oversized_targets_linked_home_and_bad_records(self):
+        # A regular file where a skill directory should be: refused, never a crash.
+        (self.home / ".gemini" / "skills").mkdir()
+        (self.home / ".gemini" / "skills" / "pat-build").write_text("not a directory")
+        code, row = self.install("--only", "gemini")
+        self.assertEqual(row["error_code"], "output_exists")
+        refused = [f for h in row["details"]["harnesses"] for f in h["files"] if f["action"] == "refused"]
+        self.assertTrue(refused and all("is a file" in f["reason"] for f in refused))
+        self.assertEqual((self.home / ".gemini" / "skills" / "pat-build").read_text(), "not a directory")
+        # An oversized destination is refused without being read.
+        big = self.home / ".claude" / "skills" / "pat-help" / "SKILL.md"
+        big.parent.mkdir(parents=True)
+        with big.open("wb") as handle:
+            handle.truncate(skills.MAX_SKILL_FILE_BYTES + 1)
+        code, row = self.install("--only", "claude")
+        self.assertEqual(row["error_code"], "output_exists")
+        refused = [f for h in row["details"]["harnesses"] for f in h["files"] if f["action"] == "refused"]
+        self.assertEqual(len(refused), 1)
+        self.assertIn("larger than any skill file", refused[0]["reason"])
+        self.assertEqual(big.stat().st_size, skills.MAX_SKILL_FILE_BYTES + 1)
+        # A home that is itself a link is used at its real location, and the result says so.
+        link = self.root / "home-link"
+        try:
+            link.symlink_to(self.home, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            link = None
+        if link is not None:
+            code, row = invoke(["dev", "install-skills", "--home", str(link), "--only", "codex", "--plan"])
+            self.assertEqual(code, 0, row)
+            self.assertEqual(row["result"]["home"], str(link))
+            self.assertEqual(row["result"]["home_resolved"], str(self.home.resolve()))
+            self.assertTrue(all(f["path"].startswith(str(self.home.resolve())) for h in row["result"]["harnesses"] for f in h["files"]))
+            # A linked directory below the home (dotfile setups) is refused, not written through.
+            (self.home / ".config").mkdir()
+            elsewhere = self.root / "dotfiles-opencode"
+            elsewhere.mkdir()
+            (self.home / ".config" / "opencode").symlink_to(elsewhere, target_is_directory=True)
+            code, row = self.install("--only", "opencode", "--plan")
+            self.assertEqual(row["error_code"], "input_missing", "a linked harness home directory is not detected as a harness")
+        # A malformed install record is a structured failure, never a traceback.
+        record = Path(skills.state_dir()) / "installed.json"
+        record.write_text(json.dumps({"schema": 1, "files": {str(big): None}}))
+        code, row = self.install("--only", "codex")
+        self.assertEqual(code, 1)
+        self.assertEqual(row["error_code"], "input_invalid")
+        self.assertIn("malformed entry", row["message"])
 
     def test_no_harness_found_is_a_clean_result_with_a_hint(self):
         empty = self.root / "empty-home"

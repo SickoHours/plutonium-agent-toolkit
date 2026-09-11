@@ -21,7 +21,8 @@ AVAILABLE = [
           status="available", owner="core",
           notes="Arguments: [--plan] [--only claude codex gemini opencode cursor hermes agents]... [--home <dir>] [--source <checkout>]. "
                 "Detects a harness by its home directory; launches nothing. Writes absent files and files it wrote before; refuses "
-                "any other existing file with output_exists after writing the rest. Record and receipts under <toolkit home>/skills/."),
+                "any other existing file, any link below the resolved home and any oversized file with output_exists after writing the rest. "
+                "Record and receipts under <toolkit home>/skills/."),
 ]
 
 PLANNED = [

@@ -41,8 +41,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
   coding-agent harness whose home directory exists (Claude Code, Codex CLI, Gemini CLI, OpenCode,
   Cursor, Hermes Agent, and the shared `~/.agents/skills` location), each `SKILL.md` stamped with the
   checkout its relative paths refer to. It writes absent files and files it wrote before, refuses any
-  other existing file (`output_exists`, after writing the rest), never follows a linked destination,
-  launches no harness, and records every file with its hash under `<toolkit home>/skills/` plus a
+  other existing file, any link below the resolved home and any oversized file (`output_exists`,
+  after writing the rest), launches no harness, and records every file with its hash under `<toolkit home>/skills/` plus a
   receipt per run; `doctor` reports per harness how many skills are current, stale, foreign or
   missing. `SETUP-PROMPT.md`, `docs/GETTING-STARTED.md` and `docs/FOR-AGENTS.md` carry the step; the
   Linux Tier 1 receipt exercises it against a scratch home (issue #22).
