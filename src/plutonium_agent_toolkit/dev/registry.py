@@ -370,10 +370,14 @@ def resolve_reference(text: str) -> dict:
     if not found:
         raise Failure(INPUT_MISSING, f"No configured registry lists {head}",
                       "Add the registry with pat registry add, or fetch by repository URL: https://github.com/<owner>/<repo>@<commit> --path <dir>.")
-    registry, entry = found[0]
-    if entry["listed"]["commit"] != commit:
-        raise Failure(INPUT_INVALID, f"{head} is listed at {entry['listed']['commit']}, not {commit}",
-                      "Fetch the listed commit, or fetch by repository URL for an unlisted commit and say so in your report.")
+    # The same name may be listed by several registries at different commits (the built-in one and an
+    # added one, say); the reference names a commit, so the listing at that commit is the one.
+    matching = [(name, e) for name, e in found if e["listed"]["commit"] == commit]
+    if not matching:
+        listed = sorted({f"{e['listed']['commit']} ({name})" for name, e in found})
+        raise Failure(INPUT_INVALID, f"{head} is listed at {', '.join(listed)}, not {commit}",
+                      "Fetch a listed commit, or fetch by repository URL for an unlisted commit and say so in your report.")
+    registry, entry = matching[0]
     return {"name": head, "repository": entry["repository"], "path": entry["path"], "commit": commit, "registry": registry, "entry": entry}
 
 

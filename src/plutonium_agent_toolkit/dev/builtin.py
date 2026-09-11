@@ -104,6 +104,8 @@ def needed_paths(snapshot: Path, path: str, depth: int = 0) -> list[str]:
         raise Failure(INPUT_INVALID, f"Built-in pack recipe is not readable JSON: {path}/composition.json") from exc
     members = data.get("modules", []) if isinstance(data, dict) else []
     loads = data.get("loads", []) if isinstance(data, dict) else []
+    if not isinstance(members, list) or not isinstance(loads, list):
+        raise Failure(INPUT_INVALID, f"Built-in pack {path}: modules and loads must be lists")
     for member in members:
         rel = member.get("path") if isinstance(member, dict) else member
         if not isinstance(rel, str) or not rel or "\\" in rel or Path(rel).is_absolute():
@@ -163,6 +165,10 @@ def verify(entry: dict) -> dict:
     # built-in is a changed tree too, not something a rerun quietly keeps.
     for rel in receipt.get("paths", []):
         p = snapshot if rel == "." else snapshot / rel
+        if p.is_symlink():
+            # A recorded path replaced by a link would make planning read outside the shelf.
+            added.append(f"{rel}: is a link")
+            continue
         if not p.is_dir():
             continue
         try:

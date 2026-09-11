@@ -9,6 +9,7 @@ import contextlib
 import io
 import json
 import os
+import shutil
 import tarfile
 import tempfile
 import unittest
@@ -305,6 +306,50 @@ class DevBuiltinTests(BuiltinFixture):
         code, row = invoke(["dev", "builtin", "--only", "sickohours/stock_hello_pack"])
         self.assertEqual(row["error_code"], "input_missing")
         self.assertIn("outside its snapshot", row["message"])
+
+    def test_second_review_round_malformed_pack_fields_linked_recorded_paths_and_fetch_by_commit(self):
+        # A pack whose modules or loads are not lists is input_invalid, never a toolkit defect.
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz") as t:
+            root = "repo-" + self.commit[:7]
+            body = json.dumps({"schema": 1, "name": "stock_hello_pack", "base": "stock", "map": "zm_transit", "modules": "../hello-zm"}).encode()
+            info = tarfile.TarInfo(f"{root}/examples/hello-pack/composition.json"); info.size = len(body); info.mode = 0o644
+            t.addfile(info, io.BytesIO(body))
+        self.served[self.url] = buf.getvalue()
+        code, row = invoke(["dev", "builtin", "--only", "sickohours/stock_hello_pack"])
+        self.assertEqual(row["error_code"], "input_invalid")
+        self.assertIn("must be lists", row["message"])
+        # A recorded directory replaced by a link is a changed tree, not verified.
+        self.served[self.url] = repo_tarball(self.commit)
+        code, row = invoke(["dev", "builtin", "--only", "sickohours/hello_zm"])
+        self.assertEqual(code, 0, row)
+        module_dir = Path(row["result"]["results"][0]["module_dir"])
+        elsewhere = self.root / "elsewhere"
+        shutil.copytree(module_dir, elsewhere)
+        shutil.rmtree(module_dir)
+        try:
+            module_dir.symlink_to(elsewhere, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            module_dir.mkdir()
+        else:
+            code, row = invoke(["dev", "builtin", "--only", "sickohours/hello_zm"])
+            self.assertEqual(row["error_code"], "artifact_changed")
+            self.assertEqual(row["details"]["added"], ["examples/hello-zm: is a link"])
+        # A name listed by the built-in registry and by an added registry at another commit resolves by commit.
+        newer = "f" * 40
+        added = {"schema": 1, "name": "official", "description": "", "entries": [dict(self.entries[0], listed={"commit": newer, "at": "2026-09-12"})]}
+        path = self.root / "official.json"
+        path.write_text(json.dumps(added))
+        code, row = invoke(["registry", "add", str(path)])
+        self.assertEqual(code, 0, row)
+        ref = registry.resolve_reference(f"{self.entries[0]['name']}@{newer}")
+        self.assertEqual((ref["registry"], ref["commit"]), ("official", newer))
+        ref = registry.resolve_reference(f"{self.entries[0]['name']}@{self.commit}")
+        self.assertEqual((ref["registry"], ref["commit"]), (registry.BUILTIN_NAME, self.commit))
+        with self.assertRaises(Failure) as caught:
+            registry.resolve_reference(f"{self.entries[0]['name']}@{'e' * 40}")
+        self.assertIn("official", caught.exception.message)
+        self.assertIn(registry.BUILTIN_NAME, caught.exception.message)
 
     def test_route_contract(self):
         code, row = invoke(["describe", "dev", "builtin"])
