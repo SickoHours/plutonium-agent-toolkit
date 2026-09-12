@@ -213,8 +213,9 @@ anyone's bytes.
 
 ## What is not in this version
 
-- No catalog, official registry repository or submission workflow yet: `docs/REGISTRY.md` has the
-  registry file, `pat registry add|list|search|show` and `pat module fetch`.
+- No catalog beyond a registry's generated listing: `docs/REGISTRY.md` has the registry file,
+  `pat registry add|list|search|show`, `pat module fetch` and the official registry repository
+  with its issue form.
 - No version constraints on dependencies: an id is either present or not.
 - No detection of runtime conflicts that only the engine would show (competing hooks on the
   same level notify, pool exhaustion). Declare them under `conflicts` when you learn them, and

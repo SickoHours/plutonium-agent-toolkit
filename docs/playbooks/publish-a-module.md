@@ -50,7 +50,7 @@ Words: `CONTEXT.md` (registry, entry, reference). Formats: `docs/MODULES.md`, `d
    Proof: `ok: true`. If the module is `private`, the plan names the missing package; that is the
    expected outcome for a stranger.
 6. Host the registry file where you like (the repository itself is fine), or submit the entry to
-   the official registry when one exists, following its issue form. An agent fills the form and
+   the official registry (`docs/REGISTRY.md`) through its issue form. An agent fills the form and
    shows it to you; it files only on your explicit go.
 
 ## Do not
