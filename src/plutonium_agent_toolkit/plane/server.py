@@ -509,7 +509,7 @@ def _summary(path: Path, rel: str, kind: str) -> dict:
     if not isinstance(data, dict):
         return {"path": rel, "kind": kind, "error": "not an object"}
     keys = ("id", "name", "version", "title", "category", "kind", "tags", "bases", "maps", "base", "map", "dependencies",
-            "conflicts", "distribution", "menu_route", "modules")
+            "conflicts", "distribution", "menu_route", "modules", "origin", "donor")
     row = {"path": rel, "kind": kind, **{k: data[k] for k in keys if k in data}}
     # The shape the format requires before anything else is read; full validation is module plan's.
     if data.get("schema") != 1:
