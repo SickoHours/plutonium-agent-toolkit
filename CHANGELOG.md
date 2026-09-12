@@ -9,6 +9,11 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Added
 
+- Add inert `module inspect <module.json|composition.json> --json` with the versioned
+  `pat.module-inspect/1` producer schema, exact-byte SHA-256 and JSON Pointer diagnostics.
+  Inspect and plan/build share declaration metadata checks; inspection requires no payloads,
+  job directory, backend or network. Route status remains implemented (offline tests only).
+
 - **`probe` composition stage.** `<base>_<feature>_probe` names a self-driving state-walk
   profile (one module plus a script that prints what it set); `pat module plan` accepts it beside
   `test`, `pack` and `pub`.

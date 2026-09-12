@@ -13,6 +13,42 @@ budgets it takes). Everything else stays in the module's own `project.json` reci
 `pat project build` already understands. A mod that has a `project.json` needs only a
 `module.json` to become composable.
 
+## Inspect metadata without resolving payloads
+
+```sh
+pat module inspect path/to/module.json --json
+pat module inspect path/to/composition.json --json
+```
+
+`module inspect` is inert: it reads one regular declaration, refuses symlinks and files over
+256 KiB, and hashes the exact bytes it parses. It creates no job or output directory, reads no
+configuration, discovers no backends, and performs no network or game operation. `--output`
+is not accepted. The normal invocation envelope retains `schema_version: 1` and a generated
+`request_id`; its result protocol is `pat.module-inspect/1`, specified by
+[the producer schema](../schemas/module-inspect-v1.schema.json).
+
+`validation: metadata-valid` means `validation_scope: declaration-only`. Inspect and plan/build
+share the metadata validators, including fields omitted from the inspection projection (source,
+provides, resource contracts, loads, base-owned listings, zone headers and decisions). Existing
+defaults and empty decision reasons are preserved. Module `payload` is the declared `recipe` or
+`seed` discriminator; inspect does not open either file or derive provides from a seed manifest.
+Composition members retain declaration order. A pinned reference without a declared local path
+fails with `input_missing` at `/modules/<index>/path`; inspect never fetches it. A declared path
+can name a missing payload/member/load/listing and still pass metadata checks.
+
+Full resolution remains `module plan`/`build`: file existence and containment, seed contents and
+provides consistency, nested composition cycles, resolved member identity and duplicate paths,
+dependency order, base/map fit, collisions and actual resource totals require those routes.
+Metadata validity establishes none of these facts or any installation or gameplay evidence.
+
+Failures retain the native `error_code`, `message` and optional `hint`, and put the inspection at
+`details.inspection`. Invalid metadata is null. Diagnostics contain structural JSON Pointer
+`field` values (including the offending unknown key), a code and message; `/` denotes a whole
+file or JSON error. `sha256` is null unless all bounded input bytes were read, including on
+unreadable, linked and oversized inputs. Invalid JSON that was read still has its actual digest.
+The `file` field is the local producer path; consumers should project a suitable label for their
+caller rather than expose that path in default model output.
+
 ## Module declaration: `module.json`
 
 Lives in the module's directory beside its payload. The payload is one of two things: a

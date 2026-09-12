@@ -45,6 +45,31 @@ class CompositionFixture(DevRouteFixture):
 
 
 class CompositionTests(CompositionFixture):
+    def test_plan_uses_the_same_metadata_validation_as_inspect_before_payload_resolution(self):
+        from plutonium_agent_toolkit.dev import compositions
+        from unittest.mock import patch
+
+        directory = self.module("alpha", dependencies=["BAD"])
+        (directory / "project.json").unlink()
+        comp = self.composition(["alpha"])
+        with patch.object(compositions, "validate_declaration_metadata",
+                          wraps=compositions.validate_declaration_metadata) as validate:
+            code, row = invoke(["module", "plan", str(comp), "--output", self.out()])
+        self.assertEqual(code, 1, row)
+        validate.assert_called_once()
+        self.assertEqual(row["details"]["field"], "/dependencies/0")
+        inspect_code, inspection = invoke(["module", "inspect", str(directory / "module.json"), "--json"])
+        self.assertEqual(inspect_code, code)
+        self.assertEqual(inspection["message"], row["message"])
+        self.assertEqual(inspection["details"]["inspection"]["diagnostics"][0]["field"], row["details"]["field"])
+        broken = self.composition([{"path": "../../missing", "role": "invalid"}])
+        with patch.object(compositions, "validate_composition_metadata",
+                          wraps=compositions.validate_composition_metadata) as validate:
+            code, row = invoke(["module", "plan", str(broken), "--output", self.out()])
+        self.assertEqual(code, 1, row)
+        validate.assert_called_once()
+        self.assertEqual(row["details"]["field"], "/modules/0/role")
+
     def test_plan_and_build_two_modules_into_one_mod_ff(self):
         self.module("alpha")
         self.module("beta", dependencies=["alpha"])

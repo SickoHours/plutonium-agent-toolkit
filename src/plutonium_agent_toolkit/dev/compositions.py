@@ -44,7 +44,10 @@ Composition recipe (``composition.json``, schema 1)::
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import os
+import stat
 import re
 import shutil
 from pathlib import Path
@@ -52,7 +55,7 @@ from types import SimpleNamespace
 
 from ..core.errors import BACKEND_FAILED, INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, Failure
 from ..core.jobs import Job
-from ..core.receipts import sha256_file
+from ..core.receipts import FILE_FLAGS, sha256_file
 from . import fastfiles, projects, scripts, seeds, titles
 from .backends import executable
 
@@ -105,6 +108,9 @@ MAX_NESTING = 4
 def add_parser(sub, common):
     p = sub.add_parser("module", help="Declared modules composed into one mod on a named base: plan, build, declare")
     actions = p.add_subparsers(dest="action", required=True)
+    q = actions.add_parser("inspect", help="Validate one declaration's metadata without resolving payloads or creating a job")
+    q.add_argument("declaration", help="Path to module.json or composition.json")
+    q.add_argument("--json", action="store_true")
     for action, help_text in (("plan", "Resolve a composition, list collisions as decisions and hash its inputs; runs no backend"),
                               ("build", "Compile, link against seeds and loads, read back and compare every module into one mod.ff")):
         q = actions.add_parser(action, help=help_text)
@@ -126,7 +132,131 @@ def add_parser(sub, common):
     common(q)
 
 
+# ----- inert declaration inspection ------------------------------------------------------
+
+INSPECT_PROTOCOL = "pat.module-inspect/1"
+MAX_DECLARATION_BYTES = 256 * 1024
+MODULE_METADATA_FIELDS = ("id", "version", "game", "title", "category", "kind", "tags", "bases", "maps",
+                          "dependencies", "conflicts", "origin", "donor", "distribution", "menu_route", "payload")
+COMPOSITION_METADATA_FIELDS = ("name", "title", "game", "tags", "base", "map", "origin", "donor", "members")
+
+
+def _read_inspection(path: Path) -> bytes:
+    """One bounded regular-file read. Refuse links/reparse points and changed identities.
+
+    POSIX also refuses a final-component link at open. Windows uses lstat/fstat identity
+    checks, like the receipt reader; no native Windows qualification is claimed here.
+    """
+    def checked_stat():
+        for part in (path, *path.parents):
+            info = part.lstat()
+            if stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
+                raise Failure(INPUT_MISSING, f"Declaration is missing or is a link: {path}")
+        info = path.lstat()
+        if not stat.S_ISREG(info.st_mode):
+            raise Failure(INPUT_MISSING, f"Declaration is not a regular file: {path}")
+        return info
+
+    try:
+        before = checked_stat()
+        if before.st_size > MAX_DECLARATION_BYTES:
+            raise Failure(INPUT_LIMIT, f"Declaration exceeds {MAX_DECLARATION_BYTES} bytes: {path}")
+        with os.fdopen(os.open(path, FILE_FLAGS), "rb") as stream:
+            opened = os.fstat(stream.fileno())
+            after = checked_stat()
+            if not stat.S_ISREG(opened.st_mode) or any(
+                    (info.st_dev, info.st_ino) != (opened.st_dev, opened.st_ino) for info in (before, after)):
+                raise Failure(INPUT_MISSING, f"Declaration changed while opening: {path}")
+            data = stream.read(MAX_DECLARATION_BYTES + 1)
+        if len(data) > MAX_DECLARATION_BYTES:
+            raise Failure(INPUT_LIMIT, f"Declaration exceeds {MAX_DECLARATION_BYTES} bytes: {path}")
+        return data
+    except (OSError, ValueError) as exc:
+        raise Failure(INPUT_MISSING, f"Cannot read declaration: {path} ({exc})") from exc
+
+
+def inspect(path: Path) -> dict:
+    """Inspect metadata only; exact input bytes supply both the digest and JSON parser."""
+    path = path.absolute()  # Do not resolve away a symlink before the bounded read.
+    result = {"protocol": INSPECT_PROTOCOL, "file": str(path), "sha256": None, "kind": "unknown",
+              "validation": "invalid", "validation_scope": "declaration-only", "metadata": None, "diagnostics": []}
+    try:
+        raw = _read_inspection(path)
+        result["sha256"] = hashlib.sha256(raw).hexdigest()
+        try:
+            data = json.loads(raw.decode("utf-8"))
+        except (ValueError, RecursionError) as exc:
+            raise Failure(INPUT_INVALID, f"Declaration is not valid JSON: {path}", field="/") from exc
+        # Explicit filenames disambiguate malformed declarations; renamed files use their keys.
+        kind = {"module.json": "module", "composition.json": "composition"}.get(path.name)
+        if kind is None and isinstance(data, dict):
+            kind = "module" if "id" in data else "composition" if "modules" in data or "name" in data else None
+        if kind == "module":
+            result["kind"] = "module"
+            metadata = validate_declaration_metadata(data)
+            fields = MODULE_METADATA_FIELDS
+        elif kind == "composition":
+            result["kind"] = "composition"
+            metadata = validate_composition_metadata(data)
+            fields = COMPOSITION_METADATA_FIELDS
+        else:
+            raise Failure(INPUT_INVALID, "Expected a module or composition declaration", field="/")
+        result.update(validation="metadata-valid", metadata={key: metadata[key] for key in fields})
+        return result
+    except Failure as exc:
+        result["diagnostics"] = [{"field": exc.details.get("field", "/"),
+                                  "error_code": exc.code, "message": exc.message}]
+        exc.details = {"inspection": result}
+        raise
+
+
 # ----- declarations ---------------------------------------------------------------------
+
+def _pointer(key) -> str:
+    return "/" + str(key).replace("~", "~0").replace("/", "~1")
+
+
+def _at(field: str, validate, *args):
+    """Attach structural source coordinates, never inferred from an error message."""
+    try:
+        return validate(*args)
+    except Failure as exc:
+        child = exc.details.get("field", "/")
+        exc.details["field"] = field + (child if child != "/" else "")
+        raise
+
+
+def _fields(row, allowed: set, required: set, what: str, field: str = "") -> None:
+    try:
+        projects._fields(row, allowed, required, what)
+    except Failure as exc:
+        key = None
+        if isinstance(row, dict):
+            unknown = sorted(set(row) - allowed)
+            missing = sorted(required - set(row))
+            key = (unknown or missing or [None])[0]
+            if unknown:
+                exc.message += f"; unknown field {key!r}"
+        exc.details["field"] = field + _pointer(key) if key is not None else field or "/"
+        raise
+
+
+def _recipe_path(text: str) -> None:
+    """The lexical part of projects._rel; containment is checked during resolution."""
+    p = Path(text)
+    if p.is_absolute() or ".." in p.parts or not p.parts or text != text.strip() or "\\" in text:
+        raise Failure(INPUT_INVALID, f"Use forward-slash relative paths inside the recipe directory: {text}")
+
+
+def _relative_path(text: str, what: str) -> str:
+    """Shared declaration-only part of composition directory/file resolution."""
+    if not isinstance(text, str) or not text or len(text) > 4096 or "\\" in text or text != text.strip():
+        raise Failure(INPUT_INVALID, f"{what} paths are forward-slash relative paths")
+    p = Path(text)
+    if p.is_absolute() or not p.parts:
+        raise Failure(INPUT_INVALID, f"{what} paths are relative to the composition directory: {text}")
+    return text
+
 
 def _text(value, what: str, limit: int) -> str:
     if not isinstance(value, str) or not value.strip() or len(value) > limit:
@@ -155,11 +285,11 @@ def _donor(value, owner: str) -> str | None:
 def _ids(value, what: str, owner: str) -> list[str]:
     if not isinstance(value, list) or len(value) > MAX_LIST:
         raise Failure(INPUT_INVALID, f"{owner}: {what} must be a list of at most {MAX_LIST} module ids")
-    for item in value:
+    for index, item in enumerate(value):
         if not isinstance(item, str) or not ID.match(item):
-            raise Failure(INPUT_INVALID, f"{owner}: {what} entries use lowercase letters, digits and underscore: {item!r}")
+            raise Failure(INPUT_INVALID, f"{owner}: {what} entries use lowercase letters, digits and underscore: {item!r}", field=f"/{index}")
         if item == owner:
-            raise Failure(INPUT_INVALID, f"{owner}: a module cannot list itself under {what}")
+            raise Failure(INPUT_INVALID, f"{owner}: a module cannot list itself under {what}", field=f"/{index}")
     if len(set(value)) != len(value):
         raise Failure(INPUT_INVALID, f"{owner}: duplicate entries under {what}")
     return list(value)
@@ -169,12 +299,15 @@ def _contract(value, what: str) -> dict:
     if value is None:
         return {field: 0 for field in CONTRACT_FIELDS}
     if not isinstance(value, dict) or set(value) - set(CONTRACT_FIELDS):
-        raise Failure(INPUT_INVALID, f"{what} names only {list(CONTRACT_FIELDS)}")
+        unknown = sorted(set(value) - set(CONTRACT_FIELDS)) if isinstance(value, dict) else []
+        suffix = f"; unknown field {unknown[0]!r}" if unknown else ""
+        raise Failure(INPUT_INVALID, f"{what} names only {list(CONTRACT_FIELDS)}{suffix}",
+                      field=_pointer(unknown[0]) if unknown else "/")
     rows = {}
     for field in CONTRACT_FIELDS:
         n = value.get(field, 0)
         if type(n) is not int or n < 0 or n > MAX_CONTRACT:
-            raise Failure(INPUT_INVALID, f"{what}.{field} must be a whole number from 0 to {MAX_CONTRACT}")
+            raise Failure(INPUT_INVALID, f"{what}.{field} must be a whole number from 0 to {MAX_CONTRACT}", field=_pointer(field))
         rows[field] = n
     return rows
 
@@ -183,13 +316,16 @@ def _provides(value, owner: str) -> dict:
     if value is None:
         return {}
     if not isinstance(value, dict) or set(value) - set(PROVIDES_KINDS):
-        raise Failure(INPUT_INVALID, f"{owner}: provides maps kinds {list(PROVIDES_KINDS)} to lists of names")
+        unknown = sorted(set(value) - set(PROVIDES_KINDS)) if isinstance(value, dict) else []
+        suffix = f"; unknown field {unknown[0]!r}" if unknown else ""
+        raise Failure(INPUT_INVALID, f"{owner}: provides maps kinds {list(PROVIDES_KINDS)} to lists of names{suffix}",
+                      field=_pointer(unknown[0]) if unknown else "/")
     out = {}
     for kind, names in value.items():
         if not isinstance(names, list) or len(names) > MAX_PROVIDES_NAMES or not all(isinstance(n, str) and 0 < len(n) <= 128 for n in names):
-            raise Failure(INPUT_INVALID, f"{owner}: provides.{kind} is a list of names")
+            raise Failure(INPUT_INVALID, f"{owner}: provides.{kind} is a list of names", field=_pointer(kind))
         if len(set(names)) != len(names):
-            raise Failure(INPUT_INVALID, f"{owner}: duplicate names under provides.{kind}")
+            raise Failure(INPUT_INVALID, f"{owner}: duplicate names under provides.{kind}", field=_pointer(kind))
         out[kind] = list(names)
     return out
 
@@ -197,12 +333,8 @@ def _provides(value, owner: str) -> dict:
 def _relative_dir(text: str, base: Path, job: Job, what: str) -> Path:
     """A directory named in a composition: relative, forward slashes, may live beside the
     composition (``../hello-zm``), never absolute, never a link, never inside the job output."""
-    if not isinstance(text, str) or not text or len(text) > 4096 or "\\" in text or text != text.strip():
-        raise Failure(INPUT_INVALID, f"{what} paths are forward-slash relative paths")
-    p = Path(text)
-    if p.is_absolute() or not p.parts:
-        raise Failure(INPUT_INVALID, f"{what} paths are relative to the composition directory: {text}")
-    full = base / p
+    _relative_path(text, what)
+    full = base / Path(text)
     if full.is_symlink() or not full.is_dir():
         raise Failure(INPUT_MISSING, f"{what} directory is missing or is a link: {text}")
     full = full.resolve()
@@ -214,15 +346,88 @@ def _relative_dir(text: str, base: Path, job: Job, what: str) -> Path:
 def _relative_file(text: str, base: Path, job: Job, what: str) -> Path:
     """A file named in a composition (a base fastfile to load): relative like a member directory,
     so a pack may point at zones kept beside it (``../base/common_zm.ff``), never absolute or a link."""
-    if not isinstance(text, str) or not text or len(text) > 4096 or "\\" in text or text != text.strip():
-        raise Failure(INPUT_INVALID, f"{what} paths are forward-slash relative paths")
-    p = Path(text)
-    if p.is_absolute() or not p.parts:
-        raise Failure(INPUT_INVALID, f"{what} paths are relative to the composition directory: {text}")
-    full = base / p
+    _relative_path(text, what)
+    full = base / Path(text)
     if full.is_symlink() or not full.is_file():
         raise Failure(INPUT_MISSING, f"{what} file is missing or is a link: {text}")
     return job.input(full)
+
+
+def validate_declaration_metadata(data) -> dict:
+    """Authoritative declaration checks; no filesystem or payload resolution."""
+    where = "module.json"
+    _fields(data, {"schema", "id", "version", "game", "title", "category", "kind", "tags", "recipe", "seed", "bases", "maps",
+                            "dependencies", "conflicts", "provides", "resource_contract", "menu_route", "distribution", "source",
+                            "origin", "donor"},
+                     {"schema", "id", "version", "bases", "maps"}, where)
+    if data["schema"] != 1:
+        raise Failure(INPUT_INVALID, f"{where}: expected schema 1", field='/schema')
+    game = data.get("game", titles.DEFAULT_TITLE)
+    if game not in titles.names():
+        raise Failure(INPUT_INVALID, f"{where}: game is one of {', '.join(titles.names())}", field='/game')
+    mid = data["id"]
+    if not isinstance(mid, str) or not ID.match(mid):
+        raise Failure(INPUT_INVALID, f"{where}: id uses lowercase letters, digits and underscore", field='/id')
+    if not isinstance(data["version"], str) or not VERSION.match(data["version"]):
+        raise Failure(INPUT_INVALID, f"{mid}: version is a short version string (letters, digits, dot, plus, dash)", field='/version')
+    title = _at("/title", _text, data.get("title", mid), f"{mid}: title", 120)
+    category = data.get("category", "module")
+    if not isinstance(category, str) or not CATEGORY.match(category):
+        raise Failure(INPUT_INVALID, f"{mid}: category is a lowercase identifier such as weapons, perks or scripts", field='/category')
+    kind = data.get("kind")
+    if kind is not None and (not isinstance(kind, str) or not CATEGORY.match(kind)):
+        raise Failure(INPUT_INVALID, f"{mid}: kind is a lowercase identifier that narrows the category (melee, wonder, perk, ...)", field='/kind')
+    title_kinds = titles.kinds(game)
+    if kind is not None and category in title_kinds and title_kinds[category] and kind not in title_kinds[category]:
+        raise Failure(INPUT_INVALID, f"{mid}: kind {kind!r} is not one of {list(title_kinds[category])} for category {category!r} in game {game}",
+                      "Use a listed kind so packs and catalogs group modules the same way, or drop kind and keep only tags.", field='/kind')
+    tags = data.get("tags", [])
+    if not isinstance(tags, list) or len(tags) > MAX_TAGS or not all(isinstance(t, str) and TAG.match(t) for t in tags) \
+            or len(set(tags)) != len(tags):
+        raise Failure(INPUT_INVALID, f"{mid}: tags is a list of at most {MAX_TAGS} distinct lowercase words (a source game, a series, a theme)", field='/tags')
+    if ("recipe" in data) == ("seed" in data):
+        raise Failure(INPUT_INVALID, f"{mid}: a declaration names exactly one payload: recipe (project.json) or seed (seed.json)", field='/recipe')
+    payload = "recipe" if "recipe" in data else "seed"
+    payload_path = _at("/" + payload, _text, data[payload], f"{mid}: {payload}", 4096)
+    if payload == "recipe":
+        _at("/recipe", _recipe_path, payload_path)
+    distribution = data.get("distribution", "seed" if "seed" in data else "source")
+    if distribution not in DISTRIBUTIONS:
+        raise Failure(INPUT_INVALID, f"{mid}: distribution is one of {list(DISTRIBUTIONS)}", field='/distribution')
+    if payload == "seed" and distribution != "private" and ("\\" in payload_path or Path(payload_path).is_absolute()
+                                                           or ".." in Path(payload_path).parts):
+        raise Failure(INPUT_INVALID, f"{mid}: seed is a forward-slash relative path inside the module directory", field="/seed")
+    if payload == "recipe" and distribution == "private":
+        raise Failure(INPUT_INVALID, f"{mid}: distribution private applies to a seed whose package is not published", field="/distribution")
+    bases = data["bases"]
+    if not isinstance(bases, list) or not bases or len(bases) > MAX_LIST or not all(isinstance(b, str) and BASE.match(b) for b in bases) \
+            or len(set(bases)) != len(bases):
+        raise Failure(INPUT_INVALID, f"{mid}: bases is a non-empty list of distinct base tokens (lowercase letters and digits)", field='/bases')
+    maps = data["maps"]
+    if not isinstance(maps, list) or not maps or len(maps) > MAX_LIST or not all(isinstance(m, str) and (m == "*" or MAP.match(m)) for m in maps) \
+            or len(set(maps)) != len(maps):
+        raise Failure(INPUT_INVALID, f"{mid}: maps is a non-empty list of distinct map ids, or [\"*\"] for any map", field='/maps')
+    menu_route = data.get("menu_route", "")
+    if not isinstance(menu_route, str) or len(menu_route) > 200:
+        raise Failure(INPUT_INVALID, f"{mid}: menu_route is a string of at most 200 characters", field='/menu_route')
+    source = data.get("source")
+    if source is not None:
+        _fields(source, {"repository", "commit"}, {"repository"}, f"{mid}: source", "/source")
+        repository = _at("/source/repository", _text, source["repository"], f"{mid}: source.repository", 512)
+        if not repository.startswith("https://"):
+            raise Failure(INPUT_INVALID, f"{mid}: source.repository is an https URL", field='/source/repository')
+        if "commit" in source and (not isinstance(source["commit"], str) or not COMMIT.match(source["commit"])):
+            raise Failure(INPUT_INVALID, f"{mid}: source.commit is a 40-character lowercase hex commit id", field='/source/commit')
+    provides = _at("/provides", _provides, data.get("provides"), mid)
+    return {"id": mid, "version": data["version"], "game": game, "title": title, "category": category, "kind": kind, "tags": list(tags),
+            "payload": payload, "payload_path": payload_path, "distribution": distribution,
+            "bases": list(bases), "maps": list(maps),
+            "dependencies": _at("/dependencies", _ids, data.get("dependencies", []), "dependencies", mid),
+            "conflicts": _at("/conflicts", _ids, data.get("conflicts", []), "conflicts", mid),
+            "provides": provides,
+            "resource_contract": _at("/resource_contract", _contract, data.get("resource_contract"), f"{mid}: resource_contract"),
+            "menu_route": menu_route, "source": source,
+            "origin": _at("/origin", _origin, data.get("origin"), mid), "donor": _at("/donor", _donor, data.get("donor"), mid)}
 
 
 def load_declaration(directory: Path, job: Job) -> dict:
@@ -234,74 +439,21 @@ def load_declaration(directory: Path, job: Job) -> dict:
         data = json.loads(src.read_text(encoding="utf-8"))
     except ValueError as exc:
         raise Failure(INPUT_INVALID, f"module.json is not valid JSON: {src}") from exc
-    where = f"module.json in {directory.name}"
-    projects._fields(data, {"schema", "id", "version", "game", "title", "category", "kind", "tags", "recipe", "seed", "bases", "maps",
-                            "dependencies", "conflicts", "provides", "resource_contract", "menu_route", "distribution", "source",
-                            "origin", "donor"},
-                     {"schema", "id", "version", "bases", "maps"}, where)
-    if data["schema"] != 1:
-        raise Failure(INPUT_INVALID, f"{where}: expected schema 1")
-    game = data.get("game", titles.DEFAULT_TITLE)
-    if game not in titles.names():
-        raise Failure(INPUT_INVALID, f"{where}: game is one of {', '.join(titles.names())}")
-    mid = data["id"]
-    if not isinstance(mid, str) or not ID.match(mid):
-        raise Failure(INPUT_INVALID, f"{where}: id uses lowercase letters, digits and underscore")
-    if not isinstance(data["version"], str) or not VERSION.match(data["version"]):
-        raise Failure(INPUT_INVALID, f"{mid}: version is a short version string (letters, digits, dot, plus, dash)")
-    title = _text(data.get("title", mid), f"{mid}: title", 120)
-    category = data.get("category", "module")
-    if not isinstance(category, str) or not CATEGORY.match(category):
-        raise Failure(INPUT_INVALID, f"{mid}: category is a lowercase identifier such as weapons, perks or scripts")
-    kind = data.get("kind")
-    if kind is not None and (not isinstance(kind, str) or not CATEGORY.match(kind)):
-        raise Failure(INPUT_INVALID, f"{mid}: kind is a lowercase identifier that narrows the category (melee, wonder, perk, ...)")
-    title_kinds = titles.kinds(game)
-    if kind is not None and category in title_kinds and title_kinds[category] and kind not in title_kinds[category]:
-        raise Failure(INPUT_INVALID, f"{mid}: kind {kind!r} is not one of {list(title_kinds[category])} for category {category!r} in game {game}",
-                      "Use a listed kind so packs and catalogs group modules the same way, or drop kind and keep only tags.")
-    tags = data.get("tags", [])
-    if not isinstance(tags, list) or len(tags) > MAX_TAGS or not all(isinstance(t, str) and TAG.match(t) for t in tags) \
-            or len(set(tags)) != len(tags):
-        raise Failure(INPUT_INVALID, f"{mid}: tags is a list of at most {MAX_TAGS} distinct lowercase words (a source game, a series, a theme)")
-    if ("recipe" in data) == ("seed" in data):
-        raise Failure(INPUT_INVALID, f"{mid}: a declaration names exactly one payload: recipe (project.json) or seed (seed.json)")
+    declaration = validate_declaration_metadata(data)
+    mid = declaration["id"]
+    distribution = declaration["distribution"]
     recipe = seed = None
-    if "recipe" in data:
-        recipe = projects._rel(_text(data["recipe"], f"{mid}: recipe", 4096), directory)
+    if declaration["payload"] == "recipe":
+        recipe = projects._rel(declaration["payload_path"], directory)
         if recipe.is_symlink() or not recipe.is_file():
             raise Failure(INPUT_MISSING, f"{mid}: recipe is missing: {data['recipe']}")
-    distribution = data.get("distribution", "seed" if "seed" in data else "source")
-    if distribution not in DISTRIBUTIONS:
-        raise Failure(INPUT_INVALID, f"{mid}: distribution is one of {list(DISTRIBUTIONS)}")
-    if "seed" in data:
-        seed_rel = _text(data["seed"], f"{mid}: seed", 4096)
+    else:
+        seed_rel = declaration["payload_path"]
         if distribution == "private" and not (directory / seed_rel).is_file():
             seed = {"private": True, "relative": seed_rel, "provides": {}, "missing": ["seed manifest"]}
         else:
             seed = seeds.load_manifest(directory, seed_rel, job, mid, allow_missing_files=distribution == "private")
-    elif distribution == "private":
-        raise Failure(INPUT_INVALID, f"{mid}: distribution private applies to a seed whose package is not published")
-    bases = data["bases"]
-    if not isinstance(bases, list) or not bases or len(bases) > MAX_LIST or len(set(bases)) != len(bases) \
-            or not all(isinstance(b, str) and BASE.match(b) for b in bases):
-        raise Failure(INPUT_INVALID, f"{mid}: bases is a non-empty list of distinct base tokens (lowercase letters and digits)")
-    maps = data["maps"]
-    if not isinstance(maps, list) or not maps or len(maps) > MAX_LIST or len(set(maps)) != len(maps) \
-            or not all(isinstance(m, str) and (m == "*" or MAP.match(m)) for m in maps):
-        raise Failure(INPUT_INVALID, f"{mid}: maps is a non-empty list of distinct map ids, or [\"*\"] for any map")
-    menu_route = data.get("menu_route", "")
-    if not isinstance(menu_route, str) or len(menu_route) > 200:
-        raise Failure(INPUT_INVALID, f"{mid}: menu_route is a string of at most 200 characters")
-    source = data.get("source")
-    if source is not None:
-        projects._fields(source, {"repository", "commit"}, {"repository"}, f"{mid}: source")
-        repository = _text(source["repository"], f"{mid}: source.repository", 512)
-        if not repository.startswith("https://"):
-            raise Failure(INPUT_INVALID, f"{mid}: source.repository is an https URL")
-        if "commit" in source and (not isinstance(source["commit"], str) or not COMMIT.match(source["commit"])):
-            raise Failure(INPUT_INVALID, f"{mid}: source.commit is a 40-character lowercase hex commit id")
-    provides = _provides(data.get("provides"), mid)
+    provides = declaration["provides"]
     if seed and not seed.get("private"):
         # The manifest is the fact; a declaration may narrow it, never contradict it.
         for pkind, names in provides.items():
@@ -313,15 +465,9 @@ def load_declaration(directory: Path, job: Job) -> dict:
                               "A seed's manifest is the fact for what the package embeds; a declaration may narrow that list, never add to it.")
         for pkind, names in seed["provides"].items():
             provides.setdefault(pkind, list(names))
-    return {"id": mid, "version": data["version"], "game": game, "title": title, "category": category, "kind": kind, "tags": list(tags),
-            "directory": directory, "recipe": recipe, "seed": seed, "distribution": distribution,
-            "bases": list(bases), "maps": list(maps),
-            "dependencies": _ids(data.get("dependencies", []), "dependencies", mid),
-            "conflicts": _ids(data.get("conflicts", []), "conflicts", mid),
-            "provides": provides,
-            "resource_contract": _contract(data.get("resource_contract"), f"{mid}: resource_contract"),
-            "menu_route": menu_route, "source": source, "declaration": src,
-            "origin": _origin(data.get("origin"), mid), "donor": _donor(data.get("donor"), mid)}
+    declaration.pop("payload")
+    declaration.pop("payload_path")
+    return declaration | {"directory": directory, "recipe": recipe, "seed": seed, "declaration": src}
 
 
 # ----- compositions ----------------------------------------------------------------------
@@ -356,24 +502,99 @@ def _decisions(value, comp_name: str) -> list[dict]:
     if value is None:
         return []
     if not isinstance(value, list) or len(value) > MAX_DECISIONS:
-        raise Failure(INPUT_INVALID, f"{comp_name}: decisions is a list of at most {MAX_DECISIONS} recorded decisions")
+        raise Failure(INPUT_INVALID, f"{comp_name}: decisions is a list of at most {MAX_DECISIONS} recorded decisions", field='/')
     rows = []
     seen = set()
-    for row in value:
-        projects._fields(row, {"collision", "owner", "reason"}, {"collision", "owner"}, f"{comp_name}: decision")
-        collision = _text(row["collision"], f"{comp_name}: decision.collision", 512)
+    for index, row in enumerate(value):
+        _fields(row, {"collision", "owner", "reason"}, {"collision", "owner"}, f"{comp_name}: decision", f"/{index}")
+        collision = _at(f"/{index}/collision", _text, row["collision"], f"{comp_name}: decision.collision", 512)
         owner = row["owner"]
         if not isinstance(owner, str) or not ID.match(owner):
-            raise Failure(INPUT_INVALID, f"{comp_name}: decision.owner is a module id in the composition")
+            raise Failure(INPUT_INVALID, f"{comp_name}: decision.owner is a module id in the composition", field=f"/{index}/owner")
         reason = row.get("reason", "")
         if not isinstance(reason, str) or len(reason) > 400:
-            raise Failure(INPUT_INVALID, f"{comp_name}: decision.reason is at most 400 characters")
+            raise Failure(INPUT_INVALID, f"{comp_name}: decision.reason is at most 400 characters", field=f"/{index}/reason")
         key = collision.casefold()
         if key in seen:
-            raise Failure(INPUT_INVALID, f"{comp_name}: two decisions for the same collision: {collision}")
+            raise Failure(INPUT_INVALID, f"{comp_name}: two decisions for the same collision: {collision}", field=f"/{index}/collision")
         seen.add(key)
         rows.append({"collision": collision, "owner": owner, "reason": reason})
     return rows
+
+
+def validate_composition_metadata(data) -> dict:
+    """Authoritative composition checks without opening members, loads or listings."""
+    _fields(data, {"schema", "name", "game", "base", "map", "modules", "loads", "budget", "decisions", "title", "tags", "zone_header",
+                            "origin", "donor", "base_owned"},
+                     {"schema", "name", "base", "map", "modules"}, "composition")
+    if data["schema"] != 1:
+        raise Failure(INPUT_INVALID, "Expected a schema 1 composition", field='/schema')
+    game = data.get("game", titles.DEFAULT_TITLE)
+    if game not in titles.names():
+        raise Failure(INPUT_INVALID, f"Composition game is one of {', '.join(titles.names())}", field='/game')
+    base = data["base"]
+    if not isinstance(base, str) or not BASE.match(base):
+        raise Failure(INPUT_INVALID, "Composition base is a short token of lowercase letters and digits (stock, or the base release's short name)", field='/base')
+    map_id = data["map"]
+    if not isinstance(map_id, str) or not MAP.match(map_id):
+        raise Failure(INPUT_INVALID, "Composition map is one concrete map id; a composition is planned for one map", field='/map')
+    name = data["name"]
+    if not isinstance(name, str) or not projects.NAME.match(name) \
+            or not re.fullmatch(rf"{re.escape(base)}_[a-z0-9_]+_(?:{'|'.join(STAGES)})", name):
+        raise Failure(INPUT_INVALID, f"Composition name follows <base>_<feature>_<stage> with base {base!r} and stage test, pack or pub", field='/name')
+    title = data.get("title", name)
+    if not isinstance(title, str) or not title.strip() or len(title) > 120:
+        raise Failure(INPUT_INVALID, "Composition title is at most 120 characters", field='/title')
+    tags = data.get("tags", [])
+    if not isinstance(tags, list) or len(tags) > MAX_TAGS or not all(isinstance(t, str) and TAG.match(t) for t in tags):
+        raise Failure(INPUT_INVALID, f"Composition tags is a list of at most {MAX_TAGS} lowercase words", field='/tags')
+    entries = data["modules"]
+    if not isinstance(entries, list) or not entries or len(entries) > MAX_MODULES:
+        raise Failure(INPUT_INVALID, f"modules lists 1 to {MAX_MODULES} members", field='/modules')
+    members = []
+    base_members = 0
+    for index, entry in enumerate(entries):
+        row = {"path": entry} if isinstance(entry, str) else entry
+        _fields(row, {"path", "name", "commit", "role"}, set(), "composition member", f"/modules/{index}")
+        role = row.get("role", "module")
+        if role not in ("module", "base"):
+            raise Failure(INPUT_INVALID, "A member's role is module or base", field=f"/modules/{index}/role")
+        if "name" in row:
+            ref = row["name"]
+            if not isinstance(ref, str) or not NAME_REF.match(ref):
+                raise Failure(INPUT_INVALID, f"A reference name is <github-owner>/<module id>: {ref!r}", field=f"/modules/{index}/name")
+            if not isinstance(row.get("commit"), str) or not COMMIT.match(row["commit"]):
+                raise Failure(INPUT_INVALID, f"Reference {ref} needs a 40-hex commit; a pack pins what it was built from", field=f"/modules/{index}/commit")
+            if "path" not in row:
+                raise Failure(INPUT_MISSING, f"Reference {ref} is not fetched: add its local path once module fetch has placed it",
+                              "pat module fetch is the route that resolves a reference into a directory; until then name the fetched path here.", field=f"/modules/{index}/path")
+        elif "commit" in row:
+            raise Failure(INPUT_INVALID, "commit belongs to a reference (with name); a local path member has none", field=f"/modules/{index}/commit")
+        if "path" not in row:
+            raise Failure(INPUT_INVALID, "Every member names a path", field=f"/modules/{index}/path")
+        _at(f"/modules/{index}/path" if isinstance(entry, dict) else f"/modules/{index}",
+            _relative_path, row["path"], "Member")
+        if role == "base":
+            base_members += 1
+        members.append({"path": row["path"], "role": role, "name": row.get("name"), "commit": row.get("commit")})
+    if base_members > 1:
+        raise Failure(INPUT_INVALID, "A composition names at most one member with role base",
+                      "The base is the pack everything else attaches to; put a second pack in as an ordinary member or nest it.", field='/modules')
+    load_rows = data.get("loads", [])
+    if not isinstance(load_rows, list) or len(load_rows) > projects.MAX_LOADS:
+        raise Failure(INPUT_INVALID, f"loads is a list of at most {projects.MAX_LOADS} fastfiles", field='/loads')
+    loads = [_at(f"/loads/{index}", _relative_path, text, "Load") for index, text in enumerate(load_rows)]
+    listing_rows = data.get("base_owned", [])
+    if not isinstance(listing_rows, list) or len(listing_rows) > MAX_BASE_LISTINGS:
+        raise Failure(INPUT_INVALID, f"base_owned is a list of at most {MAX_BASE_LISTINGS} asset listings of the base zones", field='/base_owned')
+    base_owned = [_at(f"/base_owned/{index}", _relative_path, text, "Base listing") for index, text in enumerate(listing_rows)]
+    header = data.get("zone_header", [])
+    if not isinstance(header, list) or len(header) > 32 or not all(isinstance(h, str) and re.fullmatch(r">[A-Za-z0-9_.@]+,[A-Za-z0-9_.-]{0,64}", h) for h in header):
+        raise Failure(INPUT_INVALID, "zone_header is a list of at most 32 linker metadata lines such as >level.ipak_read,common_zm", field='/zone_header')
+    return {"name": name, "title": title, "tags": list(tags), "game": game, "base": base, "map": map_id, "members": members,
+            "origin": _at("/origin", _origin, data.get("origin"), name), "donor": _at("/donor", _donor, data.get("donor"), name),
+            "zone_header": list(header), "loads": loads, "budget": _at("/budget", _contract, data["budget"], "budget") if "budget" in data else None,
+            "decisions": _at("/decisions", _decisions, data.get("decisions"), name), "base_owned": base_owned}
 
 
 def load_composition(path: Path, job: Job, depth: int = 0, seen: tuple = ()) -> dict:
@@ -387,55 +608,12 @@ def load_composition(path: Path, job: Job, depth: int = 0, seen: tuple = ()) -> 
         data = json.loads(src.read_text(encoding="utf-8"))
     except ValueError as exc:
         raise Failure(INPUT_INVALID, f"Composition is not valid JSON: {src}") from exc
-    projects._fields(data, {"schema", "name", "game", "base", "map", "modules", "loads", "budget", "decisions", "title", "tags", "zone_header",
-                            "origin", "donor", "base_owned"},
-                     {"schema", "name", "base", "map", "modules"}, "composition")
-    if data["schema"] != 1:
-        raise Failure(INPUT_INVALID, "Expected a schema 1 composition")
-    game = data.get("game", titles.DEFAULT_TITLE)
-    if game not in titles.names():
-        raise Failure(INPUT_INVALID, f"Composition game is one of {', '.join(titles.names())}")
-    base = data["base"]
-    if not isinstance(base, str) or not BASE.match(base):
-        raise Failure(INPUT_INVALID, "Composition base is a short token of lowercase letters and digits (stock, or the base release's short name)")
-    map_id = data["map"]
-    if not isinstance(map_id, str) or not MAP.match(map_id):
-        raise Failure(INPUT_INVALID, "Composition map is one concrete map id; a composition is planned for one map")
-    name = data["name"]
-    if not isinstance(name, str) or not projects.NAME.match(name) \
-            or not re.fullmatch(rf"{re.escape(base)}_[a-z0-9_]+_(?:{'|'.join(STAGES)})", name):
-        raise Failure(INPUT_INVALID, f"Composition name follows <base>_<feature>_<stage> with base {base!r} and stage test, pack or pub")
-    title = data.get("title", name)
-    if not isinstance(title, str) or not title.strip() or len(title) > 120:
-        raise Failure(INPUT_INVALID, "Composition title is at most 120 characters")
-    tags = data.get("tags", [])
-    if not isinstance(tags, list) or len(tags) > MAX_TAGS or not all(isinstance(t, str) and TAG.match(t) for t in tags):
-        raise Failure(INPUT_INVALID, f"Composition tags is a list of at most {MAX_TAGS} lowercase words")
-    entries = data["modules"]
-    if not isinstance(entries, list) or not entries or len(entries) > MAX_MODULES:
-        raise Failure(INPUT_INVALID, f"modules lists 1 to {MAX_MODULES} members")
-    members = []
+    comp = validate_composition_metadata(data)
+    game, base, map_id = comp["game"], comp["base"], comp["map"]
     directories: list[Path] = []
-    base_members = 0
-    for entry in entries:
-        row = {"path": entry} if isinstance(entry, str) else entry
-        projects._fields(row, {"path", "name", "commit", "role"}, set(), "composition member")
-        role = row.get("role", "module")
-        if role not in ("module", "base"):
-            raise Failure(INPUT_INVALID, "A member's role is module or base")
-        if "name" in row:
-            ref = row["name"]
-            if not isinstance(ref, str) or not NAME_REF.match(ref):
-                raise Failure(INPUT_INVALID, f"A reference name is <github-owner>/<module id>: {ref!r}")
-            if not isinstance(row.get("commit"), str) or not COMMIT.match(row["commit"]):
-                raise Failure(INPUT_INVALID, f"Reference {ref} needs a 40-hex commit; a pack pins what it was built from")
-            if "path" not in row:
-                raise Failure(INPUT_MISSING, f"Reference {ref} is not fetched: add its local path once module fetch has placed it",
-                              "pat module fetch is the route that resolves a reference into a directory; until then name the fetched path here.")
-        elif "commit" in row:
-            raise Failure(INPUT_INVALID, "commit belongs to a reference (with name); a local path member has none")
-        if "path" not in row:
-            raise Failure(INPUT_INVALID, "Every member names a path")
+    members = []
+    for row in comp["members"]:
+        role = row["role"]
         directory = _relative_dir(row["path"], src.parent, job, "Member")
         if directory in directories:
             raise Failure(INPUT_INVALID, f"Member directory listed twice: {row['path']}")
@@ -443,7 +621,7 @@ def load_composition(path: Path, job: Job, depth: int = 0, seen: tuple = ()) -> 
         nested = directory / "composition.json"
         if (directory / "module.json").is_file():
             member = {"kind": "module", "directory": directory, "role": role, "path": row["path"],
-                      "reference": {"name": row["name"], "commit": row["commit"]} if "name" in row else None}
+                      "reference": {"name": row["name"], "commit": row["commit"]} if row["name"] is not None else None}
         elif nested.is_file() and not nested.is_symlink():
             inner = load_composition(nested, job, depth + 1, seen + (key,))
             if inner["game"] != game:
@@ -453,30 +631,13 @@ def load_composition(path: Path, job: Job, depth: int = 0, seen: tuple = ()) -> 
             if inner["map"] != map_id:
                 raise Failure(INPUT_INVALID, f"Nested composition {inner['name']} is for map {inner['map']!r}, not {map_id!r}")
             member = {"kind": "composition", "directory": directory, "role": role, "path": row["path"], "composition": inner,
-                      "reference": {"name": row["name"], "commit": row["commit"]} if "name" in row else None}
+                      "reference": {"name": row["name"], "commit": row["commit"]} if row["name"] is not None else None}
         else:
             raise Failure(INPUT_MISSING, f"Member directory has neither module.json nor composition.json: {row['path']}")
-        if role == "base":
-            base_members += 1
         members.append(member)
-    if base_members > 1:
-        raise Failure(INPUT_INVALID, "A composition names at most one member with role base",
-                      "The base is the pack everything else attaches to; put a second pack in as an ordinary member or nest it.")
-    load_rows = data.get("loads", [])
-    if not isinstance(load_rows, list) or len(load_rows) > projects.MAX_LOADS:
-        raise Failure(INPUT_INVALID, f"loads is a list of at most {projects.MAX_LOADS} fastfiles")
-    loads = [_relative_file(text, src.parent, job, "Load") for text in load_rows]
-    listing_rows = data.get("base_owned", [])
-    if not isinstance(listing_rows, list) or len(listing_rows) > MAX_BASE_LISTINGS:
-        raise Failure(INPUT_INVALID, f"base_owned is a list of at most {MAX_BASE_LISTINGS} asset listings of the base zones")
-    base_owned = _base_owned([_relative_file(text, src.parent, job, "Base listing") for text in listing_rows])
-    header = data.get("zone_header", [])
-    if not isinstance(header, list) or len(header) > 32 or not all(isinstance(h, str) and re.fullmatch(r">[A-Za-z0-9_.@]+,[A-Za-z0-9_.-]{0,64}", h) for h in header):
-        raise Failure(INPUT_INVALID, "zone_header is a list of at most 32 linker metadata lines such as >level.ipak_read,common_zm")
-    return {"name": name, "title": title, "tags": list(tags), "game": game, "base": base, "map": map_id, "members": members,
-            "origin": _origin(data.get("origin"), name), "donor": _donor(data.get("donor"), name),
-            "zone_header": list(header), "loads": loads, "budget": _contract(data["budget"], "budget") if "budget" in data else None,
-            "decisions": _decisions(data.get("decisions"), name), "base_owned": base_owned, "source": src}
+    loads = [_relative_file(text, src.parent, job, "Load") for text in comp["loads"]]
+    base_owned = _base_owned([_relative_file(text, src.parent, job, "Base listing") for text in comp["base_owned"]])
+    return comp | {"members": members, "loads": loads, "base_owned": base_owned, "source": src}
 
 
 def flatten(comp: dict, job: Job) -> tuple[list[dict], list[Path], list[dict], list[str]]:

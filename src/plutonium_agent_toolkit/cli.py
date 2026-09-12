@@ -14,6 +14,7 @@
     pat ff inspect|extract <file.ff> --output <new dir>
     pat ff link <project dir> --zone <name> --output <new dir>
     pat project init|plan|build|verify ... --output <new dir>
+    pat module inspect <module.json|composition.json> --json
     pat module plan|build <composition.json> --output <new dir>
     pat module declare <mod.ff> --output <new dir>
     pat module fetch <owner/id@commit | https://github.com/o/r@commit> --output <new dir>
@@ -179,7 +180,7 @@ JOB_ACTIONS = {("registry", "baseline"): "baseline"}
 
 
 def is_job(group: str, action: str) -> bool:
-    return group in JOB_GROUPS or (group, action) in JOB_ACTIONS
+    return (group in JOB_GROUPS and (group, action) != ("module", "inspect")) or (group, action) in JOB_ACTIONS
 
 
 def run_job(args, argv: list[str]) -> dict:
@@ -294,6 +295,11 @@ def run(argv: list[str]) -> dict:
         from .dev import workspace
 
         return success(command, workspace.init(args.directory, args.name))
+
+    if group == "module" and args.action == "inspect":
+        from .dev import compositions
+
+        return success(command, compositions.inspect(Path(args.declaration)))
 
     if is_job(group, getattr(args, "action", "")):
         return run_job(args, argv)

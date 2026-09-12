@@ -1,0 +1,469 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "pat.module-inspect/1 invocation envelope",
+  "description": "Declaration-only producer protocol. Metadata validity does not establish payload availability, buildability, compatibility or gameplay evidence. file is a local producer path.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "toolkit_version",
+    "command",
+    "request_id",
+    "at",
+    "ok"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "toolkit_version": {
+      "type": "string"
+    },
+    "command": {
+      "const": "module inspect"
+    },
+    "request_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "result": {
+      "$ref": "#/$defs/inspection"
+    },
+    "error_code": {
+      "type": "string"
+    },
+    "message": {
+      "type": "string"
+    },
+    "hint": {
+      "type": "string"
+    },
+    "details": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "inspection"
+      ],
+      "properties": {
+        "inspection": {
+          "$ref": "#/$defs/inspection"
+        }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "required": [
+        "result"
+      ],
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "result": {
+          "properties": {
+            "validation": {
+              "const": "metadata-valid"
+            }
+          }
+        }
+      },
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "error_code"
+            ]
+          },
+          {
+            "required": [
+              "message"
+            ]
+          },
+          {
+            "required": [
+              "hint"
+            ]
+          },
+          {
+            "required": [
+              "details"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "required": [
+        "error_code",
+        "message",
+        "details"
+      ],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "details": {
+          "properties": {
+            "inspection": {
+              "properties": {
+                "validation": {
+                  "const": "invalid"
+                }
+              }
+            }
+          }
+        }
+      },
+      "not": {
+        "required": [
+          "result"
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "inspection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "file",
+        "sha256",
+        "kind",
+        "validation",
+        "validation_scope",
+        "metadata",
+        "diagnostics"
+      ],
+      "properties": {
+        "protocol": {
+          "const": "pat.module-inspect/1"
+        },
+        "file": {
+          "type": "string"
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "enum": [
+            "module",
+            "composition",
+            "unknown"
+          ]
+        },
+        "validation": {
+          "enum": [
+            "metadata-valid",
+            "invalid"
+          ]
+        },
+        "validation_scope": {
+          "const": "declaration-only"
+        },
+        "metadata": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/moduleMetadata"
+            },
+            {
+              "$ref": "#/$defs/compositionMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "field",
+              "error_code",
+              "message"
+            ],
+            "properties": {
+              "field": {
+                "type": "string",
+                "pattern": "^/"
+              },
+              "error_code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "validation": {
+              "const": "invalid"
+            },
+            "metadata": {
+              "type": "null"
+            },
+            "diagnostics": {
+              "minItems": 1
+            }
+          }
+        },
+        {
+          "properties": {
+            "validation": {
+              "const": "metadata-valid"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "kind": {
+              "const": "module"
+            },
+            "metadata": {
+              "$ref": "#/$defs/moduleMetadata"
+            },
+            "diagnostics": {
+              "maxItems": 0
+            }
+          }
+        },
+        {
+          "properties": {
+            "validation": {
+              "const": "metadata-valid"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "kind": {
+              "const": "composition"
+            },
+            "metadata": {
+              "$ref": "#/$defs/compositionMetadata"
+            },
+            "diagnostics": {
+              "maxItems": 0
+            }
+          }
+        }
+      ]
+    },
+    "moduleMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "game",
+        "title",
+        "category",
+        "kind",
+        "tags",
+        "bases",
+        "maps",
+        "dependencies",
+        "conflicts",
+        "origin",
+        "donor",
+        "distribution",
+        "menu_route",
+        "payload"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "game": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string"
+        },
+        "kind": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "bases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "maps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "conflicts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "origin": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "donor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "distribution": {
+          "enum": [
+            "source",
+            "seed",
+            "private"
+          ]
+        },
+        "menu_route": {
+          "type": "string"
+        },
+        "payload": {
+          "enum": [
+            "recipe",
+            "seed"
+          ]
+        }
+      }
+    },
+    "compositionMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "title",
+        "game",
+        "tags",
+        "base",
+        "map",
+        "origin",
+        "donor",
+        "members"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "game": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "base": {
+          "type": "string"
+        },
+        "map": {
+          "type": "string"
+        },
+        "origin": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "donor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "members": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "role",
+              "name",
+              "commit"
+            ],
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "role": {
+                "enum": [
+                  "module",
+                  "base"
+                ]
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "commit": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
