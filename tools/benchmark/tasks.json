@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "note": "Repeatable offline modding tasks scored only from receipts and the files they inventory. The prompt is handed to the agent under test verbatim after substituting <REPO>, <RUN>, <FIXTURE> and <MOD_FF>. See docs/BENCHMARK.md. inputs_contain lists path suffixes the scored receipt's declared inputs must include; input_hash_from requires an input's recorded hash to equal another task's output hash.",
+  "note": "Repeatable offline modding tasks scored only from receipts and the files they inventory. The prompt is handed to the agent under test verbatim after substituting <REPO>, <RUN>, <FIXTURE> and <MOD_FF>. See docs/BENCHMARK.md. inputs_contain lists path suffixes the scored receipt's declared inputs must include; input_hash_from requires an input's recorded hash to equal another task's output hash. artifact_contains and artifact_excludes name byte strings the scored job's compiled scripts or readback must carry or must not carry.",
   "tasks": [
     {
       "id": "bench-01-compile-error",
@@ -90,6 +90,70 @@
           "project.json",
           "scripts/hello.gsc"
         ]
+      }
+    },
+    {
+      "id": "bench-05-builtin-wrong-vm",
+      "prompt": "prompts/bench-05.md",
+      "inputs": [
+        "fixtures/bench-05/face_glow.gsc"
+      ],
+      "expect": {
+        "routes": [
+          "knowledge builtin",
+          "gsc compile"
+        ],
+        "final_status": "succeeded",
+        "artifact_excludes": [
+          "setanimknob"
+        ],
+        "artifact_contains": [
+          "face_glow_think",
+          "^3face glow armed"
+        ],
+        "max_invocations": 4,
+        "inputs_contain": [
+          "face_glow.gsc"
+        ],
+        "lookup": {
+          "command": "knowledge builtin",
+          "contains": [
+            "setanimknob"
+          ]
+        }
+      }
+    },
+    {
+      "id": "bench-06-classify-then-fix",
+      "prompt": "prompts/bench-06.md",
+      "inputs": [
+        "fixtures/bench-06/console_slice.log",
+        "fixtures/bench-06/riser_glow.gsc"
+      ],
+      "expect": {
+        "routes": [
+          "knowledge signature",
+          "gsc compile"
+        ],
+        "final_status": "succeeded",
+        "artifact_excludes": [
+          "bench_riser_glow"
+        ],
+        "artifact_contains": [
+          "riser_glow_think",
+          "^5riser glow armed"
+        ],
+        "max_invocations": 4,
+        "inputs_contain": [
+          "riser_glow.gsc",
+          "console_slice.log"
+        ],
+        "lookup": {
+          "command": "knowledge signature",
+          "contains": [
+            "clientfield"
+          ]
+        }
       }
     }
   ]

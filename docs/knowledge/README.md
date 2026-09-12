@@ -27,3 +27,9 @@ uses are defined once in [`../../CONTEXT.md`](../../CONTEXT.md); read it before 
 Every fact here was learned on a real T6 Zombies install with real ports. Where a number is a
 measured engine limit it says so; where it is a working rule from experience it says that too.
 When a page is wrong for the user's machine, fix the page in the same change as the fix.
+
+Three pages carry data behind them, shipped in the package and generated from the shipped
+Zombies zones: `pat knowledge builtin <name>` (which script VM a call exists on, with which
+argument counts), `pat knowledge limits [--map <zm_map>]` (the limits and what a map's loaded
+zones already carry against each) and `pat knowledge signature --log <slice>` (which recorded
+crash line this is and what fixed it). Ask the data before designing to a number or a name.

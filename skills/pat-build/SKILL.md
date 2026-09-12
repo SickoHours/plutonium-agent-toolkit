@@ -7,7 +7,8 @@ description: Build a T6 Zombies mod with pat and prove it offline. Use when the 
 
 Produce one build with a receipt, read it back, run the preflights for what changed, and say
 exactly what was proved. Words: `CONTEXT.md`. Facts: `docs/knowledge/fastfiles-and-zones.md`
-and `docs/knowledge/gsc.md`.
+and `docs/knowledge/gsc.md`; `pat knowledge builtin <name> --json` before relying on an
+unfamiliar call.
 
 ## Steps
 

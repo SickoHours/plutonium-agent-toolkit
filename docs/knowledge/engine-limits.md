@@ -17,6 +17,12 @@ compositions without measurement. Unknown occupancy stays unknown.
 | Scripts per recipe | 128 | Toolkit bound | Recipe rows |
 | Source tree size per recipe | 4,096 files, 2 GiB | Toolkit bound | Declared trees |
 
+The table is also data: `src/plutonium_agent_toolkit/knowledge/engine-limits.json` names, per row,
+the occupancy field that counts against it, and `pat knowledge limits --map <zm_map> --json`
+reports what the zones the engine loads for that map already carry against each row (counts from
+listings, decompiled text and WeaponDefs, never runtime pools; `null` stays unknown). A mod's
+own contribution is added on top of the map's number, never instead of it.
+
 ## Reading the table honestly
 
 - A bound observed on one map with one client build is evidence for that scope. Do not raise a

@@ -1,0 +1,7 @@
+[21:14:02] ------- Game Initialization -------
+[21:14:02] gamename: T6
+[21:14:02] gamedate: Nov  9 2012
+[21:14:03] Trying to assign 1 bits for netfield bench_riser_glow but Client Field Set actor is out of space.
+[21:14:03] ********************
+[21:14:03] ERROR: EXE_ERR_CLIENT_FIELD_SET_FULL
+[21:14:03] ********************

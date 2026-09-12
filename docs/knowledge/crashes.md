@@ -47,6 +47,11 @@ regression that consumes the failed artifact was added; the preflight playbooks 
 | `BG_AnimStateDef_Parse ... referenced missing <anim>` | Animation-state entry without a compiled tree reference | Add the reference to both compiled aitypes |
 | "Out of memory" dialog at map load | Preloaded sound-bank reservation plus the fastfile's virtual block | Stream large samples losslessly; keep critical one-shots loaded |
 
+The rows are data too: `src/plutonium_agent_toolkit/knowledge/crash-signatures.json` holds each
+as a regex with its class, cause and fix, and `pat knowledge signature --log <slice> --json`
+matches a slice line by line with the timestamp prefix stripped. A slice with no match is a line
+nobody has recorded yet, not a clean load; record it here in the same change as the fix.
+
 ## Correlate
 
 - Which load produced it: the load ID and the `check-load` result before the failure.

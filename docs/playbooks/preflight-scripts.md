@@ -14,8 +14,9 @@ failed at map load.
 
 1. Resolve builtins per instance. For every call in every server script, the name and arity
    resolve against the server export list or an included script; the same for client scripts
-   against the client list. Proof: no unresolved name remains and the two lists were never
-   pooled. Failure it prevents: `Unresolved external: <name> with N parameters`.
+   against the client list; `pat knowledge builtin <name> --json` gives the VMs and argument
+   counts shipped native scripts call a name with. Proof: no unresolved name remains and the two
+   lists were never pooled. Failure it prevents: `Unresolved external: <name> with N parameters`.
 2. Check includes. Every `#include` names a script present in the package or in a dependency
    load the game also loads. Proof: each include resolves. Failure: a method that exists in
    the engine but is exported through an include the script omitted.
@@ -29,7 +30,8 @@ failed at map load.
 5. Check network fields. New client fields are counted against the full loaded set for their
    set (actor, world, player, scriptmover), including map and global scripts. Proof: the
    count with the new bits is recorded and below the observed capacity, or the bits were
-   removed. Failure: `Client Field Set <set> is out of space`.
+   removed; `pat knowledge limits --map <zm_map> --json` gives the map's own bits per set as the
+   starting number. Failure: `Client Field Set <set> is out of space`.
 6. Check cleanup paths. Each resource-owning thread reaches idempotent cleanup on completion,
    cancellation, replacement, down, death, respawn, disconnect and map transition, without
    relying on `endon` or on `waittill_any` for the later events. Proof: each owner has a

@@ -16,7 +16,8 @@ metadata:
 Adapted from Matt Pocock's `diagnosing-bugs` (`vendor/matt-pocock/`, MIT) for a target that no
 unit test can drive. The discipline is the same: a loop that goes red on this failure comes
 before any hypothesis. Words: `CONTEXT.md`. Facts: `docs/knowledge/crashes.md` and
-`docs/knowledge/engine-limits.md`. Steps: `docs/playbooks/diagnose-a-crash.md`.
+`docs/knowledge/engine-limits.md`; `pat knowledge signature --log <slice> --json` classifies the
+saved slice. Steps: `docs/playbooks/diagnose-a-crash.md`.
 
 ## The order
 
