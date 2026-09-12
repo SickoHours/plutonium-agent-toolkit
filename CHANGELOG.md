@@ -9,6 +9,15 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Added
 
+- **Dual-wield ports and donor event tails.** `docs/knowledge/weapon-dual-wield.md` records the
+  three failures a dual-wield pair reproduces after clean readbacks: the left helper's native
+  `dwlefthand` inventory type overwritten to `primary` (a second selectable gun), clip track
+  ownership and double-applied model offsets (distorted arms, floating cartridges), and fully
+  streamed gunshot layers exhausting the streamed-voice pool. `crashes.md` and the
+  `rumble-asset-not-registered` signature name the donor `rmbnt#` rumble event that ends a match
+  on first play; `preflight-weapon-rig.md` gates the event tail and the pair. Knowledge and
+  playbook text only; no route changed.
+
 - Add inert `module inspect <module.json|composition.json> --json` with the versioned
   `pat.module-inspect/1` producer schema, exact-byte SHA-256 and JSON Pointer diagnostics.
   Inspect and plan/build share declaration metadata checks; inspection requires no payloads,
