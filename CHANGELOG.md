@@ -9,6 +9,20 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Added
 
+- **Origin, donor and evidence state, so a card can say where a thing comes from.** `module.json`
+  and `composition.json` accept `origin` (one lowercase word for the game or series the identity
+  comes from, or `unverified`; it drives the title, and is never defaulted to the donor) and
+  `donor` (one line of credit for where the bytes came from; it drives the credit line, never the
+  title). Both are validated, carried into `plan.json` per module and for the pack, and drafted by
+  `module declare` (`origin` as `unverified`, since a package says nothing about identity). A
+  registry entry's `declaration` summary may carry both, the entry may carry `evidence_state`, the
+  highest build-evidence fact of `CONTEXT.md` the registry's own record supports for the listed
+  snapshot (`none` by default; never a trust score), and `registry search` matches the origin word
+  and returns `module_origin`, `donor` and `evidence_state` on every hit. The control plane's
+  library summary lists both fields. `docs/MODULES.md`, `docs/REGISTRY.md`. Formats and offline
+  tests only (`tests/test_compositions.py`, `tests/test_registry.py`); no route, receipt or
+  evidence level changed and nothing here proves a module loads or plays.
+
 - **Weapon-camo, weapon-aim, attachment and BO3 audio knowledge.** Four pages distilled from an
   authoring workspace's T6 port cycle. `docs/knowledge/weapon-camo.md` records how a `weaponCamo`
   asset renders (`materialOverrides`, per-gun `shaderConsts[0..1]` UV tiling scaled by measured UV

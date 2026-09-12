@@ -23,7 +23,9 @@ Module declaration (``module.json``, schema 1)::
       "resource_contract": {"threads": 0, "entities": 0, "hud": 0, "network_fields": 0},
       "menu_route": "Equipment & melee > Melee > The Penetrator",
       "distribution": "seed",
-      "source": {"repository": "https://github.com/<owner>/<repo>", "commit": "<40 hex>"}
+      "source": {"repository": "https://github.com/<owner>/<repo>", "commit": "<40 hex>"},
+      "origin": "saints-row",                   # the game the identity comes from; "unverified" when unknown
+      "donor": "Saints Row: The Third assets converted by <who>, 2026"   # credit for where the bytes came from
     }
 
 Composition recipe (``composition.json``, schema 1)::
@@ -74,6 +76,12 @@ KINDS = {"weapons": ("wonder", "firearm", "melee", "launcher", "special"), "perk
          "ui": ("hud", "menu"), "core": ("inventory", "registry", "adapter"), "scripts": ("script",),
          "audio": ("bank", "music"), "tooling": ("tool",), "pack": ("pack",), "module": ()}
 DISTRIBUTIONS = ("source", "seed", "private")
+# Origin is the game or series the thing's identity comes from (the ICR-1 is a Black Ops III rifle
+# whichever pack it was converted from); it drives the title. Donor is who or what the bytes came
+# from (a conversion pack, a capture, a person) and drives the credit line. Neither affects
+# resolution. An origin nobody has verified says so instead of defaulting to the donor.
+ORIGIN_UNVERIFIED = "unverified"
+MAX_DONOR = 400
 PROVIDES_KINDS = ("weapons", "perks", "gobblegums", "powerups", "equipment", "localize", "soundbanks", "scripts", "models", "effects",
                   "rawfiles")
 # A whole pack declared as one seed lists every asset it embeds; a Beta-era pack carries several
@@ -120,6 +128,24 @@ def add_parser(sub, common):
 def _text(value, what: str, limit: int) -> str:
     if not isinstance(value, str) or not value.strip() or len(value) > limit:
         raise Failure(INPUT_INVALID, f"{what} must be a non-empty string of at most {limit} characters")
+    return value
+
+
+def _origin(value, owner: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not TAG.match(value):
+        raise Failure(INPUT_INVALID, f"{owner}: origin is one lowercase word naming the game or series the identity comes from "
+                                     f"(bo3, waw, saints-row), or {ORIGIN_UNVERIFIED!r}")
+    return value
+
+
+def _donor(value, owner: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip() or len(value) > MAX_DONOR or "\n" in value or "\r" in value:
+        raise Failure(INPUT_INVALID, f"{owner}: donor is one line of credit of at most {MAX_DONOR} characters "
+                                     "(the pack, capture or person the bytes came from)")
     return value
 
 
@@ -207,7 +233,8 @@ def load_declaration(directory: Path, job: Job) -> dict:
         raise Failure(INPUT_INVALID, f"module.json is not valid JSON: {src}") from exc
     where = f"module.json in {directory.name}"
     projects._fields(data, {"schema", "id", "version", "title", "category", "kind", "tags", "recipe", "seed", "bases", "maps",
-                            "dependencies", "conflicts", "provides", "resource_contract", "menu_route", "distribution", "source"},
+                            "dependencies", "conflicts", "provides", "resource_contract", "menu_route", "distribution", "source",
+                            "origin", "donor"},
                      {"schema", "id", "version", "bases", "maps"}, where)
     if data["schema"] != 1:
         raise Failure(INPUT_INVALID, f"{where}: expected schema 1")
@@ -286,7 +313,8 @@ def load_declaration(directory: Path, job: Job) -> dict:
             "conflicts": _ids(data.get("conflicts", []), "conflicts", mid),
             "provides": provides,
             "resource_contract": _contract(data.get("resource_contract"), f"{mid}: resource_contract"),
-            "menu_route": menu_route, "source": source, "declaration": src}
+            "menu_route": menu_route, "source": source, "declaration": src,
+            "origin": _origin(data.get("origin"), mid), "donor": _donor(data.get("donor"), mid)}
 
 
 # ----- compositions ----------------------------------------------------------------------
@@ -326,7 +354,8 @@ def load_composition(path: Path, job: Job, depth: int = 0, seen: tuple = ()) -> 
         data = json.loads(src.read_text(encoding="utf-8"))
     except ValueError as exc:
         raise Failure(INPUT_INVALID, f"Composition is not valid JSON: {src}") from exc
-    projects._fields(data, {"schema", "name", "base", "map", "modules", "loads", "budget", "decisions", "title", "tags", "zone_header"},
+    projects._fields(data, {"schema", "name", "base", "map", "modules", "loads", "budget", "decisions", "title", "tags", "zone_header",
+                            "origin", "donor"},
                      {"schema", "name", "base", "map", "modules"}, "composition")
     if data["schema"] != 1:
         raise Failure(INPUT_INVALID, "Expected a schema 1 composition")
@@ -403,6 +432,7 @@ def load_composition(path: Path, job: Job, depth: int = 0, seen: tuple = ()) -> 
     if not isinstance(header, list) or len(header) > 32 or not all(isinstance(h, str) and re.fullmatch(r">[A-Za-z0-9_.@]+,[A-Za-z0-9_.-]{0,64}", h) for h in header):
         raise Failure(INPUT_INVALID, "zone_header is a list of at most 32 linker metadata lines such as >level.ipak_read,common_zm")
     return {"name": name, "title": title, "tags": list(tags), "base": base, "map": map_id, "members": members,
+            "origin": _origin(data.get("origin"), name), "donor": _donor(data.get("donor"), name),
             "zone_header": list(header), "loads": loads, "budget": _contract(data["budget"], "budget") if "budget" in data else None,
             "decisions": _decisions(data.get("decisions"), name), "source": src}
 
@@ -569,7 +599,8 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
                "declaration_sha256": job.inputs[str(m["declaration"])], "payload": "seed" if m["seed"] else "recipe",
                "distribution": m["distribution"], "dependencies": m["dependencies"], "conflicts": m["conflicts"],
                "bases": m["bases"], "maps": m["maps"], "provides": m["provides"], "resource_contract": m["resource_contract"],
-               "menu_route": m["menu_route"], "source": m["source"], "reference": m.get("reference")}
+               "menu_route": m["menu_route"], "source": m["source"], "reference": m.get("reference"),
+               "origin": m["origin"], "donor": m["donor"]}
         if m["recipe"] is not None:
             row["recipe_sha256"] = job.inputs[str(m["recipe"].resolve())]
         else:
@@ -608,7 +639,8 @@ def execute(args, job: Job) -> dict:
     base_ids = [r["id"] for r in rows if r["role"] == "base"]
     plan = {
         "schema_version": 1, "name": comp["name"], "title": comp["title"], "tags": comp["tags"], "base": comp["base"],
-        "map": comp["map"], "game": "t6", "mode": "zm", "base_member": base_ids[0] if base_ids else None,
+        "map": comp["map"], "origin": comp["origin"], "donor": comp["donor"],
+        "game": "t6", "mode": "zm", "base_member": base_ids[0] if base_ids else None,
         "modules": rows, "order": resolved["order"],
         "scripts": [{"source": str(p), "target": t.as_posix(), "instance": i} for p, t, i in compiled],
         "assets": [{"source": str(p), "target": t.as_posix(), "type": k, "name": n} for p, t, k, n in loose],

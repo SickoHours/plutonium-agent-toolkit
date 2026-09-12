@@ -254,6 +254,8 @@ def declare(package: Path, args, job: Job) -> dict:
         "resource_contract": {"threads": 0, "entities": 0, "hud": 0, "network_fields": 0},
         "menu_route": "<how a person reaches it in game>",
         "distribution": "seed",
+        "origin": "unverified",
+        "donor": "<who or what the bytes came from: a conversion pack, a capture, a person>",
     }
     (job.root / "module.json").write_text(json.dumps(draft, indent=2) + "\n", encoding="utf-8")
     return {"seed_manifest": "seed.json", "declaration_draft": "module.json", "package_sha256": files["mod.ff"],

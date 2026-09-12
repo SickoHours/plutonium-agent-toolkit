@@ -55,6 +55,11 @@ COMMIT = re.compile(r"^[0-9a-f]{40}\Z")
 REGISTRY_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}\Z")
 KINDS = ("module", "composition")
 DISTRIBUTIONS = ("source", "seed", "private")
+# The build-evidence ladder of CONTEXT.md, as a listing may claim it for the listed snapshot on the
+# base and map the summary names: the highest fact the registry's own record supports, never a
+# trust score. "none" is the default and means the registry claims nothing.
+EVIDENCE_STATES = ("none", "offline-verified", "installed", "launched", "loaded", "playable", "captured", "accepted")
+SUMMARY_FIELDS = ("id", "version", "title", "category", "kind", "tags", "bases", "maps", "provides", "origin", "donor")
 RESERVED_OWNERS = ("plutonium", "pat", "stock")
 # The registry that ships inside the package: the toolkit's built-in modules and packs at the exact
 # commit the release pins. Read without `registry add`; its name is reserved so nothing can shadow it.
@@ -129,9 +134,10 @@ def validate_registry(data, where: str) -> dict:
 
 
 def validate_entry(entry, where: str) -> dict:
-    allowed = {"name", "kind", "repository", "path", "listed", "distribution", "declaration", "verification", "history"}
+    allowed = {"name", "kind", "repository", "path", "listed", "distribution", "declaration", "verification", "history", "evidence_state"}
     if not isinstance(entry, dict) or set(entry) - allowed or not {"name", "kind", "repository", "listed"} <= set(entry):
-        raise Failure(INPUT_INVALID, f"{where}: an entry has fields name, kind, repository, listed (optional path, distribution, declaration, verification, history)")
+        raise Failure(INPUT_INVALID, f"{where}: an entry has fields name, kind, repository, listed (optional path, distribution, declaration, "
+                                     "verification, evidence_state, history)")
     name = entry["name"]
     if not isinstance(name, str) or not NAME.match(name):
         raise Failure(INPUT_INVALID, f"{where}: entry name is <github-owner>/<module id>, lowercase: {name!r}")
@@ -160,11 +166,18 @@ def validate_entry(entry, where: str) -> dict:
     if distribution not in DISTRIBUTIONS:
         raise Failure(INPUT_INVALID, f"{where}: {name} distribution is one of {list(DISTRIBUTIONS)}")
     declaration = entry.get("declaration", {})
-    if not isinstance(declaration, dict) or set(declaration) - {"id", "version", "title", "category", "kind", "tags", "bases", "maps", "provides"}:
-        raise Failure(INPUT_INVALID, f"{where}: {name} declaration summary has id, version, title, category, kind, tags, bases, maps, provides")
+    if not isinstance(declaration, dict) or set(declaration) - set(SUMMARY_FIELDS):
+        raise Failure(INPUT_INVALID, f"{where}: {name} declaration summary has {', '.join(SUMMARY_FIELDS)}")
     for key in ("tags", "bases", "maps"):
         if key in declaration and (not isinstance(declaration[key], list) or not all(isinstance(x, str) for x in declaration[key])):
             raise Failure(INPUT_INVALID, f"{where}: {name} declaration.{key} is a list of strings")
+    for key in ("origin", "donor"):
+        if key in declaration and not isinstance(declaration[key], str):
+            raise Failure(INPUT_INVALID, f"{where}: {name} declaration.{key} is a string, as in the declaration")
+    evidence_state = entry.get("evidence_state", "none")
+    if evidence_state not in EVIDENCE_STATES:
+        raise Failure(INPUT_INVALID, f"{where}: {name} evidence_state is one of {list(EVIDENCE_STATES)}",
+                      "It is the highest build-evidence fact the registry's own record supports for the listed snapshot; leave it out to claim none.")
     verification = entry.get("verification", {})
     if not isinstance(verification, dict):
         raise Failure(INPUT_INVALID, f"{where}: {name} verification is an object")
@@ -173,7 +186,7 @@ def validate_entry(entry, where: str) -> dict:
         raise Failure(INPUT_INVALID, f"{where}: {name} history is a list")
     return {"name": name, "kind": kind, "repository": repository.rstrip("/"), "path": Path(path).as_posix() if path != "." else ".",
             "listed": dict(listed), "distribution": distribution, "declaration": dict(declaration),
-            "verification": dict(verification), "history": list(history)}
+            "verification": dict(verification), "evidence_state": evidence_state, "history": list(history)}
 
 
 def registries_dir() -> Path:
@@ -284,7 +297,8 @@ def search(text: str | None = None, *, category: str | None = None, kind: str | 
             continue
         for e in registry["entries"]:
             d = e["declaration"]
-            hay = " ".join([e["name"], d.get("id", ""), d.get("title", ""), d.get("category", ""), d.get("kind", ""), " ".join(d.get("tags", []))]).lower()
+            hay = " ".join([e["name"], d.get("id", ""), d.get("title", ""), d.get("category", ""), d.get("kind", ""), " ".join(d.get("tags", [])),
+                            d.get("origin", "")]).lower()
             if words and not all(w in hay for w in words):
                 continue
             if category and d.get("category") != category:
@@ -308,6 +322,7 @@ def search(text: str | None = None, *, category: str | None = None, kind: str | 
             hit = {"registry": registry["name"], "origin": registry["origin"], "name": e["name"], "kind": e["kind"], "distribution": e["distribution"],
                    "title": d.get("title"), "category": d.get("category"), "module_kind": d.get("kind"), "tags": d.get("tags", []),
                    "bases": d.get("bases", []), "maps": d.get("maps", []), "commit": e["listed"]["commit"],
+                   "module_origin": d.get("origin"), "donor": d.get("donor"), "evidence_state": e["evidence_state"],
                    "snapshot_status": e["verification"].get("snapshot_status", "unverified"),
                    "fetch": ["pat", "module", "fetch", f"{e['name']}@{e['listed']['commit']}", "--output", "<new dir>"]}
             if registry["origin"] == "builtin":

@@ -27,8 +27,10 @@ snapshot before listing it and a submitter runs first; it reads files and nothin
       "listed": {"commit": "<40 hex>", "at": "2026-09-11", "branch": "main"},
       "distribution": "source",
       "declaration": {"id": "hello_zm", "version": "0.1.0", "title": "hello-zm", "category": "scripts",
-                      "kind": "script", "tags": ["example"], "bases": ["stock"], "maps": ["*"]},
+                      "kind": "script", "tags": ["example"], "bases": ["stock"], "maps": ["*"],
+                      "origin": "unverified", "donor": "written for the toolkit's examples"},
       "verification": {"snapshot_status": "unverified"},
+      "evidence_state": "none",
       "history": []
     }
   ]
@@ -43,8 +45,9 @@ snapshot before listing it and a submitter runs first; it reads files and nothin
 | `repository`, `path` | The GitHub repository and the directory inside it. Only GitHub repositories are fetched in this version |
 | `listed.commit` | The 40-hex commit the entry was listed at. Everything about the entry refers to that snapshot; a moved branch changes nothing here |
 | `distribution` | `source`, `seed` or `private`, as in the declaration |
-| `declaration` | A summary copied from the declaration at the listed commit, for search: id, version, title, category, kind, tags, bases, maps, provides. The fetched declaration is the fact; this is a projection |
+| `declaration` | A summary copied from the declaration at the listed commit, for search: id, version, title, category, kind, tags, bases, maps, provides, origin, donor. The fetched declaration is the fact; this is a projection |
 | `verification` | What the registry's own checks say about the snapshot: `snapshot_status` of `unverified`, `snapshot verified` or `update unverified` (a later commit exists that nobody checked). Never a trust score |
+| `evidence_state` | The highest build-evidence fact (`CONTEXT.md`) the registry's own record supports for the listed snapshot on the bases and maps the summary names: `none` (the default, and what an absent field means), `offline-verified`, `installed`, `launched`, `loaded`, `playable`, `captured` or `accepted`. One word for a card; the receipt behind it stays with whoever earned it, and a listing that cannot point at one says `none`. Never a trust score, never inferred from a later or earlier snapshot |
 | `history` | Earlier listings, appended, never rewritten |
 
 The **catalog** is a generated, browseable projection of one or more registries (`catalog.json`
@@ -80,7 +83,7 @@ is planned and built like any other module (`pat module plan <builtin_dir>/compo
 | --- | --- | --- |
 | `pat registry add <file or https URL>` | Validates the registry and copies it under the toolkit home (`registries/`). Re-adding a name replaces the copy | `name`, `entries`, `sha256` |
 | `pat registry list` | The registries on this machine: the built-in one first, then the ones you added, each with its `origin` | `registries[]` |
-| `pat registry search [words] [--category …] [--kind …] [--tag …] [--base …] [--map …] [--entry-kind module|composition] [--origin builtin|added]` | Matches the declaration summaries in the built-in and every recorded registry; offline | `hits[].name`, `hits[].commit`, `hits[].fetch`, `hits[].builtin_dir` |
+| `pat registry search [words] [--category …] [--kind …] [--tag …] [--base …] [--map …] [--entry-kind module|composition] [--origin builtin|added]` | Matches the declaration summaries in the built-in and every recorded registry (words match the origin word too); offline. A hit carries the summary's `module_origin` and `donor` and the entry's `evidence_state` so a card can be drawn from it; `--origin` is the registry's origin (built-in or added), not the module's | `hits[].name`, `hits[].commit`, `hits[].fetch`, `hits[].builtin_dir`, `hits[].module_origin`, `hits[].donor`, `hits[].evidence_state` |
 | `pat dev builtin [--plan] [--only <owner/id>]…` | Fetches the built-in modules and packs at their pinned commits under the toolkit home with a receipt per entry; a rerun verifies, a changed tree is refused | `results[].module_dir`, `results[].action`, `downloads[]` |
 | `pat registry show <owner/id>` | Every listing of one name, with its fetch command and snapshot URL | `listings[]` |
 | `pat module fetch <owner/id@commit> --output <new dir>` | Resolves the name through the recorded registries (the commit must equal the listed one), downloads the exact-commit tarball over HTTPS, hashes it, extracts it with the archive safety checks, and confirms `module.json` or `composition.json` is at the entry's path. The fetched declaration must name the same repository and commit when it names any | `module_dir`, `commit`, `archive_sha256`, `facts` |
