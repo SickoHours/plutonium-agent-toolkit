@@ -138,6 +138,37 @@ class RegistryFileTests(RegistryFixture):
         code, row = invoke(["registry", "show", "Bad Name"])
         self.assertEqual(row["error_code"], "input_invalid")
 
+    def test_origin_donor_and_evidence_state_are_projected_into_search(self):
+        # The summary may carry the declaration's origin and donor; the entry may claim the highest
+        # build-evidence fact its own record supports. Absent means none is claimed.
+        credited = entry_row(name="someone/icr", declaration={"id": "icr", "version": "0.1.0", "title": "ICR-1 (Black Ops III)",
+                                                              "category": "weapons", "kind": "firearm", "tags": ["bo3"],
+                                                              "bases": ["stock"], "maps": ["zm_transit"], "origin": "bo3",
+                                                              "donor": "a T5 conversion pack, converted again for T6"},
+                             evidence_state="offline-verified")
+        code, row = invoke(["registry", "add", str(self.write_registry(registry_file([entry_row(), credited])))])
+        self.assertEqual(code, 0, row)
+        code, row = invoke(["registry", "search", "--origin", "added"])
+        hits = {h["name"]: h for h in row["result"]["hits"]}
+        self.assertEqual(hits["someone/icr"]["module_origin"], "bo3")
+        self.assertEqual(hits["someone/icr"]["donor"], "a T5 conversion pack, converted again for T6")
+        self.assertEqual(hits["someone/icr"]["evidence_state"], "offline-verified")
+        self.assertIsNone(hits["someone/round_announcer"]["module_origin"])
+        self.assertIsNone(hits["someone/round_announcer"]["donor"])
+        self.assertEqual(hits["someone/round_announcer"]["evidence_state"], "none")
+        code, row = invoke(["registry", "search", "bo3", "--origin", "added"])
+        self.assertEqual([h["name"] for h in row["result"]["hits"]], ["someone/icr"], "the origin word is searchable")
+        code, row = invoke(["registry", "show", "someone/icr"])
+        self.assertEqual(row["result"]["listings"][0]["evidence_state"], "offline-verified")
+        self.assertEqual(row["result"]["listings"][0]["declaration"]["origin"], "bo3")
+        # A summary is held to the declaration's constraints: no spaced origin, no multiline or oversize donor.
+        for bad in ({"origin": "Black Ops III"}, {"donor": "line one\nline two"}, {"donor": "x" * 401}):
+            broken = entry_row(name="someone/bad", declaration={"id": "bad", "version": "0.1.0", "title": "Bad", "category": "weapons",
+                                                                "bases": ["stock"], "maps": ["zm_transit"], **bad})
+            code, row = invoke(["registry", "add", str(self.write_registry(registry_file([broken]), name="bad.json"))])
+            self.assertEqual(code, 1, row)
+            self.assertEqual(row["error_code"], "input_invalid")
+
     def test_add_from_https_and_re_add_replaces(self):
         data = registry_file()
         self.served["https://example.invalid/registry.json"] = json.dumps(data).encode()
@@ -170,6 +201,10 @@ class RegistryFileTests(RegistryFixture):
             (registry_file([entry_row(path="../escape")]), "path"),
             (registry_file([entry_row(), entry_row()]), "twice"),
             (registry_file([entry_row(declaration={"bogus": 1})]), "declaration"),
+            (registry_file([entry_row(declaration={"origin": ["bo3"]})]), "origin"),
+            (registry_file([entry_row(declaration={"donor": 3})]), "donor"),
+            (registry_file([entry_row(evidence_state="trusted")]), "evidence_state"),
+            (registry_file([entry_row(evidence_state=None)]), "evidence_state"),
         ]
         for data, word in bad:
             code, row = invoke(["registry", "add", str(self.write_registry(data))])

@@ -293,6 +293,39 @@ class TaxonomyTests(CompositionFixture):
         plan = json.loads((Path(row["result"]["output"]) / "plan.json").read_text())
         self.assertEqual(plan["tags"], ["saints-row"])
 
+    def test_origin_and_donor_are_validated_and_carried_into_the_plan(self):
+        # Origin is the game the identity comes from and drives the title; donor is who the bytes came
+        # from and drives the credit line. Both are optional, neither affects resolution.
+        self.module("alpha", title="ICR-1 (Black Ops III)", origin="bo3",
+                    donor="Chronicles Reawakened v3.5 (Kosmoes) T5 conversion; T6 conversion by the pack's own converter")
+        self.module("beta", origin="unverified")
+        self.module("gamma")
+        comp = self.composition(["alpha", "beta", "gamma"], origin="bo3", donor="two conversions and one original script")
+        code, row = invoke(["module", "plan", str(comp), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        plan = json.loads((Path(row["result"]["output"]) / "plan.json").read_text())
+        rows = {m["id"]: m for m in plan["modules"]}
+        self.assertEqual(rows["alpha"]["origin"], "bo3")
+        self.assertTrue(rows["alpha"]["donor"].startswith("Chronicles Reawakened"))
+        self.assertEqual(rows["beta"]["origin"], "unverified")
+        self.assertIsNone(rows["beta"]["donor"])
+        self.assertIsNone(rows["gamma"]["origin"], "absent stays absent; the planner never fills an origin in")
+        self.assertEqual(plan["origin"], "bo3")
+        self.assertEqual(plan["donor"], "two conversions and one original script")
+        for broken in (declaration("alpha", origin="Black Ops III"), declaration("alpha", origin=["bo3"]), declaration("alpha", origin=""),
+                       declaration("alpha", donor="x" * 401), declaration("alpha", donor="two\nlines"), declaration("alpha", donor=7),
+                       declaration("alpha", donor="   ")):
+            (self.root / "modules" / "alpha" / "module.json").write_text(json.dumps(broken))
+            code, row = invoke(["module", "plan", str(self.composition(["alpha"])), "--output", self.out()])
+            self.assertEqual(code, 1, broken)
+            self.assertEqual(row["error_code"], "input_invalid", broken)
+        self.module("alpha")
+        for broken in ({"origin": "Bad Origin"}, {"donor": ""}, {"donor": ["a"]}):
+            comp = self.composition(["alpha"], **broken)
+            code, row = invoke(["module", "plan", str(comp), "--output", self.out()])
+            self.assertEqual(code, 1, broken)
+            self.assertEqual(row["error_code"], "input_invalid", broken)
+
 
 class SeedFixture(CompositionFixture):
     def seed_module(self, mid, weapons=("halo_penetrator_zm",), banks=("halo_penetrator.all.sabl",), roots=None, **overrides):

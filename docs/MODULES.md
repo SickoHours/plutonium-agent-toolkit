@@ -39,7 +39,9 @@ Lives in the module's directory beside its payload. The payload is one of two th
   "resource_contract": {"threads": 0, "entities": 0, "hud": 0, "network_fields": 0},
   "menu_route": "Equipment & melee > Melee > The Penetrator",
   "distribution": "seed",
-  "source": {"repository": "https://github.com/<owner>/<repo>", "commit": "<40 hex>"}
+  "source": {"repository": "https://github.com/<owner>/<repo>", "commit": "<40 hex>"},
+  "origin": "saints-row",
+  "donor": "Saints Row: The Third assets, converted for T6 by <who>, 2026"
 }
 ```
 
@@ -63,6 +65,12 @@ Lives in the module's directory beside its payload. The payload is one of two th
 | `menu_route` | no | How a person reaches the feature in game, at most 200 characters; carried into the plan for the handoff |
 | `distribution` | no | `source` (buildable from the repository; the default for a recipe), `seed` (the package is committed beside the manifest; the default for a seed), or `private` (a seed whose package is not published: the declaration and manifest let others plan around the module, and a build without the package fails honestly) |
 | `source` | no | Where the module comes from: an `https` `repository` URL and, ideally, the 40-hex `commit`. Carried into the plan so a pack can say what it was built from |
+| `origin` | no | One lowercase word for the game or series the thing's identity comes from (`bo3`, `waw`, `saints-row`), or `unverified` when nobody has established it. It drives the title: an ICR-1 converted from a community pack is still "ICR-1 (Black Ops III)". Never defaulted to the donor. A browse word, never a resolution rule |
+| `donor` | no | One line of credit, at most 400 characters, for where the bytes came from: a conversion pack and its author, a capture, a person. It drives the credit line, never the title. Preserved on every re-cut |
+
+Origin and donor are two facts, and a card shows both: "ICR-1 (Black Ops III)" with "from Chronicles
+Reawakened v3.5 (Kosmoes), converted for T6" under it. A module whose origin is in doubt says
+`unverified` rather than borrowing the donor's name, so the doubt is visible on the card.
 
 A declaration says nothing about evidence. Whether the module is offline verified, installed,
 playable or accepted on a base is a receipt's and a person's statement, not a field here; a
@@ -124,6 +132,7 @@ Localized strings cannot be copied out of a loaded fastfile, so `declare` extrac
 | `schema` | yes | `1` |
 | `name` | yes | `<base>_<feature>_<stage>` with the composition's own `base` token and a stage of `test`, `pack` or `pub` (`docs/knowledge/foundations.md`). It is also the install folder name |
 | `title`, `tags` | no | A display name and browse words for the pack itself |
+| `origin`, `donor` | no | The same two facts as on a module, for a pack that is one thing ("Ghosts weapons on TranZit" has origin `ghosts`); a pack of mixed origins leaves them out and the plan carries each member's own |
 | `base` | yes | The base token every module must declare |
 | `map` | yes | One concrete map id. A composition is planned for one map; plan another composition for another map |
 | `modules` | yes | 1 to 32 members. A member is a relative path (forward slashes, from the composition's directory) to a directory holding `module.json`, **or** a directory holding another `composition.json` (its modules are flattened in; it must declare the same base and map; nesting is bounded), **or** an object: `{"path": …, "role": "base"}` marks the one member the others attach to; `{"name": "<github-owner>/<id>", "commit": "<40 hex>", "path": …}` records a published module pinned at a commit, with the local directory it was fetched into. Listing order does not matter; the plan orders by dependencies, base members first |
