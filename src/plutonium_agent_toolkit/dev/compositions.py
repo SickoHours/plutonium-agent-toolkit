@@ -605,8 +605,10 @@ def collisions(modules: list[dict], loaded: dict[str, tuple], decisions: list[di
             continue
         decision = recorded.get(key.casefold())
         row = {"collision": key, "kind": "name", "modules": ids}
-        asset_name = _asset_row(key)
-        if asset_name and asset_name in base_owned and not decision:
+        # Only a seed's embedded ``asset:`` rows can be base-owned: those are copies the linker
+        # took from the base. A ``provides`` registration (weapons, models, effects, soundbanks)
+        # is a module's own claim and stays a decision even when the base carries the name.
+        if key.startswith("asset:") and key[6:].casefold() in base_owned and not decision:
             decided.append({**row, "resolution": "base-owned; the base zone's copy is loaded", "owner": ids[0]})
             continue
         if decision and decision["owner"] in ids:
@@ -617,22 +619,6 @@ def collisions(modules: list[dict], loaded: dict[str, tuple], decisions: list[di
             undecided.append({**row, "resolution": "undecided", "choices": ids,
                               "how": "two modules register the same " + key.split(":", 1)[0] + "; keep one, or record an owner under decisions and drop the other's registration"})
     return decided, undecided
-
-
-def _asset_row(key: str) -> str | None:
-    """The ``type,name`` row behind a name-collision key, or None for kinds the listing cannot see."""
-    kind, _, name = key.partition(":")
-    if kind == "asset":
-        return name.casefold()
-    if kind == "effects":
-        return f"fx,{name}".casefold()
-    if kind == "models":
-        return f"xmodel,{name}".casefold()
-    if kind == "weapons":
-        return f"weapon,{name}".casefold()
-    if kind == "soundbanks":
-        return f"soundbank,{name}".casefold()
-    return None
 
 
 def _backends(compiled: list) -> list[dict]:
@@ -730,6 +716,7 @@ def execute(args, job: Job) -> dict:
 
 
 def _build_composition(comp: dict, plan: dict, compiled, loose, seed_modules, loads, decided, header, args, job: Job) -> dict:
+    base_owned_names = len(comp.get("base_owned") or ())
     missing = [c["id"] for c in plan["backends"] if not c["available"]]
     if missing:
         raise Failure("backend_unavailable", f"Required backends are not installed: {missing}", "Run: pat dev setup")
@@ -845,7 +832,7 @@ def _build_composition(comp: dict, plan: dict, compiled, loose, seed_modules, lo
             "name": comp["name"], "title": comp["title"], "base": comp["base"], "map": comp["map"], "base_member": plan["base_member"],
             "modules": [{"id": r["id"], "version": r["version"], "order": i + 1, "payload": r["payload"], "role": r["role"]}
                         for i, r in enumerate(plan["modules"])],
-            "resource_totals": plan["resource_totals"], "budget": plan["budget"], "decisions": decided,
+            "resource_totals": plan["resource_totals"], "budget": plan["budget"], "decisions": decided, "base_owned_names": base_owned_names,
             "scripts": len(compiled), "assets": len(loose), "seeds": len(seed_modules), "loads": len(loads),
             "install_hint": f"pat game install-mod <output>/{link['packages'][0]['path']} {comp['name']}  (copy the soundbanks under packages/ beside it; loading in game is a separate, authorized step)",
             "verification": "every recipe module's scripts compiled, one mod.ff linked against every seed and load, read back, every rawfile "
