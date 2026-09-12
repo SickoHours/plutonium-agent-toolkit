@@ -171,9 +171,11 @@ def validate_entry(entry, where: str) -> dict:
     for key in ("tags", "bases", "maps"):
         if key in declaration and (not isinstance(declaration[key], list) or not all(isinstance(x, str) for x in declaration[key])):
             raise Failure(INPUT_INVALID, f"{where}: {name} declaration.{key} is a list of strings")
-    for key in ("origin", "donor"):
-        if key in declaration and not isinstance(declaration[key], str):
-            raise Failure(INPUT_INVALID, f"{where}: {name} declaration.{key} is a string, as in the declaration")
+    if "origin" in declaration or "donor" in declaration:
+        # The same constraints as the declaration, so a summary cannot carry a value no module.json could.
+        from . import compositions
+        compositions._origin(declaration.get("origin"), f"{where}: {name} declaration")
+        compositions._donor(declaration.get("donor"), f"{where}: {name} declaration")
     evidence_state = entry.get("evidence_state", "none")
     if evidence_state not in EVIDENCE_STATES:
         raise Failure(INPUT_INVALID, f"{where}: {name} evidence_state is one of {list(EVIDENCE_STATES)}",

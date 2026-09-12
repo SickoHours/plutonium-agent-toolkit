@@ -161,6 +161,13 @@ class RegistryFileTests(RegistryFixture):
         code, row = invoke(["registry", "show", "someone/icr"])
         self.assertEqual(row["result"]["listings"][0]["evidence_state"], "offline-verified")
         self.assertEqual(row["result"]["listings"][0]["declaration"]["origin"], "bo3")
+        # A summary is held to the declaration's constraints: no spaced origin, no multiline or oversize donor.
+        for bad in ({"origin": "Black Ops III"}, {"donor": "line one\nline two"}, {"donor": "x" * 401}):
+            broken = entry_row(name="someone/bad", declaration={"id": "bad", "version": "0.1.0", "title": "Bad", "category": "weapons",
+                                                                "bases": ["stock"], "maps": ["zm_transit"], **bad})
+            code, row = invoke(["registry", "add", str(self.write_registry(registry_file([broken]), name="bad.json"))])
+            self.assertEqual(code, 1, row)
+            self.assertEqual(row["error_code"], "input_invalid")
 
     def test_add_from_https_and_re_add_replaces(self):
         data = registry_file()
