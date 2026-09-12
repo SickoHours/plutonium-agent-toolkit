@@ -9,9 +9,9 @@ adapters in ``scripts.py``, ``fastfiles.py``, ``projects.py``, ``media.py`` and 
 from __future__ import annotations
 
 USAGE = [
-    {"routes": ["gsc compile", "gsc decompile", "project build", "module build"], "executable": "gsc", "source": "dev/scripts.py, dev/projects.py",
-     "argv": ["gsc-tool", "-m", "<comp|decomp>", "-g", "<t6|iw5>", "-s", "pc", "-i", "<server|client>", "[-w <includes>]", "<script>"],
-     "checks": "exit status, error lines in the log, non-empty output files"},
+    {"routes": ["gsc compile", "gsc check", "gsc decompile", "project build", "module build"], "executable": "gsc", "source": "dev/scripts.py, dev/projects.py",
+     "argv": ["gsc-tool", "-m", "<comp|decomp>", "-g", "<t6|iw5>", "-s", "pc", "-i", "<server|client>", "[-y]", "[-w <includes>]", "<script>"],
+     "checks": "exit status, error lines in the log, non-empty output files (compile); log only (check, -y: T6 packs the bytecode, IW5 packs the source)"},
     {"routes": ["ff link", "project build", "module build"], "executable": "linker", "source": "dev/fastfiles.py",
      "argv": ["Linker", "--no-color", "--base-folder", "<project>", "--output-folder", "<out>/packages",
               "[--add-asset-search-path <dir>]...", "[-l <zone.ff>]...", "<zone>"],

@@ -1,4 +1,4 @@
-"""Plutonium Agent Toolkit: agent-native tools for Plutonium T6 Zombies modding.
+"""Plutonium Agent Toolkit: agent-native tools for Plutonium T6 Zombies and IW5 (Modern Warfare 3) modding.
 
 The development (file) tools run on Windows and Linux; game control is Windows-only.
 

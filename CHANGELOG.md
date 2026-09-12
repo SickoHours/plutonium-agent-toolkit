@@ -52,6 +52,26 @@ Every entry states what shipped, on which platform it was verified, and what rem
   may hold 128 members and 1024 recorded decisions (were 32 and 256); seeds no longer count
   against the 32-load cap. Reference rows in a listing (`type, ,name`) are not base-owned. `plan` and `build` report `base_owned_names`.
 
+- **IW5 (Modern Warfare 3) as a second title for the development tools.** `dev/titles.py` holds
+  the per-title facts (gsc-tool token, script form, instances, modes, zone header, fastfile
+  magic, storage key, browse taxonomy) so one code path serves both games. `gsc compile|check|
+  decompile`, `project init`, `image convert` and `module declare` take `--game`; recipes,
+  `module.json` and `composition.json` accept `game` (default `t6`); a composition refuses mixed
+  titles and validates `kind` per title. **Scripts ship as source on IW5**: Plutonium IW5
+  compiles GSC itself and runs no gsc-tool bytecode, so `project build` and `module build` pack
+  the text and run the new `gsc check` (the compiler's dry run) as the gate; T6 is unchanged. IW5
+  is `mp` and `server` only. `game install-mod` reads the fastfile magic (`TAff`, `IWffu100`) and
+  routes to `plutonium_storage_t6` or the new `plutonium_storage_iw5`, printing the IW5 console
+  line since that title has no Mods menu. `ff inspect` reports the game OpenAssetTools read and
+  names the zone-version-2000 trap for the Plutonium-shipped IW5 zones. New pages
+  `docs/knowledge/iw5.md` (the loading contract from primary sources), `docs/knowledge/iw5-tools.md`
+  (every IW5 tool, what OpenAssetTools builds from source, how an agent drives the rest) and
+  `docs/playbooks/build-an-iw5-mod.md`; `examples/hello-iw5`; `tests/test_iw5.py`. Verified
+  offline on Linux and Windows with the pinned backends (`IWffu100` linked, read back as
+  `Loaded zone "mod" (IW5)`, source rawfile byte-identical); nothing has run in an IW5 client and
+  `docs/SUPPORT.md` grades every IW5 row `implemented`. Started from a community pull request
+  (#40) whose compiled-script route was replaced.
+
 - **Weapon-camo, weapon-aim, attachment and BO3 audio knowledge.** Four pages distilled from an
   authoring workspace's T6 port cycle. `docs/knowledge/weapon-camo.md` records how a `weaponCamo`
   asset renders (`materialOverrides`, per-gun `shaderConsts[0..1]` UV tiling scaled by measured UV

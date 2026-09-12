@@ -55,6 +55,10 @@ verified, installed, launched, playable, captured, accepted. Words are defined i
   Every control is one of the routes above with its own receipt; `docs/CONTROL-PLANE.md`.
 - **Something broke in the game** (menu return, close, dialog): **`pat-diagnose`**. It builds a
   red loop before theorising and ends by adding the gate that would have caught it.
+- **The target is Modern Warfare 3 (IW5)**: `docs/knowledge/iw5.md` first (source scripts, no
+  Mods menu, multiplayer only), `docs/knowledge/iw5-tools.md` for what exists beyond the pinned
+  backends, then `docs/playbooks/build-an-iw5-mod.md` (`pat gsc check`, `pat project build`,
+  `pat game install-mod`, then the console line). No live route exists for IW5.
 - **First time on this machine**: `docs/playbooks/first-build.md`, then the setup prompt in the
   repository root if backends are missing; `pat dev install-skills` puts these skills where the
   harnesses on the machine read them.

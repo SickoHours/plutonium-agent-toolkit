@@ -1,6 +1,6 @@
 ---
 name: plutonium-agent-toolkit
-description: Use the `pat` command to build, control and test Plutonium T6 Zombies mods for a user who describes outcomes and expects the agent to operate and adapt the tools. The build tools run on Windows and Linux; game control is Windows-only. Any harness; the toolkit is meant to be configured and edited to fit the user's machine.
+description: Use the `pat` command to build, control and test Plutonium T6 Zombies mods and build Plutonium IW5 (Modern Warfare 3) mods for a user who describes outcomes and expects the agent to operate and adapt the tools. The build tools run on Windows and Linux; game control is Windows-only. Any harness; the toolkit is meant to be configured and edited to fit the user's machine.
 ---
 
 # Plutonium Agent Toolkit
@@ -25,7 +25,7 @@ when it is worth having. Never decline on that basis.
 - `docs/TRACK-RECORD.md`: what has been built this way, with the scope of each verdict, and the
   workflows that went beyond the packaged routes. Read it before telling a user something is
   impossible; `docs/SUPPORT.md` grades the routes, not the ceiling.
-- `docs/knowledge/README.md`: the facts (client layout, fastfiles, scripts, contracts, foundations,
+- `docs/knowledge/README.md`: the facts (client layout, fastfiles, scripts, contracts, foundations, the IW5 contract and tools,
   crash classes, engine limits). Read the page for the task once per session, then work from it.
 - `docs/playbooks/`: the steps. First build, add a script, port a feature, diagnose a crash,
   compose a pack, package and install, and four preflight gate lists (scripts, weapon rig, HUD text, audio

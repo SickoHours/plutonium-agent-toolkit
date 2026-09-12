@@ -1,4 +1,4 @@
-"""``project init|plan|build|verify``: a declarative recipe for a T6 Zombies mod.
+"""``project init|plan|build|verify``: a declarative recipe for a T6 Zombies or IW5 multiplayer mod.
 
 Recipe (``project.json``, schema 1)::
 
@@ -33,7 +33,7 @@ ZONE_PART = re.compile(r"^[A-Za-z0-9_.-]{1,255}\Z")
 MAX_SCRIPTS, MAX_ASSETS, MAX_LOADS = 128, 4096, 32
 
 INIT_SCRIPT = '''// Created by pat project init. Prints to each player once they spawn.
-// Uses only engine builtins so it compiles offline without T6 include files.
+// Uses only engine builtins so gsc-tool accepts it offline without the game's include files.
 
 main()
 {
@@ -131,6 +131,9 @@ def load_recipe(path: Path, job: Job) -> tuple[dict, list, list, list]:
         want = ".csc" if instance == "client" else ".gsc"
         if instance not in scripts.INSTANCES or target.suffix != want:
             raise Failure(INPUT_INVALID, f"Script target {target.as_posix()} must end in {want} for instance {instance}")
+        if instance not in titles.instances(data["game"]):
+            raise Failure(INPUT_INVALID, f"Game {data['game']} has no {instance} script instance: {target.as_posix()}",
+                          "IW5 has one server VM; there is no .csc client script on that title.")
         source = _rel(row["source"], base)
         if source.suffix != want:
             raise Failure(INPUT_INVALID, f"Script source {row['source']} must end in {want}")
@@ -198,17 +201,21 @@ def _build(data, compiled, loose, loads, plan, args, job: Job) -> dict:
     # hello_zm.ff renamed to mod.ff could not be inflated by OpenAssetTools and hung the client.
     lines = [f"> game,{zone['game_token']}", f"> name,{zone_name}"]
     rawfiles = []
+    # T6 executes gsc-tool's bytecode, so the compiled file is the rawfile. Plutonium IW5 compiles
+    # GSC source itself and never runs gsc-tool bytecode: the source is the rawfile and gsc-tool
+    # runs as a dry-run syntax gate (`gsc check`). docs/knowledge/iw5.md.
+    action = "compile" if titles.script_form(game) == "compiled" else "check"
     for index, (source, target, instance) in enumerate(compiled):
-        child = Job(job.root / f"script-{index:03d}", "gsc compile", ["pat", "gsc", "compile", str(source)],
+        child = Job(job.root / f"script-{index:03d}", f"gsc {action}", ["pat", "gsc", action, str(source)],
                     timeout=max(1, int(job.deadline - __import__("time").monotonic())))
         try:
-            result = scripts.execute(SimpleNamespace(action="compile", input=str(source), instance=instance,
+            result = scripts.execute(SimpleNamespace(action=action, input=str(source), instance=instance,
                                                      game=game, includes=str(source.parent), timeout=args.timeout), child)
             child.finish(result)
         except Failure as exc:
             child.fail(exc)
             raise
-        produced = child.root / result["files"][0]
+        produced = child.root / result["files"][0] if result["files"] else source
         dest = raw / target
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(produced, dest)
@@ -234,8 +241,9 @@ def _build(data, compiled, loose, loads, plan, args, job: Job) -> dict:
         restored = job.root / "readback" / rel
         if not restored.is_file() or sha256_file(raw / rel) != sha256_file(restored):
             raise Failure(BACKEND_FAILED, f"Rawfile did not round-trip through the fastfile: {rel.as_posix()}")
-    return {**link, "plan": "plan.json", "game": game, "rawfiles_verified": len(rawfiles), "mod_ff": link["packages"][0]["path"],
-            "install_hint": f"pat game install-mod <output>/{link['packages'][0]['path']} {data['name']}  (keeps the name mod.ff; a renamed fastfile cannot be read). Loading it in game is a separate, authorized step"}
+    return {**link, "plan": "plan.json", "game": game, "script_form": titles.script_form(game),
+            "rawfiles_verified": len(rawfiles), "mod_ff": link["packages"][0]["path"],
+            "install_hint": f"pat game install-mod <output>/{link['packages'][0]['path']} {data['name']}  (keeps the name mod.ff; a renamed fastfile cannot be read; the folder goes under the storage of game {game}). Loading it in game is a separate, authorized step"}
 
 
 def _verify(args, job: Job) -> dict:
@@ -275,7 +283,7 @@ def execute(args, job: Job) -> dict:
         (job.root / "scripts" / f"{args.name}.gsc").write_text(INIT_SCRIPT.replace("{name}", args.name), encoding="utf-8")
         (job.root / "README.txt").write_text(f"{args.name}: created by pat project init.\n", encoding="utf-8")
         recipe = {"schema": 1, "game": args.game, "mode": mode, "name": args.name,
-                  "scripts": [{"source": f"scripts/{args.name}.gsc", "target": f"scripts/{mode}/{args.name}.gsc", "instance": "server"}],
+                  "scripts": [{"source": f"scripts/{args.name}.gsc", "target": titles.script_target(args.game, args.name), "instance": "server"}],
                   "assets": [{"source": "README.txt", "target": "README.txt", "type": "rawfile"}], "loads": []}
         (job.root / "project.json").write_text(json.dumps(recipe, indent=2) + "\n", encoding="utf-8")
         return {"recipe": "project.json", "next": ["pat project plan <dir>/project.json --output <new dir>"]}

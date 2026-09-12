@@ -117,7 +117,7 @@ def add_parser(sub, common):
     q = actions.add_parser("declare", help="Read a prebuilt mod.ff back and draft its seed manifest and declaration")
     q.add_argument("package", help="Path to a mod.ff (soundbanks beside it are hashed too)")
     q.add_argument("--load", action="append", default=[], help="Base fastfile the package references; repeat as needed")
-    q.add_argument("--game", choices=titles.names(), default=titles.DEFAULT_TITLE, help="Title the package targets (default t6)")
+    q.add_argument("--game", choices=titles.names(), default=None, help="Title the package targets; inferred from the fastfile magic when omitted")
     q.add_argument("--id", help="Module id for the draft declaration")
     q.add_argument("--title", help="Display title for the draft")
     q.add_argument("--category", help="Category for the draft (weapons, perks, ...)")
@@ -763,16 +763,17 @@ def _build_composition(comp: dict, plan: dict, compiled, loose, seed_modules, lo
             continue
         if key in staged_targets:
             continue
-        child = Job(job.root / f"script-{index:03d}", "gsc compile", ["pat", "gsc", "compile", str(source)],
+        action = "compile" if titles.script_form(game) == "compiled" else "check"
+        child = Job(job.root / f"script-{index:03d}", f"gsc {action}", ["pat", "gsc", action, str(source)],
                     timeout=max(1, int(job.deadline - __import__("time").monotonic())))
         try:
-            result = scripts.execute(SimpleNamespace(action="compile", input=str(source), instance=instance,
+            result = scripts.execute(SimpleNamespace(action=action, input=str(source), instance=instance,
                                                      game=game, includes=str(source.parent), timeout=args.timeout), child)
             child.finish(result)
         except Failure as exc:
             child.fail(exc)
             raise
-        produced = child.root / result["files"][0]
+        produced = child.root / result["files"][0] if result["files"] else source
         dest = raw / target
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(produced, dest)

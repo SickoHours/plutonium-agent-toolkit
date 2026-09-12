@@ -1,4 +1,4 @@
-# T6 and Plutonium knowledge for agents
+# T6, IW5 and Plutonium knowledge for agents
 
 Read these once per session, before the first `pat` command that builds or changes anything, and
 work from them. They hold the engine and client facts that are expensive to rediscover by trial
@@ -15,7 +15,9 @@ uses are defined once in [`../../CONTEXT.md`](../../CONTEXT.md); read it before 
 | [zombies-contracts.md](zombies-contracts.md) | You add a weapon, perk, HUD element, boss or sound to a Zombies mod |
 | [foundations.md](foundations.md) | You choose what to build on, or name a test build |
 | [crashes.md](crashes.md) | The game dropped to the menu, closed, or the player said "crashed" |
-| [other-titles.md](other-titles.md) | Someone asks about Black Ops 1, World at War or Modern Warfare 3 |
+| [iw5.md](iw5.md) | The target is Modern Warfare 3 under Plutonium: what the client loads, that scripts ship as source, where a mod goes and how it is selected |
+| [iw5-tools.md](iw5-tools.md) | You need a tool for IW5 beyond the two pinned backends, or want to know what OpenAssetTools can build from source on that title |
+| [other-titles.md](other-titles.md) | Someone asks about Black Ops 1 or World at War, or how the titles differ |
 | [prior-art.md](prior-art.md) | You were asked for a feature and no donor or source is on disk |
 | [bo3-workshop-formats.md](bo3-workshop-formats.md) | A Black Ops III Workshop map is the donor: what its fastfile, XPAK and sound banks are and how much reads offline on Linux |
 | [weapon-camo.md](weapon-camo.md) | You port a Pack-a-Punch camo, or a ported gun renders the wrong camo |

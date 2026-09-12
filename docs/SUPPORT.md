@@ -45,23 +45,27 @@ on Windows only; the Cast add-on anywhere. Where a platform has no pin, `dev set
 ## Titles: T6 and IW5
 
 The development routes accept two games, selected by the recipe/declaration `game` field and by
-`--game` on `gsc` and `project init`. Everything graded below has been earned for **T6** (Black
-Ops II Zombies). **IW5** (Modern Warfare 3) is newer, and proven for one scope only:
+`--game` on `gsc`, `project init`, `image convert` and `module declare`. Everything graded below
+has been earned for **T6** (Black Ops II Zombies). **IW5** (Modern Warfare 3, Plutonium
+multiplayer) is newer; its contract is in `docs/knowledge/iw5.md` and every row here stops at
+offline until a receipt from a host with the game is checked in.
 
 | Item | Status |
 | --- | --- |
-| IW5 `gsc compile`, `ff inspect`, `project build` | native. On Windows 11 x64 (build 26200) with the pinned gsc-tool 1.4.10 and OpenAssetTools 0.33.0, `project build` compiled the script with `-g iw5`, the Linker wrote an `IWff` fastfile (magic `49 57 66 66`, distinct from T6's `TAff`), and the Unlinker read it back as `Loaded zone "mod" (IW5)`. `examples/hello-iw5` (one rawfile) round-tripped byte-identical. |
-| IW5 asset types from loose source: `rawfile`, `stringtable`, `image` | native. One build carried a compiled GSC rawfile, a `stringtable` from a CSV, and an `image` from a real MW3 `.iwi` (the texture is not redistributed here); the Linker logged `Loaded stringtable ... (src: disk)` and `Loaded image ... (src: disk)` and the Unlinker listed all three in the IW5 zone. |
-| IW5 load-and-carry: `xmodel`, `material`, `sound`, `loadedsound`, `menu`, `weapon` | native, via `ff link --load`. Naming these as roots against a loaded stock zone (`common_mp.ff`, `ui_mp.ff`) copied each one plus its full dependency graph into a new IWff: a weapon (`cobra_20mm_mp`) pulled its xmodels, materials, images, shaders, fx, tracer, physpreset and sound; a material pulled its techset and image. Read back clean as `Loaded zone "mod" (IW5)`, 0 errors. Confirms the OAT asset-type spellings for IW5 (`loadedsound` is one word; `menu`/`menulist`, `xmodelsurfs`, `attachment`, `physcollmap`). |
-| IW5 `module declare` / composition build | native, including a weapon pack. A real IW5 `mod.ff` was declared as a seed (`--game iw5`, drafting `game: iw5` and its roots), then `module build` composed the seed with a recipe module into one `mod.ff` carrying the seed's roots and the freshly compiled script, read back clean as `Loaded zone "mod" (IW5)`. Proven both for a self-contained seed (rawfile + stringtable) and for a weapon seed (`cobra_20mm_mp`, 20 roots, 18 external base references) composed with `common_mp.ff` loaded so the references resolved; the readback held the weapon, its full dependency graph and the script. |
-| IW5 zone token / mode | confirmed. `> game,IW5`, zone name `mod` and the `mod.ff` binding produced a readable IWff fastfile. Mode `mp` and the browse taxonomy are the toolkit's own metadata, not read back from the engine. |
-| IW5 map patches, and any in-game effect | not qualified. Patching an existing map zone is a separate flow, untested; nothing here has been loaded in a running IW5 match or playtested. |
-| IW5 `weapon` routes | none. `weapon` is a BO3→T6 porter (Pack-a-Punch/wonder-weapon model); it does not map to MW3 and refuses non-`t6` recipes. |
-| IW5 game control and capture | unsupported. The Win32 console transport is written for the T6 window and command vocabulary; only `plutonium_storage_iw5` is reserved in config. No `game` or `accepted` level for IW5. |
+| IW5 `gsc check`, `project build`, `ff inspect` | implemented, offline. With the pinned gsc-tool 1.4.10 and OpenAssetTools 0.33.0 on Linux and on Windows 11, `project build examples/hello-iw5` runs the compiler's dry run on the script, packs the source as the rawfile, links an `IWffu100` fastfile (`> game,IW5`, zone version 1) and reads it back as `Loaded zone "mod" (IW5)` with the rawfile byte-identical to the source. No receipt is checked in yet; `docs/playbooks/qualify-on-this-host.md` records one. |
+| IW5 script form | source, by primary evidence, unmeasured in a client here. Plutonium IW5 compiles GSC itself and runs no gsc-tool bytecode (`docs/knowledge/iw5.md`). A prior branch packed the bytecode and was not merged for that reason. Whether a rawfile at `scripts/<name>.gsc` inside `mod.ff` is autoloaded has no receipt; the engine-path override (`maps/mp/gametypes/<gt>.gsc`) is the proven fastfile route. |
+| IW5 asset types from loose source: `rawfile`, `stringtable`, `image` | implemented, offline. Reported from a contributor's Windows run: a `stringtable` from CSV and an `image` from a real IWI version 8 linked and listed back in the IW5 zone. Not reproduced here; no receipt. |
+| IW5 load-and-carry: `xmodel`, `material`, `sound`, `loadedsound`, `menu`, `weapon` | implemented, offline. Reported from the same run: roots named against the game's `common_mp.ff` and `ui_mp.ff` were copied with their dependency graphs and read back with 0 errors. The Plutonium-shipped `storage/iw5/zone/*.ff` cannot be loaded (zone version 2000); the toolkit's readback hint says so. |
+| IW5 `module declare` / composition build | implemented, offline (`tests/test_iw5.py` on the fake backends; a contributor's Windows run composed a weapon seed with a recipe module). `declare` infers `iw5` from the fastfile magic. |
+| IW5 `game install-mod` | implemented, offline. The fastfile magic selects `plutonium_storage_iw5`; the receipt names the game and prints the console line (`fs_game mods/<folder>`). Nothing sends it. |
+| IW5 modes and instances | `mp` only, `server` only. Plutonium IW5 has no Spec Ops or campaign and no client script VM; recipes naming `sp` or a `.csc` are refused. |
+| IW5 `weapon` routes | none. `weapon catalog|plan` is a BO3 to T6 porter and refuses non-`t6` recipes. |
+| IW5 custom audio | none. OpenAssetTools has no IW5 `sound` or `loadedsound` source loader; `docs/knowledge/iw5-tools.md` names ZoneTool and `.iwd` as the routes outside the toolkit. |
+| IW5 game control and capture | unsupported. The Win32 console transport is written for the T6 window and vocabulary. No `game` or `accepted` level for IW5. |
 
-gsc-tool and OpenAssetTools are the same pinned binaries for both games, so no new backend pin was
-required for IW5; the title is selected at call time. The native pass above was a plain
-`pat project build` run; reproduce it with the commands in `examples/hello-iw5/README.md`.
+gsc-tool and OpenAssetTools are the same pinned binaries for both games; the title is selected at
+call time. Reproduce the offline pass with the commands in `examples/hello-iw5/README.md` and
+`docs/playbooks/build-an-iw5-mod.md`.
 
 ## Receipts are per host; the routes are not
 

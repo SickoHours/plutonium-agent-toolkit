@@ -6,7 +6,7 @@
   "scripts": [
     {
       "source": "scripts/hello.gsc",
-      "target": "scripts/mp/hello_iw5.gsc",
+      "target": "scripts/hello_iw5.gsc",
       "instance": "server"
     }
   ],

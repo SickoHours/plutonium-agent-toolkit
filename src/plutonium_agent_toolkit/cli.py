@@ -4,7 +4,7 @@
     pat manifest
     pat describe <group> <action>
     pat doctor
-    pat configure --plutonium-storage-t6 <abs path> [--plutonium-launcher <abs path>] ...
+    pat configure --plutonium-storage-t6 <abs path> [--plutonium-storage-iw5 <abs path>] [--plutonium-launcher <abs path>] ...
     pat dev backends
     pat dev setup [--plan] [--only ID ...]
     pat dev install-skills [--plan] [--only HARNESS ...] [--home DIR] [--source CHECKOUT]
@@ -149,7 +149,7 @@ def build_parser() -> Parser:
 
     _mcp_cli.add_parser(sub)
 
-    g = sub.add_parser("game", help="Plutonium T6 Zombies control through the external console")
+    g = sub.add_parser("game", help="Plutonium T6 Zombies control through the external console; install-mod also places IW5 packages")
     g.add_argument("action", choices=sorted(r.action for r in routes() if r.group == "game"))
     g.add_argument("argument", nargs="?", help="Mod folder ID, map ID, load ID or (install-mod) mod.ff path")
     g.add_argument("argument2", nargs="?", help="install-mod only: destination folder ID")

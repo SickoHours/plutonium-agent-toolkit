@@ -43,7 +43,9 @@ SKIP = {"Loaded", "Loading", "Failed", "Unloaded", "Loading", "Zone", "Content",
 # Asset types the linker copies out of a loaded fastfile when named as a root. Every other embedded
 # asset arrives as a dependency of one of these; naming the leaves too is harmless but noisy.
 ROOT_TYPES = ("weapon", "soundbank", "xanim", "xmodel", "material", "fx", "rawfile", "localize", "image",
-              "techniqueset", "menu", "menulist", "font", "stringtable", "tracer", "physpreset", "physconstraints")
+              "techniqueset", "menu", "menulist", "font", "stringtable", "tracer", "physpreset", "physconstraints",
+              # IW5 (docs/knowledge/iw5.md): compiled scripts, weapon attachments, leaderboards, vehicles.
+              "scriptfile", "attachment", "leaderboard", "vehicle")
 # Types that only ever come from the base or are generated per zone: never roots.
 NEVER_ROOTS = {"keyvaluepairs", "localize", "techniqueset", "image"}
 MAX_ASSETS = 8192
@@ -101,7 +103,7 @@ STRING_REF = re.compile(r"^[A-Z0-9_]{1,128}\Z")
 
 
 def parse_strings(text: str, owner: str) -> dict[str, str]:
-    """A T6 localized-strings file (REFERENCE / LANG_ENGLISH pairs) to a mapping; anything else is refused."""
+    """A localized-strings file (REFERENCE / LANG_ENGLISH pairs; the same format on T6 and IW5) to a mapping; anything else is refused."""
     rows: dict[str, str] = {}
     ref = None
     for raw in text.splitlines():
@@ -160,7 +162,7 @@ def load_manifest(directory: Path, relative: str, job: Job, owner: str, allow_mi
     package = data["package"]
     if package != "mod.ff" or package not in files:
         raise Failure(INPUT_INVALID, f"{owner}: a seed package is named mod.ff and listed under files",
-                      "A T6 fastfile is bound to its file name; a seed built as another zone cannot be linked against as mod.")
+                      "A fastfile is bound to its file name on T6 and IW5; a seed built as another zone cannot be linked against as mod.")
     seed_dir = src.parent
     hashed: dict[str, Path] = {}
     missing: list[str] = []
@@ -216,13 +218,21 @@ def declare(package: Path, args, job: Job) -> dict:
     src = job.input(package, limit=MAX_PACKAGE)
     if src.name != "mod.ff":
         raise Failure(INPUT_INVALID, "Point module declare at a file named mod.ff",
-                      "A T6 fastfile is bound to its file name; rename nothing, copy the package as mod.ff beside its soundbanks.")
+                      "A fastfile is bound to its file name on T6 and IW5; rename nothing, copy the package as mod.ff beside its soundbanks.")
+    with src.open("rb") as fh:
+        sniffed = titles.title_of_magic(fh.read(8))
+    game = getattr(args, "game", None) or sniffed or titles.DEFAULT_TITLE
+    titles.get(game)  # reject an unknown title before any backend runs
+    if sniffed and sniffed != game:
+        raise Failure(INPUT_INVALID, f"--game {game} but the fastfile magic is {sniffed}'s",
+                      "Drop --game to let the magic decide, or point declare at the right package.")
     banks = sorted(p for p in src.parent.iterdir() if p.is_file() and not p.is_symlink() and BANK.match(p.name))
     inspect = fastfiles.execute(SimpleNamespace(action="inspect", input=str(src), load=list(args.load or []), timeout=args.timeout), job)
     listing = (job.root / inspect["inventory_log"]).read_text(encoding="utf-8", errors="replace")
     embedded, referenced = parse_listing(listing)
     if not embedded:
-        raise Failure(INPUT_INVALID, "The package lists no embedded assets; is this a T6 mod fastfile?")
+        raise Failure(INPUT_INVALID, "The package lists no embedded assets; is this a mod fastfile OpenAssetTools can read?",
+                      "Zones Plutonium itself ships for IW5 (storage/iw5/zone/*.ff) are zone version 2000, which OpenAssetTools 0.33.0 cannot open; declare a mod.ff, not those.")
     roots = roots_of(embedded)
     files = {"mod.ff": sha256_file(src)}
     for bank in banks:
@@ -245,8 +255,6 @@ def declare(package: Path, args, job: Job) -> dict:
     (job.root / "seed.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     weapons = manifest["provides"].get("weapons", [])
     mid = re.sub(r"[^a-z0-9_]", "_", (args.id or (weapons[0] if weapons else src.parent.name)).lower())[:64] or "module"
-    game = getattr(args, "game", None) or titles.DEFAULT_TITLE
-    titles.get(game)  # reject an unknown title before writing the draft
     draft = {
         "schema": 1, "id": mid, "version": "0.1.0", "game": game, "title": args.title or mid,
         "category": args.category or ("weapons" if weapons else "module"),

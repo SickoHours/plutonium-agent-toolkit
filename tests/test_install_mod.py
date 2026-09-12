@@ -29,7 +29,7 @@ class InstallFixture(unittest.TestCase):
         invoke(["configure", "--plutonium-storage-t6", str(self.storage)])
         self.mod_ff = self.root / "build" / "packages" / "mod.ff"
         self.mod_ff.parent.mkdir(parents=True)
-        self.mod_ff.write_bytes(b"FASTFILE")
+        self.mod_ff.write_bytes(b"TAff" + b"FASTFILE")
 
 
 
@@ -38,16 +38,16 @@ class InstallModTests(InstallFixture):
         code, row = invoke(["game", "install-mod", str(self.mod_ff), "hello_zm"])
         self.assertEqual(code, 0, row)
         dest = self.storage / "mods" / "hello_zm" / "mod.ff"
-        self.assertEqual(dest.read_bytes(), b"FASTFILE")
-        self.assertEqual(row["result"]["sha256"], hashlib.sha256(b"FASTFILE").hexdigest())
+        self.assertEqual(dest.read_bytes(), b"TAff" + b"FASTFILE")
+        self.assertEqual(row["result"]["sha256"], hashlib.sha256(b"TAff" + b"FASTFILE").hexdigest())
         self.assertFalse(row["result"]["game_touched"])
         code, row = invoke(["game", "install-mod", str(self.mod_ff), "hello_zm"])
         self.assertEqual(row["error_code"], "output_exists")
-        self.assertEqual(dest.read_bytes(), b"FASTFILE")
-        self.mod_ff.write_bytes(b"NEWER")
+        self.assertEqual(dest.read_bytes(), b"TAff" + b"FASTFILE")
+        self.mod_ff.write_bytes(b"TAffNEWER")
         code, row = invoke(["game", "install-mod", str(self.mod_ff), "hello_zm", "--replace"])
         self.assertEqual(code, 0, row)
-        self.assertEqual(dest.read_bytes(), b"NEWER")
+        self.assertEqual(dest.read_bytes(), b"TAffNEWER")
         self.assertTrue(Path(row["result"]["backup"]).joinpath("mod.ff").is_file(), "old folder moved aside, not deleted")
         code, row = invoke(["game", "mods"])
         self.assertTrue(row["result"]["mods"][0]["available"])
@@ -80,7 +80,7 @@ class InstallModReplaceSafetyTests(InstallFixture):
         installed = self.storage / "mods" / "hello_zm" / "mod.ff"
         code, row = invoke(["game", "install-mod", str(installed), "hello_zm", "--replace"])
         self.assertEqual(code, 0, row)
-        self.assertEqual(installed.read_bytes(), b"FASTFILE")
+        self.assertEqual(installed.read_bytes(), b"TAff" + b"FASTFILE")
 
     def test_replace_restores_backup_when_the_copy_fails(self):
         from unittest.mock import patch
@@ -89,11 +89,11 @@ class InstallModReplaceSafetyTests(InstallFixture):
 
         invoke(["game", "install-mod", str(self.mod_ff), "hello_zm"])
         installed_dir = self.storage / "mods" / "hello_zm"
-        self.mod_ff.write_bytes(b"NEWER")
+        self.mod_ff.write_bytes(b"TAffNEWER")
         with patch.object(install, "sha256_file", return_value="0" * 64):
             code, row = invoke(["game", "install-mod", str(self.mod_ff), "hello_zm", "--replace"])
         self.assertEqual(row["error_code"], "hash_mismatch")
-        self.assertEqual((installed_dir / "mod.ff").read_bytes(), b"FASTFILE", "previous install restored")
+        self.assertEqual((installed_dir / "mod.ff").read_bytes(), b"TAff" + b"FASTFILE", "previous install restored")
 
     def test_extra_argument_and_replace_are_rejected_for_other_actions(self):
         code, row = invoke(["game", "select-mod", "foo", "unintended"])

@@ -1,5 +1,8 @@
 # GSC and CSC scripts
 
+This page is T6. On IW5 there is one server VM, the client compiles source itself, and gsc-tool
+is a syntax gate only: `iw5.md`.
+
 ## Two virtual machines
 
 T6 runs two script VMs. Server scripts (`.gsc`) own game rules, entities, weapons and most mod

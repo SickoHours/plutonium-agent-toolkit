@@ -1,7 +1,7 @@
 # Plutonium Agent Toolkit
 
 **Agent-native tools, knowledge and playbooks for building, controlling and testing Plutonium
-T6 Zombies mods.** You describe the result. Your coding agent researches the donor, extracts or
+T6 Zombies mods, and for building Plutonium IW5 (Modern Warfare 3) multiplayer mods.** You describe the result. Your coding agent researches the donor, extracts or
 recovers the assets, adapts the tools, builds and verifies the package, installs it and launches
 the game. You playtest and give the verdict. If your setup is unusual, the agent adapts the toolkit.
 

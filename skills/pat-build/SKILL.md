@@ -1,6 +1,6 @@
 ---
 name: pat-build
-description: Build a T6 Zombies mod with pat and prove it offline. Use when the user wants to compile a script, link a fastfile, build or verify a project recipe, or asks whether a build "works". Ends at a receipt and the applicable preflights, never at a claim about gameplay.
+description: Build a T6 Zombies or IW5 multiplayer mod with pat and prove it offline. Use when the user wants to compile a script, link a fastfile, build or verify a project recipe, or asks whether a build "works". Ends at a receipt and the applicable preflights, never at a claim about gameplay.
 ---
 
 # pat build
@@ -12,7 +12,8 @@ unfamiliar call.
 
 ## Steps
 
-1. Pick the playbook. New machine: `docs/playbooks/first-build.md`. Script change:
+1. Pick the playbook. Target IW5 (Modern Warfare 3): `docs/playbooks/build-an-iw5-mod.md`, where
+   scripts ship as source and `pat gsc check` is the gate. New machine: `docs/playbooks/first-build.md`. Script change:
    `docs/playbooks/add-a-script.md`. Several declared modules into one pack:
    `docs/playbooks/compose-a-pack.md` (`pat module plan|build`); one module onto an existing pack:
    `docs/playbooks/attach-to-a-pack.md`. Otherwise plan then build the

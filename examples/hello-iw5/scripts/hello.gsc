@@ -1,10 +1,14 @@
-// hello-iw5: prints to each player once they spawn. The IW5 counterpart of hello-zm, used to
-// exercise the build pipeline for game iw5. Uses only engine builtins (waittill, thread,
-// iprintln) that IW5 shares with T6, so gsc-tool -g iw5 compiles it offline without include files.
+// hello-iw5: prints to each player once they spawn. The IW5 counterpart of hello-zm.
+// Plutonium IW5 compiles this source itself; the toolkit packs the text and uses gsc-tool -g iw5
+// only as a dry-run syntax check. Uses only engine builtins so no include file is needed.
 
 main()
 {
     level thread on_player_connect();
+}
+
+init()
+{
 }
 
 on_player_connect()
