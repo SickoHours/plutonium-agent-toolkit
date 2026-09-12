@@ -9,9 +9,9 @@ adapters in ``scripts.py``, ``fastfiles.py``, ``projects.py``, ``media.py`` and 
 from __future__ import annotations
 
 USAGE = [
-    {"routes": ["gsc compile", "gsc decompile", "project build", "module build"], "executable": "gsc", "source": "dev/scripts.py, dev/projects.py",
-     "argv": ["gsc-tool", "-m", "<comp|decomp>", "-g", "t6", "-s", "pc", "-i", "<server|client>", "[-w <includes>]", "<script>"],
-     "checks": "exit status, error lines in the log, non-empty output files"},
+    {"routes": ["gsc compile", "gsc check", "gsc decompile", "project build", "module build"], "executable": "gsc", "source": "dev/scripts.py, dev/projects.py",
+     "argv": ["gsc-tool", "-m", "<comp|decomp>", "-g", "<t6|iw5>", "-s", "pc", "-i", "<server|client>", "[-y]", "[-w <includes>]", "<script>"],
+     "checks": "exit status, error lines in the log, non-empty output files (compile); log only (check, -y: T6 packs the bytecode, IW5 packs the source)"},
     {"routes": ["ff link", "project build", "module build"], "executable": "linker", "source": "dev/fastfiles.py",
      "argv": ["Linker", "--no-color", "--base-folder", "<project>", "--output-folder", "<out>/packages",
               "[--add-asset-search-path <dir>]...", "[-l <zone.ff>]...", "<zone>"],
@@ -24,7 +24,7 @@ USAGE = [
               "[--include-assets <types>]", "[-l <zone.ff>]...", "<fastfile>"],
      "checks": "files were written; project build byte-compares every rawfile against its source"},
     {"routes": ["image convert"], "executable": "image", "source": "dev/media.py",
-     "argv": ["ImageConverter", "--no-color", "--<t6|t5>", "<image.dds|image.iwi>"],
+     "argv": ["ImageConverter", "--no-color", "--<t6|t5|iw5>", "<image.dds|image.iwi>"],
      "checks": "a non-empty converted image exists beside the staged input"},
     {"routes": ["audio inspect", "audio convert"], "executable": "ffprobe", "source": "dev/media.py",
      "argv": ["ffprobe", "-v", "error", "-show_format", "-show_streams", "-of", "json", "<file>"],

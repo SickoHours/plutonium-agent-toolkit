@@ -29,8 +29,11 @@ AVAILABLE = [
 ]
 
 PLANNED = [
-    Route("gsc", "compile", "Compile a T6 GSC/CSC script with gsc-tool into a new output directory", "writes-output",
+    Route("gsc", "compile", "Compile a GSC/CSC script with gsc-tool into a new output directory (--game t6|iw5; T6 runs the bytecode)", "writes-output",
           status="available", owner=OWNER),
+    Route("gsc", "check", "Parse and compile a script with gsc-tool's dry run and write nothing; the syntax gate for IW5, whose client runs source", "writes-output",
+          status="implemented", owner=OWNER,
+          notes="Arguments: <script> [--game t6|iw5] [--includes <dir>]. Same diagnostics as compile; no output file."),
     Route("gsc", "decompile", "Decompile a compiled script with gsc-tool", "writes-output",
           status="available", owner=OWNER),
     Route("ff", "inspect", "List a fastfile's assets with OpenAssetTools Unlinker", "writes-output",
@@ -39,7 +42,7 @@ PLANNED = [
           status="implemented", owner=OWNER),
     Route("ff", "extract", "Extract selected assets from a fastfile", "writes-output",
           status="available", owner=OWNER),
-    Route("project", "init", "Create a minimal T6 Zombies mod project and build recipe", "writes-output",
+    Route("project", "init", "Create a minimal mod project and build recipe (--game t6 Zombies or iw5 multiplayer)", "writes-output",
           status="available", owner=OWNER),
     Route("project", "plan", "Validate a recipe and hash its declared inputs without running backends", "writes-output",
           status="available", owner=OWNER),

@@ -22,6 +22,7 @@ command, then run it. Read `docs/knowledge/` once for the facts behind the steps
 | [publish-a-module.md](publish-a-module.md) | A module or pack should be listed for others to fetch by name |
 | [attach-to-a-pack.md](attach-to-a-pack.md) | One module should be added to an existing pack, which becomes the base member of a new composition |
 | [package-and-install.md](package-and-install.md) | A build is verified and should go into the client's storage folder |
+| [build-an-iw5-mod.md](build-an-iw5-mod.md) | The target is Modern Warfare 3 (IW5): check the source, build the multiplayer package, install it under the IW5 storage and hand over the console line |
 
 Every playbook has the same five sections: **Preconditions** (what must already be true),
 **Steps** (numbered, exact commands, the receipt field that proves each), **Do not** (commands that

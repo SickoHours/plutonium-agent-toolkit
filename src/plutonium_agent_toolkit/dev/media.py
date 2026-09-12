@@ -17,7 +17,7 @@ from .backends import executable
 AUDIO_FORMATS = {"wav": "pcm_s16le", "flac": "flac", "ogg": "libvorbis", "mp3": "libmp3lame"}
 AUDIO_RATES = (8000, 11025, 16000, 22050, 32000, 44100, 48000, 96000)
 IMAGE_INPUTS = (".dds", ".iwi")
-IMAGE_GAMES = ("t6", "t5")
+IMAGE_GAMES = ("t6", "t5", "iw5")
 
 
 def add_parsers(sub, common):

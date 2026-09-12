@@ -2,7 +2,11 @@
 
 File-only. Refuses to overwrite an existing folder, hashes the source before
 and the destination after, writes an install receipt into the toolkit home and
-never touches the game. Loading the mod is a separate, authorized ``select-mod``.
+never touches the game. The fastfile's magic says which title it is for
+(``TAff`` T6, ``IWffu100`` IW5) and selects the storage key, so an IW5 package
+never lands under ``storage/t6``. Loading the mod is a separate step: on T6 the
+authorized ``select-mod``; on IW5 the console ``fs_game mods/<folder>`` or
+``loadmod <folder>``, which no route sends yet.
 """
 from __future__ import annotations
 
@@ -17,6 +21,7 @@ from ..core import config
 from ..core.envelope import now
 from ..core.errors import INPUT_INVALID, INPUT_MISSING, OUTPUT_EXISTS, Failure
 from ..core.receipts import sha256_file
+from ..dev import titles
 from .control import MOD_ID, _regular_child, state_dir
 
 
@@ -28,7 +33,18 @@ def install_mod(mod_ff: Path, folder: str, replace: bool = False) -> dict:
         raise Failure(INPUT_INVALID, "Point install-mod at a file named mod.ff (the output of project build)")
     if not isinstance(folder, str) or not MOD_ID.match(folder) or folder in (".", "..") or folder.lower().startswith("mp_"):
         raise Failure(INPUT_INVALID, "Mod folder ID uses letters, digits, dot, underscore, dash; not mp_*")
-    root = config.require("plutonium_storage_t6")
+    with src.open("rb") as fh:
+        head = fh.read(8)
+    game = titles.title_of_magic(head)
+    if game is None:
+        # No known magic: the file is not one OpenAssetTools wrote for T6 or IW5. Accept it as T6
+        # only while no IW5 storage is configured, so a machine with both never guesses.
+        if config.load().get(titles.zone("iw5")["storage_key"]):
+            raise Failure(INPUT_INVALID, f"mod.ff does not start with a known fastfile magic ({head!r}); expected TAff (T6) or IWffu100 (IW5)",
+                          "Both storages are configured, so the title must come from the file; point install-mod at the mod.ff a pat build produced.")
+        game = titles.DEFAULT_TITLE
+    zone = titles.zone(game)
+    root = config.require(zone["storage_key"])
     if not root.is_dir():
         raise Failure(INPUT_MISSING, f"Configured storage does not exist: {root}")
     mods = root / "mods"
@@ -60,10 +76,16 @@ def install_mod(mod_ff: Path, folder: str, replace: bool = False) -> dict:
             shutil.move(str(backup), str(dest_dir))
             backup = None
         raise
-    receipt = {"schema_version": 1, "at": now(), "folder": folder, "path": f"mods/{folder}/mod.ff", "sha256": dest_sha,
+    receipt = {"schema_version": 1, "at": now(), "game": game, "storage": str(root), "folder": folder,
+               "path": f"mods/{folder}/mod.ff", "sha256": dest_sha,
                "bytes": dest.stat().st_size, "source": str(src), "backup": str(backup) if backup else None,
                "game_touched": False}
     receipts = state_dir() / "installs"
     receipts.mkdir(parents=True, exist_ok=True)
     (receipts / f"{folder}-{uuid.uuid4().hex}.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
-    return {**receipt, "next": ["pat game select-mod " + folder + "   (needs authorization; loads the mod in the running game)"]}
+    if game == "t6":
+        nxt = ["pat game select-mod " + folder + "   (needs authorization; loads the mod in the running game)"]
+    else:
+        nxt = [f"In the Plutonium IW5 console: fs_game mods/{folder}  (or: loadmod {folder}); then start a private match. "
+               "No pat route sends this yet; IW5 has no Mods menu (docs/knowledge/iw5.md)"]
+    return {**receipt, "next": nxt}

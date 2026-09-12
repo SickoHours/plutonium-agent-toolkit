@@ -33,9 +33,10 @@ ROUTES = [
           notes="Argument: the load_id from the original response; valid for ten minutes."),
     Route("game", "quit", "Ask the engine to quit once and wait up to 20 s; never force-kills", "changes-game",
           status="implemented", owner=OWNER, requires_windows=True),
-    Route("game", "install-mod", "Copy a built mod.ff into storage/t6/mods/<folder>; file-only, never overwrites silently", "writes-output",
-          status="implemented", owner=OWNER, requires_config=STORAGE,
-          notes="Arguments: <path to mod.ff> <folder-id> [--replace]. Loading it is a separate select-mod."),
+    Route("game", "install-mod", "Copy a built mod.ff into storage/<game>/mods/<folder>; the fastfile magic picks t6 or iw5; file-only, never overwrites silently", "writes-output",
+          status="implemented", owner=OWNER, requires_config=[],
+          notes="Arguments: <path to mod.ff> <folder-id> [--replace]. Needs plutonium_storage_t6 or plutonium_storage_iw5 for the title the magic names. "
+                "Loading it is a separate step: select-mod on T6; the console fs_game/loadmod on IW5 (no route yet)."),
 ]
 
 for route in ROUTES:

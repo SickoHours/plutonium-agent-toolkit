@@ -19,6 +19,7 @@ from .errors import CONFIG_INVALID, CONFIG_MISSING, Failure
 
 KNOWN_KEYS = {
     "plutonium_storage_t6": "Plutonium storage\\t6 directory containing mods and main",
+    "plutonium_storage_iw5": "Plutonium storage\\iw5 directory containing mods and main",
     "plutonium_launcher": "Official plutonium.exe launcher path (optional)",
     "backends_dir": "Directory where pinned backend programs are installed (default: <home>\\backends)",
     "evidence_dir": "Directory for private run evidence (default: <home>\\evidence)",

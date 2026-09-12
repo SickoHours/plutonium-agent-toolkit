@@ -25,6 +25,9 @@ if "HIJACK_RECEIPT" in text:
     receipt = Path("receipt.json")
     receipt.unlink(missing_ok=True)
     receipt.mkdir()
+if "-y" in args:
+    print("compiled", src.name, "(dry run)")
+    sys.exit(0)
 out = Path("compiled" if mode == "comp" else "decompiled") / src.name
 out.parent.mkdir(parents=True, exist_ok=True)
 out.write_bytes(b"COMPILED:" + hashlib.sha256(text.encode()).hexdigest().encode())

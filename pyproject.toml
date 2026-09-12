@@ -5,13 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "plutonium-agent-toolkit"
 version = "0.1.0b1"
-description = "Agent-native tools for building Plutonium T6 Zombies mods on Windows and Linux; game control is Windows-only"
+description = "Agent-native tools for building Plutonium T6 Zombies and IW5 (Modern Warfare 3) mods on Windows and Linux; game control is Windows-only"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "SickoHours" }]
-keywords = ["plutonium", "call-of-duty", "black-ops-2", "modding", "agents", "gsc", "fastfile"]
+keywords = ["plutonium", "call-of-duty", "black-ops-2", "modern-warfare-3", "modding", "agents", "gsc", "fastfile"]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Environment :: Console",

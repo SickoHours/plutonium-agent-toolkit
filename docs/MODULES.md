@@ -50,9 +50,10 @@ Lives in the module's directory beside its payload. The payload is one of two th
 | `schema` | yes | `1` |
 | `id` | yes | The module's identity: lowercase letters, digits, underscore, at most 64. Other modules name it under `dependencies` and `conflicts`. Two modules in one composition cannot share an id |
 | `version` | yes | A short version string. Recorded in the plan; the toolkit does not compare versions |
+| `game` | no | The title the module targets: `t6` (default) or `iw5`. Every member of a composition targets the same game, and the recipe's `game` must match. Selects the browse taxonomy `kind` is checked against |
 | `title` | no | A display name, at most 120 characters. Defaults to the id |
-| `category` | no | The shelf a person browses: `weapons`, `perks`, `gobblegums`, `powerups`, `equipment`, `bosses`, `companions`, `maps`, `ui`, `core`, `scripts`, `audio`, `tooling`, `pack`. Defaults to `module`. Used for browsing, never for resolution |
-| `kind` | no | Narrows the category from a fixed list per category (`weapons`: `wonder`, `firearm`, `melee`, `launcher`, `special`; `perks`: `perk`, `machine`; `equipment`: `tactical`, `lethal`, `buildable`, `shield`; `bosses`: `boss`, `special-round`; `ui`: `hud`, `menu`; `core`: `inventory`, `registry`, `adapter`; and so on). A kind outside the list is refused so packs and catalogs group the same way |
+| `category` | no | The shelf a person browses. For `t6`: `weapons`, `perks`, `gobblegums`, `powerups`, `equipment`, `bosses`, `companions`, `maps`, `ui`, `core`, `scripts`, `audio`, `tooling`, `pack`. For `iw5`: `weapons`, `attachments`, `killstreaks`, `gametypes`, `perks`, `maps`, `ui`, `core`, `scripts`, `tooling`, `pack` (no `audio`: the toolkit cannot build IW5 sounds). Defaults to `module`. Used for browsing, never for resolution |
+| `kind` | no | Narrows the category from a fixed list per category and per game (t6 `weapons`: `wonder`, `firearm`, `melee`, `launcher`, `special`; iw5 `weapons`: `primary`, `secondary`, `launcher`, `melee`, `special`; and so on, defined in `dev/titles.py`). A kind outside its game's list is refused so packs and catalogs group the same way |
 | `tags` | no | Up to 16 lowercase words: a source game (`saints-row`, `bo3`), a series, a theme. Free, never validated against a list |
 | `recipe` | one of | Relative path to the module's `project.json`, inside the module directory |
 | `seed` | one of | Relative path to the module's `seed.json`, inside the module directory, with `mod.ff` and its soundbanks beside it |
@@ -132,6 +133,7 @@ Localized strings cannot be copied out of a loaded fastfile, so `declare` extrac
 | --- | --- | --- |
 | `schema` | yes | `1` |
 | `name` | yes | `<base>_<feature>_<stage>` with the composition's own `base` token and a stage of `test`, `probe`, `pack` or `pub` (`docs/knowledge/foundations.md`). It is also the install folder name |
+| `game` | no | `t6` (default) or `iw5`. Every member must target the same game; a nested composition must match. Sets the zone header (`> game,T6` or `> game,IW5`) and mode the build stamps |
 | `title`, `tags` | no | A display name and browse words for the pack itself |
 | `origin`, `donor` | no | The same two facts as on a module, for a pack that is one thing ("Ghosts weapons on TranZit" has origin `ghosts`); a pack of mixed origins leaves them out and the plan carries each member's own |
 | `base` | yes | The base token every module must declare |

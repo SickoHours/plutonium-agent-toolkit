@@ -159,7 +159,7 @@ class ExampleTests(BaselineFixture):
         code, row = self.scan(ROOT / "examples")
         self.assertIsNone(row["result"]["declaration"], "no declaration at the root of examples/")
         nested = {r["file"]: r for r in row["result"]["nested_declarations"]}
-        self.assertEqual(sorted(nested), ["hello-pack/composition.json", "hello-zm-two/module.json", "hello-zm/module.json"])
+        self.assertEqual(sorted(nested), ["hello-iw5/module.json", "hello-pack/composition.json", "hello-zm-two/module.json", "hello-zm/module.json"])
         pack = nested["hello-pack/composition.json"]
         self.assertEqual(pack["kind"], "composition")
         self.assertEqual([(m["path"], m["exists"], m["declares"]) for m in pack["members"]],

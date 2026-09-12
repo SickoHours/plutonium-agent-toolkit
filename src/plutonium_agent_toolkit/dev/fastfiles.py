@@ -46,7 +46,9 @@ def check_readback_log(log: Path) -> str:
     """Unlinker can exit zero after reporting a load failure; the log is authoritative."""
     text = log.read_bytes()[:4 * 1024 * 1024].decode("utf-8", errors="replace")
     if LOAD_FAILURE.search(text):
-        raise Failure(BACKEND_FAILED, "OpenAssetTools reported a loading failure", log=log.name)
+        hint = ("The zones Plutonium ships for IW5 under storage/iw5/zone are zone version 2000; OpenAssetTools reads version 1 only. "
+                "Load the game's own zone/english/*.ff instead." if "Could not create factory" in text else "")
+        raise Failure(BACKEND_FAILED, "OpenAssetTools reported a loading failure", hint, log=log.name)
     return text
 
 
@@ -109,9 +111,19 @@ def execute(args, job: Job) -> dict:
             argv += ["--include-assets", args.types]
     for zone in args.load:
         argv += ["-l", str(job.input(zone))]
-    log = job.run([*argv, str(src)], timeout=args.timeout)
+    try:
+        log = job.run([*argv, str(src)], timeout=args.timeout)
+    except Failure as exc:
+        log_name = exc.details.get("log")
+        if exc.code == BACKEND_FAILED and log_name and "Could not create factory" in (job.root / log_name).read_bytes()[:65536].decode("utf-8", errors="replace"):
+            raise Failure(BACKEND_FAILED, "OpenAssetTools could not open this fastfile (no zone loader for its header)",
+                          "The zones Plutonium ships for IW5 under storage/iw5/zone are zone version 2000; OpenAssetTools reads version 1 "
+                          "only. Load the game's own zone/english/*.ff instead (docs/knowledge/iw5.md).", log=log_name) from exc
+        raise
     text = check_readback_log(log)
     if args.action == "extract" and not any(p.is_file() for p in (job.root / "assets").rglob("*")):
         raise Failure(BACKEND_FAILED, "No assets were extracted", log=log.name)
+    zone = re.search(r"(?m)^Zone '[^']+' \((\w+)\)", text) or re.search(r'(?m)^Loaded zone "[^"]+" \((\w+)\)', text)
     return {"input": str(src), "inventory_log": log.name, "listing": text[:65536], "listing_truncated": len(text) > 65536,
+            "game": zone.group(1) if zone else None,
             "verification": "OpenAssetTools readback; not gameplay acceptance"}
