@@ -402,6 +402,16 @@ def entry(argv: list[str] | None = None) -> int:
     except (OSError, ValueError, KeyError, TypeError, RuntimeError) as unexpected:
         row = failure(label, Failure(OPERATION_FAILED, f"{type(unexpected).__name__}: {str(unexpected)[:400]}",
                                      "This is a toolkit defect. Report it with the command you ran."))
+    if row.get("command") == "module inspect":
+        # Keep the normal envelope and exit status, but JSON-escape lone surrogates before
+        # writing to UTF-8 stdout. Decoded field values (including exact pointers) stay intact.
+        from io import StringIO
+
+        output = StringIO()
+        code = emit(row, stream=output)
+        sys.stdout.write(output.getvalue().encode("utf-8", errors="backslashreplace").decode("utf-8"))
+        sys.stdout.flush()
+        return code
     return emit(row)
 
 

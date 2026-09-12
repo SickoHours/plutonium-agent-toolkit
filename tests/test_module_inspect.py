@@ -207,7 +207,7 @@ class InspectTests(unittest.TestCase):
                 if len(original.exception.message) > 2048:
                     self.assertIn("detail omitted due to", row["message"])
                 if omitted_pointer:
-                    self.assertIn("offending key exceeds the 2048-character diagnostic limit", row["message"])
+                    self.assertIn("offending key exceeds the diagnostic limit of 2048 UTF-16 code units", row["message"])
                 if omitted_pointer:
                     self.assertGreater(len(original.exception.details["field"]), 2048)
 
@@ -251,6 +251,76 @@ class InspectTests(unittest.TestCase):
         self.assertEqual(code, 1, row)
         self.assertIn("changed while opening", row["message"])
         self.assertIsNone(row["details"]["inspection"]["sha256"])
+
+    def test_supplementary_unicode_diagnostics_obey_utf16_limits(self):
+        def units(text):
+            return len(text.encode("utf-16-le", errors="surrogatepass")) // 2
+
+        for key, expected_field in (("\U0001f600" * 1100, "/"),
+                                    ("\U0001f600" * 1023 + "x", "/" + "\U0001f600" * 1023 + "x"),
+                                    ("\U0001f600" * 1024, "/")):
+            path = self.write(MODULE | {key: 1})
+            code, row = invoke(path)
+            self.assertEqual(code, 1, row)
+            result = row["details"]["inspection"]
+            diagnostic = result["diagnostics"][0]
+            self.assertEqual(diagnostic["field"], expected_field)
+            self.assertLessEqual(units(diagnostic["field"]), 2048)
+            self.assertLessEqual(units(diagnostic["message"]), 2048)
+            self.assertEqual(row["message"], diagnostic["message"])
+            self.assertIn("detail omitted due to", row["message"])
+            if expected_field == "/":
+                self.assertIn("offending key exceeds", row["message"])
+            self.assertEqual(result["sha256"], hashlib.sha256(path.read_bytes()).hexdigest())
+            self.assertEqual(result["validation"], "invalid")
+            self.assertIsNone(result["metadata"])
+        for char in ("\U0001f600", "\ud800", "\udfff"):
+            for limit in (2048, 200):
+                exact = char * (limit // units(char))
+                for text in (exact, exact + "x"):
+                    original = (Failure("input_invalid", text, text, field="/title") if limit == 2048
+                                else Failure(text, "Original detail", field="/title"))
+                    with patch.object(c, "validate_declaration_metadata", side_effect=original):
+                        _, row = invoke(self.write(MODULE))
+                    for field, bound in (("message", 2048), ("hint", 2048), ("error_code", 200)):
+                        self.assertLessEqual(units(row.get(field, "")), bound)
+                    if limit == 2048:
+                        if units(text) == limit:
+                            self.assertEqual((row["message"], row["hint"]), (text, text))
+                        else:
+                            self.assertIn("detail omitted due to", row["message"])
+                            self.assertIn("detail omitted due to", row["hint"])
+                        self.assertEqual((original.message, original.hint), (text, text))
+                    else:
+                        self.assertEqual(row["error_code"], text if units(text) == limit else "input_invalid")
+                        self.assertEqual(original.code, text)
+
+    def test_source_cli_preserves_escaped_lone_surrogates_without_utf8_output_errors(self):
+        env = os.environ | {"PYTHONPATH": str(ROOT / "src"), "PAT_HOME": str(self.root / "unicode-home"),
+                            "PYTHONDONTWRITEBYTECODE": "1", "PYTHONIOENCODING": "utf-8:strict"}
+        for char in ("\ud800", "\udfff"):
+            for length in (1, 2047, 2048):
+                key = char * length
+                path = self.write(MODULE | {key: 1})  # json.dumps writes escaped surrogate input.
+                proc = subprocess.run([sys.executable, "-m", "plutonium_agent_toolkit", "module", "inspect", str(path), "--json"],
+                                      env=env, cwd=self.root, capture_output=True, timeout=10)
+                self.assertEqual(proc.returncode, 1, proc.stderr)
+                self.assertEqual(proc.stderr, b"")
+                row = json.loads(proc.stdout.decode("utf-8"))
+                result = row["details"]["inspection"]
+                self.assertEqual(result["diagnostics"][0]["field"], "/" + key if length < 2048 else "/")
+                self.assertLessEqual(len(result["diagnostics"][0]["field"]), 2048)
+                self.assertLessEqual(len(row["message"]), 2048)
+                self.assertEqual(result["sha256"], hashlib.sha256(path.read_bytes()).hexdigest())
+                self.assertIsNone(result["metadata"])
+        # Serialization also preserves allowed metadata; it must not change shared validators.
+        path = self.write(MODULE | {"title": "escaped \ud800"})
+        proc = subprocess.run([sys.executable, "-m", "plutonium_agent_toolkit", "module", "inspect", str(path), "--json"],
+                              env=env, cwd=self.root, capture_output=True, timeout=10)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stderr, b"")
+        self.assertEqual(json.loads(proc.stdout.decode("utf-8"))["result"]["metadata"]["title"], "escaped \ud800")
+        self.assertFalse(Path(env["PAT_HOME"]).exists())
 
     def test_usage_failure_is_an_invocation_envelope_without_inspection(self):
         for args in (["module", "inspect", "--json"], ["module", "inspect", "module.json", "--output", "unused"]):

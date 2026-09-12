@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "pat.module-inspect/1 invocation envelope",
-  "description": "Declaration-only producer protocol. Metadata validity does not establish payload availability, buildability, compatibility or gameplay evidence. file is a local producer path. Exit-2 argument/usage failures are ordinary invocation envelopes outside this inspection protocol and have no details.inspection. Inspection diagnostic field/message and envelope message/hint are bounded to 2048 characters; error_code to 200. Overlong pointers become / with an explicit offending-key limit message; excessive prose is replaced explicitly, never silently truncated.",
+  "description": "Declaration-only producer protocol. Metadata validity does not establish payload availability, buildability, compatibility or gameplay evidence. file is a local producer path. Exit-2 argument/usage failures are ordinary invocation envelopes outside this inspection protocol and have no details.inspection. Inspection diagnostic field/message and envelope message/hint are bounded to 2048 UTF-16 code units; error_code to 200 UTF-16 code units. Supplementary characters count as two units and lone surrogates as one. JSON Schema maxLength is only a code-point upper bound; the transport enforces the stricter UTF-16 bound for JavaScript consumers. Lone surrogates are JSON-escaped on stdout without changing decoded values. Overlong pointers become / with an explicit offending-key limit message; excessive prose is replaced explicitly, never silently truncated.",
   "type": "object",
   "additionalProperties": false,
   "required": [

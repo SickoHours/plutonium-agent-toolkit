@@ -176,24 +176,32 @@ def _read_inspection(path: Path) -> bytes:
         raise Failure(INPUT_MISSING, f"Cannot read declaration: {path} ({exc})") from exc
 
 
+def _inspection_units(text: str) -> int:
+    """JavaScript string length: supplementary characters use two UTF-16 code units.
+
+    Count directly so escaped lone surrogates count as one without an encoding error.
+    """
+    return sum(2 if ord(char) > 0xFFFF else 1 for char in text)
+
+
 def _inspection_prose(text: str, notice: str = "") -> str:
     """Replace excessive detail explicitly; never return a misleading truncated value."""
-    if len(notice + text) <= MAX_INSPECTION_TEXT:
+    if _inspection_units(notice + text) <= MAX_INSPECTION_TEXT:
         return notice + text
-    return notice + f"Inspection detail omitted due to the {MAX_INSPECTION_TEXT}-character diagnostic limit."
+    return notice + f"Inspection detail omitted due to the diagnostic limit of {MAX_INSPECTION_TEXT} UTF-16 code units."
 
 
 def _inspection_failure(exc: Failure, result: dict) -> Failure:
     """Bound the inspection transport without changing shared validator failures."""
     field = exc.details.get("field", "/")
     notice = ""
-    if len(field) > MAX_INSPECTION_TEXT:
+    if _inspection_units(field) > MAX_INSPECTION_TEXT:
         field = "/"
-        notice = f"The offending key exceeds the {MAX_INSPECTION_TEXT}-character diagnostic limit; its JSON Pointer is omitted. "
+        notice = f"The offending key exceeds the diagnostic limit of {MAX_INSPECTION_TEXT} UTF-16 code units; its JSON Pointer is omitted. "
     code = exc.code
-    if len(code) > MAX_INSPECTION_CODE:
+    if _inspection_units(code) > MAX_INSPECTION_CODE:
         code = INPUT_INVALID
-        notice += f"The original error code exceeds the {MAX_INSPECTION_CODE}-character diagnostic limit and is omitted. "
+        notice += f"The original error code exceeds the diagnostic limit of {MAX_INSPECTION_CODE} UTF-16 code units and is omitted. "
     message = _inspection_prose(exc.message, notice)
     result["diagnostics"] = [{"field": field, "error_code": code, "message": message}]
     return Failure(code, message, _inspection_prose(exc.hint), inspection=result)

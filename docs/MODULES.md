@@ -52,8 +52,12 @@ unreadable, linked and oversized inputs. Invalid JSON that was read still has it
 The `file` field is the local producer path; consumers should project a suitable label for their
 caller rather than expose that path in default model output.
 
-Inspection diagnostic `field` and `message` are at most 2048 characters; `error_code` is at most
-200. If an escaped JSON Pointer exceeds the limit, the field becomes `/` and the message
+Inspection diagnostic `field` and `message` are at most 2048 UTF-16 code units; `error_code` is
+at most 200 UTF-16 code units. These match JavaScript string length: supplementary characters
+count as two units and lone surrogates as one. The schema's `maxLength` remains a code-point
+upper bound; the transport enforces the stricter UTF-16 bound for consumer compatibility.
+Lone surrogates are JSON-escaped on stdout so decoded values survive UTF-8 output unchanged.
+If an escaped JSON Pointer exceeds the limit, the field becomes `/` and the message
 explicitly says the offending key exceeds the diagnostic limit. A pointer is never truncated
 into a different key. Overlong messages and hints are replaced with a bounded notice that detail
 was omitted due to the diagnostic limit. Envelope `message`, `hint` and `error_code` have the

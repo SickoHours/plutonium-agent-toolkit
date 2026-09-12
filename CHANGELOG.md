@@ -32,10 +32,12 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 - `module inspect` accepts symlinked ancestor directories like plan/build while still refusing
   a linked declaration and checking regular-file identity. Its diagnostic field/message and
-  envelope message/hint are limited to 2048 characters, with error codes limited to 200;
+  envelope message/hint are limited to 2048 UTF-16 code units, with error codes limited to 200 units;
   explicit omission notices replace excessive detail, and overlong pointers become `/`.
   Plan/build metadata errors again include the member directory in schema/game/id context.
   Usage failures are documented as invocation errors outside the inspection protocol.
+  UTF-16 unit counting matches JavaScript consumers for supplementary Unicode; lone surrogates
+  count without encoding errors and are JSON-escaped on inspect stdout without changing values.
 
 - `docs/MODULES.md` no longer says there is no official registry repository (there is one,
   `docs/REGISTRY.md`); `publish-a-module.md` points at it. `docs/SUPPORT.md` no longer lists the
