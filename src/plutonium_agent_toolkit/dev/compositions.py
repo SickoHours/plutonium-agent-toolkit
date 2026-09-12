@@ -684,8 +684,8 @@ def execute(args, job: Job) -> dict:
             loose += l
             loads += [p for p in extra_loads if p not in loads]
     seed_modules = [by_id[mid] for mid in resolved["order"] if by_id[mid]["seed"]]
-    if len(compiled) > projects.MAX_SCRIPTS or len(loose) > projects.MAX_ASSETS or len(loads) + len(seed_modules) > projects.MAX_LOADS:
-        raise Failure(INPUT_LIMIT, f"A composition holds at most {projects.MAX_SCRIPTS} scripts, {projects.MAX_ASSETS} assets and {projects.MAX_LOADS} loads (seeds count as loads)")
+    if len(compiled) > projects.MAX_SCRIPTS or len(loose) > projects.MAX_ASSETS or len(loads) > projects.MAX_LOADS or len(seed_modules) > MAX_MODULES:
+        raise Failure(INPUT_LIMIT, f"A composition holds at most {projects.MAX_SCRIPTS} scripts, {projects.MAX_ASSETS} assets, {projects.MAX_LOADS} loads and {MAX_MODULES} seeds")
     decided, undecided = collisions(modules, loaded, decisions, comp.get("base_owned"))
     checks = _backends(compiled)
     rows = _plan_rows(modules, resolved["order"], job)

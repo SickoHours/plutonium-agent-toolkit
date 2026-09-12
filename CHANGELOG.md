@@ -49,8 +49,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
   base zones it loads; a name collision whose asset the base already carries resolves as
   `base-owned` with no decision, since both seeds got the copy by linking against the base. This
   is what a pack of modules each built alone on the same base produces by the hundred. Packs may
-  hold 128 members and 1024 recorded decisions (were 32 and 256). `plan` and `build` report
-  `base_owned_names`.
+  hold 128 members and 1024 recorded decisions (were 32 and 256); seeds no longer count against
+  the 32-load cap. `plan` and `build` report `base_owned_names`.
 
 - **Weapon-camo, weapon-aim, attachment and BO3 audio knowledge.** Four pages distilled from an
   authoring workspace's T6 port cycle. `docs/knowledge/weapon-camo.md` records how a `weaponCamo`

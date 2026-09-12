@@ -537,6 +537,13 @@ class BaseOwnedTests(SeedFixture):
         code, row = invoke(["module", "plan", str(comp), "--output", self.out()])
         self.assertEqual(row["error_code"], "input_missing")
 
+    def test_forty_seeds_plan_within_the_load_cap(self):
+        for i in range(40):
+            self.seed_module(f"gun{i:02d}", weapons=(f"gun{i:02d}_zm",), banks=(f"gun{i:02d}.all.sabl",))
+        code, row = invoke(["module", "plan", str(self.composition([f"gun{i:02d}" for i in range(40)], name="stock_forty_test")), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        self.assertEqual(row["result"]["seeds"], 40)
+
     def test_member_and_decision_caps(self):
         from plutonium_agent_toolkit.dev import compositions
         self.assertEqual(compositions.MAX_MODULES, 128)
