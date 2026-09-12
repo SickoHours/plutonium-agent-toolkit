@@ -44,7 +44,7 @@ what failed. Do not flip a route because a neighbouring one passed.
 
 ## After merging
 
-Run `python tools/bump_version.py 0.1.0b1`, commit, run `python tools/release_check.py`, tag
+Run `python tools/bump_version.py <next-version>`, commit, run `python tools/release_check.py`, tag
 with the SemVer form it prints, and push the tag. The release workflow does the rest. The
 announcement links the GitHub Release and `docs/SUPPORT.md`; it does not claim anything the
 support matrix does not.

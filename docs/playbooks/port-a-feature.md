@@ -6,8 +6,11 @@ recipe-based T6 mod, on a clean base, with every offline gate before the first l
 ## Preconditions
 
 - The destination mod has a recipe and builds (`first-build.md`).
-- The foundation is chosen and named (`docs/knowledge/foundations.md`): base plus this one
-  module is the whole test package.
+- The base is chosen from the map and named (`docs/knowledge/foundations.md`): base plus this
+  one module is the whole test package. Prefer the stock game first; a mod base is a separate
+  build with its own receipt and verdict.
+- Anything the feature calls that another module owns (a power-up, a core service) is a
+  `dependencies` entry in its `module.json`, never a copy.
 - You have read `docs/knowledge/zombies-contracts.md` for the feature's class, and the class
   preflight playbook exists for it (`preflight-weapon-rig.md`, `preflight-hud-text.md`) or you
   will write the checklist first.
@@ -63,7 +66,10 @@ recipe-based T6 mod, on a clean base, with every offline gate before the first l
 - Infer an engine limit from one observation and design to it as a budget; count what the whole
   composition uses.
 - Present a normal-only weapon as a finished port; normal plus PAP is the unit.
-- Carry the previous base's acceptance to this build.
+- Carry the previous base's acceptance to this build, or let a pack's verdict stand in for the
+  module's own.
+- Title the module after its donor pack; the title names the origin game and `donor` carries
+  the credit (`docs/MODULES.md`).
 
 ## Stop conditions
 

@@ -58,4 +58,4 @@ asking the maintainer anything. Every failure the agent hit produced an `error_c
 named the fix. Anything short of that is a finding, and each finding becomes an issue.
 
 Open the findings as issues with the `pilot` label, one per finding. The maintainer fixes them
-or documents them as known limitations in `docs/SUPPORT.md` before the beta announcement.
+or documents them as known limitations in `docs/SUPPORT.md` before the next release announcement.

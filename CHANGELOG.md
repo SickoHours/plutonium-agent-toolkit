@@ -9,6 +9,28 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Added
 
+- **`probe` composition stage.** `<base>_<feature>_probe` names a self-driving state-walk
+  profile (one module plus a script that prints what it set); `pat module plan` accepts it beside
+  `test`, `pack` and `pub`.
+
+- **Frozen, first-class bases; dependency packs; origin and donor; the probe stage.**
+  `docs/knowledge/foundations.md` and `CONTEXT.md` now state the base policy an authoring
+  workspace settled on: a base is frozen and first-class, a module that supports several
+  bases has one receipt per base, cards read declarations and receipts only; a feature that
+  is several modules ships as a dependency pack whose members declare what they call; a
+  module's title names its origin game and `donor` carries the credit; `probe` is a stage
+  beside `test`, `pack` and `pub`. `port-a-feature.md` and `attach-to-a-pack.md` carry the
+  matching preconditions and do-nots. Documentation only; no route or check changed.
+
+### Fixed
+
+- `docs/MODULES.md` no longer says there is no official registry repository (there is one,
+  `docs/REGISTRY.md`); `publish-a-module.md` points at it. `docs/SUPPORT.md` no longer lists the
+  MCP wrapper and control plane as unpackaged while grading them. The umbrella skill separates
+  route status from evidence level instead of mixing the two ladders in one sentence.
+  `PILOT-USER.md` and `REVIEWING-QUALIFICATION.md` drop a stale beta reference and a literal
+  version in a generic instruction.
+
 - **Origin, donor and evidence state, so a card can say where a thing comes from.** `module.json`
   and `composition.json` accept `origin` (one lowercase word for the game or series the identity
   comes from, or `unverified`; it drives the title, and is never defaulted to the donor) and
