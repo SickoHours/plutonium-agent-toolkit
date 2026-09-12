@@ -10,8 +10,9 @@ describe the outcome; you install, configure, run, debug and, when the defaults 
 machine, adapt the toolkit itself. It is open source and malleable on purpose.
 
 Read the repository's `AGENTS.md` and `docs/FOR-AGENTS.md` for the full contract, and
-`docs/SUPPORT.md` for what each route has actually earned (`available` = native receipt on Windows or
-Linux, `implemented` = runs but no receipt, `offline` = unit-tested only, `deferred` = out of scope).
+`docs/SUPPORT.md`, the canonical page for what each route has actually earned. Two ladders, never
+mixed: a route's status (`available`, `implemented`, `planned`, `deferred`, `unsupported`) and its
+evidence level (`contract`, `deferred`, `offline`, `native`, `game`, `accepted`).
 macOS is untested and not claimed; say so if the user is on one. On Windows or Linux, a
 development route with a receipt from the other OS only is expected to work here (Linux is the
 harder host; a Linux receipt is strong evidence for Windows): run it, adapt the adapter if the

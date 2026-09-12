@@ -64,7 +64,7 @@ CATEGORY = re.compile(r"^[a-z][a-z0-9-]{0,31}\Z")
 TAG = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}\Z")
 COMMIT = re.compile(r"^[0-9a-f]{40}\Z")
 NAME_REF = re.compile(r"^[a-z0-9][a-z0-9-]{0,38}/[a-z0-9_]{1,64}\Z")
-STAGES = ("test", "pack", "pub")
+STAGES = ("test", "probe", "pack", "pub")
 CONTRACT_FIELDS = ("threads", "entities", "hud", "network_fields")
 # The taxonomy people browse by. `category` is the shelf; `kind` narrows it; `tags` are free
 # lowercase words (a source game, a series, a theme). None of them affects resolution.
@@ -93,7 +93,9 @@ MAX_PROVIDES_NAMES = 4096
 # manifest does not list (including every name when the manifest lists none) is a contradiction.
 # Kinds the listing cannot see (perks, gobblegums, powerups, equipment, scripts) stay the declaration's.
 MANIFEST_KINDS = ("weapons", "localize", "soundbanks", "rawfiles", "models", "effects")
-MAX_MODULES = 32
+MAX_MODULES = 128
+MAX_DECISIONS = 1024
+MAX_BASE_LISTINGS = 8
 MAX_LIST = 64
 MAX_TAGS = 16
 MAX_CONTRACT = 100_000
@@ -319,11 +321,37 @@ def load_declaration(directory: Path, job: Job) -> dict:
 
 # ----- compositions ----------------------------------------------------------------------
 
+LISTING_ROW = re.compile(r"^([a-z0-9_]+),\s*([^\s,][^\n]*)$")  # embedded rows only; a reference row (type, ,name) is not a base copy
+
+
+def _base_owned(listings: list[Path]) -> set[str]:
+    """Asset names the base zones already carry, read from plain listings (one ``type,name``
+    row per line, the shape an unlinker ``--list`` prints). A reference row (``type, ,name``)
+    means the zone only points at the asset, so it is skipped: the base has no copy to win
+    with. A seed that carries an embedded name got it by linking against the base; the base
+    wins and no decision is needed. Listings are read line by line and capped at 200000 rows
+    and 64 MiB."""
+    names: set[str] = set()
+    for path in listings:
+        if path.stat().st_size > 64 * 1024 * 1024:
+            raise Failure(INPUT_LIMIT, f"Base listing is larger than 64 MiB: {path.name}")
+        rows = 0
+        for line in path.open(encoding="utf-8", errors="replace"):
+            m = LISTING_ROW.match(line.strip())
+            if not m:
+                continue
+            rows += 1
+            if rows > 200_000:
+                raise Failure(INPUT_LIMIT, f"Base listing has more than 200000 rows: {path.name}")
+            names.add(f"{m.group(1)},{m.group(2).strip()}".casefold())
+    return names
+
+
 def _decisions(value, comp_name: str) -> list[dict]:
     if value is None:
         return []
-    if not isinstance(value, list) or len(value) > 256:
-        raise Failure(INPUT_INVALID, f"{comp_name}: decisions is a list of at most 256 recorded decisions")
+    if not isinstance(value, list) or len(value) > MAX_DECISIONS:
+        raise Failure(INPUT_INVALID, f"{comp_name}: decisions is a list of at most {MAX_DECISIONS} recorded decisions")
     rows = []
     seen = set()
     for row in value:
@@ -355,7 +383,7 @@ def load_composition(path: Path, job: Job, depth: int = 0, seen: tuple = ()) -> 
     except ValueError as exc:
         raise Failure(INPUT_INVALID, f"Composition is not valid JSON: {src}") from exc
     projects._fields(data, {"schema", "name", "base", "map", "modules", "loads", "budget", "decisions", "title", "tags", "zone_header",
-                            "origin", "donor"},
+                            "origin", "donor", "base_owned"},
                      {"schema", "name", "base", "map", "modules"}, "composition")
     if data["schema"] != 1:
         raise Failure(INPUT_INVALID, "Expected a schema 1 composition")
@@ -428,13 +456,17 @@ def load_composition(path: Path, job: Job, depth: int = 0, seen: tuple = ()) -> 
     if not isinstance(load_rows, list) or len(load_rows) > projects.MAX_LOADS:
         raise Failure(INPUT_INVALID, f"loads is a list of at most {projects.MAX_LOADS} fastfiles")
     loads = [_relative_file(text, src.parent, job, "Load") for text in load_rows]
+    listing_rows = data.get("base_owned", [])
+    if not isinstance(listing_rows, list) or len(listing_rows) > MAX_BASE_LISTINGS:
+        raise Failure(INPUT_INVALID, f"base_owned is a list of at most {MAX_BASE_LISTINGS} asset listings of the base zones")
+    base_owned = _base_owned([_relative_file(text, src.parent, job, "Base listing") for text in listing_rows])
     header = data.get("zone_header", [])
     if not isinstance(header, list) or len(header) > 32 or not all(isinstance(h, str) and re.fullmatch(r">[A-Za-z0-9_.@]+,[A-Za-z0-9_.-]{0,64}", h) for h in header):
         raise Failure(INPUT_INVALID, "zone_header is a list of at most 32 linker metadata lines such as >level.ipak_read,common_zm")
     return {"name": name, "title": title, "tags": list(tags), "base": base, "map": map_id, "members": members,
             "origin": _origin(data.get("origin"), name), "donor": _donor(data.get("donor"), name),
             "zone_header": list(header), "loads": loads, "budget": _contract(data["budget"], "budget") if "budget" in data else None,
-            "decisions": _decisions(data.get("decisions"), name), "source": src}
+            "decisions": _decisions(data.get("decisions"), name), "base_owned": base_owned, "source": src}
 
 
 def flatten(comp: dict, job: Job) -> tuple[list[dict], list[Path], list[dict], list[str]]:
@@ -444,6 +476,7 @@ def flatten(comp: dict, job: Job) -> tuple[list[dict], list[Path], list[dict], l
     modules: list[dict] = []
     loads: list[Path] = list(comp["loads"])
     decisions: list[dict] = list(comp["decisions"])
+    comp.setdefault("base_owned", set())
     header: list[str] = list(comp["zone_header"])
     for member in comp["members"]:
         if member["kind"] == "module":
@@ -461,6 +494,7 @@ def flatten(comp: dict, job: Job) -> tuple[list[dict], list[Path], list[dict], l
                 modules.append(declaration)
             loads += [p for p in inner_loads if p not in loads]
             decisions += inner_decisions
+            comp["base_owned"] |= member["composition"].get("base_owned", set())
     return modules, loads, decisions, header
 
 
@@ -514,10 +548,12 @@ def resolve(comp: dict, modules: list[dict]) -> dict:
     return {"order": order, "resource_totals": totals}
 
 
-def collisions(modules: list[dict], loaded: dict[str, tuple], decisions: list[dict]) -> tuple[list[dict], list[dict]]:
+def collisions(modules: list[dict], loaded: dict[str, tuple], decisions: list[dict], base_owned: set[str] | None = None) -> tuple[list[dict], list[dict]]:
     """Every place two modules would own the same thing, as decisions. Identical bytes for the
-    same file dedupe with no decision; anything else needs an owner recorded in the recipe.
-    Returns (decided, undecided)."""
+    same file dedupe with no decision; a name the base zones already carry (``base_owned``,
+    from the composition's base listings) is the base's and resolves with no decision; anything
+    else needs an owner recorded in the recipe. Returns (decided, undecided)."""
+    base_owned = base_owned or set()
     file_owners: dict[str, list[tuple[str, str]]] = {}
     for m in modules:
         if m["recipe"] is not None:
@@ -569,6 +605,12 @@ def collisions(modules: list[dict], loaded: dict[str, tuple], decisions: list[di
             continue
         decision = recorded.get(key.casefold())
         row = {"collision": key, "kind": "name", "modules": ids}
+        # Only a seed's embedded ``asset:`` rows can be base-owned: those are copies the linker
+        # took from the base. A ``provides`` registration (weapons, models, effects, soundbanks)
+        # is a module's own claim and stays a decision even when the base carries the name.
+        if key.startswith("asset:") and key[6:].casefold() in base_owned and not decision:
+            decided.append({**row, "resolution": "base-owned; the base zone's copy is loaded", "owner": ids[0]})
+            continue
         if decision and decision["owner"] in ids:
             decided.append({**row, "resolution": "recorded decision", "owner": decision["owner"], "reason": decision["reason"]})
         elif decision:
@@ -631,9 +673,9 @@ def execute(args, job: Job) -> dict:
             loose += l
             loads += [p for p in extra_loads if p not in loads]
     seed_modules = [by_id[mid] for mid in resolved["order"] if by_id[mid]["seed"]]
-    if len(compiled) > projects.MAX_SCRIPTS or len(loose) > projects.MAX_ASSETS or len(loads) + len(seed_modules) > projects.MAX_LOADS:
-        raise Failure(INPUT_LIMIT, f"A composition holds at most {projects.MAX_SCRIPTS} scripts, {projects.MAX_ASSETS} assets and {projects.MAX_LOADS} loads (seeds count as loads)")
-    decided, undecided = collisions(modules, loaded, decisions)
+    if len(compiled) > projects.MAX_SCRIPTS or len(loose) > projects.MAX_ASSETS or len(loads) > projects.MAX_LOADS or len(seed_modules) > MAX_MODULES:
+        raise Failure(INPUT_LIMIT, f"A composition holds at most {projects.MAX_SCRIPTS} scripts, {projects.MAX_ASSETS} assets, {projects.MAX_LOADS} loads and {MAX_MODULES} seeds")
+    decided, undecided = collisions(modules, loaded, decisions, comp.get("base_owned"))
     checks = _backends(compiled)
     rows = _plan_rows(modules, resolved["order"], job)
     base_ids = [r["id"] for r in rows if r["role"] == "base"]
@@ -649,7 +691,7 @@ def execute(args, job: Job) -> dict:
                    "strings": str(m["seed"]["strings"]) if m["seed"].get("strings") else None} for m in seed_modules],
         "loads": [str(p) for p in loads], "zone_header": header,
         "resource_totals": resolved["resource_totals"], "budget": comp["budget"],
-        "decisions": decided, "undecided": undecided,
+        "decisions": decided, "undecided": undecided, "base_owned_names": len(comp.get("base_owned") or ()),
         "backends": checks, "backends_available": all(c["available"] for c in checks),
         "input_files": len(job.inputs),
         "verification": "composition resolved (dependency order, conflicts, base and map fit, budget); collisions listed as decisions; "
@@ -662,7 +704,7 @@ def execute(args, job: Job) -> dict:
                            for i, r in enumerate(rows)],
                "resource_totals": resolved["resource_totals"], "budget": comp["budget"],
                "scripts": len(compiled), "assets": len(loose), "seeds": len(seed_modules), "loads": len(loads),
-               "decisions": decided, "undecided": undecided}
+               "decisions": decided, "undecided": undecided, "base_owned_names": len(comp.get("base_owned") or ())}
     if args.action == "plan":
         return {**summary, "backends": checks, "backends_available": plan["backends_available"],
                 "input_files": plan["input_files"], "verification": plan["verification"]}
@@ -674,6 +716,7 @@ def execute(args, job: Job) -> dict:
 
 
 def _build_composition(comp: dict, plan: dict, compiled, loose, seed_modules, loads, decided, header, args, job: Job) -> dict:
+    base_owned_names = len(comp.get("base_owned") or ())
     missing = [c["id"] for c in plan["backends"] if not c["available"]]
     if missing:
         raise Failure("backend_unavailable", f"Required backends are not installed: {missing}", "Run: pat dev setup")
@@ -789,7 +832,7 @@ def _build_composition(comp: dict, plan: dict, compiled, loose, seed_modules, lo
             "name": comp["name"], "title": comp["title"], "base": comp["base"], "map": comp["map"], "base_member": plan["base_member"],
             "modules": [{"id": r["id"], "version": r["version"], "order": i + 1, "payload": r["payload"], "role": r["role"]}
                         for i, r in enumerate(plan["modules"])],
-            "resource_totals": plan["resource_totals"], "budget": plan["budget"], "decisions": decided,
+            "resource_totals": plan["resource_totals"], "budget": plan["budget"], "decisions": decided, "base_owned_names": base_owned_names,
             "scripts": len(compiled), "assets": len(loose), "seeds": len(seed_modules), "loads": len(loads),
             "install_hint": f"pat game install-mod <output>/{link['packages'][0]['path']} {comp['name']}  (copy the soundbanks under packages/ beside it; loading in game is a separate, authorized step)",
             "verification": "every recipe module's scripts compiled, one mod.ff linked against every seed and load, read back, every rawfile "

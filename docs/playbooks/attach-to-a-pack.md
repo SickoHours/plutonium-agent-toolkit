@@ -13,6 +13,10 @@ read back. The pack stays untouched; the result is a new composition and a new p
 - The module declares the pack's base and map under `bases` and `maps`. If it does not, this
   playbook does not apply yet: build the module alone on that base and map first
   (`port-a-feature.md`, `package-and-install.md`), earn its verdict, extend the declaration.
+  A base is frozen; a module that supports several has one receipt per base.
+- Every member's `dependencies` names only the module ids it calls into; a feature's shared
+  services are members with their own declarations. A dependency pack is this same recipe for
+  a feature that needs several modules (`docs/knowledge/foundations.md`).
 - The base's zones the linker needs are on disk (`loads`), and the base's zone header lines are
   known (`zone_header`); a previous composition on the same base has both.
 - Backends `gsc` and `oat` are installed (`pat doctor --json`).

@@ -14,6 +14,8 @@ or two sentences, what it is rather than what it does. No implementation detail 
 _Avoid_: base game, vanilla, clean install
 
 **Base**: The foundation a module is built and tested on, named in every receipt by id and hash.
+Frozen and first-class: the stock game, an upstream mod release and a quality-of-life variant
+follow the same rules, and a module that supports several bases has one receipt per base.
 _Avoid_: pack, template, current build
 
 **Module**: One feature (a weapon family, perk, equipment, boss, companion) with its own source,
@@ -21,15 +23,21 @@ recipe, assets, tests, menu route and resource contract.
 _Avoid_: mod, feature pack, addon
 
 **Core module**: Shared runtime plumbing other modules depend on by id, such as an inventory
-arbiter or an item registry.
+arbiter, an item registry or a power-up runtime. It is a module with its own declaration.
 _Avoid_: shared code, library, helpers
 
 **Composition**: A named set of pinned module revisions on a named base, with a sealed recipe
 and its own evidence record.
 _Avoid_: mod pack, bundle, all-in-one
 
+**Dependency pack**: A composition whose members are the modules one feature needs to run,
+each declaring what it calls under `dependencies`; the smallest installable form of that
+feature, with every member still installable alone.
+_Avoid_: bundle, meta-module, feature pack
+
 **Profile**: One installed folder under Plutonium's `mods`, named `<base>_<feature>_<stage>`.
-Stages: `test` (one module alone), `pack` (a composition), `pub` (a release candidate).
+Stages: `test` (one module alone), `probe` (a self-driving state walk that prints what it
+set; never a player candidate), `pack` (a composition), `pub` (a release candidate).
 _Avoid_: mod folder, build, install
 
 **Global tooling**: Scripts Plutonium loads for every profile from its global scripts folder.
@@ -107,7 +115,13 @@ _Avoid_: side, mode, context
 
 ## Sources of assets
 
+**Origin**: The game or series a thing's identity comes from; it drives a module's title
+("ICR-1 (Black Ops III)") and browse shelf, never resolution. `unverified` when nobody has
+established it.
+_Avoid_: source game (ambiguous with donor), from
+
 **Donor**: A game or capture that supplies models, animations, audio or scripts for a port.
+It drives the credit line, never the title, and is preserved on every re-cut.
 _Avoid_: source game, reference
 
 **Sealed donor**: A donor whose files are inventoried and hashed into a catalog receipt so later

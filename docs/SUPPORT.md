@@ -118,9 +118,10 @@ interfaces, not about what an agent can do; the agent path is named with each.
   `weapon plan` consume a sealed donor that an agent-driven capture produced (TRACK-RECORD.md);
   the donor and manifest format is in `docs/WEAPONS.md`. Conversion stays with the owning port's
   adapter until a generic one is written.
-- Multiplayer, co-op, other Call of Duty titles, macOS (untested, not claimed), Stream Deck,
-  desktop GUIs, MCP wrapper: not packaged and not on the track record. An agent that needs one
-  adds it per `docs/FOR-AGENTS.md` and registers it with an honest status.
+- Multiplayer, co-op, macOS (untested, not claimed), Stream Deck and desktop GUIs: not packaged
+  and not on the track record. The MCP wrapper (`mcp tools|serve`) and the control plane
+  (`plane serve`) are packaged and graded in the matrix above, offline. An agent that needs
+  something else adds it per `docs/FOR-AGENTS.md` and registers it with an honest status.
 
 ## Release bars
 

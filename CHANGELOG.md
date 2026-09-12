@@ -9,6 +9,28 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Added
 
+- **`probe` composition stage.** `<base>_<feature>_probe` names a self-driving state-walk
+  profile (one module plus a script that prints what it set); `pat module plan` accepts it beside
+  `test`, `pack` and `pub`.
+
+- **Frozen, first-class bases; dependency packs; origin and donor; the probe stage.**
+  `docs/knowledge/foundations.md` and `CONTEXT.md` now state the base policy an authoring
+  workspace settled on: a base is frozen and first-class, a module that supports several
+  bases has one receipt per base, cards read declarations and receipts only; a feature that
+  is several modules ships as a dependency pack whose members declare what they call; a
+  module's title names its origin game and `donor` carries the credit; `probe` is a stage
+  beside `test`, `pack` and `pub`. `port-a-feature.md` and `attach-to-a-pack.md` carry the
+  matching preconditions and do-nots. Documentation only; no route or check changed.
+
+### Fixed
+
+- `docs/MODULES.md` no longer says there is no official registry repository (there is one,
+  `docs/REGISTRY.md`); `publish-a-module.md` points at it. `docs/SUPPORT.md` no longer lists the
+  MCP wrapper and control plane as unpackaged while grading them. The umbrella skill separates
+  route status from evidence level instead of mixing the two ladders in one sentence.
+  `PILOT-USER.md` and `REVIEWING-QUALIFICATION.md` drop a stale beta reference and a literal
+  version in a generic instruction.
+
 - **Origin, donor and evidence state, so a card can say where a thing comes from.** `module.json`
   and `composition.json` accept `origin` (one lowercase word for the game or series the identity
   comes from, or `unverified`; it drives the title, and is never defaulted to the donor) and
@@ -22,6 +44,13 @@ Every entry states what shipped, on which platform it was verified, and what rem
   library summary lists both fields. `docs/MODULES.md`, `docs/REGISTRY.md`. Formats and offline
   tests only (`tests/test_compositions.py`, `tests/test_registry.py`); no route, receipt or
   evidence level changed and nothing here proves a module loads or plays.
+
+- **Base-owned collisions and larger packs.** A composition may name `base_owned` listings of the
+  base zones it loads; a name collision whose asset the base already carries resolves as
+  `base-owned` with no decision, since both seeds got the copy by linking against the base. This
+  is what a pack of modules each built alone on the same base produces by the hundred. Packs and built-in packs
+  may hold 128 members and 1024 recorded decisions (were 32 and 256); seeds no longer count
+  against the 32-load cap. Reference rows in a listing (`type, ,name`) are not base-owned. `plan` and `build` report `base_owned_names`.
 
 - **Weapon-camo, weapon-aim, attachment and BO3 audio knowledge.** Four pages distilled from an
   authoring workspace's T6 port cycle. `docs/knowledge/weapon-camo.md` records how a `weaponCamo`
