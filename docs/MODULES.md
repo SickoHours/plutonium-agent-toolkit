@@ -130,7 +130,7 @@ Localized strings cannot be copied out of a loaded fastfile, so `declare` extrac
 | Field | Required | Meaning |
 | --- | --- | --- |
 | `schema` | yes | `1` |
-| `name` | yes | `<base>_<feature>_<stage>` with the composition's own `base` token and a stage of `test`, `pack` or `pub` (`docs/knowledge/foundations.md`). It is also the install folder name |
+| `name` | yes | `<base>_<feature>_<stage>` with the composition's own `base` token and a stage of `test`, `probe`, `pack` or `pub` (`docs/knowledge/foundations.md`). It is also the install folder name |
 | `title`, `tags` | no | A display name and browse words for the pack itself |
 | `origin`, `donor` | no | The same two facts as on a module, for a pack that is one thing ("Ghosts weapons on TranZit" has origin `ghosts`); a pack of mixed origins leaves them out and the plan carries each member's own |
 | `base` | yes | The base token every module must declare |

@@ -493,6 +493,15 @@ class SeedTests(SeedFixture):
         self.assertTrue(any(u["collision"] == "asset:soundbank,shared.all" for u in row["result"]["undecided"]))
 
 
+class StageTests(SeedFixture):
+    def test_probe_stage_is_accepted_and_others_refused(self):
+        self.module("alpha")
+        code, row = invoke(["module", "plan", str(self.composition(["alpha"], name="stock_alpha_probe")), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        code, row = invoke(["module", "plan", str(self.composition(["alpha"], name="stock_alpha_release")), "--output", self.out()])
+        self.assertEqual(code, 1, row)
+
+
 class NestingAndReferenceTests(SeedFixture):
     def test_a_composition_can_be_a_member_and_a_base(self):
         self.module("qol_a")

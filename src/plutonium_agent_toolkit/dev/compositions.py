@@ -64,7 +64,7 @@ CATEGORY = re.compile(r"^[a-z][a-z0-9-]{0,31}\Z")
 TAG = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}\Z")
 COMMIT = re.compile(r"^[0-9a-f]{40}\Z")
 NAME_REF = re.compile(r"^[a-z0-9][a-z0-9-]{0,38}/[a-z0-9_]{1,64}\Z")
-STAGES = ("test", "pack", "pub")
+STAGES = ("test", "probe", "pack", "pub")
 CONTRACT_FIELDS = ("threads", "entities", "hud", "network_fields")
 # The taxonomy people browse by. `category` is the shelf; `kind` narrows it; `tags` are free
 # lowercase words (a source game, a series, a theme). None of them affects resolution.

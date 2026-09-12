@@ -9,6 +9,10 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Added
 
+- **`probe` composition stage.** `<base>_<feature>_probe` names a self-driving state-walk
+  profile (one module plus a script that prints what it set); `pat module plan` accepts it beside
+  `test`, `pack` and `pub`.
+
 - **Frozen, first-class bases; dependency packs; origin and donor; the probe stage.**
   `docs/knowledge/foundations.md` and `CONTEXT.md` now state the base policy an authoring
   workspace settled on: a base is frozen and first-class, a module that supports several
