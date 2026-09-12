@@ -20,9 +20,11 @@ pat module inspect path/to/module.json --json
 pat module inspect path/to/composition.json --json
 ```
 
-`module inspect` is inert: it reads one regular declaration, refuses symlinks and files over
-256 KiB, and hashes the exact bytes it parses. It creates no job or output directory, reads no
-configuration, discovers no backends, and performs no network or game operation. `--output`
+`module inspect` is inert: it reads one regular declaration and refuses final-component
+symlinks/reparse points and files over 256 KiB. Symlinked ancestor directories are allowed,
+matching plan/build. The reader verifies stable regular-file identity and hashes the exact
+bytes it parses. It creates no job or output directory, reads no configuration, discovers no
+backends, and performs no network or game operation. `--output`
 is not accepted. The normal invocation envelope retains `schema_version: 1` and a generated
 `request_id`; its result protocol is `pat.module-inspect/1`, specified by
 [the producer schema](../schemas/module-inspect-v1.schema.json).
@@ -41,13 +43,29 @@ provides consistency, nested composition cycles, resolved member identity and du
 dependency order, base/map fit, collisions and actual resource totals require those routes.
 Metadata validity establishes none of these facts or any installation or gameplay evidence.
 
-Failures retain the native `error_code`, `message` and optional `hint`, and put the inspection at
-`details.inspection`. Invalid metadata is null. Diagnostics contain structural JSON Pointer
+Inspection failures retain the native `error_code`, `message` and optional `hint` within the
+transport limits below, and put the inspection at `details.inspection`. Invalid metadata is null.
+Diagnostics contain structural JSON Pointer
 `field` values (including the offending unknown key), a code and message; `/` denotes a whole
 file or JSON error. `sha256` is null unless all bounded input bytes were read, including on
 unreadable, linked and oversized inputs. Invalid JSON that was read still has its actual digest.
 The `file` field is the local producer path; consumers should project a suitable label for their
 caller rather than expose that path in default model output.
+
+Inspection diagnostic `field` and `message` are at most 2048 characters; `error_code` is at most
+200. If an escaped JSON Pointer exceeds the limit, the field becomes `/` and the message
+explicitly says the offending key exceeds the diagnostic limit. A pointer is never truncated
+into a different key. Overlong messages and hints are replaced with a bounded notice that detail
+was omitted due to the diagnostic limit. Envelope `message`, `hint` and `error_code` have the
+same limits as diagnostics, with the same code and message in both places. An overlong error
+code becomes `input_invalid` with an explicit omission notice. These bounds apply only when
+inspect emits an error; the reusable validators and plan/build error details remain intact.
+The inspection stays invalid with null metadata and retains its exact source digest when read.
+
+Argument/usage failures, such as a missing path or supplying `--output`, exit 2 and emit the
+normal toolkit `invalid_arguments` invocation envelope without `details.inspection`. They are
+outside `pat.module-inspect/1` and its producer schema; callers must handle them as invocation
+failures rather than inspection results.
 
 ## Module declaration: `module.json`
 

@@ -45,6 +45,51 @@ class CompositionFixture(DevRouteFixture):
 
 
 class CompositionTests(CompositionFixture):
+    def test_inspect_and_plan_accept_a_symlinked_parent_but_refuse_a_final_link(self):
+        import hashlib
+
+        directory = self.module("alpha")
+        comp = self.composition(["alpha"])
+        alias = self.root / "alias"
+        alias.symlink_to(self.root, target_is_directory=True)
+        for path in (comp, directory / "module.json"):
+            through_alias = alias / path.relative_to(self.root)
+            code, row = invoke(["module", "inspect", str(through_alias), "--json"])
+            self.assertEqual(code, 0, row)
+            self.assertEqual(row["result"]["file"], str(through_alias))
+            self.assertEqual(row["result"]["sha256"], hashlib.sha256(path.read_bytes()).hexdigest())
+        code, row = invoke(["module", "plan", str(alias / comp.relative_to(self.root)), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        final_link = self.root / "composition.json"
+        final_link.symlink_to(comp)
+        for action in ("inspect", "plan"):
+            args = ["module", action, str(final_link), "--json"]
+            if action == "plan":
+                args += ["--output", self.out()]
+            code, row = invoke(args)
+            self.assertEqual(code, 1, row)
+            self.assertEqual(row["error_code"], "input_missing")
+            if action == "inspect":
+                self.assertIsNone(row["details"]["inspection"]["sha256"])
+
+    def test_plan_and_build_restore_member_directory_context_for_metadata_errors(self):
+        for field, value in (("schema", 2), ("game", "unknown"), ("id", "BAD")):
+            with self.subTest(field=field):
+                directory = self.module("alpha")
+                path = directory / "module.json"
+                data = json.loads(path.read_text())
+                data[field] = value
+                path.write_text(json.dumps(data))
+                comp = self.composition(["alpha"])
+                for action in ("plan", "build"):
+                    code, row = invoke(["module", action, str(comp), "--output", self.out()])
+                    self.assertEqual(code, 1, row)
+                    self.assertTrue(row["message"].startswith("module.json in alpha: "), row)
+                    self.assertEqual(row["details"]["field"], "/" + field)
+                code, row = invoke(["module", "inspect", str(path)])
+                self.assertEqual(code, 1, row)
+                self.assertTrue(row["message"].startswith("module.json: "), row)
+
     def test_plan_uses_the_same_metadata_validation_as_inspect_before_payload_resolution(self):
         from plutonium_agent_toolkit.dev import compositions
         from unittest.mock import patch

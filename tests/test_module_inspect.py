@@ -178,6 +178,90 @@ class InspectTests(unittest.TestCase):
         with patch.object(c.os, "open", side_effect=PermissionError("denied")):
             self.assertIsNone(invoke(target)[1]["details"]["inspection"]["sha256"])
 
+    def test_long_keys_and_values_produce_explicit_bounded_diagnostics(self):
+        cases = [(MODULE | {"k" * 5000: 1}, "module.json", "/", True),
+                 (MODULE | {"/" * 1024: 1}, "module.json", "/", True),
+                 (MODULE | {"k" * 2047: 1}, "module.json", "/" + "k" * 2047, False),
+                 (MODULE | {"dependencies": ["x" * 5000]}, "module.json", "/dependencies/0", False),
+                 (PACK | {"modules": [{"name": "n" * 5000}]}, "composition.json", "/modules/0/name", False),
+                 (PACK | {"modules": [{"path": "../a", "k" * 5000: 1}]}, "composition.json", "/", True)]
+        for data, name, field, omitted_pointer in cases:
+            with self.subTest(name=name, field_length=len(field), omitted_pointer=omitted_pointer):
+                path = self.write(data, name)
+                validator = c.validate_declaration_metadata if name == "module.json" else c.validate_composition_metadata
+                with self.assertRaises(Failure) as original:
+                    validator(data)
+                code, row = invoke(path)
+                self.assertEqual(code, 1, row)
+                result = row["details"]["inspection"]
+                diagnostic = result["diagnostics"][0]
+                self.assertEqual(diagnostic["field"], field)
+                self.assertEqual(result["sha256"], hashlib.sha256(path.read_bytes()).hexdigest())
+                self.assertEqual(result["validation"], "invalid")
+                self.assertIsNone(result["metadata"])
+                self.assertEqual(row["message"], diagnostic["message"])
+                self.assertEqual(row["error_code"], diagnostic["error_code"])
+                self.assertLessEqual(len(diagnostic["field"]), 2048)
+                self.assertLessEqual(len(row["message"]), 2048)
+                self.assertLessEqual(len(row["error_code"]), 200)
+                if len(original.exception.message) > 2048:
+                    self.assertIn("detail omitted due to", row["message"])
+                if omitted_pointer:
+                    self.assertIn("offending key exceeds the 2048-character diagnostic limit", row["message"])
+                if omitted_pointer:
+                    self.assertGreater(len(original.exception.details["field"]), 2048)
+
+    def test_inspection_bounds_hint_code_and_boundary_text_without_mutating_validator_failure(self):
+        path = self.write(MODULE)
+        for length in (2048, 2049):
+            original = Failure("input_invalid", "m" * length, "h" * length, field="/title")
+            with patch.object(c, "validate_declaration_metadata", side_effect=original):
+                code, row = invoke(path)
+            self.assertEqual(code, 1)
+            self.assertLessEqual(len(row["message"]), 2048)
+            self.assertLessEqual(len(row["hint"]), 2048)
+            if length == 2048:
+                self.assertEqual(row["message"], original.message)
+                self.assertEqual(row["hint"], original.hint)
+            else:
+                self.assertIn("detail omitted due to", row["message"])
+                self.assertIn("detail omitted due to", row["hint"])
+            self.assertEqual(original.message, "m" * length)
+            self.assertEqual(original.hint, "h" * length)
+            self.assertEqual(original.details, {"field": "/title"})
+        for length in (200, 201):
+            original = Failure("e" * length, "Original detail", field="/title")
+            with patch.object(c, "validate_declaration_metadata", side_effect=original):
+                _, row = invoke(path)
+            self.assertEqual(row["error_code"], original.code if length == 200 else "input_invalid")
+            if length == 201:
+                self.assertIn("original error code exceeds", row["message"])
+            self.assertEqual(original.code, "e" * length)
+
+    def test_reader_refuses_regular_file_identity_change_before_read(self):
+        path = self.write(MODULE)
+        replacement = self.root / "replacement.json"
+        replacement.write_text(json.dumps(MODULE | {"id": "beta"}))
+        real_open = c.os.open
+        def replace_before_open(*args, **kwargs):
+            replacement.replace(path)
+            return real_open(*args, **kwargs)
+        with patch.object(c.os, "open", side_effect=replace_before_open):
+            code, row = invoke(path)
+        self.assertEqual(code, 1, row)
+        self.assertIn("changed while opening", row["message"])
+        self.assertIsNone(row["details"]["inspection"]["sha256"])
+
+    def test_usage_failure_is_an_invocation_envelope_without_inspection(self):
+        for args in (["module", "inspect", "--json"], ["module", "inspect", "module.json", "--output", "unused"]):
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                code = cli.entry(args)
+            row = json.loads(output.getvalue())
+            self.assertEqual(code, 2)
+            self.assertEqual(row["error_code"], "invalid_arguments")
+            self.assertNotIn("details", row)
+
     def test_hash_is_the_exact_single_read_parsed_bytes_even_if_path_changes(self):
         path = self.write(MODULE)
         raw = (json.dumps(MODULE, indent=2) + "\n").encode()
@@ -236,3 +320,8 @@ class InspectTests(unittest.TestCase):
         row = self.check_failure(MODULE | {"extra": 1}, "/extra")
         self.assertEqual(set(row), set(schema["required"]) | {"error_code", "message", "details"})
         self.assertEqual(schema["$defs"]["inspection"]["properties"]["protocol"]["const"], "pat.module-inspect/1")
+        diagnostic = schema["$defs"]["inspection"]["properties"]["diagnostics"]["items"]["properties"]
+        for key, limit in (("field", 2048), ("message", 2048), ("error_code", 200)):
+            self.assertEqual(diagnostic[key]["maxLength"], limit)
+        for key, limit in (("message", 2048), ("hint", 2048), ("error_code", 200)):
+            self.assertEqual(schema["properties"][key]["maxLength"], limit)

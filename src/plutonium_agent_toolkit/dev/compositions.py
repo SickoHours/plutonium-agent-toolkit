@@ -136,23 +136,24 @@ def add_parser(sub, common):
 
 INSPECT_PROTOCOL = "pat.module-inspect/1"
 MAX_DECLARATION_BYTES = 256 * 1024
+MAX_INSPECTION_TEXT = 2048
+MAX_INSPECTION_CODE = 200
 MODULE_METADATA_FIELDS = ("id", "version", "game", "title", "category", "kind", "tags", "bases", "maps",
                           "dependencies", "conflicts", "origin", "donor", "distribution", "menu_route", "payload")
 COMPOSITION_METADATA_FIELDS = ("name", "title", "game", "tags", "base", "map", "origin", "donor", "members")
 
 
 def _read_inspection(path: Path) -> bytes:
-    """One bounded regular-file read. Refuse links/reparse points and changed identities.
+    """One bounded regular-file read. Refuse final links/reparse points and changed identities.
 
-    POSIX also refuses a final-component link at open. Windows uses lstat/fstat identity
-    checks, like the receipt reader; no native Windows qualification is claimed here.
+    Symlinked ancestors are allowed, as in plan/build. POSIX also refuses a final-component
+    link at open. Windows uses lstat/fstat identity checks, like the receipt reader;
+    no native Windows qualification is claimed here.
     """
     def checked_stat():
-        for part in (path, *path.parents):
-            info = part.lstat()
-            if stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
-                raise Failure(INPUT_MISSING, f"Declaration is missing or is a link: {path}")
         info = path.lstat()
+        if stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
+            raise Failure(INPUT_MISSING, f"Declaration is missing or is a link: {path}")
         if not stat.S_ISREG(info.st_mode):
             raise Failure(INPUT_MISSING, f"Declaration is not a regular file: {path}")
         return info
@@ -173,6 +174,29 @@ def _read_inspection(path: Path) -> bytes:
         return data
     except (OSError, ValueError) as exc:
         raise Failure(INPUT_MISSING, f"Cannot read declaration: {path} ({exc})") from exc
+
+
+def _inspection_prose(text: str, notice: str = "") -> str:
+    """Replace excessive detail explicitly; never return a misleading truncated value."""
+    if len(notice + text) <= MAX_INSPECTION_TEXT:
+        return notice + text
+    return notice + f"Inspection detail omitted due to the {MAX_INSPECTION_TEXT}-character diagnostic limit."
+
+
+def _inspection_failure(exc: Failure, result: dict) -> Failure:
+    """Bound the inspection transport without changing shared validator failures."""
+    field = exc.details.get("field", "/")
+    notice = ""
+    if len(field) > MAX_INSPECTION_TEXT:
+        field = "/"
+        notice = f"The offending key exceeds the {MAX_INSPECTION_TEXT}-character diagnostic limit; its JSON Pointer is omitted. "
+    code = exc.code
+    if len(code) > MAX_INSPECTION_CODE:
+        code = INPUT_INVALID
+        notice += f"The original error code exceeds the {MAX_INSPECTION_CODE}-character diagnostic limit and is omitted. "
+    message = _inspection_prose(exc.message, notice)
+    result["diagnostics"] = [{"field": field, "error_code": code, "message": message}]
+    return Failure(code, message, _inspection_prose(exc.hint), inspection=result)
 
 
 def inspect(path: Path) -> dict:
@@ -204,10 +228,7 @@ def inspect(path: Path) -> dict:
         result.update(validation="metadata-valid", metadata={key: metadata[key] for key in fields})
         return result
     except Failure as exc:
-        result["diagnostics"] = [{"field": exc.details.get("field", "/"),
-                                  "error_code": exc.code, "message": exc.message}]
-        exc.details = {"inspection": result}
-        raise
+        raise _inspection_failure(exc, result) from exc
 
 
 # ----- declarations ---------------------------------------------------------------------
@@ -353,9 +374,8 @@ def _relative_file(text: str, base: Path, job: Job, what: str) -> Path:
     return job.input(full)
 
 
-def validate_declaration_metadata(data) -> dict:
+def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
     """Authoritative declaration checks; no filesystem or payload resolution."""
-    where = "module.json"
     _fields(data, {"schema", "id", "version", "game", "title", "category", "kind", "tags", "recipe", "seed", "bases", "maps",
                             "dependencies", "conflicts", "provides", "resource_contract", "menu_route", "distribution", "source",
                             "origin", "donor"},
@@ -439,7 +459,7 @@ def load_declaration(directory: Path, job: Job) -> dict:
         data = json.loads(src.read_text(encoding="utf-8"))
     except ValueError as exc:
         raise Failure(INPUT_INVALID, f"module.json is not valid JSON: {src}") from exc
-    declaration = validate_declaration_metadata(data)
+    declaration = validate_declaration_metadata(data, where=f"module.json in {directory.name}")
     mid = declaration["id"]
     distribution = declaration["distribution"]
     recipe = seed = None

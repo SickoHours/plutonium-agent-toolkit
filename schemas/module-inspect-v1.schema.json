@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "pat.module-inspect/1 invocation envelope",
-  "description": "Declaration-only producer protocol. Metadata validity does not establish payload availability, buildability, compatibility or gameplay evidence. file is a local producer path.",
+  "description": "Declaration-only producer protocol. Metadata validity does not establish payload availability, buildability, compatibility or gameplay evidence. file is a local producer path. Exit-2 argument/usage failures are ordinary invocation envelopes outside this inspection protocol and have no details.inspection. Inspection diagnostic field/message and envelope message/hint are bounded to 2048 characters; error_code to 200. Overlong pointers become / with an explicit offending-key limit message; excessive prose is replaced explicitly, never silently truncated.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -37,13 +37,16 @@
       "$ref": "#/$defs/inspection"
     },
     "error_code": {
-      "type": "string"
+      "type": "string",
+      "maxLength": 200
     },
     "message": {
-      "type": "string"
+      "type": "string",
+      "maxLength": 2048
     },
     "hint": {
-      "type": "string"
+      "type": "string",
+      "maxLength": 2048
     },
     "details": {
       "type": "object",
@@ -203,13 +206,16 @@
             "properties": {
               "field": {
                 "type": "string",
-                "pattern": "^/"
+                "pattern": "^/",
+                "maxLength": 2048
               },
               "error_code": {
-                "type": "string"
+                "type": "string",
+                "maxLength": 200
               },
               "message": {
-                "type": "string"
+                "type": "string",
+                "maxLength": 2048
               }
             }
           }
