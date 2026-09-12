@@ -123,7 +123,8 @@ Localized strings cannot be copied out of a loaded fastfile, so `declare` extrac
   "loads": ["../base/common_zm.ff", "../base/zm_factory-inspect.ff"],
   "zone_header": [">level.ipak_read,common_zm", ">level.ipak_read,zm_factory"],
   "budget": {"threads": 4, "entities": 0, "hud": 0, "network_fields": 0},
-  "decisions": [{"collision": "scripts/zm/hud.gsc", "owner": "my_base_pack", "reason": "the pack's HUD wins"}]
+  "decisions": [{"collision": "scripts/zm/hud.gsc", "owner": "my_base_pack", "reason": "the pack's HUD wins"}],
+  "base_owned": ["../base/common_zm-list.txt", "../base/zm_factory-list.txt"]
 }
 ```
 
@@ -135,11 +136,12 @@ Localized strings cannot be copied out of a loaded fastfile, so `declare` extrac
 | `origin`, `donor` | no | The same two facts as on a module, for a pack that is one thing ("Ghosts weapons on TranZit" has origin `ghosts`); a pack of mixed origins leaves them out and the plan carries each member's own |
 | `base` | yes | The base token every module must declare |
 | `map` | yes | One concrete map id. A composition is planned for one map; plan another composition for another map |
-| `modules` | yes | 1 to 32 members. A member is a relative path (forward slashes, from the composition's directory) to a directory holding `module.json`, **or** a directory holding another `composition.json` (its modules are flattened in; it must declare the same base and map; nesting is bounded), **or** an object: `{"path": …, "role": "base"}` marks the one member the others attach to; `{"name": "<github-owner>/<id>", "commit": "<40 hex>", "path": …}` records a published module pinned at a commit, with the local directory it was fetched into. Listing order does not matter; the plan orders by dependencies, base members first |
+| `modules` | yes | 1 to 128 members. A member is a relative path (forward slashes, from the composition's directory) to a directory holding `module.json`, **or** a directory holding another `composition.json` (its modules are flattened in; it must declare the same base and map; nesting is bounded), **or** an object: `{"path": …, "role": "base"}` marks the one member the others attach to; `{"name": "<github-owner>/<id>", "commit": "<40 hex>", "path": …}` records a published module pinned at a commit, with the local directory it was fetched into. Listing order does not matter; the plan orders by dependencies, base members first |
 | `loads` | no | Relative paths to fastfiles the linker loads for asset lookup: the base's zones. They may live beside the pack |
 | `zone_header` | no | Linker metadata lines the base needs at the top of the zone (Zombies Declassified Beta 2 needs its `>level.ipak_read` rows); at most 32 |
 | `budget` | no | Whole-number ceilings for the summed resource contracts. Absent means the totals are reported and not enforced. A number here is a decision you made after measuring, not a guess |
 | `decisions` | no | One recorded owner per collision the plan listed (below). A decision naming a module that is not party to the collision is refused |
+| `base_owned` | no | Up to 8 relative paths to plain asset listings of the base zones the composition loads (one `type, name` row per line, the shape an unlinker `--list` prints). A name collision whose asset the base already carries is classified `base-owned` and needs no decision: both seeds got their copy by linking against the base, and the base's copy is what loads. Names the listings do not carry stay decisions. A recorded decision for a base-owned name still wins |
 
 ## What `plan` proves and what it does not
 
@@ -217,6 +219,9 @@ anyone's bytes.
   `pat registry add|list|search|show`, `pat module fetch` and the official registry repository
   with its issue form.
 - No version constraints on dependencies: an id is either present or not.
+- Seed manifests carry no per-asset digest, so two seeds naming the same asset can only be told
+  apart by a base listing (`base_owned`) or a recorded decision; the planner never compares the
+  seeds' bytes for a name row.
 - No detection of runtime conflicts that only the engine would show (competing hooks on the
   same level notify, pool exhaustion). Declare them under `conflicts` when you learn them, and
   record the crash signature per `docs/playbooks/diagnose-a-crash.md`.

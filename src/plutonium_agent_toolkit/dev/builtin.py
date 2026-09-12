@@ -33,7 +33,7 @@ from . import backends, registry
 MAX_ENTRY_FILES = 4096
 MAX_NESTING = 4          # the same bound load_composition applies: depth 0 is the pack itself
 MAX_RECIPE_BYTES = 256 * 1024
-MAX_MEMBERS = 32         # the planner's bound on a composition's members
+MAX_MEMBERS = 128         # the planner's bound on a composition's members
 MAX_LOADS = 32
 
 

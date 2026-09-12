@@ -45,6 +45,13 @@ Every entry states what shipped, on which platform it was verified, and what rem
   tests only (`tests/test_compositions.py`, `tests/test_registry.py`); no route, receipt or
   evidence level changed and nothing here proves a module loads or plays.
 
+- **Base-owned collisions and larger packs.** A composition may name `base_owned` listings of the
+  base zones it loads; a name collision whose asset the base already carries resolves as
+  `base-owned` with no decision, since both seeds got the copy by linking against the base. This
+  is what a pack of modules each built alone on the same base produces by the hundred. Packs and built-in packs
+  may hold 128 members and 1024 recorded decisions (were 32 and 256); seeds no longer count
+  against the 32-load cap. Reference rows in a listing (`type, ,name`) are not base-owned. `plan` and `build` report `base_owned_names`.
+
 - **Weapon-camo, weapon-aim, attachment and BO3 audio knowledge.** Four pages distilled from an
   authoring workspace's T6 port cycle. `docs/knowledge/weapon-camo.md` records how a `weaponCamo`
   asset renders (`materialOverrides`, per-gun `shaderConsts[0..1]` UV tiling scaled by measured UV
