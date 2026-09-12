@@ -502,6 +502,51 @@ class StageTests(SeedFixture):
         self.assertEqual(code, 1, row)
 
 
+class BaseOwnedTests(SeedFixture):
+    def test_base_listing_resolves_names_the_base_carries_and_leaves_the_rest(self):
+        # Two seeds each carry a private copy of *shared_specular (the fake seed writes it) and
+        # both name their own weapon. A listing of the base zones that carries the image makes
+        # that collision base-owned; the weapon and soundbank collisions stay decisions.
+        self.seed_module("pen_a", banks=("shared.all.sabl",))
+        self.seed_module("pen_b", banks=("shared.all.sabl",))
+        listing = self.root / "packs" / "base" / "common_zm-list.txt"
+        listing.parent.mkdir(parents=True, exist_ok=True)
+        listing.write_text("Loaded zone \"common_zm\" (T6)\nimage, *shared_specular\ntechniqueset, ,mc_lit_sm_r0c0n0s0_zqq1fze7\n")
+        comp = self.composition(["pen_a", "pen_b"], name="stock_owned_test", base_owned=["../base/common_zm-list.txt"])
+        code, row = invoke(["module", "plan", str(comp), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        owned = [d for d in row["result"]["decisions"] if d["resolution"].startswith("base-owned")]
+        self.assertEqual([d["collision"] for d in owned], ["asset:image,*shared_specular"])
+        self.assertEqual(owned[0]["owner"], "pen_a")
+        self.assertEqual(row["result"]["base_owned_names"], 2)
+        undecided = {u["collision"] for u in row["result"]["undecided"]}
+        self.assertIn("asset:soundbank,shared.all", undecided)
+        self.assertIn("weapons:halo_penetrator_zm", undecided)
+        self.assertNotIn("asset:image,*shared_specular", undecided)
+        # A recorded decision for a base-owned name still wins, verbatim.
+        comp = self.composition(["pen_a", "pen_b"], name="stock_owned2_test", base_owned=["../base/common_zm-list.txt"],
+                                decisions=[{"collision": "asset:image,*shared_specular", "owner": "pen_b", "reason": "keep b"}])
+        code, row = invoke(["module", "plan", str(comp), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        self.assertEqual([d["owner"] for d in row["result"]["decisions"] if d["collision"] == "asset:image,*shared_specular"], ["pen_b"])
+        # Listings are relative files like loads; an absolute path or a missing file is refused.
+        comp = self.composition(["pen_a", "pen_b"], name="stock_owned3_test", base_owned=[str(listing)])
+        code, row = invoke(["module", "plan", str(comp), "--output", self.out()])
+        self.assertEqual(code, 1); self.assertIn("relative", row["message"])
+        comp = self.composition(["pen_a", "pen_b"], name="stock_owned4_test", base_owned=["../base/missing.txt"])
+        code, row = invoke(["module", "plan", str(comp), "--output", self.out()])
+        self.assertEqual(row["error_code"], "input_missing")
+
+    def test_member_and_decision_caps(self):
+        from plutonium_agent_toolkit.dev import compositions
+        self.assertEqual(compositions.MAX_MODULES, 128)
+        self.assertEqual(compositions.MAX_DECISIONS, 1024)
+        self.module("alpha")
+        comp = self.composition(["alpha"], name="stock_caps_test", decisions=[{"collision": f"scripts/zm/x{i}.gsc", "owner": "alpha"} for i in range(1025)])
+        code, row = invoke(["module", "plan", str(comp), "--output", self.out()])
+        self.assertEqual(code, 1); self.assertIn("1024", row["message"])
+
+
 class NestingAndReferenceTests(SeedFixture):
     def test_a_composition_can_be_a_member_and_a_base(self):
         self.module("qol_a")
