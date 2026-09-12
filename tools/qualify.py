@@ -350,6 +350,7 @@ def tier_offline(receipt, home: Path, work: Path):
                                                   "--output", str(work / "plan-hello"), "--json"])
     step(receipt, "output_exists refusal", PAT + ["project", "plan", str(ROOT / "examples/hello-zm/project.json"),
                                                    "--output", str(work / "plan-hello"), "--json"], expect_ok=False)
+    step(receipt, "workspace init", PAT + ["workspace", "init", str(work / "workspace"), "--name", "qualify_ws", "--json"])
     init = step(receipt, "project init", PAT + ["project", "init", "--name", "qualify_init", "--output", str(work / "init"), "--json"])
     if init["passed"]:
         step(receipt, "project plan the init recipe", PAT + ["project", "plan", str(work / "init" / "project.json"),
