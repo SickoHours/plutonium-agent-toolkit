@@ -511,14 +511,14 @@ class BaseOwnedTests(SeedFixture):
         self.seed_module("pen_b", banks=("shared.all.sabl",))
         listing = self.root / "packs" / "base" / "common_zm-list.txt"
         listing.parent.mkdir(parents=True, exist_ok=True)
-        listing.write_text("Loaded zone \"common_zm\" (T6)\nimage, *shared_specular\ntechniqueset, ,mc_lit_sm_r0c0n0s0_zqq1fze7\n")
+        listing.write_text("Loaded zone \"common_zm\" (T6)\nimage, *shared_specular\ntechniqueset, ,mc_lit_sm_r0c0n0s0_zqq1fze7\nimage, ,*ref_only\n")
         comp = self.composition(["pen_a", "pen_b"], name="stock_owned_test", base_owned=["../base/common_zm-list.txt"])
         code, row = invoke(["module", "plan", str(comp), "--output", self.out()])
         self.assertEqual(code, 0, row)
         owned = [d for d in row["result"]["decisions"] if d["resolution"].startswith("base-owned")]
         self.assertEqual([d["collision"] for d in owned], ["asset:image,*shared_specular"])
         self.assertEqual(owned[0]["owner"], "pen_a")
-        self.assertEqual(row["result"]["base_owned_names"], 2)
+        self.assertEqual(row["result"]["base_owned_names"], 1, "reference rows are not base-owned")
         undecided = {u["collision"] for u in row["result"]["undecided"]}
         self.assertIn("asset:soundbank,shared.all", undecided)
         self.assertIn("weapons:halo_penetrator_zm", undecided)
@@ -545,8 +545,9 @@ class BaseOwnedTests(SeedFixture):
         self.assertEqual(row["result"]["seeds"], 40)
 
     def test_member_and_decision_caps(self):
-        from plutonium_agent_toolkit.dev import compositions
+        from plutonium_agent_toolkit.dev import compositions, builtin
         self.assertEqual(compositions.MAX_MODULES, 128)
+        self.assertEqual(builtin.MAX_MEMBERS, 128, "built-in packs share the member cap")
         self.assertEqual(compositions.MAX_DECISIONS, 1024)
         self.module("alpha")
         comp = self.composition(["alpha"], name="stock_caps_test", decisions=[{"collision": f"scripts/zm/x{i}.gsc", "owner": "alpha"} for i in range(1025)])

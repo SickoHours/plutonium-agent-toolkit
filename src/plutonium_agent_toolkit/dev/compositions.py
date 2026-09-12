@@ -321,19 +321,22 @@ def load_declaration(directory: Path, job: Job) -> dict:
 
 # ----- compositions ----------------------------------------------------------------------
 
-LISTING_ROW = re.compile(r"^([a-z0-9_]+),\s*(?:,\s*)?([^\s,][^\n]*)$")
+LISTING_ROW = re.compile(r"^([a-z0-9_]+),\s*([^\s,][^\n]*)$")  # embedded rows only; a reference row (type, ,name) is not a base copy
 
 
 def _base_owned(listings: list[Path]) -> set[str]:
     """Asset names the base zones already carry, read from plain listings (one ``type,name``
-    row per line, the shape an unlinker ``--list`` prints; a leading ``,`` marks a reference and
-    is accepted). A seed that carries one of these names got it by linking against the base;
-    the base wins and no decision is needed. At most 200000 rows per listing."""
+    row per line, the shape an unlinker ``--list`` prints). A reference row (``type, ,name``)
+    means the zone only points at the asset, so it is skipped: the base has no copy to win
+    with. A seed that carries an embedded name got it by linking against the base; the base
+    wins and no decision is needed. Listings are read line by line and capped at 200000 rows
+    and 64 MiB."""
     names: set[str] = set()
     for path in listings:
-        text = path.read_text(encoding="utf-8", errors="replace")
+        if path.stat().st_size > 64 * 1024 * 1024:
+            raise Failure(INPUT_LIMIT, f"Base listing is larger than 64 MiB: {path.name}")
         rows = 0
-        for line in text.splitlines():
+        for line in path.open(encoding="utf-8", errors="replace"):
             m = LISTING_ROW.match(line.strip())
             if not m:
                 continue
