@@ -24,7 +24,7 @@ import re
 from functools import lru_cache
 from pathlib import Path
 
-from ..core.errors import INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, INVALID_ARGUMENTS, Failure
+from ..core.errors import OPERATION_FAILED, INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, INVALID_ARGUMENTS, Failure
 
 DATA = Path(__file__).resolve().parent.parent / "knowledge"
 FILES = ("builtins.json", "engine-limits.json", "crash-signatures.json", "occupancy.json")
@@ -153,20 +153,31 @@ def limits(map_id: str | None = None) -> dict:
     return {"map": map_id, **row, "note": occupancy["note"]}
 
 
-def record(output: Path, command: str, argv: list[str], answer: dict, log: Path | None = None) -> dict:
+def record(output: Path, command: str, argv: list[str], answer: dict | None, log: Path | None = None,
+           text: str | None = None) -> dict:
     """The same answer, plus a job directory holding it as ``answer.json`` and a receipt. The
     lookup itself stays inert; the receipt is provenance, so a benchmark can tell a toolkit answer
-    from a fabricated file. A log passed with ``--log`` is recorded as the job's input."""
+    from a fabricated file. For ``signature --log`` the log is registered as the job's input first
+    and the classification reads that hashed snapshot, so the receipt names the bytes that produced
+    the answer. Any failure marks the receipt failed before it propagates."""
     from ..core.jobs import Job
 
     job = Job(output, command, argv, timeout=60)
     try:
         if log is not None:
-            job.input(log)
+            snapshot = job.input(log)
+            answer = signature(snapshot, None)
+        elif answer is None:
+            answer = signature(None, text)
         (job.root / "answer.json").write_text(json.dumps(answer, indent=2) + "\n", encoding="utf-8")
         result = job.finish(dict(answer))
     except Failure as exc:
         job.fail(exc)
         raise
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError) as unexpected:
+        exc = Failure(OPERATION_FAILED, f"{type(unexpected).__name__}: {str(unexpected)[:400]}",
+                      "Keep the receipt and report it with the command you ran.")
+        job.fail(exc)
+        raise exc from unexpected
     result["receipt"] = str(job.receipt_path)
     return result

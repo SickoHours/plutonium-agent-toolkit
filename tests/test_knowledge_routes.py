@@ -206,3 +206,33 @@ class DocsAndBenchmarkTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RecordedLookupTests(unittest.TestCase):
+    def test_output_writes_answer_and_receipt_and_snapshots_the_log(self):
+        import hashlib, json, os, tempfile
+        from pathlib import Path
+        from plutonium_agent_toolkit.cli import entry
+        import contextlib, io
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d).resolve()
+            log = root / "slice.log"
+            log.write_text("[00:00:01] Unresolved external: precachemodel with 1 parameters\n")
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                code = entry(["knowledge", "signature", "--log", str(log), "--output", str(root / "job"), "--json"])
+            row = json.loads(buf.getvalue())
+            self.assertEqual(code, 0, row)
+            receipt = json.loads((root / "job/receipt.json").read_text())
+            self.assertEqual(receipt["status"], "succeeded")
+            answer = (root / "job/answer.json").read_bytes()
+            self.assertEqual(receipt["outputs"]["answer.json"], hashlib.sha256(answer).hexdigest())
+            self.assertTrue(any(k.endswith("slice.log") for k in receipt["inputs"]), receipt["inputs"])
+            self.assertIn("precachemodel", answer.decode())
+            # a failure after the job starts leaves the receipt failed, never running
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                code = entry(["knowledge", "signature", "--log", str(root / "absent.log"), "--output", str(root / "job2"), "--json"])
+            self.assertNotEqual(code, 0)
+            if (root / "job2/receipt.json").is_file():
+                self.assertNotEqual(json.loads((root / "job2/receipt.json").read_text())["status"], "running")

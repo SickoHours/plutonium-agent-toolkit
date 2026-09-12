@@ -315,16 +315,18 @@ def run(argv: list[str]) -> dict:
     if group == "knowledge":
         from .dev import knowledge
 
-        if args.action == "builtin":
-            answer = knowledge.builtin(args.name, args.vm)
-        elif args.action == "signature":
-            answer = knowledge.signature(Path(args.log) if args.log else None, args.text)
-        else:
-            answer = knowledge.limits(args.map)
         if getattr(args, "output", None):
-            return success(command, knowledge.record(Path(args.output), command, argv, answer,
-                                                    Path(args.log) if getattr(args, "log", None) else None))
-        return success(command, answer)
+            if args.action == "signature":
+                # The log is snapshotted into the job before it is read, so the receipt names the classified bytes.
+                return success(command, knowledge.record(Path(args.output), command, argv, None,
+                                                        Path(args.log) if args.log else None, args.text))
+            answer = knowledge.builtin(args.name, args.vm) if args.action == "builtin" else knowledge.limits(args.map)
+            return success(command, knowledge.record(Path(args.output), command, argv, answer))
+        if args.action == "builtin":
+            return success(command, knowledge.builtin(args.name, args.vm))
+        if args.action == "signature":
+            return success(command, knowledge.signature(Path(args.log) if args.log else None, args.text))
+        return success(command, knowledge.limits(args.map))
     if group == "agent":
         from .agent import cli as agent_cli
 
