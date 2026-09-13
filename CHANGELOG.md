@@ -7,6 +7,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- Refuse overlapping declared function or whole-file replacements, even with an owner decision.
+
 - Validate declared function/file replacements and generated entry references.
 
 - Clarified `docs/MODULES.md` that `module state` checks the built plan only when the receipt

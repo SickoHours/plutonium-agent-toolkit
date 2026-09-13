@@ -444,3 +444,7 @@ this is a round-counter transition, not proof of N naturally completed gameplay 
 Engine callbacks, map/gametype main and gamemode_callback_setup are base-owned and refused.
 These fields declare intent; source consistency, collisions and entry generation are checked
 by composition planning/building as described below.
+
+Overlapping declared functions (`function:<target>`) or replaced files (`file:<path>`) are
+hard refusals. Owner decisions do not resolve them: the engine has one effective replacement.
+Ordinary asset/file collision decisions retain their existing behavior.
