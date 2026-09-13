@@ -207,3 +207,7 @@ a JSON Pointer and failed job receipt. Stitching writes test-plan.json with depe
 `module state` is offline: synthetic rung, package drift, source drift, changed contract and
 failed-run tests pass. Derivation is read-only; no actual game-tested or accepted evidence
 is created by this route. The run requires a terminal `automated-passed` verdict.
+
+Composition pool/compiler checks are offline. Tests cover over-budget refusal, unknown counts,
+missing projectile unions and compiler-reported unresolved symbols. Successful dry-run compilation
+is not a new external-resolution qualification. No runtime pool occupancy is inferred.
