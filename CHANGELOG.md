@@ -7,6 +7,7 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- Module metadata accepts T4/T5 source-map lineage entries, preserving multiple maps and source variants separately from qualification evidence.
 
 - Install-mod optionally stages sibling soundbanks and declared mod_load profile links, with hashes in its receipt and the existing rollback behavior.
 

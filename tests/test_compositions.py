@@ -45,6 +45,17 @@ class CompositionFixture(DevRouteFixture):
 
 
 class CompositionTests(CompositionFixture):
+    def test_lineage_is_metadata_only_and_preserves_multiple_source_maps(self):
+        from plutonium_agent_toolkit.dev.compositions import validate_declaration_metadata
+        one = {"game": "t5", "map": "zm_factory", "source": "Example source", "note": "Same-map call path; not T6 verification."}
+        rows = [one, dict(one, map="zm_prototype")]
+        self.assertEqual(validate_declaration_metadata(declaration("alpha", lineage=rows))["lineage"], rows)
+        self.assertEqual(validate_declaration_metadata(declaration("alpha", lineage=one))["lineage"], [one])
+        for value in ([], dict(one, game="t6"), dict(one, map="other"), dict(one, source=""), dict(one, note="x"*401)):
+            with self.assertRaises(Exception):
+                validate_declaration_metadata(declaration("alpha", lineage=value))
+
+
     def test_unqualified_target_is_opt_in_and_retained_in_build_receipt(self):
         self.module("alpha", maps=["zm_transit"])
         comp = self.composition(["alpha"], name="b2_example_pack", base="b2", map_id="zm_factory")

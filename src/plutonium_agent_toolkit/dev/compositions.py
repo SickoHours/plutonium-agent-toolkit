@@ -147,7 +147,7 @@ MAX_DECLARATION_BYTES = 256 * 1024
 MAX_INSPECTION_TEXT = 2048
 MAX_INSPECTION_CODE = 200
 MODULE_METADATA_FIELDS = ("id", "version", "game", "title", "category", "kind", "tags", "bases", "maps",
-                          "dependencies", "conflicts", "origin", "donor", "distribution", "menu_route", "payload")
+                          "dependencies", "conflicts", "origin", "donor", "distribution", "menu_route", "payload", "lineage")
 COMPOSITION_METADATA_FIELDS = ("name", "title", "game", "tags", "base", "map", "origin", "donor", "members")
 
 
@@ -390,11 +390,31 @@ def _relative_file(text: str, base: Path, job: Job, what: str) -> Path:
     return job.input(full)
 
 
+def validate_lineage(value):
+    if value is None:
+        return None
+    rows = [value] if isinstance(value, dict) else value
+    if not isinstance(rows, list) or not 1 <= len(rows) <= 18:
+        raise Failure(INPUT_INVALID, "lineage is one entry or 1 to 18 same-map source entries", field="/lineage")
+    result = []
+    for row in rows:
+        _fields(row, {"game", "map", "source", "note"}, {"game", "map", "source"}, "lineage")
+        if row["game"] not in ("t4", "t5") or not isinstance(row["map"], str) or not re.fullmatch(r"zm_[a-z0-9_]{1,60}", row["map"]):
+            raise Failure(INPUT_INVALID, "lineage requires a T4/T5 game and a zm_ map ID", field="/lineage")
+        if not isinstance(row["source"], str) or not row["source"].strip() or len(row["source"]) > 2048:
+            raise Failure(INPUT_INVALID, "lineage source must be non-empty and at most 2048 characters", field="/lineage")
+        note = row.get("note", "")
+        if not isinstance(note, str) or len(note) > 400:
+            raise Failure(INPUT_INVALID, "lineage note is at most 400 characters", field="/lineage")
+        result.append(dict(row, note=note))
+    return result
+
+
 def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
     """Authoritative declaration checks; no filesystem or payload resolution."""
     _fields(data, {"schema", "id", "version", "game", "title", "category", "kind", "tags", "recipe", "seed", "bases", "maps",
                             "dependencies", "conflicts", "provides", "resource_contract", "menu_route", "distribution", "source",
-                            "origin", "donor"},
+                            "origin", "donor", "lineage"},
                      {"schema", "id", "version", "bases", "maps"}, where)
     if data["schema"] != 1:
         raise Failure(INPUT_INVALID, f"{where}: expected schema 1", field='/schema')
@@ -461,6 +481,7 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
             "provides": provides,
             "resource_contract": _at("/resource_contract", _contract, data.get("resource_contract"), f"{mid}: resource_contract"),
             "menu_route": menu_route, "source": source,
+            "lineage": validate_lineage(data.get("lineage")),
             "origin": _at("/origin", _origin, data.get("origin"), mid), "donor": _at("/donor", _donor, data.get("donor"), mid)}
 
 
