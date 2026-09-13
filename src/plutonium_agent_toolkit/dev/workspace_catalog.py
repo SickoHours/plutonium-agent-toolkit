@@ -11,24 +11,68 @@ from .compositions import validate_declaration_metadata
 
 MAX_BYTES = 64 * 1024 * 1024
 MAX_MODULES = 512
+MAX_ICON_BYTES = 64 * 1024 * 1024
+MAX_ICON_FILE_BYTES = 16 * 1024 * 1024
+MAX_FOUNDATION_MAPS = 64
+MAX_FOUNDATION_ROWS = 256
 FLAGS = ("offline_verified", "installed", "runtime_verified", "player_accepted")
 ICON_ROLES = {"bound HUD icon", "shared HUD icon", "local reference icon"}
 
 
-def read_object(path: Path, *, optional=False):
+def read_bytes(path: Path, *, optional=False):
+    if path.is_symlink():
+        raise Failure(INPUT_MISSING, f"Record is a link: {path.name}")
     if optional and not path.exists():
-        return {}
-    if path.is_symlink() or not path.is_file():
-        raise Failure(INPUT_MISSING, f"Record is missing or is a link: {path.name}")
+        return None
+    if not path.is_file():
+        raise Failure(INPUT_MISSING, f"Record is missing: {path.name}")
     if path.stat().st_size > MAX_BYTES:
         raise Failure(INPUT_LIMIT, f"Record exceeds the size bound: {path.name}")
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
+        with path.open("rb") as stream:
+            data = stream.read(MAX_BYTES + 1)
+    except OSError as exc:
+        raise Failure(INPUT_INVALID, f"Record is not readable: {path.name}") from exc
+    if len(data) > MAX_BYTES:
+        raise Failure(INPUT_LIMIT, f"Record exceeds the size bound: {path.name}")
+    return data
+
+
+def parse_object(data: bytes, path: Path):
+    try:
+        value = json.loads(data.decode("utf-8"))
+    except (ValueError, RecursionError) as exc:
         raise Failure(INPUT_INVALID, f"Record is not readable JSON: {path.name}") from exc
     if not isinstance(value, dict):
         raise Failure(INPUT_INVALID, f"Record must be an object: {path.name}")
     return value
+
+
+def read_object(path: Path, *, optional=False):
+    data = read_bytes(path, optional=optional)
+    return {} if data is None else parse_object(data, path)
+
+
+class IconBudget:
+    def __init__(self):
+        self.remaining = MAX_ICON_BYTES
+        self.digests = {}
+
+    def digest(self, file: Path):
+        canonical = file.resolve()
+        if canonical in self.digests:
+            return self.digests[canonical]
+        size = file.stat().st_size
+        if size > self.remaining:
+            raise Failure(INPUT_LIMIT, "Workspace icon bytes exceed the aggregate budget")
+        with file.open("rb") as stream:
+            data = stream.read(min(self.remaining, MAX_ICON_FILE_BYTES) + 1)
+        if len(data) > min(self.remaining, MAX_ICON_FILE_BYTES):
+            raise Failure(INPUT_LIMIT, "Workspace icon bytes exceed the size bound")
+        self.remaining -= len(data)
+        digest = hashlib.sha256(data).hexdigest()
+        self.digests[canonical] = digest
+        return digest
 
 
 def text(value, limit=2048):
@@ -51,18 +95,18 @@ def project_record(row, source, pointer):
             "verdict": text(row.get("verdict"))}
 
 
-def icon_binding(art, art_root):
+def icon_binding(art, art_root, budget):
     for row in rows(art, "artwork"):
         binding = row.get("binding", {})
         role = binding.get("role") if isinstance(binding, dict) else None
         url = row.get("url")
-        if role in ICON_ROLES and isinstance(url, str) and re.fullmatch(r"local-media/[0-9a-f]{64}\.webp", url):
+        if isinstance(role, str) and role in ICON_ROLES and isinstance(url, str) and re.fullmatch(r"local-media/[0-9a-f]{64}\.webp", url):
             file = art_root / url
-            if file.is_symlink() or not file.is_file() or file.stat().st_size > 16 * 1024 * 1024:
+            if file.is_symlink() or not file.is_file() or file.stat().st_size > MAX_ICON_FILE_BYTES:
                 continue
             if not file.resolve().is_relative_to(art_root):
                 continue
-            digest = hashlib.sha256(file.read_bytes()).hexdigest()
+            digest = budget.digest(file)
             return {"id": "local-" + digest, "role": role, "source": "local art catalog"}
     return None
 
@@ -85,45 +129,62 @@ def catalog(directory: str, art_catalog: str | None = None):
     module_root = root / "modules"
     if not module_root.is_dir() or module_root.is_symlink():
         raise Failure(INPUT_MISSING, "Workspace modules directory is missing")
-    records = read_object(root / "registry/t6-modules.json", optional=True)
-    recipes = read_object(root / "registry/module-recipes.json", optional=True)
+    diagnostics = []
+    def optional_records(relative):
+        try:
+            return read_object(root / relative, optional=True)
+        except (Failure, OSError) as exc:
+            diagnostics.append({"path": relative, "message": str(exc)[:2048]})
+            return {}
+    records = optional_records("registry/t6-modules.json")
+    recipes = optional_records("registry/module-recipes.json")
     art = read_object(Path(art_catalog).expanduser().resolve()) if art_catalog else {}
-    registry = {row.get("id"): row for row in rows(records, "modules")}
+    registry = {row["id"]: row for row in rows(records, "modules") if isinstance(row.get("id"), str)}
     bindings = rows(recipes, "recipes")
     art_rows = rows(art, "modules")
     children = sorted(module_root.iterdir())
     if len(children) > MAX_MODULES:
         raise Failure(INPUT_LIMIT, "Workspace has more than 512 module directories")
-    modules, diagnostics = [], []
+    modules = []
+    icon_budget = IconBudget()
+    truncated = False
     for child in children:
         declaration = child / "module.json"
         if child.is_symlink() or not child.is_dir() or not declaration.exists():
             continue
         try:
-            data = read_object(declaration)
+            declaration_bytes = read_bytes(declaration)
+            data = parse_object(declaration_bytes, declaration)
             metadata = validate_declaration_metadata(data)
             module_id = metadata["id"]
             matching = [r for r in bindings if r.get("catalog_id") == child.name or r.get("id") == child.name
                         or r.get("recipe") in (f"modules/{child.name}/recipe.json", f"modules/{child.name}/project.json")]
             catalog_id = matching[0].get("catalog_id", child.name) if matching else child.name
+            if not isinstance(catalog_id, str):
+                raise Failure(INPUT_INVALID, "Recipe catalog_id must be a string")
             registered = registry.get(catalog_id, {})
             module_art = next((r for r in art_rows if r.get("declarationId") == module_id), {})
             builds = []
             for binding in matching:
                 for i, row in enumerate(rows(binding, "builds")):
+                    if len(builds) >= 256:
+                        raise Failure(INPUT_LIMIT, "Module has more than 256 build records")
                     builds.append(project_record(row, "registry/module-recipes.json", f"{binding.get('id')}/builds/{i}"))
             for i, row in enumerate(rows(registered, "build_revisions")):
+                if len(builds) >= 256:
+                    raise Failure(INPUT_LIMIT, "Module has more than 256 build records")
                 builds.append(project_record(row, "registry/t6-modules.json", f"{catalog_id}/build_revisions/{i}"))
-            if len(builds) > 256:
-                raise Failure(INPUT_LIMIT, "Module has more than 256 build records")
-            symbol = module_art.get("coverSymbol", {}).get("url")
+            cover_symbol = module_art.get("coverSymbol", {})
+            if not isinstance(cover_symbol, dict):
+                raise Failure(INPUT_INVALID, "coverSymbol must be an object")
+            symbol = cover_symbol.get("url")
             if not isinstance(symbol, str) or not re.fullmatch(r"library-symbols/[a-z0-9-]+\.svg", symbol):
                 symbol = None
             modules.append({"id": module_id, "directory": f"modules/{child.name}",
-                            "declaration_sha256": hashlib.sha256(declaration.read_bytes()).hexdigest(),
+                            "declaration_sha256": hashlib.sha256(declaration_bytes).hexdigest(),
                             "weapon_class": text(registered.get("weapon_class")),
                             "registry_origin": text(registered.get("origin_primary")),
-                            "icon_binding": icon_binding(module_art, Path(art_catalog).resolve().parent) if art_catalog else None,
+                            "icon_binding": icon_binding(module_art, Path(art_catalog).resolve().parent, icon_budget) if art_catalog else None,
                             "symbol": "symbol-" + Path(symbol).stem if symbol else None,
                             "provides": data.get("provides", {}), "build_records": builds,
                             "latest_test": latest_test(child)})
@@ -144,6 +205,16 @@ def catalog(directory: str, art_catalog: str | None = None):
                     descriptor = read_object(descriptor_path)
                 links = descriptor.get("link_loads", {})
                 maps = info.get("maps", {})
+                if not isinstance(links, dict):
+                    raise Failure(INPUT_INVALID, "link_loads must be an object")
+                if not isinstance(maps, dict):
+                    raise Failure(INPUT_INVALID, "maps must be an object")
+                if len(maps) > MAX_FOUNDATION_MAPS or len(links) > MAX_FOUNDATION_MAPS or len(maps.keys() | links.keys()) > MAX_FOUNDATION_MAPS:
+                    truncated = True
+                    raise Failure(INPUT_LIMIT, "Foundation exceeds the map count bound")
+                if len(foundations) + len(maps.keys() | links.keys()) > MAX_FOUNDATION_ROWS:
+                    truncated = True
+                    raise Failure(INPUT_LIMIT, "Workspace exceeds the foundation row bound")
                 for map_id in dict.fromkeys([*maps, *links]):
                     loads = links.get(map_id)
                     staged = isinstance(loads, list) and bool(loads) and all(isinstance(p, str) and (descriptor_path.parent / p).is_file() for p in loads)
@@ -152,4 +223,4 @@ def catalog(directory: str, art_catalog: str | None = None):
             except (Failure, OSError, ValueError, TypeError) as exc:
                 diagnostics.append({"path": f"foundations/{file.name}", "message": str(exc)[:2048]})
     return {"protocol": "pat.workspace-catalog/1", "modules": modules, "foundations": foundations,
-            "diagnostics": diagnostics[:64], "truncated": len(diagnostics) > 64}
+            "diagnostics": diagnostics[:64], "truncated": truncated or len(diagnostics) > 64}

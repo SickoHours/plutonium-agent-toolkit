@@ -329,3 +329,11 @@ reference-icon roles are portraits; texture samples are excluded. Icon IDs hash 
 served file bytes, not a source filename. Foundation staging names its descriptor and
 requires its per-map link-load files to exist. This is file presence, not gameplay.
 The route reads files only and returns per-module diagnostics for invalid declarations.
+
+Workspace catalog reads each module declaration once for both metadata and digest. It rejects
+linked registry files with diagnostics, projects at most 256 builds per module and 256
+foundation rows per workspace (64 maps per foundation), and caches shared icon hashes within
+a 64 MiB aggregate image budget. Malformed nested JSON remains a structured failure.
+Composition discovery has its own 64 MiB declaration budget; only the selected closure is
+registered against the job's input cap. Publication validates all member, load and owned-list
+paths before creating a saved recipe.

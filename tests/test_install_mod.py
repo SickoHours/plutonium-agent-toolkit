@@ -141,3 +141,16 @@ class InstallModReplaceSafetyTests(InstallFixture):
         code, row = invoke(["game", "mods", "--replace"])
         self.assertEqual(code, 2)
         self.assertIn("--replace applies only", row["message"])
+
+class InstallFoundationDepthTests(InstallFixture):
+    def test_deep_foundation_json_refuses_without_moving_existing_install(self):
+        code, row = invoke(['game','install-mod',str(self.mod_ff),'example'])
+        self.assertEqual(code, 0, row)
+        installed = self.storage/'mods/example/mod.ff'
+        before = installed.read_bytes()
+        foundation = self.root/'deep.json'
+        foundation.write_text('{"nested":' + '['*20000 + '0' + ']'*20000 + '}')
+        code, row = invoke(['game','install-mod',str(self.mod_ff),'example','--replace','--profile-foundation',str(foundation)])
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row['error_code'], 'input_invalid')
+        self.assertEqual(installed.read_bytes(), before)

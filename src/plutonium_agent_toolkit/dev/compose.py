@@ -16,7 +16,7 @@ def read_json(path: Path, job: Job, limit=4 * 1024 * 1024):
     source = job.input(path, limit=limit)
     try:
         value = json.loads(source.read_text(encoding="utf-8"))
-    except (ValueError, OSError) as exc:
+    except (ValueError, OSError, RecursionError) as exc:
         raise Failure(INPUT_INVALID, "Invalid composition input JSON") from exc
     if not isinstance(value, dict):
         raise Failure(INPUT_INVALID, "Composition input must be a JSON object")
@@ -50,14 +50,21 @@ def publish(args, job: Job):
     destination = Path(args.publish_to).expanduser().absolute()
     if destination.name != data["name"]:
         raise Failure(INPUT_INVALID, "Publish directory must match the composition name")
+    def existing(value, *, member=False):
+        path = source.parent / value
+        if path.is_symlink() or not (path.is_dir() if member else path.is_file()):
+            raise Failure(INPUT_MISSING, "Published input is missing or is a link")
+        if member and not any((path / name).is_file() for name in ("module.json", "composition.json")):
+            raise Failure(INPUT_MISSING, "Published member declaration is missing")
+        return relative(path.resolve(), destination)
     for field in ("loads", "base_owned"):
-        data[field] = [relative((source.parent / value).resolve(), destination) for value in data.get(field, [])]
+        data[field] = [existing(value) for value in data.get(field, [])]
     members = []
     for value in data["modules"]:
         if isinstance(value, str):
-            members.append(relative((source.parent / value).resolve(), destination))
+            members.append(existing(value, member=True))
         else:
-            members.append(dict(value, path=relative((source.parent / value["path"]).resolve(), destination)))
+            members.append(dict(value, path=existing(value["path"], member=True)))
     data["modules"] = members
     compositions.validate_composition_metadata(data)
     # Exclusive publication; a saved recipe is never silently replaced.
@@ -80,6 +87,7 @@ def execute(args, job: Job):
     if len(args.module) > compositions.MAX_MODULES or len(args.member_root) > 16:
         raise Failure(INPUT_LIMIT, "Too many module IDs or member roots")
     index = {}
+    discovery_bytes = 0
     for root_text in args.member_root:
         root = Path(root_text).expanduser().resolve()
         if not root.is_dir():
@@ -88,10 +96,18 @@ def execute(args, job: Job):
         if len(children) > 4096:
             raise Failure(INPUT_LIMIT, "Member root exceeds 4096 entries")
         for child in children:
+            job.check_deadline()
             declaration = child / "module.json"
             if child.is_symlink() or not child.is_dir() or not declaration.is_file():
                 continue
-            _, data = read_json(declaration, job, compositions.MAX_DECLARATION_BYTES)
+            raw = compositions._read_inspection(declaration)
+            discovery_bytes += len(raw)
+            if discovery_bytes > 64 * 1024 * 1024:
+                raise Failure(INPUT_LIMIT, "Module discovery exceeds 64 MiB")
+            try:
+                data = json.loads(raw)
+            except (ValueError, RecursionError) as exc:
+                raise Failure(INPUT_INVALID, "Invalid discovered module JSON") from exc
             metadata = compositions.validate_declaration_metadata(data)
             index.setdefault(metadata["id"], (child, metadata))  # Ordered roots prefer a built seed.
     selected = {}
@@ -111,6 +127,11 @@ def execute(args, job: Job):
         include(mid)
         if mid + "_registration" in index:
             include(mid + "_registration")
+    # Only selected declarations are inputs of this composition; discovery has its own budget.
+    for path, discovered in selected.values():
+        _, current = read_json(path / "module.json", job, compositions.MAX_DECLARATION_BYTES)
+        if compositions.validate_declaration_metadata(current) != discovered:
+            raise Failure(INPUT_INVALID, "Selected declaration changed after discovery")
     foundation_path, foundation = read_json(Path(args.foundation), job)
     if foundation.get("profile_prefix") and foundation["profile_prefix"] != args.base:
         raise Failure(INPUT_INVALID, "Requested base does not match the foundation profile prefix")

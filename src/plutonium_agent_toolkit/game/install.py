@@ -76,7 +76,7 @@ def install_mod(mod_ff: Path, folder: str, replace: bool = False, with_soundbank
             raise Failure(INPUT_INVALID, "Profile foundation must be a bounded regular JSON file")
         try:
             declared = json.loads(foundation.read_text(encoding="utf-8")).get("profile_links", {})
-        except (ValueError, AttributeError) as exc:
+        except (ValueError, AttributeError, RecursionError) as exc:
             raise Failure(INPUT_INVALID, "Invalid profile foundation") from exc
         if not isinstance(declared, dict) or set(declared) - {"mod_load.ff", "mod_load.ipak"}:
             raise Failure(INPUT_INVALID, "Profile links only name mod_load.ff and mod_load.ipak")

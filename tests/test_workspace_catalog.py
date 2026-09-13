@@ -54,7 +54,6 @@ class WorkspaceCatalogTests(unittest.TestCase):
         row = catalog(str(self.root),str(art))['modules'][0]
         self.assertIsNone(row['icon_binding'])
         self.assertEqual(row['symbol'],'symbol-weapon')
-        media = self.root / asset['url']
         media = self.root / 'art' / asset['url']
         media.parent.mkdir(parents=True)
         media.write_bytes(b'webp fixture')
@@ -76,3 +75,130 @@ class WorkspaceCatalogTests(unittest.TestCase):
         self.assertTrue(next(r for r in found if r['map']=='zm_factory')['staged'])
         self.assertFalse(next(r for r in found if r['map']=='zm_moon')['staged'])
         self.assertEqual(found[0]['source'],'foundations/foundation.json')
+
+    def test_non_object_foundation_maps_is_a_diagnostic(self):
+        self.write('foundations/bad.json', {'id':'base','profile_prefix':'stock','maps':[], 'link_loads':{'zm_factory':[]}})
+        result = catalog(str(self.root))
+        self.assertEqual(len(result['modules']), 1)
+        self.assertIn('maps must be an object', result['diagnostics'][0]['message'])
+
+    def test_non_object_cover_symbol_is_a_module_diagnostic(self):
+        art = self.write('art.json', {'modules':[{'declarationId':'example','coverSymbol':[]}]})
+        result = catalog(str(self.root), str(art))
+        self.assertEqual(result['modules'], [])
+        self.assertIn('coverSymbol must be an object', result['diagnostics'][0]['message'])
+
+    def test_icon_bytes_have_an_aggregate_budget(self):
+        from unittest.mock import patch
+        from plutonium_agent_toolkit.dev import workspace_catalog as wc
+        declaration = json.loads((self.root/'modules/example/module.json').read_text())
+        self.write('modules/second/module.json', dict(declaration, id='second'))
+        artworks = []
+        for mid, token in [('example','a'), ('second','b')]:
+            url = 'local-media/' + token*64 + '.webp'
+            file = self.root / url
+            file.parent.mkdir(exist_ok=True)
+            file.write_bytes(b'xx')
+            artworks.append({'declarationId':mid, 'artwork':[{'url':url,'binding':{'role':'bound HUD icon'}}]})
+        art = self.write('art.json', {'modules':artworks})
+        with patch.object(wc, 'MAX_ICON_BYTES', 3):
+            result = catalog(str(self.root), str(art))
+        self.assertEqual(len(result['modules']), 1)
+        self.assertIn('aggregate budget', result['diagnostics'][0]['message'])
+
+    def test_shared_icon_is_read_once_per_catalog(self):
+        from unittest.mock import patch
+        from plutonium_agent_toolkit.dev import workspace_catalog as wc
+        declaration = json.loads((self.root/'modules/example/module.json').read_text())
+        self.write('modules/second/module.json', dict(declaration, id='second'))
+        url = 'local-media/' + 'a'*64 + '.webp'
+        file = self.root / url
+        file.parent.mkdir()
+        file.write_bytes(b'xx')
+        art = self.write('art.json', {'modules':[{'declarationId':mid,'artwork':[{'url':url,'binding':{'role':'shared HUD icon'}}]} for mid in ['example','second']]})
+        with patch.object(wc, 'MAX_ICON_BYTES', 2), patch.object(wc.hashlib, 'sha256', wraps=wc.hashlib.sha256) as hashed:
+            result = catalog(str(self.root), str(art))
+        self.assertEqual(len(result['modules']), 2)
+        self.assertEqual(hashed.call_count, 3)  # Two declarations, one shared image.
+        self.assertEqual(result['diagnostics'], [])
+
+    def test_declaration_hash_and_validation_use_the_same_snapshot(self):
+        import hashlib
+        from unittest.mock import patch
+        from plutonium_agent_toolkit.dev import workspace_catalog as wc
+        file = self.root/'modules/example/module.json'
+        original = file.read_bytes()
+        validate = wc.validate_declaration_metadata
+        def replace_after_validation(data):
+            result = validate(data)
+            file.write_text(json.dumps(dict(data, id='replaced')))
+            return result
+        with patch.object(wc, 'validate_declaration_metadata', side_effect=replace_after_validation):
+            row = catalog(str(self.root))['modules'][0]
+        self.assertEqual(row['id'], 'example')
+        self.assertEqual(row['declaration_sha256'], hashlib.sha256(original).hexdigest())
+
+    def test_build_bound_is_checked_before_projecting_the_next_row(self):
+        from unittest.mock import patch
+        from plutonium_agent_toolkit.dev import workspace_catalog as wc
+        self.write('registry/module-recipes.json', {'recipes':[{'id':'example','builds':[{'id':str(i)} for i in range(128)]}]})
+        self.write('registry/t6-modules.json', {'modules':[{'id':'example','build_revisions':[{'id':str(i)} for i in range(129)]}]})
+        with patch.object(wc, 'project_record', wraps=wc.project_record) as project:
+            result = catalog(str(self.root))
+        self.assertEqual(project.call_count, 256)
+        self.assertEqual(result['modules'], [])
+        self.assertIn('256 build records', result['diagnostics'][0]['message'])
+
+    def test_non_object_link_loads_is_a_foundation_diagnostic(self):
+        self.write('foundations/bad.json', {'id':'base','profile_prefix':'stock','maps':{'zm_factory':{}}, 'link_loads':[]})
+        result = catalog(str(self.root))
+        self.assertEqual(result['foundations'], [])
+        self.assertIn('link_loads must be an object', result['diagnostics'][0]['message'])
+
+    def test_optional_registry_symlinks_are_rejected_with_diagnostics(self):
+        target = self.write('target.json', {'modules':[]})
+        directory = self.root/'registry'
+        directory.mkdir()
+        link = directory/'t6-modules.json'
+        for destination in (target, self.root/'missing.json'):
+            with self.subTest(destination=destination.name):
+                try:
+                    link.symlink_to(destination)
+                except OSError as exc:
+                    self.skipTest(str(exc))
+                result = catalog(str(self.root))
+                self.assertEqual(len(result['modules']), 1)
+                self.assertIn('link', result['diagnostics'][0]['message'])
+                link.unlink()
+
+    def test_foundation_map_count_is_bounded_before_projection(self):
+        self.write('foundations/large.json', {'id':'base','profile_prefix':'stock','maps':{f'zm_{i}':{} for i in range(65)}})
+        result = catalog(str(self.root))
+        self.assertEqual(result['foundations'], [])
+        self.assertTrue(result['truncated'])
+        self.assertIn('map count bound', result['diagnostics'][0]['message'])
+
+    def test_total_foundation_rows_are_bounded(self):
+        for i in range(5):
+            self.write(f'foundations/base{i}.json', {'id':f'base{i}','profile_prefix':'stock','maps':{f'zm_{j}':{} for j in range(64)}})
+        result = catalog(str(self.root))
+        self.assertEqual(len(result['foundations']), 256)
+        self.assertTrue(result['truncated'])
+        self.assertIn('foundation row bound', result['diagnostics'][0]['message'])
+
+    def test_unhashable_registry_ids_are_ignored(self):
+        self.write('registry/t6-modules.json', {'modules':[{'id':[]}, {'id':{}}, {'id':'example','weapon_class':'Pistols'}]})
+        result = catalog(str(self.root))
+        self.assertEqual(result['modules'][0]['weapon_class'], 'Pistols')
+        self.assertEqual(result['diagnostics'], [])
+
+    def test_deep_json_returns_a_structured_failure_or_diagnostic(self):
+        from plutonium_agent_toolkit.dev.workspace_catalog import read_object
+        file = self.root/'deep.json'
+        file.write_text('{"nested":' + '['*20000 + '0' + ']'*20000 + '}')
+        with self.assertRaises(Failure) as raised:
+            read_object(file)
+        self.assertEqual(raised.exception.code, 'input_invalid')
+        self.write('foundations/base.json', {'id':'base','profile_prefix':'stock','private_descriptor':'../deep.json'})
+        result = catalog(str(self.root))
+        self.assertIn('not readable JSON', result['diagnostics'][0]['message'])
