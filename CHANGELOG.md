@@ -7,6 +7,11 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- Contract validation accepts concrete maps for wildcard declarations and reports excessive
+  nesting as `input_invalid`; documentation describes probe inspection without promising
+  composition-time enforcement. Covered by offline unit tests on Linux; native Windows
+  and gameplay behavior remain unverified.
+
 - Validate optional per-module test contracts during module inspection, with closed actions, typed checks and exact-byte digests.
 - Document the still-unexecuted native Windows issue 8 comparison experiment.
 

@@ -70,14 +70,17 @@ def check(value, field):
     if 'equals' in value and (type(value['equals']) not in (str,int,float,bool) or isinstance(value['equals'],str) and len(value['equals'])>200 or type(value['equals']) is float and not math.isfinite(value['equals'])): fail(field+'/equals','Expected bounded scalar')
 
 def validate_contract(data, *, declaration, probe=False):
-    data=copy.deepcopy(data)
+    try:
+        data=copy.deepcopy(data)
+    except RecursionError as exc:
+        raise Failure(INPUT_INVALID,'Invalid test contract structure',field='/') from exc
     _fields(data,{'schema','module','maps','steps','soak','human_only','not_covered'},{'schema','module','maps','steps','soak','human_only','not_covered'},'test contract')
     if type(data['schema']) is not int or data['schema']!=1: fail('/schema','Expected schema 1')
     if data['module']!=declaration['id']: fail('/module','Contract module must match declaration')
     if not isinstance(data['maps'],dict) or not 1<=len(data['maps'])<=64: fail('/maps','Expected map preconditions')
     for mid, value in data['maps'].items():
         field='/maps'+_pointer(mid)
-        if not MAP.fullmatch(mid) or mid not in declaration['maps']: fail(field,'Map is outside declaration')
+        if not MAP.fullmatch(mid) or ('*' not in declaration['maps'] and mid not in declaration['maps']): fail(field,'Map is outside declaration')
         _fields(value,{'preconditions'},{'preconditions'},'map',field)
         rows(value['preconditions'],field+'/preconditions',16)
         for i,p in enumerate(value['preconditions']):
@@ -111,7 +114,7 @@ def validate_contract(data, *, declaration, probe=False):
     return data
 
 def requires_probe(contract):
-    """True when any agent-actor action uses a probe verb; a composition must then supply test_probe."""
+    """Report whether any agent-actor action uses a probe verb; this enforces no composition policy."""
     for value in contract['maps'].values():
         for p in value['preconditions']:
             if p['verb'] in PROBE_VERBS and p.get('actor','agent')=='agent': return True
