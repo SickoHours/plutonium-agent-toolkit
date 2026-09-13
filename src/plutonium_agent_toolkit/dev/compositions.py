@@ -115,7 +115,16 @@ def add_parser(sub, common):
                               ("build", "Compile, link against seeds and loads, read back and compare every module into one mod.ff")):
         q = actions.add_parser(action, help=help_text)
         q.add_argument("composition", help="Path to composition.json")
+        q.add_argument("--allow-unqualified", action="store_true", help="Report base/map mismatches without refusing; does not add evidence")
         common(q)
+    q = actions.add_parser("compose", help="Compose declared IDs against a foundation, or publish a successfully built recipe")
+    q.add_argument("--name"); q.add_argument("--base"); q.add_argument("--map")
+    q.add_argument("--game", choices=titles.names(), default=None, help="Title the recipe targets; inferred from the members when omitted")
+    q.add_argument("--foundation")
+    q.add_argument("--member-root", action="append", default=[])
+    q.add_argument("--module", action="append", default=[])
+    q.add_argument("--publish-to"); q.add_argument("--from-build"); q.add_argument("--composition")
+    common(q)
     q = actions.add_parser("fetch", help="Download a published module or pack at its exact commit into a new directory")
     q.add_argument("reference", help="<owner>/<id>@<commit> (through a recorded registry) or https://github.com/<owner>/<repo>@<commit>")
     q.add_argument("--path", help="Directory inside the repository that holds module.json or composition.json (default: the registry entry's path, or the root)")
@@ -139,7 +148,7 @@ MAX_DECLARATION_BYTES = 256 * 1024
 MAX_INSPECTION_TEXT = 2048
 MAX_INSPECTION_CODE = 200
 MODULE_METADATA_FIELDS = ("id", "version", "game", "title", "category", "kind", "tags", "bases", "maps",
-                          "dependencies", "conflicts", "origin", "donor", "distribution", "menu_route", "payload")
+                          "dependencies", "conflicts", "origin", "donor", "distribution", "menu_route", "payload", "lineage")
 COMPOSITION_METADATA_FIELDS = ("name", "title", "game", "tags", "base", "map", "origin", "donor", "members")
 
 
@@ -382,11 +391,31 @@ def _relative_file(text: str, base: Path, job: Job, what: str) -> Path:
     return job.input(full)
 
 
+def validate_lineage(value):
+    if value is None:
+        return None
+    rows = [value] if isinstance(value, dict) else value
+    if not isinstance(rows, list) or not 1 <= len(rows) <= 18:
+        raise Failure(INPUT_INVALID, "lineage is one entry or 1 to 18 same-map source entries", field="/lineage")
+    result = []
+    for row in rows:
+        _fields(row, {"game", "map", "source", "note"}, {"game", "map", "source"}, "lineage")
+        if row["game"] not in ("t4", "t5") or not isinstance(row["map"], str) or not re.fullmatch(r"zm_[a-z0-9_]{1,60}", row["map"]):
+            raise Failure(INPUT_INVALID, "lineage requires a T4/T5 game and a zm_ map ID", field="/lineage")
+        if not isinstance(row["source"], str) or not row["source"].strip() or len(row["source"]) > 2048:
+            raise Failure(INPUT_INVALID, "lineage source must be non-empty and at most 2048 characters", field="/lineage")
+        note = row.get("note", "")
+        if not isinstance(note, str) or len(note) > 400:
+            raise Failure(INPUT_INVALID, "lineage note is at most 400 characters", field="/lineage")
+        result.append(dict(row, note=note))
+    return result
+
+
 def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
     """Authoritative declaration checks; no filesystem or payload resolution."""
     _fields(data, {"schema", "id", "version", "game", "title", "category", "kind", "tags", "recipe", "seed", "bases", "maps",
                             "dependencies", "conflicts", "provides", "resource_contract", "menu_route", "distribution", "source",
-                            "origin", "donor"},
+                            "origin", "donor", "lineage"},
                      {"schema", "id", "version", "bases", "maps"}, where)
     if data["schema"] != 1:
         raise Failure(INPUT_INVALID, f"{where}: expected schema 1", field='/schema')
@@ -453,6 +482,7 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
             "provides": provides,
             "resource_contract": _at("/resource_contract", _contract, data.get("resource_contract"), f"{mid}: resource_contract"),
             "menu_route": menu_route, "source": source,
+            "lineage": validate_lineage(data.get("lineage")),
             "origin": _at("/origin", _origin, data.get("origin"), mid), "donor": _at("/donor", _donor, data.get("donor"), mid)}
 
 
@@ -711,13 +741,14 @@ def _order(modules: list[dict]) -> list[str]:
     return order
 
 
-def resolve(comp: dict, modules: list[dict]) -> dict:
+def resolve(comp: dict, modules: list[dict], allow_unqualified: bool = False) -> dict:
     ids = [m["id"] for m in modules]
     if len(set(ids)) != len(ids):
         duplicates = sorted({i for i in ids if ids.count(i) > 1})
         raise Failure(INPUT_INVALID, f"Two members declare the same id: {duplicates}",
                       "A module appears once in a pack, including through nested compositions.")
     known = set(ids)
+    unqualified = []
     for m in modules:
         for dep in m["dependencies"]:
             if dep not in known:
@@ -726,10 +757,14 @@ def resolve(comp: dict, modules: list[dict]) -> dict:
         for other in m["conflicts"]:
             if other in known:
                 raise Failure(INPUT_INVALID, f"{m['id']} declares a conflict with {other}; both are in the composition")
-        if comp["base"] not in m["bases"]:
+        base_mismatch = comp["base"] not in m["bases"]
+        map_mismatch = "*" not in m["maps"] and comp["map"] not in m["maps"]
+        if allow_unqualified and (base_mismatch or map_mismatch):
+            unqualified.append({"id": m["id"], "declared_bases": m["bases"], "declared_maps": m["maps"], "base": comp["base"], "map": comp["map"]})
+        if base_mismatch and not allow_unqualified:
             raise Failure(INPUT_INVALID, f"{m['id']} is declared for bases {m['bases']}, not for {comp['base']!r}",
                           "Build the module on a base it declares, or extend its declaration after testing it there.")
-        if "*" not in m["maps"] and comp["map"] not in m["maps"]:
+        if map_mismatch and not allow_unqualified:
             raise Failure(INPUT_INVALID, f"{m['id']} is declared for maps {m['maps']}, not for {comp['map']!r}",
                           "Qualify the module on that map first (build alone, load, play, record the verdict), then extend maps.")
         if m["seed"] and m["seed"].get("private"):
@@ -742,7 +777,7 @@ def resolve(comp: dict, modules: list[dict]) -> dict:
             if totals[field] > comp["budget"][field]:
                 raise Failure(INPUT_LIMIT, f"Resource budget exceeded: {field} {totals[field]} > {comp['budget'][field]}",
                               "Raise the budget deliberately after measuring, or leave a module out; the sum counts every module.")
-    return {"order": order, "resource_totals": totals}
+    return {"order": order, "resource_totals": totals, "unqualified": unqualified}
 
 
 def collisions(modules: list[dict], loaded: dict[str, tuple], decisions: list[dict], base_owned: set[str] | None = None) -> tuple[list[dict], list[dict]]:
@@ -851,6 +886,9 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
 
 
 def execute(args, job: Job) -> dict:
+    if args.action == "compose":
+        from . import compose
+        return compose.execute(args, job)
     if args.action == "fetch":
         from . import registry
 
@@ -863,7 +901,7 @@ def execute(args, job: Job) -> dict:
     if mixed:
         raise Failure(INPUT_INVALID, f"Composition targets game {comp['game']} but these members target another game: {mixed}",
                       "Every module in a composition targets the same game; split the pack or fix the members' module.json game.")
-    resolved = resolve(comp, modules)
+    resolved = resolve(comp, modules, getattr(args, "allow_unqualified", False))
     loaded = {m["id"]: projects.load_recipe(m["recipe"], job) for m in modules if m["recipe"] is not None}
     by_id = {m["id"]: m for m in modules}
     compiled, loose = [], []
@@ -892,11 +930,12 @@ def execute(args, job: Job) -> dict:
                    "soundbanks": [n for n in m["seed"]["files"] if n != "mod.ff"],
                    "strings": str(m["seed"]["strings"]) if m["seed"].get("strings") else None} for m in seed_modules],
         "loads": [str(p) for p in loads], "zone_header": header,
+        "unqualified": resolved["unqualified"],
         "resource_totals": resolved["resource_totals"], "budget": comp["budget"],
         "decisions": decided, "undecided": undecided, "base_owned_names": len(comp.get("base_owned") or ()),
         "backends": checks, "backends_available": all(c["available"] for c in checks),
         "input_files": len(job.inputs),
-        "verification": "composition resolved (dependency order, conflicts, base and map fit, budget); collisions listed as decisions; "
+        "verification": "composition resolved (dependency order, conflicts, budget); base/map mismatches listed in unqualified; collisions listed as decisions; "
                         "declarations, recipes, seeds and declared inputs hashed; backend presence checked; nothing compiled",
     }
     (job.root / "plan.json").write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
@@ -904,7 +943,8 @@ def execute(args, job: Job) -> dict:
                "base_member": plan["base_member"],
                "modules": [{"id": r["id"], "version": r["version"], "order": i + 1, "payload": r["payload"], "role": r["role"]}
                            for i, r in enumerate(rows)],
-               "resource_totals": resolved["resource_totals"], "budget": comp["budget"],
+               "unqualified": resolved["unqualified"],
+        "resource_totals": resolved["resource_totals"], "budget": comp["budget"],
                "scripts": len(compiled), "assets": len(loose), "seeds": len(seed_modules), "loads": len(loads),
                "decisions": decided, "undecided": undecided, "base_owned_names": len(comp.get("base_owned") or ())}
     if args.action == "plan":
@@ -1031,7 +1071,7 @@ def _build_composition(comp: dict, plan: dict, compiled, loose, seed_modules, lo
     if missing_roots:
         raise Failure(BACKEND_FAILED, f"{len(missing_roots)} seed root(s) are not in the composed package: {missing_roots[:5]}",
                       "The linker did not copy them from the seed; check the loads and the seed manifest.", missing=missing_roots[:64])
-    return {**link, "plan": "plan.json", "rawfiles_verified": len(rawfiles), "mod_ff": link["packages"][0]["path"],
+    return {**link, "unqualified": plan["unqualified"], "plan": "plan.json", "rawfiles_verified": len(rawfiles), "mod_ff": link["packages"][0]["path"],
             "seed_roots_verified": sum(len(m["seed"]["roots"]) for m in seed_modules),
             "embedded_assets": len(embedded), "referenced_assets": len(referenced), "localized_strings": len(strings),
             "soundbanks": sorted(p.name for p in banks.iterdir() if p.is_file() and p.name != "mod.ff"),

@@ -296,7 +296,8 @@
         "donor",
         "distribution",
         "menu_route",
-        "payload"
+        "payload",
+        "lineage"
       ],
       "properties": {
         "id": {
@@ -376,6 +377,49 @@
           "enum": [
             "recipe",
             "seed"
+          ]
+        },
+        "lineage": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 18,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "game",
+                  "map",
+                  "source",
+                  "note"
+                ],
+                "properties": {
+                  "game": {
+                    "enum": [
+                      "t4",
+                      "t5"
+                    ]
+                  },
+                  "map": {
+                    "type": "string",
+                    "pattern": "^zm_[a-z0-9_]{1,60}$"
+                  },
+                  "source": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 400
+                  }
+                }
+              }
+            }
           ]
         }
       }
