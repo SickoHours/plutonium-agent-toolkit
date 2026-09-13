@@ -30,6 +30,10 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Fixed
 
+- Composition member, load and base-listing paths beginning with `/` are rejected on
+  Windows as well as Linux. A Windows path rooted on the current drive is not relative
+  to the composition directory. Covered by the inspection metadata tests.
+
 - `module inspect` accepts symlinked ancestor directories like plan/build while still refusing
   a linked declaration and checking regular-file identity. Its diagnostic field/message and
   envelope message/hint are limited to 2048 UTF-16 code units, with error codes limited to 200 units;

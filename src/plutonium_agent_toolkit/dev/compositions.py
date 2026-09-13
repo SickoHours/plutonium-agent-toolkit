@@ -282,7 +282,7 @@ def _relative_path(text: str, what: str) -> str:
     if not isinstance(text, str) or not text or len(text) > 4096 or "\\" in text or text != text.strip():
         raise Failure(INPUT_INVALID, f"{what} paths are forward-slash relative paths")
     p = Path(text)
-    if p.is_absolute() or not p.parts:
+    if text.startswith("/") or p.is_absolute() or not p.parts:
         raise Failure(INPUT_INVALID, f"{what} paths are relative to the composition directory: {text}")
     return text
 

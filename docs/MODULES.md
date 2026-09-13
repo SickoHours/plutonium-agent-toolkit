@@ -203,6 +203,9 @@ Localized strings cannot be copied out of a loaded fastfile, so `declare` extrac
 | `decisions` | no | One recorded owner per collision the plan listed (below). A decision naming a module that is not party to the collision is refused |
 | `base_owned` | no | Up to 8 relative paths to plain asset listings of the base zones the composition loads (one `type, name` row per line, the shape an unlinker `--list` prints). A name collision whose asset the base already carries is classified `base-owned` and needs no decision: both seeds got their copy by linking against the base, and the base's copy is what loads. Names the listings do not carry stay decisions. A recorded decision for a base-owned name still wins |
 
+Member, load and base-listing paths cannot begin with `/`, including on Windows where
+that spelling is rooted on the current drive rather than relative to the composition.
+
 ## What `plan` proves and what it does not
 
 `pat module plan <composition.json> --output <new dir> --json` reads every declaration, recipe

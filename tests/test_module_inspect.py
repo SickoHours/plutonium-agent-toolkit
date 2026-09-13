@@ -141,6 +141,7 @@ class InspectTests(unittest.TestCase):
                  ("modules", [{"name": "owner/a", "commit": "bad"}], "/modules/0/commit"),
                  ("modules", [{"commit": "a" * 40, "path": "../a"}], "/modules/0/commit"),
                  ("loads", [3], "/loads/0"), ("base_owned", [3], "/base_owned/0"),
+                 ("loads", ["/absolute"], "/loads/0"), ("base_owned", ["/absolute"], "/base_owned/0"),
                  ("budget", {"hud": -1}, "/budget/hud"), ("zone_header", ["bad"], "/zone_header"),
                  ("decisions", [{"collision": "x", "owner": "BAD"}], "/decisions/0/owner"),
                  ("decisions", [{"collision": "x", "owner": "alpha", "reason": None}], "/decisions/0/reason"),
