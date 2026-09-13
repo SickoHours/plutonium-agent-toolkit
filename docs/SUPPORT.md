@@ -203,3 +203,7 @@ missing named files and exact-byte hashes. It does not execute a contract or est
 `test plan` is implemented offline. The loader resolves declared members in dependency order,
 requires a named contract for each, records file hashes, and refuses missing map coverage with
 a JSON Pointer and failed job receipt. Stitching writes test-plan.json with dependency order, merged preconditions, pairwise checks, explicit conflicts, human-only steps and coverage exclusions. No live qualification.
+
+`module state` is offline: synthetic rung, package drift, source drift, changed contract and
+failed-run tests pass. Derivation is read-only; no actual game-tested or accepted evidence
+is created by this route. The run requires a terminal `automated-passed` verdict.

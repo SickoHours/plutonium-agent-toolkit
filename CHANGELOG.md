@@ -7,6 +7,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- Derive composition evidence state from package, source, contract, run and scoped verdict hashes.
+
 - Stitch test contracts in dependency order, with explicit shared-check decisions and human/probe precondition refusals.
 
 - Add the offline test-plan route and contract-member loader with receipted missing-input refusals.

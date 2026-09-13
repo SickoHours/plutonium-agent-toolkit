@@ -108,6 +108,11 @@ MAX_NESTING = 4
 def add_parser(sub, common):
     p = sub.add_parser("module", help="Declared modules composed into one mod on a named base: plan, build, declare")
     actions = p.add_subparsers(dest="action", required=True)
+    q = actions.add_parser("state", help="Derive composition evidence state from current hashes")
+    q.add_argument("--composition",required=True)
+    for name in ("plan","verify","test-plan","run","verdict"):
+        q.add_argument("--"+name)
+    q.add_argument("--json",action="store_true")
     q = actions.add_parser("inspect", help="Validate one declaration's metadata without resolving payloads or creating a job")
     q.add_argument("declaration", help="Path to module.json or composition.json")
     q.add_argument("--json", action="store_true")

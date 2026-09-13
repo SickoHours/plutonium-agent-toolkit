@@ -394,3 +394,13 @@ and `not_covered`; the planner never silently turns a failed assertion into a pa
 The four phases are load, members, interactions and soak. Human-only verification remains in
 `human_steps`. Until a probe exists, nonzero soak is a human round-advance step, and background
 plans refuse human preconditions/soak. A plan is preparation, not evidence that actions ran.
+
+## Derived evidence state
+
+`pat module state --composition DIR --plan PLAN --verify RECEIPT --test-plan TEST_PLAN
+--run RUN --verdict ACCEPTED --json` computes composed, offline_verified,
+ready_for_game_testing, game_tested, then player_accepted. Optional evidence paths stop at
+whichever rung remains proven. Package bytes, built plan, all receipt input hashes, exact
+member contracts, admitted run-plan digest and latest scoped verdict must match in order.
+Changes revoke later claims and appear in `reasons`; no state file is stored or updated.
+A stale composition plan is reported as composed with its mismatch reason, never offline verified.
