@@ -62,3 +62,11 @@ class GeneratedEntry(CompositionFixture):
         m=self.entry_member('alpha');(m/'scripts/alpha.gsc').write_text('main() {}')
         comp=self.composition(['alpha']);code,row=invoke(['module','plan',str(comp),'--output',self.out(),'--json'])
         self.assertEqual(code,1,row);self.assertEqual(row['details']['field'],'/modules/0/entry')
+
+class LooseScripts(CompositionFixture):
+    def test_compiled_scripts_are_emitted_loose_beside_the_package(self):
+        self.module('alpha');comp=self.composition(['alpha']);out=self.out()
+        code,row=invoke(['module','build',str(comp),'--output',out,'--json']);self.assertEqual(code,0,row)
+        self.assertEqual(row['result']['loose_scripts'],['scripts/zm/alpha.gsc'])
+        loose=Path(out)/'packages/scripts/zm/alpha.gsc';self.assertTrue(loose.is_file())
+        self.assertEqual(loose.read_bytes(),(Path(out)/'readback/scripts/zm/alpha.gsc').read_bytes())
