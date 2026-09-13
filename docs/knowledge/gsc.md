@@ -72,3 +72,13 @@ and the *engine* must have those scripts loaded too.
 `map_restart` reruns the loaded scripts and is the fast loop for script logic. It does not reread
 the fastfile: after a rebuild, reinstall and `reload-mod`. A compile plus a clean startup is
 cheaper than a gameplay pass and must be reported as the cheaper thing.
+
+## Declared function replacements
+
+Call `replaceFunc` from the generated `main()` before the target executes; module registration
+runs from generated `init()`. Engine entry points (`CodeCallback_*`, map/gametype main and
+`gamemode_callback_setup`) belong to the foundation and cannot be detoured by a module.
+One effective registration exists per target, so duplicate declarations are refused rather
+than relying on last-registration-wins behavior. Detours clear on fast_restart; load and
+re-registration evidence is required again. The literal source scan and generated-entry
+readback are offline evidence only; they do not establish runtime detour behavior or gameplay.
