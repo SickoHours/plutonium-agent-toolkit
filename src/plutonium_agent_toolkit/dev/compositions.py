@@ -119,6 +119,7 @@ def add_parser(sub, common):
         common(q)
     q = actions.add_parser("compose", help="Compose declared IDs against a foundation, or publish a successfully built recipe")
     q.add_argument("--name"); q.add_argument("--base"); q.add_argument("--map")
+    q.add_argument("--game", choices=titles.names(), default=None, help="Title the recipe targets; inferred from the members when omitted")
     q.add_argument("--foundation")
     q.add_argument("--member-root", action="append", default=[])
     q.add_argument("--module", action="append", default=[])

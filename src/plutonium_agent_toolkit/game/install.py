@@ -80,7 +80,9 @@ def install_mod(mod_ff: Path, folder: str, replace: bool = False, with_soundbank
             target = (foundation.parent / value).resolve()
             if not target.is_file() or target.is_relative_to(dest_dir):
                 raise Failure(INPUT_MISSING, "Profile link source is missing or inside the destination")
-            links[name] = target
+            # Hash now, before anything moves: an unreadable or oversized target refuses the
+            # install instead of failing after the previous mod has been moved aside.
+            links[name] = (target, sha256_file(target))
     backup = None
     if dest_dir.exists():
         if not replace:
@@ -98,7 +100,7 @@ def install_mod(mod_ff: Path, folder: str, replace: bool = False, with_soundbank
             (dest_dir / name).write_bytes(data)
             if sha256_file(dest_dir / name) != hashlib.sha256(data).hexdigest():
                 raise Failure("hash_mismatch", "Installed soundbank differs from source")
-        for name, target in links.items():
+        for name, (target, _) in links.items():
             (dest_dir / name).symlink_to(target)
         if dest_sha != source_sha:
             raise Failure("hash_mismatch", "Installed mod.ff does not match the source after copy; inspect the storage volume")
@@ -113,7 +115,7 @@ def install_mod(mod_ff: Path, folder: str, replace: bool = False, with_soundbank
                "path": f"mods/{folder}/mod.ff", "sha256": dest_sha,
                "bytes": dest.stat().st_size, "source": str(src), "backup": str(backup) if backup else None,
                "soundbanks": [{"name": name, "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)} for name, data in soundbanks.items()],
-               "profile_links": [{"name": name, "target": str(target), "sha256": sha256_file(target)} for name, target in links.items()],
+               "profile_links": [{"name": name, "target": str(target), "sha256": digest} for name, (target, digest) in links.items()],
                "game_touched": False}
     receipts = state_dir() / "installs"
     receipts.mkdir(parents=True, exist_ok=True)

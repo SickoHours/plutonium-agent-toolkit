@@ -35,6 +35,33 @@ class ComposeTests(CompositionFixture):
         self.assertEqual(code, 1, row)
         self.assertIn("zm_moon", row["message"])
 
+    def test_recipe_names_the_members_title_and_refuses_a_mixed_or_wrong_game(self):
+        (self.root / "modules" / "mp_only").mkdir(parents=True)
+        (self.root / "modules" / "mp_only" / "module.json").write_text(json.dumps({
+            "schema": 1, "id": "mp_only", "version": "0.1.0", "game": "iw5", "title": "mp_only", "category": "scripts",
+            "recipe": "project.json", "bases": ["stock"], "maps": ["*"], "dependencies": [], "conflicts": [],
+            "resource_contract": {"threads": 1, "entities": 0, "hud": 0, "network_fields": 0}}))
+        code, row = invoke(self.inputs() + ["--module", "alpha", "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        recipe = json.loads(Path(row["result"]["composition"]).read_text())
+        self.assertEqual(recipe["game"], "t6", "derived from the only title the members declare")
+        code, row = invoke(self.inputs() + ["--module", "alpha", "--module", "mp_only", "--output", self.out()])
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "input_invalid")
+        self.assertIn("more than one title", row["message"])
+        code, row = invoke(self.inputs() + ["--game", "iw5", "--module", "alpha", "--output", self.out()])
+        self.assertEqual(code, 1, row)
+        self.assertIn("--game iw5", row["message"])
+
+    def test_foundation_zone_header_must_be_strings(self):
+        args = self.inputs()
+        foundation = Path(args[args.index("--foundation") + 1])
+        foundation.write_text(json.dumps({"link_loads": {"zm_factory": []}, "mod_zone_header": [">game,T6", 7]}))
+        code, row = invoke(args + ["--module", "alpha", "--output", self.out()])
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "input_invalid")
+        self.assertIn("mod_zone_header", row["message"])
+
     def test_publish_requires_exact_successful_build_and_does_not_replace(self):
         code, row = invoke(self.inputs() + ["--module", "alpha", "--output", self.out()])
         self.assertEqual(code, 0, row)

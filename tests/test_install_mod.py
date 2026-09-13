@@ -50,6 +50,22 @@ class InstallModTests(InstallFixture):
         self.assertFalse(row["result"]["game_touched"])
 
 
+    def test_unhashable_profile_link_refuses_before_moving_the_previous_install(self):
+        code, row = invoke(["game", "install-mod", str(self.mod_ff), "example"])
+        self.assertEqual(code, 0, row)
+        installed = self.storage / "mods/example/mod.ff"
+        before = installed.read_bytes()
+        link_dir = self.root / "link_dir"
+        link_dir.mkdir()
+        foundation = self.root / "foundation.json"
+        foundation.write_text(json.dumps({"profile_links": {"mod_load.ff": str(link_dir)}}))
+        self.mod_ff.write_bytes(b"TAffNEWER")
+        code, row = invoke(["game", "install-mod", str(self.mod_ff), "example", "--replace", "--profile-foundation", str(foundation)])
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "input_missing")
+        self.assertEqual(installed.read_bytes(), before, "the previous install is untouched")
+        self.assertFalse(list((Path(os.environ["PAT_HOME"])).rglob("mod-backups/*")), "nothing was moved aside")
+
     def test_install_copies_hashes_and_refuses_overwrite(self):
         code, row = invoke(["game", "install-mod", str(self.mod_ff), "hello_zm"])
         self.assertEqual(code, 0, row)

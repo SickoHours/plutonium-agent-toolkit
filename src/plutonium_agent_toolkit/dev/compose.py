@@ -121,9 +121,19 @@ def execute(args, job: Job):
     if not isinstance(loads, list):
         raise Failure(INPUT_MISSING, f"Foundation has no staged link loads for {args.map}")
     header = foundation.get("mod_zone_header", descriptor.get("mod_zone_header", []))
+    if not isinstance(header, list) or len(header) > 64 or any(not isinstance(line, str) for line in header):
+        raise Failure(INPUT_INVALID, "Foundation mod_zone_header must be a list of at most 64 strings")
     # A descriptor may carry the original map's ipak line; select the requested map.
     header = [f">level.ipak_read,{args.map}" if line.startswith(">level.ipak_read,zm_") else line for line in header]
-    recipe = {"schema": 1, "name": args.name, "base": args.base, "map": args.map,
+    # The recipe names the title its members target; a mixed set is refused here, before any plan.
+    games = sorted({metadata["game"] for _, metadata in selected.values()})
+    game = getattr(args, "game", None) or (games[0] if len(games) == 1 else None)
+    if game is None:
+        raise Failure(INPUT_INVALID, f"Members target more than one title ({', '.join(games)}); pass --game or split the pack")
+    if games != [game]:
+        raise Failure(INPUT_INVALID, f"--game {game} but the members target {', '.join(games)}",
+                      "Every module in a composition targets the same game; pick members for one title.")
+    recipe = {"schema": 1, "name": args.name, "game": game, "base": args.base, "map": args.map,
               "modules": [relative(path, job.root) for path, _ in selected.values()],
               "loads": [relative((descriptor_path.parent / value).resolve(), job.root) for value in loads],
               "zone_header": header}
