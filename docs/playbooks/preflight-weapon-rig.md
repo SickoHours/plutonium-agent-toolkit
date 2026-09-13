@@ -32,17 +32,20 @@ conversion; the numbered list is the gate, not a suggestion.
    encoding, and never subtract hand bind positions or apply an offset twice. Evaluate idle,
    ADS, fire, equip and reload poses with the offsets applied; a floating cartridge or distorted
    arm at idle is this item failing.
-4. Confirm animation-tree ownership: no weapon leaf keys `tag_view`, `tag_ads` or `tag_cambone`;
+4. Confirm animation-tree ownership (`docs/knowledge/weapon-dual-wield.md` for a pair): no weapon leaf keys `tag_view`, `tag_ads` or `tag_cambone`;
    the aim layer touches `tag_torso` only; a one-bone ADS donor is not expanded to a whole pose.
 5. Retime clips to the destination rate with
    `pat model retime <clip>.cast --fps <n> --output ../jobs/<weapon>-retime-NNN --json` when the
    donor rate differs, then re-inspect the output; keep every pose and keyframe.
 6. Validate every reload slot (including left and empty reloads) has sound notetracks that
    resolve to loaded aliases; a clip with none plays silently.
-7. Compare the weapon definition field by field with its native counterpart: inventory type per
+7. Inspect every converted clip's event tail: no `rmbnt#` rumble event survives conversion and every
+   `sndnt#` event resolves to an alias the module or the base carries; a survivor ends the match on
+   first play (`crashes.md`, rumble row).
+8. Compare the weapon definition field by field with its native counterpart: inventory type per
    hand, shared ammo group and cap, impact type and projectile physics, animation and sound alias
    names. Write the differences down; each is intentional or a bug.
-8. Record all seven results in the module README with the inspect receipt paths.
+9. Record all nine results in the module README with the inspect receipt paths.
 
 ## Do not
 
@@ -50,7 +53,7 @@ conversion; the numbered list is the gate, not a suggestion.
 - Take a clean `model convert` as proof of the rig; it proves the file converted.
 - Verify a roundtrip against itself using the same wrong convention; compare against the native
   reference pose.
-- Build the package before items 1 to 7 have a recorded result.
+- Build the package before items 1 to 8 have a recorded result.
 
 ## Stop conditions
 

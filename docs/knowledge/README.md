@@ -23,6 +23,7 @@ uses are defined once in [`../../CONTEXT.md`](../../CONTEXT.md); read it before 
 | [weapon-camo.md](weapon-camo.md) | You port a Pack-a-Punch camo, or a ported gun renders the wrong camo |
 | [weapon-aim.md](weapon-aim.md) | A ported gun aims wrong: blurry when aiming, no zoom, or sights that do not line up |
 | [weapon-attachments.md](weapon-attachments.md) | A ported BO3 weapon has no iron sight picture, or carries a sight or optic |
+| [weapon-dual-wield.md](weapon-dual-wield.md) | You port a dual-wield pair: a second selectable gun appears, the arms or gun distort, or overlapping shots cut out |
 | [bo3-sab-audio.md](bo3-sab-audio.md) | You recover a BO3 donor weapon's sounds offline, or rebuild its alias rows |
 | [engine-limits.md](engine-limits.md) | A build compiled and linked but the engine rejected it at load; you are about to design to a number |
 

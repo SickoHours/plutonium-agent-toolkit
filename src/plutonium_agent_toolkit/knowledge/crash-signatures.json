@@ -101,6 +101,15 @@
    "source": "docs/knowledge/crashes.md"
   },
   {
+   "cause": "A converted donor animation kept a rmbnt# rumble event naming an asset T6 never registers; the engine aborts the match on first play",
+   "class": "asset-missing",
+   "fix": "Strip rmbnt# events and unresolved sndnt# events from the clip's event tail at conversion; poses and frames untouched",
+   "id": "rumble-asset-not-registered",
+   "log_text": "Could not play rumble asset '<name>' because it was not registered and loaded",
+   "regex": "Could not play rumble asset '([^']+)' because it was not registered and loaded",
+   "source": "docs/knowledge/crashes.md"
+  },
+  {
    "cause": "A script failed to link or threw at runtime",
    "class": "script-error",
    "fix": "Read the first error line above it, not the last; fix the script, not the engine",

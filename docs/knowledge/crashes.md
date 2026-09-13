@@ -45,6 +45,7 @@ regression that consumes the failed artifact was added; the preflight playbooks 
 | `G_ParseSpawnVars: closing brace without data` | Whitespace between quoted tokens lost in an entity edit | Preserve token separators and every original key |
 | `Exceeded limit of 32 'sound' assets` | Aggregate sound assets across map plus mod | Merge banks; it is an aggregate-load concern |
 | `BG_AnimStateDef_Parse ... referenced missing <anim>` | Animation-state entry without a compiled tree reference | Add the reference to both compiled aitypes |
+| `Could not play rumble asset '<name>' because it was not registered and loaded` | A converted donor clip kept its compiled event tail; a `rmbnt#` entry names a rumble the donor game had and T6 does not; the match ends (`SV_Shutdown`) on first play | Rewrite the event tail at conversion: drop `rmbnt#` events, resolve `sndnt#` events through the weapon's notetrack sound map or drop them; poses and frames untouched |
 | "Out of memory" dialog at map load | Preloaded sound-bank reservation plus the fastfile's virtual block | Stream large samples losslessly; keep critical one-shots loaded |
 
 The rows are data too: `src/plutonium_agent_toolkit/knowledge/crash-signatures.json` holds each

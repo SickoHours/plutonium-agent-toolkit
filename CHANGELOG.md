@@ -17,6 +17,17 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Added
 
+- **Dual-wield ports and donor event tails.** `docs/knowledge/weapon-dual-wield.md` records the
+  three failures a dual-wield pair reproduces after clean readbacks: the left helper's native
+  `dwlefthand` inventory type overwritten to `primary` (a second selectable gun), clip track
+  ownership and double-applied model offsets (distorted arms, floating cartridges), and fully
+  streamed gunshot layers exhausting the streamed-voice pool. `crashes.md` and the
+  `rumble-asset-not-registered` signature name the donor `rmbnt#` rumble event that ends a match
+  on first play; `preflight-weapon-rig.md` gates the event tail and the pair. Knowledge and
+  playbook text only; no route changed. Verified on the authoring workspace's Linux host by
+  reproduction on the Bloodhound pair and the Reawakened batch (donor clips with `rmbnt#`
+  tails); no native Windows run of the toolkit is claimed for this text.
+
 - **Base tokens named as aliases.** `CONTEXT.md` defines *base token* (`stock`, `b2`) as a
   versioned alias for a foundation id (`bo2-stock`, `dlc5-beta2`) and `docs/knowledge/foundations.md`
   carries the table, so a card, a receipt and a verdict can show either spelling and mean the
