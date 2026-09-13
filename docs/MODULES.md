@@ -408,3 +408,13 @@ whichever rung remains proven. Package bytes, built plan, all receipt input hash
 member contracts, admitted run-plan digest and latest scoped verdict must match in order.
 Changes revoke later claims and appear in `reasons`; no state file is stored or updated.
 A stale composition plan is reported as composed with its mismatch reason, never offline verified.
+
+## Checks
+
+Composition plans contain `checks` with `passed`, `failed` or `not_counted`. Pool checks
+use shipped map occupancy plus declared contributions; a floor above the observed bound
+fails before linking, while incomplete counts remain uncounted. Projectile FX union requires
+weapon blobs and is not inferred from weapon count. Soundbank listing is only a floor.
+Builds run a receipted `gsc check` dry run per script before linking. Compiler-reported unresolved
+externals fail; successful compilation alone cannot prove runtime external resolution and that
+symbol check remains `not_counted`. Plans themselves do not run the compiler.

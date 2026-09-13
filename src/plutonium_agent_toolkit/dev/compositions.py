@@ -956,6 +956,12 @@ def execute(args, job: Job) -> dict:
         "verification": "composition resolved (dependency order, conflicts, budget); base/map mismatches listed in unqualified; collisions listed as decisions; "
                         "declarations, recipes, seeds and declared inputs hashed; backend presence checked; nothing compiled",
     }
+    from . import checks as offline_checks
+    plan["checks"] = offline_checks.evaluate(plan)
+    if args.action == "build":
+        plan["checks"] += offline_checks.check_scripts(compiled,args,job,comp["game"])
+    else:
+        plan["checks"] += [{"id":"symbols:"+t.as_posix(),"outcome":"not_counted","detail":"gsc check runs before the build link"} for _,t,_ in compiled]
     (job.root / "plan.json").write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
     summary = {"plan": "plan.json", "name": comp["name"], "title": comp["title"], "base": comp["base"], "map": comp["map"],
                "base_member": plan["base_member"],
@@ -965,6 +971,9 @@ def execute(args, job: Job) -> dict:
         "resource_totals": resolved["resource_totals"], "budget": comp["budget"],
                "scripts": len(compiled), "assets": len(loose), "seeds": len(seed_modules), "loads": len(loads),
                "decisions": decided, "undecided": undecided, "base_owned_names": len(comp.get("base_owned") or ())}
+    summary["checks"] = plan["checks"]
+    if any(c["outcome"]=="failed" for c in plan["checks"]):
+        raise Failure(INPUT_INVALID,"Offline checks failed",checks=plan["checks"])
     if args.action == "plan":
         return {**summary, "backends": checks, "backends_available": plan["backends_available"],
                 "input_files": plan["input_files"], "verification": plan["verification"]}
