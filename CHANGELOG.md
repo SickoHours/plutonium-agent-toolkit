@@ -30,6 +30,9 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Fixed
 
+- Ignore the local `uv.lock`: the dependency-free package and pip/setuptools CI do not
+  consume a lockfile. No dependency or installation behavior changes.
+
 - Accept `distribution: private` with recipe-backed modules, preserving the private label
   independently of payload type. Inspection remains declaration-only; plan/build still
   validate the recipe and refuse missing inputs. Covered by synthetic inspection and

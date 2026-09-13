@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 /.venv/
+/uv.lock
 /.qualify-home/
 *.egg-info/
 /build/
