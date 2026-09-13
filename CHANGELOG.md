@@ -7,6 +7,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- Derive composition evidence state from package, source, contract, run and scoped verdict hashes.
+
 - Test-plan stitching now folds human harness checks into the shared-check conflict pass and drops
   owner-excluded human steps from the plan and its interaction pairs; a nested recipe's decision is
   scoped to its own members and cannot resolve an outer collision; and a flattened member targeting
