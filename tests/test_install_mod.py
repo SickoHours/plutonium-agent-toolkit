@@ -34,6 +34,22 @@ class InstallFixture(unittest.TestCase):
 
 
 class InstallModTests(InstallFixture):
+    def test_opt_in_soundbanks_and_profile_links_are_receipted(self):
+        bank = self.mod_ff.parent / "example.all.sabl"
+        bank.write_bytes(b"synthetic bank")
+        load = self.root / "mod_load.ff"
+        load.write_bytes(b"synthetic load")
+        foundation = self.root / "foundation.json"
+        foundation.write_text(json.dumps({"profile_links": {"mod_load.ff": str(load)}}))
+        code, row = invoke(["game", "install-mod", str(self.mod_ff), "example", "--with-soundbanks", "--profile-foundation", str(foundation)])
+        self.assertEqual(code, 0, row)
+        self.assertEqual((self.storage / "mods/example/example.all.sabl").read_bytes(), b"synthetic bank")
+        self.assertTrue((self.storage / "mods/example/mod_load.ff").is_symlink())
+        self.assertEqual(row["result"]["soundbanks"][0]["name"], bank.name)
+        self.assertEqual(row["result"]["profile_links"][0]["name"], "mod_load.ff")
+        self.assertFalse(row["result"]["game_touched"])
+
+
     def test_install_copies_hashes_and_refuses_overwrite(self):
         code, row = invoke(["game", "install-mod", str(self.mod_ff), "hello_zm"])
         self.assertEqual(code, 0, row)

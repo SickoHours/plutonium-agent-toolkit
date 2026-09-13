@@ -190,3 +190,5 @@ tags (`-alpha`, `-beta`, `-rc`) are marked pre-release automatically.
 ## Composition authoring adapter
 
 `module compose` is implemented and covered by synthetic CLI tests for dependency/registration resolution, missing IDs, staged map selection and successful-build-gated publication. It is not a new backend or gameplay qualification. `module plan` and `module build` retain their existing evidence; the opt-in unqualified-target flag adds warning records, not evidence for new target combinations.
+
+Install-mod soundbank/profile-link options are covered by isolated filesystem tests. Profile links require native symlink permissions; native Windows link creation and actual DLC package loading remain unverified.

@@ -112,6 +112,8 @@ def execute(args, job: Job):
         if mid + "_registration" in index:
             include(mid + "_registration")
     foundation_path, foundation = read_json(Path(args.foundation), job)
+    if foundation.get("profile_prefix") and foundation["profile_prefix"] != args.base:
+        raise Failure(INPUT_INVALID, "Requested base does not match the foundation profile prefix")
     descriptor_path, descriptor = foundation_path, foundation
     if foundation.get("private_descriptor"):
         descriptor_path, descriptor = read_json(foundation_path.parent / foundation["private_descriptor"], job)

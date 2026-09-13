@@ -154,6 +154,8 @@ def build_parser() -> Parser:
     g.add_argument("action", choices=sorted(r.action for r in routes() if r.group == "game"))
     g.add_argument("argument", nargs="?", help="Mod folder ID, map ID, load ID or (install-mod) mod.ff path")
     g.add_argument("argument2", nargs="?", help="install-mod only: destination folder ID")
+    g.add_argument("--with-soundbanks", action="store_true")
+    g.add_argument("--profile-foundation", type=Path)
     g.add_argument("--replace", action="store_true", help="install-mod only: move an existing folder aside first")
     g.add_argument("--json", action="store_true")
 
@@ -360,6 +362,8 @@ def run_game(args) -> dict:
     command = f"game {args.action}"
     route = find("game", args.action)
     if args.action != "install-mod":
+        if args.with_soundbanks or args.profile_foundation:
+            raise Failure(INVALID_ARGUMENTS, "Package options apply only to game install-mod")
         if args.argument2 is not None:
             raise Failure(INVALID_ARGUMENTS, f"game {args.action} takes at most one argument; got extra {args.argument2!r}. Nothing was sent")
         if args.replace:
@@ -374,7 +378,7 @@ def run_game(args) -> dict:
 
         if not args.argument or not args.argument2:
             raise Failure(INVALID_ARGUMENTS, "Usage: pat game install-mod <path to mod.ff> <folder-id> [--replace]")
-        return success(command, install.install_mod(Path(args.argument), args.argument2, replace=args.replace))
+        return success(command, install.install_mod(Path(args.argument), args.argument2, replace=args.replace, with_soundbanks=args.with_soundbanks, profile_foundation=args.profile_foundation))
     if route.requires_windows and not os.environ.get("PAT_GAME_UNGATED"):
         platform.require_windows(command)
     control.validate_argument(args.action, args.argument)
