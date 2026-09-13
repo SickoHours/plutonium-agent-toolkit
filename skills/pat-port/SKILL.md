@@ -1,6 +1,9 @@
 ---
 name: pat-port
 description: Port a weapon, item or behaviour from a donor game into one T6 Zombies module on a clean base. Use when the user names a donor (Black Ops, Black Ops III, a capture) or asks to "bring over" or "convert" a feature. Runs the rig, script, HUD and audio preflights before the first install.
+metadata:
+  version: "1.0.0"
+  updated: "2026-09-13"
 ---
 
 # pat port

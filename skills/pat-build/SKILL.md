@@ -1,6 +1,9 @@
 ---
 name: pat-build
 description: Build a T6 Zombies or IW5 multiplayer mod with pat and prove it offline. Use when the user wants to compile a script, link a fastfile, build or verify a project recipe, or asks whether a build "works". Ends at a receipt and the applicable preflights, never at a claim about gameplay.
+metadata:
+  version: "1.0.0"
+  updated: "2026-09-13"
 ---
 
 # pat build

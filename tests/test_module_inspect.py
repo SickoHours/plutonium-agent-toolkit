@@ -90,6 +90,33 @@ class InspectTests(unittest.TestCase):
         self.assertFalse((self.root / "project.json").exists())
         self.assertFalse((self.root / "seed.json").exists())
 
+    def test_private_recipe_is_metadata_valid_without_reading_its_payload(self):
+        code, row = invoke(self.write(MODULE | {"distribution": "private"}))
+        self.assertEqual(code, 0, row)
+        self.assertEqual(row["result"]["validation"], "metadata-valid")
+        self.assertEqual(row["result"]["metadata"]["distribution"], "private")
+        self.assertEqual(row["result"]["metadata"]["payload"], "recipe")
+        self.assertFalse((self.root / "project.json").exists())
+        self.check_failure(MODULE | {"distribution": "private", "recipe": "../outside.json"}, "/recipe")
+
+    def test_recipe_paths_reject_windows_anchors_on_every_host(self):
+        for distribution in ("source", "private"):
+            for path in ("D:payload.json", "D:/payload.json", "/payload.json", "D:"):
+                with self.subTest(distribution=distribution, path=path):
+                    self.check_failure(MODULE | {"distribution": distribution, "recipe": path}, "/recipe")
+            code, row = invoke(self.write(MODULE | {"distribution": distribution, "recipe": "nested/project.json"}))
+            self.assertEqual(code, 0, row)
+
+    def test_private_seed_paths_are_validated_even_when_the_manifest_is_absent(self):
+        seed = {k: v for k, v in MODULE.items() if k != "recipe"}
+        for distribution in ("seed", "private", "source"):
+            for path in ("../other/seed.json", "/seed.json", "other\\seed.json", "D:seed.json", "D:/seed.json"):
+                with self.subTest(distribution=distribution, path=path):
+                    self.check_failure(seed | {"distribution": distribution, "seed": path}, "/seed")
+            code, row = invoke(self.write(seed | {"distribution": distribution, "seed": "nested/seed.json"}))
+            self.assertEqual(code, 0, row)
+        self.assertFalse((self.root / "nested").exists())
+
     def test_composition_keeps_declared_order_and_omitted_metadata_is_validated(self):
         data = PACK | {"modules": [{"path": "../z", "role": "base"}, "../a",
                                   {"name": "owner/beta", "commit": "a" * 40, "path": "../missing"}],
@@ -111,7 +138,7 @@ class InspectTests(unittest.TestCase):
         cases = [("schema", 2, "/schema"), ("id", "BAD", "/id"), ("game", [], "/game"),
                  ("version", "", "/version"), ("title", " ", "/title"), ("category", "BAD", "/category"),
                  ("kind", "bad_kind", "/kind"), ("tags", ["x", "x"], "/tags"),
-                 ("recipe", "../outside.json", "/recipe"), ("distribution", "private", "/distribution"),
+                 ("recipe", "../outside.json", "/recipe"), ("distribution", "unknown", "/distribution"),
                  ("bases", [{}], "/bases"), ("maps", [{}], "/maps"), ("menu_route", None, "/menu_route"),
                  ("source", {"repository": "http://example.invalid"}, "/source/repository"),
                  ("source", {"repository": "https://example.invalid", "commit": "x"}, "/source/commit"),

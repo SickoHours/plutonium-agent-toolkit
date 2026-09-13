@@ -2,6 +2,9 @@
 name: pat-help
 description: Which pat skill or playbook fits the situation. A router over the skills in this repository.
 disable-model-invocation: true
+metadata:
+  version: "1.0.0"
+  updated: "2026-09-13"
 ---
 
 # pat help

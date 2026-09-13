@@ -1,7 +1,9 @@
 ---
 name: pat-review
-description: Review a T6 Zombies mod change before install on three separate axes: standards (the contracts in docs/knowledge), spec (what was asked for), and evidence (which of the six build facts the change has actually earned). Use when the user asks to review a build, a branch, or a candidate, or before any package-and-install.
+description: "Review a T6 Zombies mod change before install on three separate axes: standards (the contracts in docs/knowledge), spec (what was asked for), and evidence (which of the six build facts the change has actually earned). Use when the user asks to review a build, a branch, or a candidate, or before any package-and-install."
 metadata:
+  version: "1.0.0"
+  updated: "2026-09-13"
   source:
     repository: https://github.com/mattpocock/skills
     commit: 3cca18b368ae95cdbdebbff572ccafa662551015

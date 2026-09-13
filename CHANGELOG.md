@@ -30,6 +30,23 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Fixed
 
+- Validate private seed paths before the missing-manifest shortcut, and reject Windows
+  drive-prefixed or rooted recipe/seed paths during declaration validation on every host.
+  Inspection, plan and build share these checks. Covered by Linux regression tests;
+  no new native Windows or game qualification is claimed.
+
+- Version all seven toolkit skills with `metadata.version: "1.0.0"` and
+  `metadata.updated: "2026-09-13"`; quote the `pat-review` description so its colon
+  parses as YAML text. Existing metadata and skill bodies are preserved.
+
+- Ignore the local `uv.lock`: the dependency-free package and pip/setuptools CI do not
+  consume a lockfile. No dependency or installation behavior changes.
+
+- Accept `distribution: private` with recipe-backed modules, preserving the private label
+  independently of payload type. Inspection remains declaration-only; plan/build still
+  validate the recipe and refuse missing inputs. Covered by synthetic inspection and
+  composition tests on Linux; no new native Windows or game qualification is claimed.
+
 - Composition member, load and base-listing paths beginning with `/` are rejected on
   Windows as well as Linux. A Windows path rooted on the current drive is not relative
   to the composition directory. Covered by the inspection metadata tests.

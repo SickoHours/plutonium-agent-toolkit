@@ -2,6 +2,8 @@
 name: pat-diagnose
 description: Diagnose a T6 Zombies mod that returned to the menu, closed the game, or showed an error dialog. Use when the user says "crashed", "it broke", "back to menu", or reports a load failure. Builds a red loop before any theory; ends by adding the gate that would have caught it.
 metadata:
+  version: "1.0.0"
+  updated: "2026-09-13"
   source:
     repository: https://github.com/mattpocock/skills
     commit: 3cca18b368ae95cdbdebbff572ccafa662551015
