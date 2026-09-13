@@ -414,3 +414,11 @@ weapon blobs and is not inferred from weapon count. Soundbank listing is only a 
 Builds run a receipted `gsc check` dry run per script before linking. Compiler-reported unresolved
 externals fail; successful compilation alone cannot prove runtime external resolution and that
 symbol check remains `not_counted`. Plans themselves do not run the compiler.
+
+Probe actions with an agent actor cause `test plan` and `module build` to include exactly one
+local sibling module named `test_probe`, tagged `test-only`, on `_test`/`_probe` profiles.
+The planner searches member siblings and the workspace's modules directory, refuses missing or
+ambiguous candidates, and emits a buildable composition with the probe explicitly included.
+The probe is first in dependency order. `_pack`/`_pub` compositions refuse every test-only member,
+including through nested compositions. Probe-scoped contracts permit signed `round_set +N`;
+this is a round-counter transition, not proof of N naturally completed gameplay rounds.

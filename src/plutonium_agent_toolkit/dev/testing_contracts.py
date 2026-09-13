@@ -36,7 +36,7 @@ def action(value, field, actor, probe, precondition=False):
     _fields(value,allowed,{'verb'},'action',field)
     verb=value['verb']
     if not isinstance(verb,str) or verb not in VOCABULARY: fail(field+'/verb','Unknown test verb')
-    if 'arg' in value and (not isinstance(value['arg'],str) or not ARG.fullmatch(value['arg'])): fail(field+'/arg','Expected safe argument of at most 64 characters')
+    if 'arg' in value and (not isinstance(value['arg'],str) or not (ARG.fullmatch(value['arg']) or verb=='round_set' and re.fullmatch(r'\+[0-9]{1,3}',value['arg']))): fail(field+'/arg','Expected safe argument of at most 64 characters')
     if verb in PROBE_VERBS and actor=='agent' and not probe: fail(field+'/actor' if precondition else field.rsplit('/',1)[0]+'/actor','Probe verbs require a human until a test probe is present')
     if precondition:
         role(actor,field+'/actor');value['actor']=actor

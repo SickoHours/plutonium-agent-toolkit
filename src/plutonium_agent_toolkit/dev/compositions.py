@@ -743,7 +743,7 @@ def _order(modules: list[dict]) -> list[str]:
     """Dependency order (a module after everything it depends on); refuses cycles. Base-role
     members sort first among equals so the base's assets are staged before attachments."""
     pending = {m["id"]: set(m["dependencies"]) for m in modules}
-    rank = {m["id"]: 0 if m.get("role") == "base" else 1 for m in modules}
+    rank = {m["id"]: -1 if m["id"]=="test_probe" else 0 if m.get("role") == "base" else 1 for m in modules}
     order: list[str] = []
     while pending:
         ready = sorted((mid for mid, deps in pending.items() if not deps - set(order)), key=lambda mid: (rank[mid], mid))
@@ -756,6 +756,9 @@ def _order(modules: list[dict]) -> list[str]:
 
 
 def resolve(comp: dict, modules: list[dict], allow_unqualified: bool = False) -> dict:
+    for i,m in enumerate(modules):
+        if "test-only" in m["tags"] and comp["name"].endswith(("_pack","_pub")):
+            raise Failure(INPUT_INVALID,"Test-only member cannot reach a release profile",field=f"/modules/{i}")
     ids = [m["id"] for m in modules]
     if len(set(ids)) != len(ids):
         duplicates = sorted({i for i in ids if ids.count(i) > 1})
@@ -911,6 +914,8 @@ def execute(args, job: Job) -> dict:
         return seeds.declare(Path(args.package).expanduser(), args, job)
     comp = load_composition(Path(args.composition), job)
     modules, loads, decisions, header = flatten(comp, job)
+    from ..testing.planner import prepare_probe
+    prepare_probe(comp,modules,job)
     mixed = sorted({m["id"] for m in modules if m.get("game", titles.DEFAULT_TITLE) != comp["game"]})
     if mixed:
         raise Failure(INPUT_INVALID, f"Composition targets game {comp['game']} but these members target another game: {mixed}",

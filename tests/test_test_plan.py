@@ -62,3 +62,21 @@ class StitchRules(unittest.TestCase):
         planner,p,cs=self.fixture();cs['beta']['maps']={}
         with self.assertRaises(Failure) as cm:planner.stitch(p,cs,[])
         self.assertEqual(cm.exception.details['field'],'/modules/1/tests/maps/zm_transit')
+
+class ProbePlanning(TestPlanRoute):
+    def test_probe_is_added_and_background_soak_is_automated(self):
+        m,c=self.member('alpha');c['maps']['zm_transit']['preconditions']=[{'verb':'power_on','actor':'agent'}];(m/'test-contract.json').write_text(json.dumps(c))
+        p,pc=self.member('test_probe',tags=['test-only']);pc['soak']['rounds']=0;(p/'test-contract.json').write_text(json.dumps(pc))
+        comp=self.composition(['alpha']);out=self.out()
+        code,row=invoke(['test','plan','--composition',str(comp),'--mode','background','--output',out,'--json']);self.assertEqual(code,0,row)
+        from pathlib import Path
+        plan=json.loads((Path(out)/'test-plan.json').read_text());self.assertTrue(plan['probe']);self.assertIn('test_probe',[m['id'] for m in plan['members']])
+        self.assertEqual(plan['phases'][3]['steps'][0]['actor'],'agent')
+        self.assertTrue((Path(out)/'composition.json').is_file())
+    def test_release_profile_refuses_probe_contract(self):
+        m,c=self.member('alpha');c['maps']['zm_transit']['preconditions']=[{'verb':'god','arg':'on','actor':'agent'}];(m/'test-contract.json').write_text(json.dumps(c))
+        comp=self.composition(['alpha'],name='stock_x_pack')
+        code,row=invoke(['test','plan','--composition',str(comp),'--output',self.out(),'--json']);self.assertEqual(code,1,row);self.assertEqual(row['error_code'],'input_invalid')
+    def test_build_plan_refuses_any_test_only_member_in_release(self):
+        self.module('test_probe',tags=['test-only']);comp=self.composition(['test_probe'],name='stock_x_pub')
+        code,row=invoke(['module','plan',str(comp),'--output',self.out(),'--json']);self.assertEqual(code,1,row);self.assertEqual(row['error_code'],'input_invalid')
