@@ -337,3 +337,8 @@ a 64 MiB aggregate image budget. Malformed nested JSON remains a structured fail
 Composition discovery has its own 64 MiB declaration budget; only the selected closure is
 registered against the job's input cap. Publication validates all member, load and owned-list
 paths before creating a saved recipe.
+
+Directory enumeration itself is bounded (512 module-directory entries, 64 foundation-directory
+entries), before sorting. Catalog output escapes lone surrogate code points so the JSON reply
+remains UTF-8 encodable. Foundation identity fields must be strings; an explicitly empty
+link-load list is staged, because it requires no additional files.

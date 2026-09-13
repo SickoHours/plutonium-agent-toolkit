@@ -7,6 +7,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- Check catalog directory limits while enumerating, escape non-UTF-8 output strings, validate foundation identity types, and report a valid empty load list as staged.
+
 - Bound workspace catalog image bytes and foundation/build rows, diagnose malformed records, and hash the exact validated declaration snapshot. Composition discovery has a separate byte budget; publication rejects missing inputs. Deeply nested foundation JSON returns a structured failure before install changes.
 
 - Add inert `workspace catalog`: source-labelled build revisions, weapon classes, declared provides, content-hashed icon bindings and foundation staging, without inferring verification facts.

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 
@@ -75,6 +76,26 @@ class IconBudget:
         return digest
 
 
+def directory_entries(directory: Path, limit: int):
+    entries = []
+    with os.scandir(directory) as stream:
+        for entry in stream:
+            if len(entries) >= limit:
+                raise Failure(INPUT_LIMIT, f"Directory exceeds {limit} entries: {directory.name}")
+            entries.append(directory / entry.name)
+    return sorted(entries)
+
+
+def safe_output(value):
+    if isinstance(value, str):
+        return value.encode("utf-8", errors="backslashreplace").decode("utf-8")[:2048]
+    if isinstance(value, list):
+        return [safe_output(item) for item in value]
+    if isinstance(value, dict):
+        return {safe_output(key): safe_output(item) for key, item in value.items()}
+    return value
+
+
 def text(value, limit=2048):
     return value[:limit] if isinstance(value, str) else None
 
@@ -142,9 +163,7 @@ def catalog(directory: str, art_catalog: str | None = None):
     registry = {row["id"]: row for row in rows(records, "modules") if isinstance(row.get("id"), str)}
     bindings = rows(recipes, "recipes")
     art_rows = rows(art, "modules")
-    children = sorted(module_root.iterdir())
-    if len(children) > MAX_MODULES:
-        raise Failure(INPUT_LIMIT, "Workspace has more than 512 module directories")
+    children = directory_entries(module_root, MAX_MODULES)
     modules = []
     icon_budget = IconBudget()
     truncated = False
@@ -193,11 +212,21 @@ def catalog(directory: str, art_catalog: str | None = None):
     foundations = []
     foundation_root = root / "foundations"
     if foundation_root.is_dir() and not foundation_root.is_symlink():
-        for file in sorted(foundation_root.glob("*.json"))[:64]:
+        try:
+            foundation_files = directory_entries(foundation_root, 64)
+        except (Failure, OSError) as exc:
+            diagnostics.append({"path": "foundations", "message": str(exc)[:2048]})
+            truncated = True
+            foundation_files = []
+        for file in foundation_files:
+            if file.suffix != ".json":
+                continue
             try:
                 info = read_object(file)
-                if not info.get("id") or not info.get("profile_prefix"):
+                if "id" not in info or "profile_prefix" not in info:
                     continue
+                if not isinstance(info["id"], str) or not isinstance(info["profile_prefix"], str) or not info["id"] or not info["profile_prefix"]:
+                    raise Failure(INPUT_INVALID, "Foundation id and profile_prefix must be non-empty strings")
                 descriptor = info
                 descriptor_path = file
                 if info.get("private_descriptor"):
@@ -217,10 +246,10 @@ def catalog(directory: str, art_catalog: str | None = None):
                     raise Failure(INPUT_LIMIT, "Workspace exceeds the foundation row bound")
                 for map_id in dict.fromkeys([*maps, *links]):
                     loads = links.get(map_id)
-                    staged = isinstance(loads, list) and bool(loads) and all(isinstance(p, str) and (descriptor_path.parent / p).is_file() for p in loads)
+                    staged = isinstance(loads, list) and all(isinstance(p, str) and (descriptor_path.parent / p).is_file() for p in loads)
                     foundations.append({"id": info["id"], "base": info["profile_prefix"], "map": map_id,
                                         "staged": staged, "source": f"foundations/{file.name}"})
             except (Failure, OSError, ValueError, TypeError) as exc:
                 diagnostics.append({"path": f"foundations/{file.name}", "message": str(exc)[:2048]})
-    return {"protocol": "pat.workspace-catalog/1", "modules": modules, "foundations": foundations,
-            "diagnostics": diagnostics[:64], "truncated": truncated or len(diagnostics) > 64}
+    return safe_output({"protocol": "pat.workspace-catalog/1", "modules": modules, "foundations": foundations,
+                        "diagnostics": diagnostics[:64], "truncated": truncated or len(diagnostics) > 64})

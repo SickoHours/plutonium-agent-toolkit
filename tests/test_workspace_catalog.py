@@ -202,3 +202,73 @@ class WorkspaceCatalogTests(unittest.TestCase):
         self.write('foundations/base.json', {'id':'base','profile_prefix':'stock','private_descriptor':'../deep.json'})
         result = catalog(str(self.root))
         self.assertIn('not readable JSON', result['diagnostics'][0]['message'])
+
+    def test_directory_enumeration_stops_before_materializing_unbounded_entries(self):
+        import contextlib
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from plutonium_agent_toolkit.dev import workspace_catalog as wc
+        count = 0
+        @contextlib.contextmanager
+        def scan(_):
+            def entries():
+                nonlocal count
+                for i in range(10000):
+                    count += 1
+                    yield SimpleNamespace(name=f'entry{i}.json')
+            yield entries()
+        for limit in (64, wc.MAX_MODULES):
+            with self.subTest(limit=limit), patch.object(wc.os, 'scandir', side_effect=scan):
+                count = 0
+                with self.assertRaises(Failure) as raised:
+                    wc.directory_entries(self.root, limit)
+                self.assertEqual(raised.exception.code, 'input_limit')
+                self.assertEqual(count, limit + 1)
+
+    def test_foundation_ids_must_be_strings_before_emission(self):
+        file = self.root/'foundations/bad.json'
+        file.parent.mkdir()
+        for field in ('id', 'profile_prefix'):
+            data = {'id':'base','profile_prefix':'stock','maps':{'zm_factory':{}},'link_loads':{'zm_factory':[]}}
+            data[field] = float('nan')
+            file.write_text(json.dumps(data))
+            code, reply = invoke(['workspace','catalog',str(self.root),'--json'])
+            self.assertEqual(code, 0, reply)
+            self.assertEqual(reply['result']['foundations'], [])
+            self.assertIn('must be non-empty strings', reply['result']['diagnostics'][0]['message'])
+
+    def test_catalog_output_escapes_lone_surrogates_in_records_and_provides(self):
+        declaration = json.loads((self.root/'modules/example/module.json').read_text())
+        self.write('modules/example/module.json', dict(declaration, provides={'soundbanks':['bank\ud800']}))
+        self.write('registry/t6-modules.json', {'modules':[{'id':'example','weapon_class':'class\ud801','build_revisions':[{'id':'build\ud802','scope':'scope\ud803'}]}]})
+        code, reply = invoke(['workspace','catalog',str(self.root),'--json'])
+        self.assertEqual(code, 0, reply)
+        result = reply['result']
+        json.dumps(result, ensure_ascii=False, allow_nan=False).encode('utf-8')
+        module = result['modules'][0]
+        self.assertEqual(module['provides']['soundbanks'], ['bank\\ud800'])
+        self.assertEqual(module['weapon_class'], 'class\\ud801')
+        self.assertEqual(module['build_records'][0]['id'], 'build\\ud802')
+        self.assertEqual(module['build_records'][0]['scope'], 'scope\\ud803')
+
+    def test_empty_load_list_is_staged_but_missing_load_data_is_not(self):
+        self.write('foundations/base.json', {'id':'base','profile_prefix':'stock','maps':{'zm_factory':{},'zm_moon':{}},'link_loads':{'zm_factory':[]}})
+        rows = catalog(str(self.root))['foundations']
+        self.assertTrue(next(row for row in rows if row['map']=='zm_factory')['staged'])
+        self.assertFalse(next(row for row in rows if row['map']=='zm_moon')['staged'])
+
+    def test_catalog_applies_module_directory_entry_limit(self):
+        from unittest.mock import patch
+        from plutonium_agent_toolkit.dev import workspace_catalog as wc
+        (self.root/'modules/second').mkdir()
+        with patch.object(wc, 'MAX_MODULES', 1), self.assertRaises(Failure) as raised:
+            catalog(str(self.root))
+        self.assertEqual(raised.exception.code, 'input_limit')
+
+    def test_catalog_reports_excess_foundation_directory_entries(self):
+        for i in range(65):
+            self.write(f'foundations/base{i}.json', {'id':str(i),'profile_prefix':'stock','maps':{}})
+        result = catalog(str(self.root))
+        self.assertTrue(result['truncated'])
+        self.assertEqual(result['foundations'], [])
+        self.assertIn('64 entries', result['diagnostics'][0]['message'])
