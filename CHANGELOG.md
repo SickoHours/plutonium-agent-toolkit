@@ -17,6 +17,11 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Added
 
+- **Base tokens named as aliases.** `CONTEXT.md` defines *base token* (`stock`, `b2`) as a
+  versioned alias for a foundation id (`bo2-stock`, `dlc5-beta2`) and `docs/knowledge/foundations.md`
+  carries the table, so a card, a receipt and a verdict can show either spelling and mean the
+  same base. Vocabulary only; no route changed.
+
 - Add inert `module inspect <module.json|composition.json> --json` with the versioned
   `pat.module-inspect/1` producer schema, exact-byte SHA-256 and JSON Pointer diagnostics.
   Inspect and plan/build share declaration metadata checks; inspection requires no payloads,
