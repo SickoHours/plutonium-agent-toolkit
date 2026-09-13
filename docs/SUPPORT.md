@@ -211,3 +211,6 @@ is created by this route. The run requires a terminal `automated-passed` verdict
 Composition pool/compiler checks are offline. Tests cover over-budget refusal, unknown counts,
 missing projectile unions and compiler-reported unresolved symbols. Successful dry-run compilation
 is not a new external-resolution qualification. No runtime pool occupancy is inferred.
+
+Replacement declaration fields are offline-validated: normalization/deduplication, engine-entry
+refusal and typed entry references have synthetic tests. This declares no runtime compatibility.

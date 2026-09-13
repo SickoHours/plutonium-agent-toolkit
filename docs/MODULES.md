@@ -432,3 +432,15 @@ ambiguous candidates, and emits a buildable composition with the probe explicitl
 The probe is first in dependency order. `_pack`/`_pub` compositions refuse every test-only member,
 including through nested compositions. Probe-scoped contracts permit signed `round_set +N`;
 this is a round-counter transition, not proof of N naturally completed gameplay rounds.
+
+## Declared replacement
+
+| Field | Contract |
+| --- | --- |
+| `replaces.functions` | Up to 256 lowercase, deduplicated `script/path::function` targets |
+| `replaces.files` | Up to 64 lowercase, deduplicated relative GSC/CSC paths |
+| `entry.replace`, `entry.register` | Optional paired function references for generated entry ownership |
+
+Engine callbacks, map/gametype main and gamemode_callback_setup are base-owned and refused.
+These fields declare intent; source consistency, collisions and entry generation are checked
+by composition planning/building as described below.

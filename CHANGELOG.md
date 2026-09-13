@@ -7,6 +7,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- Validate declared function/file replacements and generated entry references.
+
 - Clarified `docs/MODULES.md` that `module state` checks the built plan only when the receipt
   records it, and otherwise requires the plan's member declaration hashes to be bound in the
   receipt's inputs. Documentation only; no behavior change and no new platform verification.

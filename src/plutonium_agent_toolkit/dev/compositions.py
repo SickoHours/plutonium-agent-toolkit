@@ -153,7 +153,7 @@ MAX_DECLARATION_BYTES = 256 * 1024
 MAX_INSPECTION_TEXT = 2048
 MAX_INSPECTION_CODE = 200
 MODULE_METADATA_FIELDS = ("id", "version", "game", "title", "category", "kind", "tags", "bases", "maps",
-                          "dependencies", "conflicts", "origin", "donor", "distribution", "menu_route", "payload", "lineage")
+                          "dependencies", "conflicts", "origin", "donor", "distribution", "menu_route", "payload", "lineage", "replaces", "entry")
 COMPOSITION_METADATA_FIELDS = ("name", "title", "game", "tags", "base", "map", "origin", "donor", "members")
 
 
@@ -247,7 +247,7 @@ def inspect(path: Path) -> dict:
             fields = COMPOSITION_METADATA_FIELDS
         else:
             raise Failure(INPUT_INVALID, "Expected a module or composition declaration", field="/")
-        result.update(validation="metadata-valid", metadata={key: metadata[key] for key in fields})
+        result.update(validation="metadata-valid", metadata={key: metadata[key] for key in fields if key not in ("replaces","entry") or key in data})
         if kind == "module" and metadata.get("tests"):
             from .testing_contracts import load_contract, requires_probe
             # A module is inspected alone; whether a probe member exists is a composition fact.
@@ -425,11 +425,45 @@ def validate_lineage(value):
     return result
 
 
+FUNCTION = re.compile(r'^[a-z0-9_/]+::[a-z0-9_]+$')
+
+def _function(value):
+    if not isinstance(value,str) or len(value)>256 or not FUNCTION.fullmatch(value.lower()):
+        raise Failure(INPUT_INVALID,'Expected script/path::function')
+    return value.lower()
+
+def _replaces(value):
+    if value is None:return {'functions':[],'files':[]}
+    _fields(value,{'functions','files'},{'functions','files'},'replaces')
+    out={}
+    for key,maximum in (('functions',256),('files',64)):
+        rows=value[key]
+        if not isinstance(rows,list) or len(rows)>maximum:raise Failure(INPUT_INVALID,'Too many replacement targets',field='/'+key)
+        normalized=[]
+        for i,v in enumerate(rows):
+            field=f'/{key}/{i}'
+            if key=='functions':
+                v=_at(field,_function,v);path,fn=v.split('::')
+                if fn.startswith('codecallback_') or fn=='gamemode_callback_setup' or fn=='main' and (path.startswith('maps/mp/zm_') or '/gametypes' in path):
+                    raise Failure(INPUT_INVALID,'Cannot replace a base-owned entry point','This engine entry point is base-owned; use foundation work.',field=field)
+            else:
+                _at(field,_text,v,'script path',256);v=v.lower();_at(field,_recipe_path,v)
+                if not v.endswith(('.gsc','.csc')):raise Failure(INPUT_INVALID,'Replaced files must be scripts',field=field)
+            if v not in normalized:normalized.append(v)
+        out[key]=normalized
+    return out
+
+def _entry(value):
+    if value is None:return None
+    _fields(value,{'replace','register'},{'replace','register'},'entry')
+    return {k:_at('/'+k,_function,v) for k,v in value.items()}
+
+
 def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
     """Authoritative declaration checks; no filesystem or payload resolution."""
     _fields(data, {"schema", "id", "version", "game", "title", "category", "kind", "tags", "recipe", "seed", "bases", "maps",
                             "dependencies", "conflicts", "provides", "resource_contract", "menu_route", "distribution", "source",
-                            "origin", "donor", "lineage", "tests"},
+                            "origin", "donor", "lineage", "tests", "replaces", "entry"},
                      {"schema", "id", "version", "bases", "maps"}, where)
     if data["schema"] != 1:
         raise Failure(INPUT_INVALID, f"{where}: expected schema 1", field='/schema')
@@ -494,6 +528,7 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
     provides = _at("/provides", _provides, data.get("provides"), mid)
     return {"id": mid, "version": data["version"], "game": game, "title": title, "category": category, "kind": kind, "tags": list(tags),
             "payload": payload, "payload_path": payload_path, "distribution": distribution, "tests": tests,
+            "replaces":_at("/replaces",_replaces,data.get("replaces")), "entry":_at("/entry",_entry,data.get("entry")),
             "bases": list(bases), "maps": list(maps),
             "dependencies": _at("/dependencies", _ids, data.get("dependencies", []), "dependencies", mid),
             "conflicts": _at("/conflicts", _ids, data.get("conflicts", []), "conflicts", mid),
@@ -895,7 +930,7 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
                "distribution": m["distribution"], "dependencies": m["dependencies"], "conflicts": m["conflicts"],
                "bases": m["bases"], "maps": m["maps"], "provides": m["provides"], "resource_contract": m["resource_contract"],
                "menu_route": m["menu_route"], "source": m["source"], "reference": m.get("reference"),
-               "origin": m["origin"], "donor": m["donor"]}
+               "origin": m["origin"], "donor": m["donor"], "replaces":m["replaces"], "entry":m["entry"]}
         if m["recipe"] is not None:
             row["recipe_sha256"] = job.inputs[str(m["recipe"].resolve())]
         else:
