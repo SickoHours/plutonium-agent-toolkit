@@ -312,3 +312,20 @@ The result carries `composition`, `plan`, `plan_receipt`, `undecided` and `unqua
 ### Source-map lineage metadata
 
 Optional `lineage` records a T4/T5 source relationship: `[{"game":"t5","map":"zm_factory","source":"Example source variant","note":"Same-map witness; no T6 verification"}]`. One object is accepted for compatibility and normalized to an array by inspection. Arrays contain 1–18 entries, preserving multiple source maps or variants without claiming exclusive authorship. Notes are at most 400 characters. Only `t4`/`t5` and `zm_` map IDs are accepted. Lineage is descriptive metadata; plan/build ignore it and it never widens declared bases/maps or changes any evidence fact.
+
+
+## Workspace catalog records
+
+`pat workspace catalog <workspace> --art-catalog <local-catalog.json> --json` joins
+`modules/*/module.json` with optional `registry/module-recipes.json` build rows and
+`registry/t6-modules.json` build revisions and weapon classes. It returns protocol
+`pat.workspace-catalog/1`, declaration digests, declared provides, source paths and
+record pointers. Missing flags remain null. Runtime verification is the record's
+loaded/playable claim; no launch or capture fact is invented. Records from other maps
+or foundations must stay separate. Top-level registry status and prose are not facts.
+
+An optional local art catalog binds declaration IDs to artwork. Only explicit HUD or
+reference-icon roles are portraits; texture samples are excluded. Icon IDs hash the
+served file bytes, not a source filename. Foundation staging names its descriptor and
+requires its per-map link-load files to exist. This is file presence, not gameplay.
+The route reads files only and returns per-module diagnostics for invalid declarations.

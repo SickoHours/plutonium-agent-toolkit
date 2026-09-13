@@ -7,6 +7,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- Add inert `workspace catalog`: source-labelled build revisions, weapon classes, declared provides, content-hashed icon bindings and foundation staging, without inferring verification facts.
+
 - Module metadata accepts T4/T5 source-map lineage entries, preserving multiple maps and source variants separately from qualification evidence.
 
 - Install-mod optionally stages sibling soundbanks and declared mod_load profile links, with hashes in its receipt and the existing rollback behavior.
