@@ -199,3 +199,7 @@ PR 55 review regressions cover missing published inputs, a 4096-entry discovery 
 `module inspect` test-contract validation is offline: `tests/test_testing_contracts.py`
 covers closed fields, vocabulary, actor requirements, check types, limits, path containment,
 missing named files and exact-byte hashes. It does not execute a contract or establish gameplay.
+
+`test plan` is implemented offline. The loader resolves declared members in dependency order,
+requires a named contract for each, records file hashes, and refuses missing map coverage with
+a JSON Pointer and failed job receipt. The stitching task supplies successful plan output.
