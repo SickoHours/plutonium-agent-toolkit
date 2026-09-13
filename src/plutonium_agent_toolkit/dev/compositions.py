@@ -427,6 +427,26 @@ def validate_lineage(value):
 
 FUNCTION = re.compile(r'^[a-z0-9_/]+::[a-z0-9_]+$')
 
+def scan_replacements(text):
+    pattern=re.compile(r"replacefunc\s*\(\s*([A-Za-z0-9_\\/]+)::([A-Za-z0-9_]+)",re.I)
+    return {path.replace(chr(92),'/').lower()+'::'+name.lower() for path,name in pattern.findall(text)}
+
+def replacement_warnings(modules,loaded):
+    warnings=[]
+    for i,m in enumerate(modules):
+        found=set()
+        if m['id'] in loaded:
+            for source,_,_ in loaded[m['id']][1]:
+                found.update(scan_replacements(source.read_text(encoding='utf-8')))
+        declared=set(m.get('replaces',{}).get('functions',[]))
+        missing=found-declared
+        if missing:
+            raise Failure('declaration_mismatch','Source has undeclared function replacements',
+                          'Declare these targets: '+', '.join(sorted(missing)),field=f'/modules/{i}/replaces/functions')
+        for target in sorted(declared-found):warnings.append({'module':m['id'],'target':target,'message':'Declared replacement not found in available script source'})
+    return warnings
+
+
 def _function(value):
     if not isinstance(value,str) or len(value)>256 or not FUNCTION.fullmatch(value.lower()):
         raise Failure(INPUT_INVALID,'Expected script/path::function')
@@ -968,6 +988,7 @@ def execute(args, job: Job) -> dict:
                       "Every module in a composition targets the same game; split the pack or fix the members' module.json game.")
     resolved = resolve(comp, modules, getattr(args, "allow_unqualified", False))
     loaded = {m["id"]: projects.load_recipe(m["recipe"], job) for m in modules if m["recipe"] is not None}
+    warnings=replacement_warnings(modules,loaded)
     by_id = {m["id"]: m for m in modules}
     compiled, loose = [], []
     for mid in resolved["order"]:
@@ -988,7 +1009,7 @@ def execute(args, job: Job) -> dict:
     plan = {
         "schema_version": 1, "name": comp["name"], "title": comp["title"], "tags": comp["tags"], "base": comp["base"],
         "map": comp["map"], "origin": comp["origin"], "donor": comp["donor"],
-        "game": comp["game"], "mode": titles.zone(comp["game"])["mode"],
+        "game": comp["game"], "mode": titles.zone(comp["game"])["mode"], "warnings":warnings,
         "base_member": base_ids[0] if base_ids else None,
         "modules": rows, "order": resolved["order"],
         "scripts": [{"source": str(p), "target": t.as_posix(), "instance": i} for p, t, i in compiled],
