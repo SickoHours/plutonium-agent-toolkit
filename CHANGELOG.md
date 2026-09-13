@@ -7,6 +7,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- Module plan/build: optional `--allow-unqualified` reports target base/map mismatches in plans and build receipts without changing declarations or evidence.
+
 ### Added
 
 - Add inert `module inspect <module.json|composition.json> --json` with the versioned

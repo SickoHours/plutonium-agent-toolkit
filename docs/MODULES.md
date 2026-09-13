@@ -296,3 +296,7 @@ anyone's bytes.
   record the crash signature per `docs/playbooks/diagnose-a-crash.md`.
 - No map patches, client-script injection or shared core services beyond what a recipe or a
   seed already carries.
+
+### Unqualified targets
+
+`module plan` and `module build` accept `--allow-unqualified`. A module whose declared base or map does not cover the target is listed in `unqualified` in the plan, result and build receipt instead of refusing. Dependency, conflict, game, input and budget checks still apply. Without the flag, base/map mismatches still refuse. This is a stated compatibility risk, never new build or gameplay evidence, and declarations are unchanged.

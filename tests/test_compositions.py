@@ -45,6 +45,20 @@ class CompositionFixture(DevRouteFixture):
 
 
 class CompositionTests(CompositionFixture):
+    def test_unqualified_target_is_opt_in_and_retained_in_build_receipt(self):
+        self.module("alpha", maps=["zm_transit"])
+        comp = self.composition(["alpha"], name="b2_example_pack", base="b2", map_id="zm_factory")
+        code, denied = invoke(["module", "plan", str(comp), "--output", self.out()])
+        self.assertEqual(code, 1, denied)
+        expected = [{"id": "alpha", "declared_bases": ["stock"], "declared_maps": ["zm_transit"], "base": "b2", "map": "zm_factory"}]
+        for action in ("plan", "build"):
+            code, result = invoke(["module", action, str(comp), "--allow-unqualified", "--output", self.out()])
+            self.assertEqual(code, 0, result)
+            self.assertEqual(result["result"]["unqualified"], expected)
+            receipt = json.loads(Path(result["result"]["receipt"]).read_text())
+            self.assertEqual(receipt["result"]["unqualified"], expected)
+
+
     def test_invalid_payload_paths_fail_before_plan_and_build_resolve_them(self):
         directory = self.module("alpha")
         comp = self.composition(["alpha"])

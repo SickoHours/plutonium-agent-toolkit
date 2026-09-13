@@ -115,6 +115,7 @@ def add_parser(sub, common):
                               ("build", "Compile, link against seeds and loads, read back and compare every module into one mod.ff")):
         q = actions.add_parser(action, help=help_text)
         q.add_argument("composition", help="Path to composition.json")
+        q.add_argument("--allow-unqualified", action="store_true", help="Report base/map mismatches without refusing; does not add evidence")
         common(q)
     q = actions.add_parser("fetch", help="Download a published module or pack at its exact commit into a new directory")
     q.add_argument("reference", help="<owner>/<id>@<commit> (through a recorded registry) or https://github.com/<owner>/<repo>@<commit>")
@@ -711,13 +712,14 @@ def _order(modules: list[dict]) -> list[str]:
     return order
 
 
-def resolve(comp: dict, modules: list[dict]) -> dict:
+def resolve(comp: dict, modules: list[dict], allow_unqualified: bool = False) -> dict:
     ids = [m["id"] for m in modules]
     if len(set(ids)) != len(ids):
         duplicates = sorted({i for i in ids if ids.count(i) > 1})
         raise Failure(INPUT_INVALID, f"Two members declare the same id: {duplicates}",
                       "A module appears once in a pack, including through nested compositions.")
     known = set(ids)
+    unqualified = []
     for m in modules:
         for dep in m["dependencies"]:
             if dep not in known:
@@ -726,10 +728,14 @@ def resolve(comp: dict, modules: list[dict]) -> dict:
         for other in m["conflicts"]:
             if other in known:
                 raise Failure(INPUT_INVALID, f"{m['id']} declares a conflict with {other}; both are in the composition")
-        if comp["base"] not in m["bases"]:
+        base_mismatch = comp["base"] not in m["bases"]
+        map_mismatch = "*" not in m["maps"] and comp["map"] not in m["maps"]
+        if allow_unqualified and (base_mismatch or map_mismatch):
+            unqualified.append({"id": m["id"], "declared_bases": m["bases"], "declared_maps": m["maps"], "base": comp["base"], "map": comp["map"]})
+        if base_mismatch and not allow_unqualified:
             raise Failure(INPUT_INVALID, f"{m['id']} is declared for bases {m['bases']}, not for {comp['base']!r}",
                           "Build the module on a base it declares, or extend its declaration after testing it there.")
-        if "*" not in m["maps"] and comp["map"] not in m["maps"]:
+        if map_mismatch and not allow_unqualified:
             raise Failure(INPUT_INVALID, f"{m['id']} is declared for maps {m['maps']}, not for {comp['map']!r}",
                           "Qualify the module on that map first (build alone, load, play, record the verdict), then extend maps.")
         if m["seed"] and m["seed"].get("private"):
@@ -742,7 +748,7 @@ def resolve(comp: dict, modules: list[dict]) -> dict:
             if totals[field] > comp["budget"][field]:
                 raise Failure(INPUT_LIMIT, f"Resource budget exceeded: {field} {totals[field]} > {comp['budget'][field]}",
                               "Raise the budget deliberately after measuring, or leave a module out; the sum counts every module.")
-    return {"order": order, "resource_totals": totals}
+    return {"order": order, "resource_totals": totals, "unqualified": unqualified}
 
 
 def collisions(modules: list[dict], loaded: dict[str, tuple], decisions: list[dict], base_owned: set[str] | None = None) -> tuple[list[dict], list[dict]]:
@@ -863,7 +869,7 @@ def execute(args, job: Job) -> dict:
     if mixed:
         raise Failure(INPUT_INVALID, f"Composition targets game {comp['game']} but these members target another game: {mixed}",
                       "Every module in a composition targets the same game; split the pack or fix the members' module.json game.")
-    resolved = resolve(comp, modules)
+    resolved = resolve(comp, modules, getattr(args, "allow_unqualified", False))
     loaded = {m["id"]: projects.load_recipe(m["recipe"], job) for m in modules if m["recipe"] is not None}
     by_id = {m["id"]: m for m in modules}
     compiled, loose = [], []
@@ -892,11 +898,12 @@ def execute(args, job: Job) -> dict:
                    "soundbanks": [n for n in m["seed"]["files"] if n != "mod.ff"],
                    "strings": str(m["seed"]["strings"]) if m["seed"].get("strings") else None} for m in seed_modules],
         "loads": [str(p) for p in loads], "zone_header": header,
+        "unqualified": resolved["unqualified"],
         "resource_totals": resolved["resource_totals"], "budget": comp["budget"],
         "decisions": decided, "undecided": undecided, "base_owned_names": len(comp.get("base_owned") or ()),
         "backends": checks, "backends_available": all(c["available"] for c in checks),
         "input_files": len(job.inputs),
-        "verification": "composition resolved (dependency order, conflicts, base and map fit, budget); collisions listed as decisions; "
+        "verification": "composition resolved (dependency order, conflicts, budget); base/map mismatches listed in unqualified; collisions listed as decisions; "
                         "declarations, recipes, seeds and declared inputs hashed; backend presence checked; nothing compiled",
     }
     (job.root / "plan.json").write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
@@ -904,7 +911,8 @@ def execute(args, job: Job) -> dict:
                "base_member": plan["base_member"],
                "modules": [{"id": r["id"], "version": r["version"], "order": i + 1, "payload": r["payload"], "role": r["role"]}
                            for i, r in enumerate(rows)],
-               "resource_totals": resolved["resource_totals"], "budget": comp["budget"],
+               "unqualified": resolved["unqualified"],
+        "resource_totals": resolved["resource_totals"], "budget": comp["budget"],
                "scripts": len(compiled), "assets": len(loose), "seeds": len(seed_modules), "loads": len(loads),
                "decisions": decided, "undecided": undecided, "base_owned_names": len(comp.get("base_owned") or ())}
     if args.action == "plan":
@@ -1031,7 +1039,7 @@ def _build_composition(comp: dict, plan: dict, compiled, loose, seed_modules, lo
     if missing_roots:
         raise Failure(BACKEND_FAILED, f"{len(missing_roots)} seed root(s) are not in the composed package: {missing_roots[:5]}",
                       "The linker did not copy them from the seed; check the loads and the seed manifest.", missing=missing_roots[:64])
-    return {**link, "plan": "plan.json", "rawfiles_verified": len(rawfiles), "mod_ff": link["packages"][0]["path"],
+    return {**link, "unqualified": plan["unqualified"], "plan": "plan.json", "rawfiles_verified": len(rawfiles), "mod_ff": link["packages"][0]["path"],
             "seed_roots_verified": sum(len(m["seed"]["roots"]) for m in seed_modules),
             "embedded_assets": len(embedded), "referenced_assets": len(referenced), "localized_strings": len(strings),
             "soundbanks": sorted(p.name for p in banks.iterdir() if p.is_file() and p.name != "mod.ff"),
