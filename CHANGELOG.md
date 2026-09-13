@@ -11,6 +11,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
   nesting as `input_invalid`; documentation describes probe inspection without promising
   composition-time enforcement. Covered by offline unit tests on Linux; native Windows
   and gameplay behavior remain unverified.
+- Stitch test contracts in dependency order, with explicit shared-check decisions and human/probe precondition refusals.
+
 - Add the offline test-plan route and contract-member loader with receipted missing-input refusals.
 
 - Validate optional per-module test contracts during module inspection, with closed actions, typed checks and exact-byte digests.
