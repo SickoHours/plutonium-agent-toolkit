@@ -50,6 +50,13 @@ class InstallModTests(InstallFixture):
         self.assertFalse(row["result"]["game_touched"])
 
 
+    def test_dangling_soundbank_link_is_an_invalid_input(self):
+        (self.mod_ff.parent / "gone.all.sabl").symlink_to(self.root / "missing.sabl")
+        code, row = invoke(["game", "install-mod", str(self.mod_ff), "example", "--with-soundbanks"])
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "input_invalid", row)
+        self.assertFalse((self.storage / "mods/example").exists())
+
     def test_unhashable_profile_link_refuses_before_moving_the_previous_install(self):
         code, row = invoke(["game", "install-mod", str(self.mod_ff), "example"])
         self.assertEqual(code, 0, row)

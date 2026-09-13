@@ -57,11 +57,17 @@ def install_mod(mod_ff: Path, folder: str, replace: bool = False, with_soundbank
     soundbanks = {}
     if with_soundbanks:
         banks = sorted(p for p in src.parent.iterdir() if p.suffix.lower() in (".sabl", ".sabs"))
-        if len(banks) > 128 or sum(p.stat().st_size for p in banks) > 512 * 1024 * 1024:
+        if len(banks) > 128:
             raise Failure(INPUT_LIMIT, "Soundbank staging exceeds 128 files or 512 MiB")
+        total = 0
         for bank in banks:
+            # A dangling link or a non-file sibling is an invalid input, never a stat() crash.
             if bank.is_symlink() or not bank.is_file():
                 raise Failure(INPUT_INVALID, "Soundbanks must be regular files beside mod.ff")
+            total += bank.stat().st_size
+        if total > 512 * 1024 * 1024:
+            raise Failure(INPUT_LIMIT, "Soundbank staging exceeds 128 files or 512 MiB")
+        for bank in banks:
             soundbanks[bank.name] = bank.read_bytes()
     links = {}
     if profile_foundation is not None:

@@ -117,9 +117,14 @@ def execute(args, job: Job):
     descriptor_path, descriptor = foundation_path, foundation
     if foundation.get("private_descriptor"):
         descriptor_path, descriptor = read_json(foundation_path.parent / foundation["private_descriptor"], job)
-    loads = descriptor.get("link_loads", {}).get(args.map)
-    if not isinstance(loads, list):
+    link_loads = descriptor.get("link_loads", {})
+    if not isinstance(link_loads, dict):
+        raise Failure(INPUT_INVALID, "Foundation link_loads must be an object of map id to file paths")
+    loads = link_loads.get(args.map)
+    if loads is None:
         raise Failure(INPUT_MISSING, f"Foundation has no staged link loads for {args.map}")
+    if not isinstance(loads, list) or len(loads) > 16 or any(not isinstance(value, str) or not value for value in loads):
+        raise Failure(INPUT_INVALID, f"Foundation link loads for {args.map} must be a list of at most 16 paths")
     header = foundation.get("mod_zone_header", descriptor.get("mod_zone_header", []))
     if not isinstance(header, list) or len(header) > 64 or any(not isinstance(line, str) for line in header):
         raise Failure(INPUT_INVALID, "Foundation mod_zone_header must be a list of at most 64 strings")

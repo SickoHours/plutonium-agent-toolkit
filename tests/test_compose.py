@@ -53,6 +53,15 @@ class ComposeTests(CompositionFixture):
         self.assertEqual(code, 1, row)
         self.assertIn("--game iw5", row["message"])
 
+    def test_malformed_foundation_link_loads_refuse(self):
+        args = self.inputs()
+        foundation = Path(args[args.index("--foundation") + 1])
+        for broken in ({"link_loads": "zm_factory"}, {"link_loads": {"zm_factory": [7]}}, {"link_loads": {"zm_factory": "x"}}):
+            foundation.write_text(json.dumps(broken))
+            code, row = invoke(args + ["--module", "alpha", "--output", self.out()])
+            self.assertEqual(code, 1, row)
+            self.assertEqual(row["error_code"], "input_invalid", row)
+
     def test_foundation_zone_header_must_be_strings(self):
         args = self.inputs()
         foundation = Path(args[args.index("--foundation") + 1])
