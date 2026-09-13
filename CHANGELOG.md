@@ -7,6 +7,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- Auto-include a local test-only probe for agent preconditions and refuse test-only members in release compositions.
+
 - Report counted, failed and uncounted pool checks on composition plans and run per-script compiler dry runs before linking.
 
 - Derive composition evidence state from package, source, contract, run and scoped verdict hashes.
