@@ -9,6 +9,12 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Added
 
+- Add inert `module inspect <module.json|composition.json> --json` with the versioned
+  `pat.module-inspect/1` producer schema, exact-byte SHA-256 and JSON Pointer diagnostics.
+  Inspect and plan/build share declaration metadata checks; inspection requires no payloads,
+  job directory, backend or network. Plan/build metadata failures gain an additive
+  `details.field` JSON Pointer. Route status remains implemented (offline tests only).
+
 - **`probe` composition stage.** `<base>_<feature>_probe` names a self-driving state-walk
   profile (one module plus a script that prints what it set); `pat module plan` accepts it beside
   `test`, `pack` and `pub`.
@@ -23,6 +29,19 @@ Every entry states what shipped, on which platform it was verified, and what rem
   matching preconditions and do-nots. Documentation only; no route or check changed.
 
 ### Fixed
+
+- Composition member, load and base-listing paths beginning with `/` are rejected on
+  Windows as well as Linux. A Windows path rooted on the current drive is not relative
+  to the composition directory. Covered by the inspection metadata tests.
+
+- `module inspect` accepts symlinked ancestor directories like plan/build while still refusing
+  a linked declaration and checking regular-file identity. Its diagnostic field/message and
+  envelope message/hint are limited to 2048 UTF-16 code units, with error codes limited to 200 units;
+  explicit omission notices replace excessive detail, and overlong pointers become `/`.
+  Plan/build metadata errors again include the member directory in schema/game/id context.
+  Usage failures are documented as invocation errors outside the inspection protocol.
+  UTF-16 unit counting matches JavaScript consumers for supplementary Unicode; lone surrogates
+  count without encoding errors and are JSON-escaped on inspect stdout without changing values.
 
 - `docs/MODULES.md` no longer says there is no official registry repository (there is one,
   `docs/REGISTRY.md`); `publish-a-module.md` points at it. `docs/SUPPORT.md` no longer lists the

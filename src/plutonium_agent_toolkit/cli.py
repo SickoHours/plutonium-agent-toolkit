@@ -14,6 +14,7 @@
     pat ff inspect|extract <file.ff> --output <new dir>
     pat ff link <project dir> --zone <name> --output <new dir>
     pat project init|plan|build|verify ... --output <new dir>
+    pat module inspect <module.json|composition.json> --json
     pat module plan|build <composition.json> --output <new dir>
     pat module declare <mod.ff> --output <new dir>
     pat module fetch <owner/id@commit | https://github.com/o/r@commit> --output <new dir>
@@ -179,7 +180,7 @@ JOB_ACTIONS = {("registry", "baseline"): "baseline"}
 
 
 def is_job(group: str, action: str) -> bool:
-    return group in JOB_GROUPS or (group, action) in JOB_ACTIONS
+    return (group in JOB_GROUPS and (group, action) != ("module", "inspect")) or (group, action) in JOB_ACTIONS
 
 
 def run_job(args, argv: list[str]) -> dict:
@@ -295,6 +296,11 @@ def run(argv: list[str]) -> dict:
 
         return success(command, workspace.init(args.directory, args.name))
 
+    if group == "module" and args.action == "inspect":
+        from .dev import compositions
+
+        return success(command, compositions.inspect(Path(args.declaration)))
+
     if is_job(group, getattr(args, "action", "")):
         return run_job(args, argv)
 
@@ -396,6 +402,16 @@ def entry(argv: list[str] | None = None) -> int:
     except (OSError, ValueError, KeyError, TypeError, RuntimeError) as unexpected:
         row = failure(label, Failure(OPERATION_FAILED, f"{type(unexpected).__name__}: {str(unexpected)[:400]}",
                                      "This is a toolkit defect. Report it with the command you ran."))
+    if row.get("command") == "module inspect":
+        # Keep the normal envelope and exit status, but JSON-escape lone surrogates before
+        # writing to UTF-8 stdout. Decoded field values (including exact pointers) stay intact.
+        from io import StringIO
+
+        output = StringIO()
+        code = emit(row, stream=output)
+        sys.stdout.write(output.getvalue().encode("utf-8", errors="backslashreplace").decode("utf-8"))
+        sys.stdout.flush()
+        return code
     return emit(row)
 
 

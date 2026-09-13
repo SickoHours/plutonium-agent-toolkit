@@ -74,6 +74,9 @@ PLANNED = [
           status="implemented", owner=OWNER),
     Route("weapon", "plan", "Validate a normal/PAP weapon recipe against a catalog", "writes-output",
           status="implemented", owner=OWNER),
+    Route("module", "inspect", "Validate one module or composition declaration without resolving payloads", "inert",
+          status="implemented", owner=OWNER,
+          notes="Argument: <module.json|composition.json> --json. Protocol pat.module-inspect/1; declaration-only, at most 256 KiB, no final-component symlinks, job, payload reads or network; symlinked ancestors allowed. Schema: schemas/module-inspect-v1.schema.json."),
     Route("module", "plan", "Resolve a composition of declared modules (dependency order, conflicts, base and map fit, "
           "resource budget), list every collision as a decision, and hash every input without running a backend", "writes-output",
           status="available", owner=OWNER,

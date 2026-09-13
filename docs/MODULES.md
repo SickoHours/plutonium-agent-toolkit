@@ -13,6 +13,64 @@ budgets it takes). Everything else stays in the module's own `project.json` reci
 `pat project build` already understands. A mod that has a `project.json` needs only a
 `module.json` to become composable.
 
+## Inspect metadata without resolving payloads
+
+```sh
+pat module inspect path/to/module.json --json
+pat module inspect path/to/composition.json --json
+```
+
+`module inspect` is inert: it reads one regular declaration and refuses final-component
+symlinks/reparse points and files over 256 KiB. Symlinked ancestor directories are allowed,
+matching plan/build. The reader verifies stable regular-file identity and hashes the exact
+bytes it parses. It creates no job or output directory, reads no configuration, discovers no
+backends, and performs no network or game operation. `--output`
+is not accepted. The normal invocation envelope retains `schema_version: 1` and a generated
+`request_id`; its result protocol is `pat.module-inspect/1`, specified by
+[the producer schema](../schemas/module-inspect-v1.schema.json).
+
+`validation: metadata-valid` means `validation_scope: declaration-only`. Inspect and plan/build
+share the metadata validators, including fields omitted from the inspection projection (source,
+provides, resource contracts, loads, base-owned listings, zone headers and decisions). Existing
+defaults and empty decision reasons are preserved. Module `payload` is the declared `recipe` or
+`seed` discriminator; inspect does not open either file or derive provides from a seed manifest.
+Composition members retain declaration order. A pinned reference without a declared local path
+fails with `input_missing` at `/modules/<index>/path`; inspect never fetches it. A declared path
+can name a missing payload/member/load/listing and still pass metadata checks.
+
+Full resolution remains `module plan`/`build`: file existence and containment, seed contents and
+provides consistency, nested composition cycles, resolved member identity and duplicate paths,
+dependency order, base/map fit, collisions and actual resource totals require those routes.
+Metadata validity establishes none of these facts or any installation or gameplay evidence.
+
+Inspection failures retain the native `error_code`, `message` and optional `hint` within the
+transport limits below, and put the inspection at `details.inspection`. Invalid metadata is null.
+Diagnostics contain structural JSON Pointer
+`field` values (including the offending unknown key), a code and message; `/` denotes a whole
+file or JSON error. `sha256` is null unless all bounded input bytes were read, including on
+unreadable, linked and oversized inputs. Invalid JSON that was read still has its actual digest.
+The `file` field is the local producer path; consumers should project a suitable label for their
+caller rather than expose that path in default model output.
+
+Inspection diagnostic `field` and `message` are at most 2048 UTF-16 code units; `error_code` is
+at most 200 UTF-16 code units. These match JavaScript string length: supplementary characters
+count as two units and lone surrogates as one. The schema's `maxLength` remains a code-point
+upper bound; the transport enforces the stricter UTF-16 bound for consumer compatibility.
+Lone surrogates are JSON-escaped on stdout so decoded values survive UTF-8 output unchanged.
+If an escaped JSON Pointer exceeds the limit, the field becomes `/` and the message
+explicitly says the offending key exceeds the diagnostic limit. A pointer is never truncated
+into a different key. Overlong messages and hints are replaced with a bounded notice that detail
+was omitted due to the diagnostic limit. Envelope `message`, `hint` and `error_code` have the
+same limits as diagnostics, with the same code and message in both places. An overlong error
+code becomes `input_invalid` with an explicit omission notice. These bounds apply only when
+inspect emits an error; the reusable validators and plan/build error details remain intact.
+The inspection stays invalid with null metadata and retains its exact source digest when read.
+
+Argument/usage failures, such as a missing path or supplying `--output`, exit 2 and emit the
+normal toolkit `invalid_arguments` invocation envelope without `details.inspection`. They are
+outside `pat.module-inspect/1` and its producer schema; callers must handle them as invocation
+failures rather than inspection results.
+
 ## Module declaration: `module.json`
 
 Lives in the module's directory beside its payload. The payload is one of two things: a
@@ -144,6 +202,9 @@ Localized strings cannot be copied out of a loaded fastfile, so `declare` extrac
 | `budget` | no | Whole-number ceilings for the summed resource contracts. Absent means the totals are reported and not enforced. A number here is a decision you made after measuring, not a guess |
 | `decisions` | no | One recorded owner per collision the plan listed (below). A decision naming a module that is not party to the collision is refused |
 | `base_owned` | no | Up to 8 relative paths to plain asset listings of the base zones the composition loads (one `type, name` row per line, the shape an unlinker `--list` prints). A name collision whose asset the base already carries is classified `base-owned` and needs no decision: both seeds got their copy by linking against the base, and the base's copy is what loads. Names the listings do not carry stay decisions. A recorded decision for a base-owned name still wins |
+
+Member, load and base-listing paths cannot begin with `/`, including on Windows where
+that spelling is rooted on the current drive rather than relative to the composition.
 
 ## What `plan` proves and what it does not
 
