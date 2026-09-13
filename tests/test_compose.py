@@ -93,3 +93,51 @@ class ComposeTests(CompositionFixture):
         code, row = invoke(args + [receipt, "--output", self.out()])
         self.assertEqual(code, 1, row)
         self.assertEqual(saved.read_bytes(), before)
+
+    def test_discovery_does_not_spend_the_selected_input_budget(self):
+        args = self.inputs()
+        declaration = json.loads((self.root/'modules/alpha/module.json').read_text())
+        for i in range(4093):
+            directory = self.root/'modules'/f'unused_{i}'
+            directory.mkdir()
+            (directory/'module.json').write_text(json.dumps(dict(declaration, id=f'unused_{i}')))
+        code, row = invoke(args + ['--module','alpha','--output',self.out()])
+        self.assertEqual(code, 0, row)
+        receipt = json.loads(Path(row['result']['receipt']).read_text())
+        self.assertLess(len(receipt['inputs']), 10)
+        self.assertIn(str((self.root/'foundation.json').resolve()), receipt['inputs'])
+
+    def test_publish_refuses_a_deleted_member_load_or_owned_listing(self):
+        import hashlib
+        import shutil
+        from types import SimpleNamespace
+        from plutonium_agent_toolkit.dev import compose
+        from plutonium_agent_toolkit.core.jobs import Job
+        from plutonium_agent_toolkit.core.errors import Failure
+        args = self.inputs()
+        for kind in ('member', 'load', 'owned'):
+            with self.subTest(kind=kind):
+                source_root = self.root/f'publish-{kind}'
+                source_root.mkdir()
+                member = source_root/'member'
+                member.mkdir()
+                (member/'module.json').write_text((self.root/'modules/alpha/module.json').read_text())
+                load = source_root/'base.ff'
+                load.write_bytes(b'fixture')
+                owned = source_root/'owned.txt'
+                owned.write_text('image,example')
+                recipe = source_root/'composition.json'
+                recipe.write_text(json.dumps({'schema':1,'name':'stock_sample_pack','base':'stock','map':'zm_transit','modules':['member'],'loads':['base.ff'],'base_owned':['owned.txt']}))
+                package = source_root/'mod.ff'
+                package.write_bytes(b'package')
+                receipt = source_root/'build.json'
+                receipt.write_text(json.dumps({'command':'module build','status':'succeeded','ok':True,'inputs':{str(recipe.resolve()):hashlib.sha256(recipe.read_bytes()).hexdigest()},'outputs':{'mod.ff':hashlib.sha256(package.read_bytes()).hexdigest()},'result':{'mod_ff':'mod.ff'}}))
+                if kind == 'member': shutil.rmtree(member)
+                elif kind == 'load': load.unlink()
+                else: owned.unlink()
+                destination = source_root/'saved/stock_sample_pack'
+                job = Job(Path(self.out()), 'module compose', [])
+                with self.assertRaises(Failure) as raised:
+                    compose.publish(SimpleNamespace(composition=str(recipe),from_build=str(receipt),publish_to=str(destination)), job)
+                self.assertEqual(raised.exception.code, 'input_missing')
+                self.assertFalse(destination.exists())

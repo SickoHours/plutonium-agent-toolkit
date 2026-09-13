@@ -94,6 +94,10 @@ def build_parser() -> Parser:
     q.add_argument("directory", help="New or empty directory to create the workspace in")
     q.add_argument("--name", help="Workspace name (default: the directory name)")
     q.add_argument("--json", action="store_true")
+    q = wsa.add_parser("catalog", help="Read source-labelled workspace build records and optional icon bindings")
+    q.add_argument("directory")
+    q.add_argument("--art-catalog")
+    q.add_argument("--json", action="store_true")
     b = dev.add_parser("builtin", help="Fetch the built-in modules and packs the shipped registry lists into the toolkit home; rerun verifies")
     b.add_argument("--plan", action="store_true", help="Report each built-in's state without touching the network")
     b.add_argument("--only", nargs="+", metavar="OWNER/ID", help="Only these built-in entries")
@@ -297,6 +301,10 @@ def run(argv: list[str]) -> dict:
         from .dev import workspace
 
         return success(command, workspace.init(args.directory, args.name))
+
+    if group == "workspace" and args.action == "catalog":
+        from .dev import workspace_catalog
+        return success(command, workspace_catalog.catalog(args.directory, args.art_catalog))
 
     if group == "module" and args.action == "inspect":
         from .dev import compositions

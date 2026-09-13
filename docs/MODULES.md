@@ -312,3 +312,41 @@ The result carries `composition`, `plan`, `plan_receipt`, `undecided` and `unqua
 ### Source-map lineage metadata
 
 Optional `lineage` records a T4/T5 source relationship: `[{"game":"t5","map":"zm_factory","source":"Example source variant","note":"Same-map witness; no T6 verification"}]`. One object is accepted for compatibility and normalized to an array by inspection. Arrays contain 1–18 entries, preserving multiple source maps or variants without claiming exclusive authorship. Notes are at most 400 characters. Only `t4`/`t5` and `zm_` map IDs are accepted. Lineage is descriptive metadata; plan/build ignore it and it never widens declared bases/maps or changes any evidence fact.
+
+
+## Workspace catalog records
+
+`pat workspace catalog <workspace> --art-catalog <local-catalog.json> --json` joins
+`modules/*/module.json` with optional `registry/module-recipes.json` build rows and
+`registry/t6-modules.json` build revisions and weapon classes. It returns protocol
+`pat.workspace-catalog/1`, declaration digests, declared provides, source paths and
+record pointers. Missing flags remain null. Runtime verification is the record's
+loaded/playable claim; no launch or capture fact is invented. Records from other maps
+or foundations must stay separate. Top-level registry status and prose are not facts.
+
+An optional local art catalog binds declaration IDs to artwork. Only explicit HUD or
+reference-icon roles are portraits; texture samples are excluded. Icon IDs hash the
+served file bytes, not a source filename. Foundation staging names its descriptor and
+requires its per-map link-load files to exist. This is file presence, not gameplay.
+The route reads files only and returns per-module diagnostics for invalid declarations.
+
+Workspace catalog reads each module declaration once for both metadata and digest. It rejects
+linked registry files with diagnostics, projects at most 256 builds per module and 256
+foundation rows per workspace (64 maps per foundation), and caches shared icon hashes within
+a 64 MiB aggregate image budget. Malformed nested JSON remains a structured failure.
+Composition discovery has its own 64 MiB declaration budget; only the selected closure is
+registered against the job's input cap. Publication validates all member, load and owned-list
+paths before creating a saved recipe.
+
+Directory enumeration itself is bounded (512 module-directory entries, 64 foundation-directory
+entries), before sorting. Catalog output escapes lone surrogate code points so the JSON reply
+remains UTF-8 encodable. Foundation identity fields must be strings; an explicitly empty
+link-load list is staged, because it requires no additional files.
+Record-pointer labels are bounded before interpolation, so large registry identifiers cannot
+amplify into hundreds of large retained strings. Non-string binding IDs use the module's
+directory label. Output strings are bounded before UTF-8 escaping as well as afterward.
+Catalog declarations use the same 256 KiB byte limit as declaration inspection. Each module's
+`provides` projection is capped at 64 KiB, and retained data rows share a 512 KiB serialized
+budget; overflow produces diagnostics and sets `truncated`, never partial provides claims.
+Diagnostics are separately bounded. TEST.md reads use a 512 KiB limit on the opened stream,
+and at most 16 load paths per map are inspected, matching composition authoring.

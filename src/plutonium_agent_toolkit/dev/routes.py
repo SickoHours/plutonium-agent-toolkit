@@ -17,6 +17,7 @@ AVAILABLE = [
           owner="core",
           notes="Use --plan to list without downloading; --only to select IDs. Runs no vendor installer. "
                 "Pinned downloads are per-platform; where a platform has no pin, supply the tool with PAT_BACKEND_<NAME>."),
+    Route("workspace", "catalog", "Read source-labelled workspace build records, declared provides and optional icon bindings", "inert", status="implemented", owner=OWNER, notes="Reads workspace files only. No fact is inferred; no game actions."),
     Route("workspace", "init", "Create a modding workspace directory for the person and their agent: AGENTS.md, module, composition, job, receipt, registry and donor directories, an ignore file and a record", "writes-output",
           status="implemented", owner="core",
           notes="Arguments: <directory> [--name <id>]. Refuses a non-empty directory and any location inside the toolkit checkout. Copies nothing; the skills already point at the checkout."),
