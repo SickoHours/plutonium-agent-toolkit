@@ -36,6 +36,7 @@ BACKEND_TIMEOUT = "backend_timeout"
 BUSY = "busy"
 CANCELLED = "cancelled"
 # Verification
+DECLARATION_MISMATCH = "declaration_mismatch"
 ARTIFACT_CHANGED = "artifact_changed"
 INPUT_CHANGED = "input_changed"
 HASH_MISMATCH = "hash_mismatch"

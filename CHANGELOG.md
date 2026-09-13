@@ -7,6 +7,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- Refuse literal replaceFunc targets missing from declarations and warn on declared targets absent from source.
+
 - Refuse overlapping declared function or whole-file replacements, even with an owner decision.
 
 - Validate declared function/file replacements and generated entry references.

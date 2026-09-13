@@ -31,3 +31,15 @@ class ReplacementCollision(CompositionFixture):
         for mid in ['alpha','beta']:self.module(mid,replaces={'functions':[],'files':['maps/mp/zombies/_zm.gsc']})
         comp=self.composition(['alpha','beta']);code,row=invoke(['module','plan',str(comp),'--output',self.out(),'--json'])
         self.assertEqual(code,1,row);self.assertEqual(row['details']['collisions'][0]['kind'],'file')
+
+class ReplacementScan(CompositionFixture):
+    def test_undeclared_source_target_is_refused(self):
+        m=self.module('alpha');(m/'scripts/alpha.gsc').write_text('main() { replaceFunc(maps\\mp\\zombies\\_zm::round_think, ::mine); }\nmine() {}')
+        comp=self.composition(['alpha']);code,row=invoke(['module','plan',str(comp),'--output',self.out(),'--json'])
+        self.assertEqual(code,1,row);self.assertEqual(row['error_code'],'declaration_mismatch');self.assertIn('maps/mp/zombies/_zm::round_think',row['hint'])
+    def test_declared_but_unfound_is_a_warning(self):
+        self.module('alpha',replaces={'functions':['maps/mp/zombies/_zm::round_think'],'files':[]})
+        comp=self.composition(['alpha']);out=self.out();code,row=invoke(['module','plan',str(comp),'--output',out,'--json'])
+        self.assertEqual(code,0,row);self.assertTrue(json.loads((Path(out)/'plan.json').read_text())['warnings'])
+    def test_scan_normalizes_case_and_separators(self):
+        self.assertEqual(c.scan_replacements('replaceFunc(MAPS\\MP\\ZOMBIES\\_ZM::Round_Think, ::mine);'),{'maps/mp/zombies/_zm::round_think'})

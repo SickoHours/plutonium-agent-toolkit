@@ -438,3 +438,8 @@ by composition planning/building as described below.
 Overlapping declared functions (`function:<target>`) or replaced files (`file:<path>`) are
 hard refusals. Owner decisions do not resolve them: the engine has one effective replacement.
 Ordinary asset/file collision decisions retain their existing behavior.
+
+Literal `replaceFunc(script::function, ...)` targets in recipe source must be declared or planning
+fails with `declaration_mismatch` and the target in the hint. Backslashes and case normalize.
+Declared targets not found in available source are warnings, preserving seed workflows.
+This regex scan does not prove dynamically computed replacements or runtime detour behavior.
