@@ -342,3 +342,6 @@ Directory enumeration itself is bounded (512 module-directory entries, 64 founda
 entries), before sorting. Catalog output escapes lone surrogate code points so the JSON reply
 remains UTF-8 encodable. Foundation identity fields must be strings; an explicitly empty
 link-load list is staged, because it requires no additional files.
+Record-pointer labels are bounded before interpolation, so large registry identifiers cannot
+amplify into hundreds of large retained strings. Non-string binding IDs use the module's
+directory label. Output strings are bounded before UTF-8 escaping as well as afterward.

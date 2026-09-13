@@ -272,3 +272,20 @@ class WorkspaceCatalogTests(unittest.TestCase):
         self.assertTrue(result['truncated'])
         self.assertEqual(result['foundations'], [])
         self.assertIn('64 entries', result['diagnostics'][0]['message'])
+
+    def test_large_binding_ids_are_bounded_before_pointer_interpolation(self):
+        from unittest.mock import patch
+        from plutonium_agent_toolkit.dev import workspace_catalog as wc
+        self.write('registry/module-recipes.json', {'recipes':[{'id':'x'*100000,'catalog_id':'example','builds':[{'id':str(i)} for i in range(256)]}]})
+        original = wc.project_record
+        def checked(row, source, pointer):
+            self.assertLess(len(pointer), 280)
+            return original(row, source, pointer)
+        with patch.object(wc, 'project_record', side_effect=checked):
+            result = catalog(str(self.root))
+        self.assertEqual(len(result['modules'][0]['build_records']), 256)
+
+    def test_non_string_binding_id_uses_a_bounded_directory_pointer(self):
+        self.write('registry/module-recipes.json', {'recipes':[{'id':['not','a','string'],'catalog_id':'example','builds':[{'id':'one'}]}]})
+        result = catalog(str(self.root))
+        self.assertEqual(result['modules'][0]['build_records'][0]['pointer'], 'example/builds/0')

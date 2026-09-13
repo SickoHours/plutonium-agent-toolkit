@@ -88,7 +88,7 @@ def directory_entries(directory: Path, limit: int):
 
 def safe_output(value):
     if isinstance(value, str):
-        return value.encode("utf-8", errors="backslashreplace").decode("utf-8")[:2048]
+        return value[:2048].encode("utf-8", errors="backslashreplace").decode("utf-8")[:2048]
     if isinstance(value, list):
         return [safe_output(item) for item in value]
     if isinstance(value, dict):
@@ -184,15 +184,17 @@ def catalog(directory: str, art_catalog: str | None = None):
             registered = registry.get(catalog_id, {})
             module_art = next((r for r in art_rows if r.get("declarationId") == module_id), {})
             builds = []
+            catalog_pointer = text(catalog_id, 256)
             for binding in matching:
+                binding_pointer = text(binding.get("id"), 256) or child.name
                 for i, row in enumerate(rows(binding, "builds")):
                     if len(builds) >= 256:
                         raise Failure(INPUT_LIMIT, "Module has more than 256 build records")
-                    builds.append(project_record(row, "registry/module-recipes.json", f"{binding.get('id')}/builds/{i}"))
+                    builds.append(project_record(row, "registry/module-recipes.json", f"{binding_pointer}/builds/{i}"))
             for i, row in enumerate(rows(registered, "build_revisions")):
                 if len(builds) >= 256:
                     raise Failure(INPUT_LIMIT, "Module has more than 256 build records")
-                builds.append(project_record(row, "registry/t6-modules.json", f"{catalog_id}/build_revisions/{i}"))
+                builds.append(project_record(row, "registry/t6-modules.json", f"{catalog_pointer}/build_revisions/{i}"))
             cover_symbol = module_art.get("coverSymbol", {})
             if not isinstance(cover_symbol, dict):
                 raise Failure(INPUT_INVALID, "coverSymbol must be an object")
