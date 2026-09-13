@@ -53,7 +53,7 @@ conversion; the numbered list is the gate, not a suggestion.
 - Take a clean `model convert` as proof of the rig; it proves the file converted.
 - Verify a roundtrip against itself using the same wrong convention; compare against the native
   reference pose.
-- Build the package before items 1 to 7 have a recorded result.
+- Build the package before items 1 to 8 have a recorded result.
 
 ## Stop conditions
 
