@@ -54,6 +54,17 @@ donor's name (`docs/MODULES.md`).
 
 ## Naming
 
+### Base tokens and foundation ids
+
+| Token (declarations, compositions, profile names) | Foundation id (staging records, receipts) | What it is |
+| --- | --- | --- |
+| `stock` | `bo2-stock` | Unmodified Black Ops II Zombies, retail zones read in place |
+| `b2` | `dlc5-beta2` | Zombies Declassified Beta 2, staged and hash-verified |
+
+The table is the alias mapping between the two spellings; both name the same frozen base.
+A new base adds a row; a row is never rewritten, so old receipts keep their meaning.
+
+
 Test builds and installed folders are named `<base>_<feature>_<stage>`:
 
 - base: a short token for the foundation (`stock` for the unmodified game, or the mod release's

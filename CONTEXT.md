@@ -18,6 +18,14 @@ Frozen and first-class: the stock game, an upstream mod release and a quality-of
 follow the same rules, and a module that supports several bases has one receipt per base.
 _Avoid_: pack, template, current build
 
+**Base token**: The short lowercase word a declaration, a composition and a profile name use
+for a base: `stock` for the unmodified game, or a release's own token (`b2` for Zombies
+Declassified Beta 2). A token is an alias for a foundation id and its hash-verified record
+(`stock` is `bo2-stock`, `b2` is `dlc5-beta2`); the alias table is versioned and stored
+history is never renamed when a token or an id changes. A card, a receipt and a verdict may
+show either, and mean the same base.
+_Avoid_: base name, base id (when the token is meant), version
+
 **Module**: One feature (a weapon family, perk, equipment, boss, companion) with its own source,
 recipe, assets, tests, menu route and resource contract.
 _Avoid_: mod, feature pack, addon
