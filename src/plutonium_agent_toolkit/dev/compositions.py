@@ -832,11 +832,11 @@ def resolve(comp: dict, modules: list[dict], allow_unqualified: bool = False) ->
     return {"order": order, "resource_totals": totals, "unqualified": unqualified}
 
 
-def collisions(modules: list[dict], loaded: dict[str, tuple], decisions: list[dict], base_owned: set[str] | None = None) -> tuple[list[dict], list[dict]]:
+def collisions(modules: list[dict], loaded: dict[str, tuple], decisions: list[dict], base_owned: set[str] | None = None) -> tuple[list[dict], list[dict], list[dict]]:
     """Every place two modules would own the same thing, as decisions. Identical bytes for the
     same file dedupe with no decision; a name the base zones already carry (``base_owned``,
     from the composition's base listings) is the base's and resolves with no decision; anything
-    else needs an owner recorded in the recipe. Returns (decided, undecided)."""
+    else needs an owner recorded in the recipe. Returns (decided, undecided, refused); declared replacements cannot be decided away."""
     base_owned = base_owned or set()
     file_owners: dict[str, list[tuple[str, str]]] = {}
     for m in modules:
@@ -902,7 +902,14 @@ def collisions(modules: list[dict], loaded: dict[str, tuple], decisions: list[di
         else:
             undecided.append({**row, "resolution": "undecided", "choices": ids,
                               "how": "two modules register the same " + key.split(":", 1)[0] + "; keep one, or record an owner under decisions and drop the other's registration"})
-    return decided, undecided
+    refused=[]
+    for kind,field in (("function","functions"),("file","files")):
+        owners={}
+        for m in modules:
+            for target in m.get("replaces",{}).get(field,[]):owners.setdefault(target,[]).append(m["id"])
+        for target,ids in sorted(owners.items()):
+            if len(ids)>1:refused.append({"collision":kind+":"+target,"kind":kind,"modules":sorted(ids)})
+    return decided, undecided, refused
 
 
 def _backends(compiled: list) -> list[dict]:
@@ -968,7 +975,9 @@ def execute(args, job: Job) -> dict:
     seed_modules = [by_id[mid] for mid in resolved["order"] if by_id[mid]["seed"]]
     if len(compiled) > projects.MAX_SCRIPTS or len(loose) > projects.MAX_ASSETS or len(loads) > projects.MAX_LOADS or len(seed_modules) > MAX_MODULES:
         raise Failure(INPUT_LIMIT, f"A composition holds at most {projects.MAX_SCRIPTS} scripts, {projects.MAX_ASSETS} assets, {projects.MAX_LOADS} loads and {MAX_MODULES} seeds")
-    decided, undecided = collisions(modules, loaded, decisions, comp.get("base_owned"))
+    decided, undecided, refused = collisions(modules, loaded, decisions, comp.get("base_owned"))
+    if refused:
+        raise Failure(INPUT_INVALID,"Overlapping declared replacements cannot be resolved by an owner decision",collisions=refused)
     checks = _backends(compiled)
     rows = _plan_rows(modules, resolved["order"], job)
     base_ids = [r["id"] for r in rows if r["role"] == "base"]

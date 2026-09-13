@@ -17,3 +17,17 @@ class ReplacementDeclaration(unittest.TestCase):
     def test_entry_is_a_function_reference(self):
         with self.assertRaises(Failure) as cm:c.validate_declaration_metadata(declaration('x',entry={'replace':'bad;quit','register':'x::y'}))
         self.assertEqual(cm.exception.details['field'],'/entry/replace')
+
+class ReplacementCollision(CompositionFixture):
+    def test_function_collision_cannot_be_decided_away(self):
+        target='maps/mp/zombies/_zm::round_think'
+        for mid in ['alpha','beta']:self.module(mid,replaces={'functions':[target],'files':[]})
+        for decisions in [[],[{'collision':'function:'+target,'owner':'alpha','reason':'Try to override'}]]:
+            comp=self.composition(['alpha','beta'],decisions=decisions)
+            code,row=invoke(['module','plan',str(comp),'--output',self.out(),'--json'])
+            self.assertEqual(code,1,row);self.assertEqual(row['error_code'],'input_invalid')
+            self.assertEqual(row['details']['collisions'][0],{'collision':'function:'+target,'kind':'function','modules':['alpha','beta']})
+    def test_whole_file_replacement_overlap_is_refused(self):
+        for mid in ['alpha','beta']:self.module(mid,replaces={'functions':[],'files':['maps/mp/zombies/_zm.gsc']})
+        comp=self.composition(['alpha','beta']);code,row=invoke(['module','plan',str(comp),'--output',self.out(),'--json'])
+        self.assertEqual(code,1,row);self.assertEqual(row['details']['collisions'][0]['kind'],'file')
