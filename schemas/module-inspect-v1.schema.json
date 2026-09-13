@@ -429,12 +429,16 @@
             "sha256",
             "steps",
             "human_steps",
-            "maps"
+            "maps",
+            "requires_probe"
           ],
           "properties": {
             "sha256": {
               "type": "string",
               "pattern": "^[a-f0-9]{64}$"
+            },
+            "requires_probe": {
+              "type": "boolean"
             },
             "steps": {
               "type": "integer",

@@ -51,7 +51,19 @@ class InspectContracts(CompositionFixture):
         self.assertEqual(row['details']['inspection']['diagnostics'][0]['field'],'/tests')
         raw=json.dumps(contract()).encode();(m/'test-contract.json').write_bytes(raw)
         code,row=invoke(['module','inspect',str(m/'module.json'),'--json']);self.assertEqual(code,0,row)
-        self.assertEqual(row['result']['metadata']['tests'],{'sha256':hashlib.sha256(raw).hexdigest(),'steps':1,'human_steps':0,'maps':['zm_transit']})
+        self.assertEqual(row['result']['metadata']['tests'],{'sha256':hashlib.sha256(raw).hexdigest(),'steps':1,'human_steps':0,'maps':['zm_transit'],'requires_probe':False})
+    def test_inspect_reports_probe_requirement_instead_of_refusing(self):
+        # A module is inspected alone; whether a probe is present is the composition's fact, so
+        # agent probe verbs are reported, never refused, here. The planner enforces them.
+        m=self.module('gobblegum_machine',maps=['zm_transit'],tests='test-contract.json')
+        d=contract(); d['maps']['zm_transit']['preconditions']=[{'verb':'power_on','actor':'agent'}]
+        raw=json.dumps(d).encode();(m/'test-contract.json').write_bytes(raw)
+        code,row=invoke(['module','inspect',str(m/'module.json'),'--json']);self.assertEqual(code,0,row)
+        self.assertEqual(row['result']['validation'],'metadata-valid')
+        self.assertTrue(row['result']['metadata']['tests']['requires_probe'])
+        self.assertEqual(row['result']['metadata']['tests']['sha256'],hashlib.sha256(raw).hexdigest())
+        with self.assertRaises(Failure) as cm: tc.validate_contract(d,declaration=DECL)
+        self.assertEqual(cm.exception.details['field'],'/maps/zm_transit/preconditions/0/actor')
     def test_tests_path_cannot_escape(self):
         for path in ['../contract.json','/contract.json','a\\b.json']:
             m=self.module('gobblegum_machine',tests=path)

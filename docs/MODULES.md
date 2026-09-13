@@ -370,7 +370,9 @@ metadata-only inspection. Contract fields are closed; unknown fields name their 
 Actions use only `weapon_give`, `weapon_equip`, `weapon_upgrade`, `weapon_remove`, `gum`,
 `gobblegum`, `recipe`, `mark`, `wait_s`, `fast_restart`, `check_load`, or probe verbs
 `power_on`, `doors_open`, `points_set`, `round_set`, `perk_give`, `god`. Probe verbs require
-a human actor and prompt until a test composition supplies the probe. Preconditions default
+a human actor and prompt unless the composition supplies the `test_probe` member; `module
+inspect` validates a module alone, so it reports `requires_probe` instead of refusing, and
+`test plan` / `module plan` enforce it where the composition is known. Preconditions default
 to an agent actor. Arguments contain at most 64 letters, digits, underscores, dots, slashes
 or hyphens. No arbitrary console strings are admitted.
 

@@ -244,10 +244,14 @@ def inspect(path: Path) -> dict:
             raise Failure(INPUT_INVALID, "Expected a module or composition declaration", field="/")
         result.update(validation="metadata-valid", metadata={key: metadata[key] for key in fields})
         if kind == "module" and metadata.get("tests"):
-            from .testing_contracts import load_contract
-            contract = load_contract(path.parent, metadata)
+            from .testing_contracts import load_contract, requires_probe
+            # A module is inspected alone; whether a probe member exists is a composition fact.
+            # Validate the structure with probe scope and report the requirement; the planner
+            # and the release-profile rule enforce it where the composition is known.
+            contract = load_contract(path.parent, metadata, probe=True)
             result["metadata"]["tests"] = {"sha256": contract["sha256"], "steps": len(contract["steps"]),
-                                           "human_steps": len(contract["human_only"]), "maps": list(contract["maps"])}
+                                           "human_steps": len(contract["human_only"]), "maps": list(contract["maps"]),
+                                           "requires_probe": requires_probe(contract)}
         return result
     except Failure as exc:
         raise _inspection_failure(exc, result) from exc

@@ -110,6 +110,13 @@ def validate_contract(data, *, declaration, probe=False):
     for i,item in enumerate(data['not_covered']):text(item,f'/not_covered/{i}',400)
     return data
 
+def requires_probe(contract):
+    """True when any agent-actor action uses a probe verb; a composition must then supply test_probe."""
+    for value in contract['maps'].values():
+        for p in value['preconditions']:
+            if p['verb'] in PROBE_VERBS and p.get('actor','agent')=='agent': return True
+    return any(s.get('action',{}).get('verb') in PROBE_VERBS and s['actor']=='agent' for s in contract['steps'])
+
 def load_contract(directory, declaration, *, probe=False):
     path=declaration.get('tests')
     if not path: raise Failure(INPUT_MISSING,'Declaration does not name a test contract',field='/tests')
