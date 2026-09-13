@@ -10,6 +10,8 @@ Four knowledge pages gate the steps where this playbook's ports have failed.
 `docs/knowledge/bo3-sab-audio.md` gates step 4: carve the recordings by name from the bank and
 read the alias chain from the donor's own bytes; where a live alias row was never captured, a
 native prototype row is a recorded adaptation, not donor data.
+`docs/knowledge/weapon-dual-wield.md` gates the audio bullet of step 5 for a dual-wield pair:
+the pair's gunshot aliases stay resident and recovered foley binds to the donor's clip frames.
 `docs/knowledge/weapon-attachments.md` gates the models bullet of step 5 and the aim work that
 follows it: a BO3 weapon's sights can be a separate runtime-mounted attachment model, so list and
 capture it with the weapon held before any aim clip is authored.

@@ -16,7 +16,9 @@ Every entry states what shipped, on which platform it was verified, and what rem
   streamed gunshot layers exhausting the streamed-voice pool. `crashes.md` and the
   `rumble-asset-not-registered` signature name the donor `rmbnt#` rumble event that ends a match
   on first play; `preflight-weapon-rig.md` gates the event tail and the pair. Knowledge and
-  playbook text only; no route changed.
+  playbook text only; no route changed. Verified on the authoring workspace's Linux host by
+  reproduction on the Bloodhound pair and the Reawakened batch (donor clips with `rmbnt#`
+  tails); no native Windows run of the toolkit is claimed for this text.
 
 - Add inert `module inspect <module.json|composition.json> --json` with the versioned
   `pat.module-inspect/1` producer schema, exact-byte SHA-256 and JSON Pointer diagnostics.
