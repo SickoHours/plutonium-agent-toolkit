@@ -36,6 +36,28 @@ def script_result(name,text,passed):
     return {'id':'symbols:'+name,'outcome':'failed' if errors or not passed else 'not_counted',
             'detail':('; '.join(errors)[:800] or ('gsc check failed' if not passed else 'gsc check passed syntax/compilation; runtime external resolution is not proven'))}
 
+CALL=re.compile(r'(?<![\w\\:.\[])([a-z_][a-z0-9_]*)\s*\(')
+DEF=re.compile(r'^([a-z_][a-z0-9_]*)\s*\(',re.M)
+INCLUDE=re.compile(r'^#include\s+([^;]+);',re.M)
+KEYWORDS=frozenset(('if','while','for','foreach','switch','return','wait','waittill','waittillmatch','endon','notify','thread','spawn','array','assert'))
+
+def external_symbols(name,text):
+    """Unqualified calls resolved against the stock export table: failed when the call needs an
+    #include the script lacks; passed when every known call resolves; not_counted when a call is
+    neither a local function, a witnessed builtin, nor a stock export (the engine decides)."""
+    exports=knowledge.load('stock-exports.json')['exports']
+    text=re.sub(r'/\*.*?\*/','',text,flags=re.S);text=re.sub(r'//[^\n]*','',text)
+    includes={inc.strip().replace(chr(92),'/').lower() for inc in INCLUDE.findall(text)}
+    defined=set(DEF.findall(text));missing=[];unknown=[]
+    for call in sorted(set(CALL.findall(text))-defined-KEYWORDS):
+        owners=[path for path,names in exports.items() if call in names]
+        if owners:
+            if not any(o in includes for o in owners):missing.append(f'{call} ({" or ".join(owners)})')
+        elif knowledge.builtin(call).get('verdict')!='builtin':unknown.append(call)
+    if missing:return [{'id':'externals:'+name,'outcome':'failed','detail':'Unqualified stock calls without #include: '+'; '.join(missing)[:800]}]
+    if unknown:return [{'id':'externals:'+name,'outcome':'not_counted','detail':'Calls not in the stock export table or builtin witness list: '+', '.join(unknown)[:400]}]
+    return [{'id':'externals:'+name,'outcome':'passed','detail':'Every unqualified call is local, a witnessed builtin, or covered by an #include'}]
+
 def evaluate(plan):
     limits=knowledge.load('engine-limits.json')['rows'];maps=knowledge.load('occupancy.json')['maps']
     occupancy=maps.get(plan['map'],{})

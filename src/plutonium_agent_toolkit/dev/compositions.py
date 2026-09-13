@@ -1031,6 +1031,10 @@ def execute(args, job: Job) -> dict:
     }
     from . import checks as offline_checks
     plan["checks"] = offline_checks.evaluate(plan)
+    for source,target,_ in compiled:
+        try: text=Path(source).read_text(encoding="utf-8",errors="replace")
+        except OSError: continue
+        plan["checks"] += offline_checks.external_symbols(target.as_posix(),text)
     if args.action == "build":
         plan["checks"] += offline_checks.check_scripts(compiled,args,job,comp["game"])
     else:
@@ -1178,6 +1182,16 @@ def _build_composition(comp: dict, plan: dict, compiled, loose, seed_modules, lo
             if dest.exists():
                 raise Failure(INPUT_INVALID, f"Two seeds ship the soundbank {name}; a pack carries one copy of each bank")
             shutil.copyfile(path, dest)
+    # Compiled scripts also travel loose beside the package: on this base the engine executes
+    # scripts/zm/*.gsc from the profile folder (`loaded successfully from raw`) and does not run
+    # the rawfile copies inside mod.ff. Every accepted stock profile ships them this way.
+    loose_scripts = []
+    for rel in rawfiles:
+        if rel.as_posix().startswith("scripts/") and rel.suffix.lower() in (".gsc", ".csc"):
+            dest = banks / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(raw / rel, dest)
+            loose_scripts.append(rel.as_posix())
     readback_log = job.run([*executable("unlinker"), "--no-color", "--include-assets", "rawfile", "--output-folder",
                             str(job.root / "readback"), str(package)], timeout=args.timeout)
     fastfiles.check_readback_log(readback_log)
@@ -1197,6 +1211,7 @@ def _build_composition(comp: dict, plan: dict, compiled, loose, seed_modules, lo
             "seed_roots_verified": sum(len(m["seed"]["roots"]) for m in seed_modules),
             "embedded_assets": len(embedded), "referenced_assets": len(referenced), "localized_strings": len(strings),
             "soundbanks": sorted(p.name for p in banks.iterdir() if p.is_file() and p.name != "mod.ff"),
+            "loose_scripts": loose_scripts,
             "name": comp["name"], "title": comp["title"], "base": comp["base"], "map": comp["map"], "base_member": plan["base_member"],
             "modules": [{"id": r["id"], "version": r["version"], "order": i + 1, "payload": r["payload"], "role": r["role"]}
                         for i, r in enumerate(plan["modules"])],

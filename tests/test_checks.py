@@ -54,3 +54,22 @@ class PreLinkScriptChecks(unittest.TestCase):
                 checks.check_scripts([(source,Path('a.gsc'),'server'),(source,Path('b.gsc'),'client')],SimpleNamespace(timeout=600),job,'t6')
         self.assertEqual(cm.exception.code,'backend_timeout')
         self.assertEqual(len(calls),1)
+class ExternalSymbols(unittest.TestCase):
+    """Unqualified calls to stock exports without the matching #include link-fail in the engine."""
+    def test_unqualified_stock_call_without_include_fails(self):
+        src='init()\n{\n    players = get_players();\n    x = self get_player_equipment();\n}\n'
+        rows=checks.external_symbols('scripts/zm/a.gsc',src)
+        self.assertEqual(rows[0]['outcome'],'failed');self.assertIn('get_players',rows[0]['detail']);self.assertIn('common_scripts/utility',rows[0]['detail'])
+        self.assertIn('get_player_equipment',rows[0]['detail'])
+    def test_include_or_qualification_resolves(self):
+        src='#include common_scripts\\utility;\ninit()\n{\n    players = get_players();\n    e = self maps\\mp\\zombies\\_zm_utility::get_player_equipment();\n}\n'
+        self.assertEqual(checks.external_symbols('scripts/zm/a.gsc',src)[0]['outcome'],'passed')
+    def test_local_definition_and_witnessed_builtins_are_not_externals(self):
+        src='init()\n{\n    helper();\n    iprintln("x");\n}\nhelper()\n{\n}\n'
+        self.assertEqual(checks.external_symbols('scripts/zm/a.gsc',src)[0]['outcome'],'passed')
+    def test_comments_are_not_calls(self):
+        src='// get_players( is only a comment\n/* get_player_equipment( */\ninit()\n{\n    helper();\n}\nhelper()\n{\n}\n'
+        self.assertEqual(checks.external_symbols('scripts/zm/a.gsc',src)[0]['outcome'],'passed')
+    def test_unknown_names_stay_not_counted(self):
+        src='init()\n{\n    totally_unknown_thing();\n}\n'
+        self.assertEqual(checks.external_symbols('scripts/zm/a.gsc',src)[0]['outcome'],'not_counted')
