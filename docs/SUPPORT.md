@@ -214,3 +214,8 @@ is not a new external-resolution qualification. No runtime pool occupancy is inf
 
 Replacement declaration fields are offline-validated: normalization/deduplication, engine-entry
 refusal and typed entry references have synthetic tests. This declares no runtime compatibility.
+
+Declared replacement/entry tests cover normalized references, engine-entry exclusions,
+irresolvable duplicate functions/files, undeclared literal targets, declared-but-unfound
+warnings, generated call order, compiler integration and rawfile readback. These extensions
+remain offline-tested; no new Windows/game/player acceptance qualification is claimed.
