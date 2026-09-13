@@ -453,3 +453,11 @@ Literal `replaceFunc(script::function, ...)` targets in recipe source must be de
 fails with `declaration_mismatch` and the target in the hint. Backslashes and case normalize.
 Declared targets not found in available source are warnings, preserving seed workflows.
 This regex scan does not prove dynamically computed replacements or runtime detour behavior.
+
+## Entry script
+
+An entry-managed module exposes its declared replace/register functions and defines neither
+`main()` nor `init()`. The build generates `scripts/zm/zz_<composition>_entry.gsc`: main calls
+replacements, init calls registrations, both in composition order. It uses the existing compiler,
+zone rawfile list and byte-for-byte readback. Root scripts are normally each engine entry points;
+one generated owner is needed for deterministic order. Other modules keep their existing roots.

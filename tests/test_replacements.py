@@ -43,3 +43,22 @@ class ReplacementScan(CompositionFixture):
         self.assertEqual(code,0,row);self.assertTrue(json.loads((Path(out)/'plan.json').read_text())['warnings'])
     def test_scan_normalizes_case_and_separators(self):
         self.assertEqual(c.scan_replacements('replaceFunc(MAPS\\MP\\ZOMBIES\\_ZM::Round_Think, ::mine);'),{'maps/mp/zombies/_zm::round_think'})
+
+class GeneratedEntry(CompositionFixture):
+    def entry_member(self,mid):
+        m=self.module(mid,entry={'replace':f'scripts/zm/{mid}::{mid}_replace','register':f'scripts/zm/{mid}::{mid}_register'})
+        (m/f'scripts/{mid}.gsc').write_text(f'{mid}_replace() {{}}\n{mid}_register() {{}}')
+        return m
+    def test_entry_is_compiled_zoned_and_read_back(self):
+        self.entry_member('alpha');self.entry_member('beta');comp=self.composition(['beta','alpha']);out=self.out()
+        code,row=invoke(['module','build',str(comp),'--output',out,'--json']);self.assertEqual(code,0,row)
+        target='scripts/zm/zz_stock_pack_test_entry.gsc'
+        source=Path(out)/'generated-entry/zz_stock_pack_test_entry.gsc';self.assertTrue(source.is_file())
+        s=source.read_text();self.assertLess(s.index('::alpha_replace();'),s.index('::beta_replace();'));self.assertLess(s.index('::alpha_register();'),s.index('::beta_register();'))
+        self.assertIn('rawfile,'+target,(Path(out)/'project/zone_source/mod.zone').read_text())
+        self.assertEqual(row['result']['rawfiles_verified'],3)
+        self.assertTrue((Path(out)/'readback'/target).is_file())
+    def test_entry_member_cannot_define_its_own_main(self):
+        m=self.entry_member('alpha');(m/'scripts/alpha.gsc').write_text('main() {}')
+        comp=self.composition(['alpha']);code,row=invoke(['module','plan',str(comp),'--output',self.out(),'--json'])
+        self.assertEqual(code,1,row);self.assertEqual(row['details']['field'],'/modules/0/entry')
