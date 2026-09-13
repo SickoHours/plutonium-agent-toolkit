@@ -45,6 +45,28 @@ class CompositionFixture(DevRouteFixture):
 
 
 class CompositionTests(CompositionFixture):
+    def test_invalid_payload_paths_fail_before_plan_and_build_resolve_them(self):
+        directory = self.module("alpha")
+        comp = self.composition(["alpha"])
+        for payload, path in (("recipe", "D:payload.json"), ("seed", "../other/seed.json"),
+                              ("seed", "D:seed.json")):
+            data = declaration("alpha", distribution="private")
+            data.pop("recipe")
+            data[payload] = path
+            (directory / "module.json").write_text(json.dumps(data))
+            for action in ("plan", "build"):
+                with self.subTest(payload=payload, path=path, action=action):
+                    code, row = invoke(["module", action, str(comp), "--output", self.out()])
+                    self.assertEqual(code, 1, row)
+                    self.assertEqual(row["error_code"], "input_invalid", row)
+                    self.assertEqual(row["details"]["field"], "/" + payload)
+        data["seed"] = "nested/seed.json"
+        (directory / "module.json").write_text(json.dumps(data))
+        for action in ("plan", "build"):
+            code, row = invoke(["module", action, str(comp), "--output", self.out()])
+            self.assertEqual(code, 1, row)
+            self.assertEqual(row["error_code"], "input_missing", row)
+
     def test_inspect_and_plan_accept_a_symlinked_parent_but_refuse_a_final_link(self):
         import hashlib
 

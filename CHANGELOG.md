@@ -30,6 +30,11 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Fixed
 
+- Validate private seed paths before the missing-manifest shortcut, and reject Windows
+  drive-prefixed or rooted recipe/seed paths during declaration validation on every host.
+  Inspection, plan and build share these checks. Covered by Linux regression tests;
+  no new native Windows or game qualification is claimed.
+
 - Version all seven toolkit skills with `metadata.version: "1.0.0"` and
   `metadata.updated: "2026-09-13"`; quote the `pat-review` description so its colon
   parses as YAML text. Existing metadata and skill bodies are preserved.

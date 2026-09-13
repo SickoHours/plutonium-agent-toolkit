@@ -50,7 +50,7 @@ import os
 import stat
 import re
 import shutil
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from types import SimpleNamespace
 
 from ..core.errors import BACKEND_FAILED, INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, Failure
@@ -273,7 +273,7 @@ def _fields(row, allowed: set, required: set, what: str, field: str = "") -> Non
 def _recipe_path(text: str) -> None:
     """The lexical part of projects._rel; containment is checked during resolution."""
     p = Path(text)
-    if p.is_absolute() or ".." in p.parts or not p.parts or text != text.strip() or "\\" in text:
+    if p.is_absolute() or PureWindowsPath(text).anchor or ".." in p.parts or not p.parts or text != text.strip() or "\\" in text:
         raise Failure(INPUT_INVALID, f"Use forward-slash relative paths inside the recipe directory: {text}")
 
 
@@ -422,8 +422,8 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
     distribution = data.get("distribution", "seed" if "seed" in data else "source")
     if distribution not in DISTRIBUTIONS:
         raise Failure(INPUT_INVALID, f"{mid}: distribution is one of {list(DISTRIBUTIONS)}", field='/distribution')
-    if payload == "seed" and distribution != "private" and ("\\" in payload_path or Path(payload_path).is_absolute()
-                                                           or ".." in Path(payload_path).parts):
+    if payload == "seed" and ("\\" in payload_path or Path(payload_path).is_absolute()
+                              or PureWindowsPath(payload_path).anchor or ".." in Path(payload_path).parts):
         raise Failure(INPUT_INVALID, f"{mid}: seed is a forward-slash relative path inside the module directory", field="/seed")
     bases = data["bases"]
     if not isinstance(bases, list) or not bases or len(bases) > MAX_LIST or not all(isinstance(b, str) and BASE.match(b) for b in bases) \
