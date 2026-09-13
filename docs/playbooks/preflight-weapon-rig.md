@@ -45,7 +45,7 @@ conversion; the numbered list is the gate, not a suggestion.
 8. Compare the weapon definition field by field with its native counterpart: inventory type per
    hand, shared ammo group and cap, impact type and projectile physics, animation and sound alias
    names. Write the differences down; each is intentional or a bug.
-9. Record all eight results in the module README with the inspect receipt paths.
+9. Record all nine results in the module README with the inspect receipt paths.
 
 ## Do not
 
