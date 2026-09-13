@@ -415,6 +415,8 @@ class InspectTests(unittest.TestCase):
             metadata_schema = schema["$defs"][definition]
             self.assertEqual(set(row["result"]["metadata"]), set(metadata_schema["required"]))
             self.assertFalse(metadata_schema["additionalProperties"])
+        self.assertIn("tests", schema["$defs"]["moduleMetadata"]["properties"])
+        self.assertNotIn("tests", schema["$defs"]["moduleMetadata"]["required"])
         row = self.check_failure(MODULE | {"extra": 1}, "/extra")
         self.assertEqual(set(row), set(schema["required"]) | {"error_code", "message", "details"})
         self.assertEqual(schema["$defs"]["inspection"]["properties"]["protocol"]["const"], "pat.module-inspect/1")

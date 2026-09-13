@@ -350,3 +350,36 @@ Catalog declarations use the same 256 KiB byte limit as declaration inspection. 
 budget; overflow produces diagnostics and sets `truncated`, never partial provides claims.
 Diagnostics are separately bounded. TEST.md reads use a 512 KiB limit on the opened stream,
 and at most 16 load paths per map are inspected, matching composition authoring.
+
+## Test contract
+
+A module may name a sibling contract with `"tests": "test-contract.json"`. `module inspect`
+validates the named file and reports its exact-byte SHA-256, step and human-verifier counts,
+and maps. A missing named file is `input_missing` at `/tests`. Modules without `tests` retain
+metadata-only inspection. Contract fields are closed; unknown fields name their JSON Pointer.
+
+| Field | Meaning |
+| --- | --- |
+| `schema`, `module` | Version 1 and the declaration's exact id |
+| `maps` | Concrete declared map ids (any concrete id when the declaration uses `["*"]`), each with at most 16 ordered preconditions |
+| `steps` | At most 64 unique ids, each with actor and verifier (`agent` or `human`) |
+| `soak.rounds` | Whole number 0–10 |
+| `human_only` | Every human-verifier step id exactly once |
+| `not_covered` | Explicit coverage exclusions |
+
+Actions use only `weapon_give`, `weapon_equip`, `weapon_upgrade`, `weapon_remove`, `gum`,
+`gobblegum`, `recipe`, `mark`, `wait_s`, `fast_restart`, `check_load`, or probe verbs
+`power_on`, `doors_open`, `points_set`, `round_set`, `perk_give`, `god`. Probe verbs require
+a human actor and prompt in standalone contract validation. `module inspect` validates a
+module alone and reports agent probe actions as `requires_probe` instead of refusing them.
+Composition planning does not enforce that requirement in this release. Preconditions default
+to an agent actor. Arguments contain at most 64 letters, digits, underscores, dots, slashes
+or hyphens. No arbitrary console strings are admitted.
+
+An agent verifier requires a check: `log` (present/absent regex, at most 200 characters),
+`harness` (dotted key with equals/min/max), `dvar` (name and equals), or `screenshot`
+(record only, no automatic visual assertion). Human actors/verifiers require a prompt.
+Evidence may request a screenshot and clip-before/after seconds. `wait_s` is bounded to
+300 seconds and each clip window to 60 seconds. Validation proves structure, not gameplay.
+Excessively nested contract structures return an `input_invalid` diagnostic at `/` when
+validation cannot copy them safely.
