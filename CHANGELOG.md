@@ -7,6 +7,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- Validate declared function/file replacements and generated entry references.
+
 - Auto-include a local test-only probe for agent preconditions and refuse test-only members in release compositions.
 
 - Report counted, failed and uncounted pool checks on composition plans and run per-script compiler dry runs before linking.
