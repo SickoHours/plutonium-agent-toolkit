@@ -2,6 +2,8 @@
 name: pat-grill
 description: Settle the material decisions for a T6 Zombies mod, port or test in one numbered round with a recommended answer each. Use before pat-port or pat-build when base, maps, weapon forms, donor, menu route or acceptance scope are not yet stated, or when the user says "grill me" about a modding plan.
 metadata:
+  version: "1.0.0"
+  updated: "2026-09-13"
   source:
     repository: https://github.com/mattpocock/skills
     commit: 3cca18b368ae95cdbdebbff572ccafa662551015

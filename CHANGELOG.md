@@ -30,6 +30,10 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Fixed
 
+- Version all seven toolkit skills with `metadata.version: "1.0.0"` and
+  `metadata.updated: "2026-09-13"`; quote the `pat-review` description so its colon
+  parses as YAML text. Existing metadata and skill bodies are preserved.
+
 - Ignore the local `uv.lock`: the dependency-free package and pip/setuptools CI do not
   consume a lockfile. No dependency or installation behavior changes.
 
