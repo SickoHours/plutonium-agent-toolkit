@@ -345,3 +345,8 @@ link-load list is staged, because it requires no additional files.
 Record-pointer labels are bounded before interpolation, so large registry identifiers cannot
 amplify into hundreds of large retained strings. Non-string binding IDs use the module's
 directory label. Output strings are bounded before UTF-8 escaping as well as afterward.
+Catalog declarations use the same 256 KiB byte limit as declaration inspection. Each module's
+`provides` projection is capped at 64 KiB, and retained data rows share a 512 KiB serialized
+budget; overflow produces diagnostics and sets `truncated`, never partial provides claims.
+Diagnostics are separately bounded. TEST.md reads use a 512 KiB limit on the opened stream,
+and at most 16 load paths per map are inspected, matching composition authoring.

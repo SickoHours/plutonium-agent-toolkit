@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 
 from ..core.errors import Failure, INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING
-from .compositions import validate_declaration_metadata
+from .compositions import MAX_DECLARATION_BYTES, validate_declaration_metadata
 
 MAX_BYTES = 64 * 1024 * 1024
 MAX_MODULES = 512
@@ -16,25 +16,27 @@ MAX_ICON_BYTES = 64 * 1024 * 1024
 MAX_ICON_FILE_BYTES = 16 * 1024 * 1024
 MAX_FOUNDATION_MAPS = 64
 MAX_FOUNDATION_ROWS = 256
+MAX_PROVIDES_BYTES = 64 * 1024
+MAX_RETAINED_BYTES = 512 * 1024
 FLAGS = ("offline_verified", "installed", "runtime_verified", "player_accepted")
 ICON_ROLES = {"bound HUD icon", "shared HUD icon", "local reference icon"}
 
 
-def read_bytes(path: Path, *, optional=False):
+def read_bytes(path: Path, *, optional=False, limit=MAX_BYTES):
     if path.is_symlink():
         raise Failure(INPUT_MISSING, f"Record is a link: {path.name}")
     if optional and not path.exists():
         return None
     if not path.is_file():
         raise Failure(INPUT_MISSING, f"Record is missing: {path.name}")
-    if path.stat().st_size > MAX_BYTES:
+    if path.stat().st_size > limit:
         raise Failure(INPUT_LIMIT, f"Record exceeds the size bound: {path.name}")
     try:
         with path.open("rb") as stream:
-            data = stream.read(MAX_BYTES + 1)
+            data = stream.read(limit + 1)
     except OSError as exc:
         raise Failure(INPUT_INVALID, f"Record is not readable: {path.name}") from exc
-    if len(data) > MAX_BYTES:
+    if len(data) > limit:
         raise Failure(INPUT_LIMIT, f"Record exceeds the size bound: {path.name}")
     return data
 
@@ -96,6 +98,21 @@ def safe_output(value):
     return value
 
 
+class OutputBudget:
+    def __init__(self):
+        self.remaining = MAX_RETAINED_BYTES
+
+    def take(self, value):
+        normalized = safe_output(value)
+        encoded = json.dumps(normalized, ensure_ascii=False, allow_nan=False, indent=2)
+        # Include indentation when the row is nested in the CLI envelope's result arrays.
+        size = len(encoded.encode("utf-8")) + 8 * (encoded.count("\n") + 1)
+        if size > self.remaining:
+            raise Failure(INPUT_LIMIT, "Workspace catalog output exceeds the aggregate budget")
+        self.remaining -= size
+        return normalized
+
+
 def text(value, limit=2048):
     return value[:limit] if isinstance(value, str) else None
 
@@ -136,7 +153,11 @@ def latest_test(directory: Path):
     file = directory / "docs/TEST.md"
     if not file.is_file() or file.is_symlink() or file.stat().st_size > 512 * 1024:
         return None
-    lines = file.read_text(encoding="utf-8").splitlines()
+    with file.open("rb") as stream:
+        data = stream.read(512 * 1024 + 1)
+    if len(data) > 512 * 1024:
+        return None
+    lines = data.decode("utf-8").splitlines()
     candidates = [(i, line) for i, line in enumerate(lines, 1) if re.search(r"\b(build|receipt)\b", line, re.I) and line.strip()]
     if not candidates:
         return None
@@ -166,16 +187,20 @@ def catalog(directory: str, art_catalog: str | None = None):
     children = directory_entries(module_root, MAX_MODULES)
     modules = []
     icon_budget = IconBudget()
+    output_budget = OutputBudget()
     truncated = False
     for child in children:
         declaration = child / "module.json"
         if child.is_symlink() or not child.is_dir() or not declaration.exists():
             continue
         try:
-            declaration_bytes = read_bytes(declaration)
+            declaration_bytes = read_bytes(declaration, limit=MAX_DECLARATION_BYTES)
             data = parse_object(declaration_bytes, declaration)
             metadata = validate_declaration_metadata(data)
             module_id = metadata["id"]
+            provides = data.get("provides", {})
+            if len(json.dumps(provides, ensure_ascii=True).encode("ascii")) > MAX_PROVIDES_BYTES:
+                raise Failure(INPUT_LIMIT, "Declared provides exceeds the projection budget")
             matching = [r for r in bindings if r.get("catalog_id") == child.name or r.get("id") == child.name
                         or r.get("recipe") in (f"modules/{child.name}/recipe.json", f"modules/{child.name}/project.json")]
             catalog_id = matching[0].get("catalog_id", child.name) if matching else child.name
@@ -201,15 +226,17 @@ def catalog(directory: str, art_catalog: str | None = None):
             symbol = cover_symbol.get("url")
             if not isinstance(symbol, str) or not re.fullmatch(r"library-symbols/[a-z0-9-]+\.svg", symbol):
                 symbol = None
-            modules.append({"id": module_id, "directory": f"modules/{child.name}",
+            modules.append(output_budget.take({"id": module_id, "directory": f"modules/{child.name}",
                             "declaration_sha256": hashlib.sha256(declaration_bytes).hexdigest(),
                             "weapon_class": text(registered.get("weapon_class")),
                             "registry_origin": text(registered.get("origin_primary")),
                             "icon_binding": icon_binding(module_art, Path(art_catalog).resolve().parent, icon_budget) if art_catalog else None,
                             "symbol": "symbol-" + Path(symbol).stem if symbol else None,
-                            "provides": data.get("provides", {}), "build_records": builds,
-                            "latest_test": latest_test(child)})
+                            "provides": provides, "build_records": builds,
+                            "latest_test": latest_test(child)}))
         except (Failure, OSError, ValueError) as exc:
+            if isinstance(exc, Failure) and exc.code == INPUT_LIMIT:
+                truncated = True
             diagnostics.append({"path": f"modules/{child.name}", "message": str(exc)[:2048]})
     foundations = []
     foundation_root = root / "foundations"
@@ -248,10 +275,15 @@ def catalog(directory: str, art_catalog: str | None = None):
                     raise Failure(INPUT_LIMIT, "Workspace exceeds the foundation row bound")
                 for map_id in dict.fromkeys([*maps, *links]):
                     loads = links.get(map_id)
-                    staged = isinstance(loads, list) and all(isinstance(p, str) and (descriptor_path.parent / p).is_file() for p in loads)
-                    foundations.append({"id": info["id"], "base": info["profile_prefix"], "map": map_id,
-                                        "staged": staged, "source": f"foundations/{file.name}"})
+                    staged = isinstance(loads, list) and len(loads) <= 16 and all(isinstance(p, str) and (descriptor_path.parent / p).is_file() for p in loads)
+                    foundations.append(output_budget.take({"id": info["id"], "base": info["profile_prefix"], "map": map_id,
+                                        "staged": staged, "source": f"foundations/{file.name}"}))
             except (Failure, OSError, ValueError, TypeError) as exc:
+                if isinstance(exc, Failure) and exc.code == INPUT_LIMIT:
+                    truncated = True
                 diagnostics.append({"path": f"foundations/{file.name}", "message": str(exc)[:2048]})
-    return safe_output({"protocol": "pat.workspace-catalog/1", "modules": modules, "foundations": foundations,
-                        "diagnostics": diagnostics[:64], "truncated": truncated or len(diagnostics) > 64})
+    # Data rows are already normalized and budgeted. Keep diagnostics bounded separately;
+    # avoid recursively copying the accumulated module payload a second time.
+    bounded_diagnostics = [{"path": safe_output(row["path"])[:256], "message": safe_output(row["message"])[:512]} for row in diagnostics[:64]]
+    return {"protocol": "pat.workspace-catalog/1", "modules": modules, "foundations": foundations,
+            "diagnostics": bounded_diagnostics, "truncated": truncated or len(diagnostics) > 64}

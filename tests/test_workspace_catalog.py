@@ -289,3 +289,65 @@ class WorkspaceCatalogTests(unittest.TestCase):
         self.write('registry/module-recipes.json', {'recipes':[{'id':['not','a','string'],'catalog_id':'example','builds':[{'id':'one'}]}]})
         result = catalog(str(self.root))
         self.assertEqual(result['modules'][0]['build_records'][0]['pointer'], 'example/builds/0')
+
+    def test_provides_is_bounded_before_a_module_is_retained(self):
+        from unittest.mock import patch
+        from plutonium_agent_toolkit.dev import workspace_catalog as wc
+        with patch.object(wc, 'MAX_PROVIDES_BYTES', 1):
+            result = catalog(str(self.root))
+        self.assertEqual(result['modules'], [])
+        self.assertTrue(result['truncated'])
+        self.assertIn('provides exceeds', result['diagnostics'][0]['message'])
+
+    def test_aggregate_output_budget_limits_retained_modules(self):
+        from unittest.mock import patch
+        from plutonium_agent_toolkit.dev import workspace_catalog as wc
+        first = catalog(str(self.root))['modules'][0]
+        encoded = json.dumps(first, ensure_ascii=False, allow_nan=False, indent=2)
+        row_size = len(encoded.encode()) + 8 * (encoded.count('\n') + 1)
+        declaration = json.loads((self.root/'modules/example/module.json').read_text())
+        self.write('modules/second_/module.json', dict(declaration, id='second_'))
+        with patch.object(wc, 'MAX_RETAINED_BYTES', row_size):
+            result = catalog(str(self.root))
+        self.assertEqual(len(result['modules']), 1)
+        self.assertTrue(result['truncated'])
+        self.assertIn('output exceeds', result['diagnostics'][0]['message'])
+
+    def test_module_read_uses_the_declaration_byte_limit(self):
+        file = self.root/'modules/example/module.json'
+        file.write_bytes(file.read_bytes() + b' ' * (256 * 1024))
+        result = catalog(str(self.root))
+        self.assertEqual(result['modules'], [])
+        self.assertIn('size bound', result['diagnostics'][0]['message'])
+
+    def test_oversized_load_list_is_not_statted(self):
+        from unittest.mock import patch
+        self.write('foundations/base.json', {'id':'base','profile_prefix':'stock','maps':{'zm_factory':{}},'link_loads':{'zm_factory':['../base.ff']*17}})
+        (self.root/'base.ff').write_bytes(b'fixture')
+        original = Path.is_file
+        load_calls = []
+        def observe(path):
+            if path.name == 'base.ff': load_calls.append(path)
+            return original(path)
+        with patch.object(Path, 'is_file', observe):
+            result = catalog(str(self.root))
+        self.assertFalse(result['foundations'][0]['staged'])
+        self.assertEqual(load_calls, [])
+
+    def test_test_record_size_is_checked_against_bytes_actually_read(self):
+        import os
+        from unittest.mock import patch
+        from plutonium_agent_toolkit.dev.workspace_catalog import latest_test
+        file = self.root/'modules/example/docs/TEST.md'
+        file.parent.mkdir()
+        file.write_bytes(b'build ' + b'x'*(512*1024))
+        original = Path.stat
+        def stale_size(path, *args, **kwargs):
+            stat = original(path, *args, **kwargs)
+            if path == file:
+                fields = list(stat)
+                fields[6] = 1
+                return os.stat_result(fields)
+            return stat
+        with patch.object(Path, 'stat', stale_size):
+            self.assertIsNone(latest_test(file.parent.parent))

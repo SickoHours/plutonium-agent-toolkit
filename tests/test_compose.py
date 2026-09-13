@@ -105,7 +105,7 @@ class ComposeTests(CompositionFixture):
         self.assertEqual(code, 0, row)
         receipt = json.loads(Path(row['result']['receipt']).read_text())
         self.assertLess(len(receipt['inputs']), 10)
-        self.assertIn(str(self.root/'foundation.json'), receipt['inputs'])
+        self.assertIn(str((self.root/'foundation.json').resolve()), receipt['inputs'])
 
     def test_publish_refuses_a_deleted_member_load_or_owned_listing(self):
         import hashlib
@@ -131,7 +131,7 @@ class ComposeTests(CompositionFixture):
                 package = source_root/'mod.ff'
                 package.write_bytes(b'package')
                 receipt = source_root/'build.json'
-                receipt.write_text(json.dumps({'command':'module build','status':'succeeded','ok':True,'inputs':{str(recipe):hashlib.sha256(recipe.read_bytes()).hexdigest()},'outputs':{'mod.ff':hashlib.sha256(package.read_bytes()).hexdigest()},'result':{'mod_ff':'mod.ff'}}))
+                receipt.write_text(json.dumps({'command':'module build','status':'succeeded','ok':True,'inputs':{str(recipe.resolve()):hashlib.sha256(recipe.read_bytes()).hexdigest()},'outputs':{'mod.ff':hashlib.sha256(package.read_bytes()).hexdigest()},'result':{'mod_ff':'mod.ff'}}))
                 if kind == 'member': shutil.rmtree(member)
                 elif kind == 'load': load.unlink()
                 else: owned.unlink()

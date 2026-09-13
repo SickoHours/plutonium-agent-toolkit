@@ -7,6 +7,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- Cap aggregate catalog output and per-module provides, bound TEST.md stream reads, and limit staged-load filesystem checks to the compose route's 16-path bound.
+
 - Check catalog directory limits while enumerating, escape non-UTF-8 output strings, validate foundation identity types, and report a valid empty load list as staged.
 
 - Bound workspace catalog image bytes and foundation/build rows, diagnose malformed records, and hash the exact validated declaration snapshot. Composition discovery has a separate byte budget; publication rejects missing inputs. Deeply nested foundation JSON returns a structured failure before install changes.
