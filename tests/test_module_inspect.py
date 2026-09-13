@@ -90,6 +90,15 @@ class InspectTests(unittest.TestCase):
         self.assertFalse((self.root / "project.json").exists())
         self.assertFalse((self.root / "seed.json").exists())
 
+    def test_private_recipe_is_metadata_valid_without_reading_its_payload(self):
+        code, row = invoke(self.write(MODULE | {"distribution": "private"}))
+        self.assertEqual(code, 0, row)
+        self.assertEqual(row["result"]["validation"], "metadata-valid")
+        self.assertEqual(row["result"]["metadata"]["distribution"], "private")
+        self.assertEqual(row["result"]["metadata"]["payload"], "recipe")
+        self.assertFalse((self.root / "project.json").exists())
+        self.check_failure(MODULE | {"distribution": "private", "recipe": "../outside.json"}, "/recipe")
+
     def test_composition_keeps_declared_order_and_omitted_metadata_is_validated(self):
         data = PACK | {"modules": [{"path": "../z", "role": "base"}, "../a",
                                   {"name": "owner/beta", "commit": "a" * 40, "path": "../missing"}],
@@ -111,7 +120,7 @@ class InspectTests(unittest.TestCase):
         cases = [("schema", 2, "/schema"), ("id", "BAD", "/id"), ("game", [], "/game"),
                  ("version", "", "/version"), ("title", " ", "/title"), ("category", "BAD", "/category"),
                  ("kind", "bad_kind", "/kind"), ("tags", ["x", "x"], "/tags"),
-                 ("recipe", "../outside.json", "/recipe"), ("distribution", "private", "/distribution"),
+                 ("recipe", "../outside.json", "/recipe"), ("distribution", "unknown", "/distribution"),
                  ("bases", [{}], "/bases"), ("maps", [{}], "/maps"), ("menu_route", None, "/menu_route"),
                  ("source", {"repository": "http://example.invalid"}, "/source/repository"),
                  ("source", {"repository": "https://example.invalid", "commit": "x"}, "/source/commit"),

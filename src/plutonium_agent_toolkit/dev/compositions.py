@@ -425,8 +425,6 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
     if payload == "seed" and distribution != "private" and ("\\" in payload_path or Path(payload_path).is_absolute()
                                                            or ".." in Path(payload_path).parts):
         raise Failure(INPUT_INVALID, f"{mid}: seed is a forward-slash relative path inside the module directory", field="/seed")
-    if payload == "recipe" and distribution == "private":
-        raise Failure(INPUT_INVALID, f"{mid}: distribution private applies to a seed whose package is not published", field="/distribution")
     bases = data["bases"]
     if not isinstance(bases, list) or not bases or len(bases) > MAX_LIST or not all(isinstance(b, str) and BASE.match(b) for b in bases) \
             or len(set(bases)) != len(bases):

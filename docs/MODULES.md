@@ -122,7 +122,7 @@ Lives in the module's directory beside its payload. The payload is one of two th
 | `provides` | no | What the module registers, by kind: `weapons`, `perks`, `gobblegums`, `powerups`, `equipment`, `localize`, `soundbanks`, `scripts`, `models`, `effects`, `rawfiles`, each a list of up to 4096 names. Two modules providing the same name is a decision (below); a `rawfiles` name is a file target and is listed once, as the file collision. A seed's manifest fills this in; for the kinds the manifest derives (`weapons`, `localize`, `soundbanks`, `rawfiles`, `models`, `effects`) a declaration may narrow the manifest's list and never add to it, even when the manifest lists none of that kind; the other kinds are the declaration's |
 | `resource_contract` | no | Whole numbers the module adds to the engine's budgets: `threads`, `entities`, `hud`, `network_fields`. Missing fields count as 0. Summed across the composition and checked against the composition's `budget` |
 | `menu_route` | no | How a person reaches the feature in game, at most 200 characters; carried into the plan for the handoff |
-| `distribution` | no | `source` (buildable from the repository; the default for a recipe), `seed` (the package is committed beside the manifest; the default for a seed), or `private` (a seed whose package is not published: the declaration and manifest let others plan around the module, and a build without the package fails honestly) |
+| `distribution` | no | `source` (buildable from the repository; the default for a recipe), `seed` (the package is committed beside the manifest; the default for a seed), or `private` (recipe source/assets or a seed package are not published; the payload type remains recipe or seed, and plan/build still require the local inputs) |
 | `source` | no | Where the module comes from: an `https` `repository` URL and, ideally, the 40-hex `commit`. Carried into the plan so a pack can say what it was built from |
 | `origin` | no | One lowercase word for the game or series the thing's identity comes from (`bo3`, `waw`, `saints-row`), or `unverified` when nobody has established it. It drives the title: an ICR-1 converted from a community pack is still "ICR-1 (Black Ops III)". Never defaulted to the donor. A browse word, never a resolution rule |
 | `donor` | no | One line of credit, at most 400 characters, for where the bytes came from: a conversion pack and its author, a capture, a person. It drives the credit line, never the title. Preserved on every re-cut |
@@ -264,6 +264,12 @@ a `mod.ff` is a seed, declared from the package with `module declare`, and the p
 the package provides. Either way the base pack is an ordinary member. To test a module on a base
 or map it does not yet declare, build it alone there first (`port-a-feature.md`,
 `package-and-install.md`), earn the verdict, then extend `bases` or `maps`.
+
+A private recipe declaration can be inspected without opening its recipe or inputs, just
+like a source recipe declaration. Inspection proves metadata only. Plan/build still validate
+the recipe and require every local input; `private` does not bypass path or payload checks,
+authorize publication, or make a foreign recipe format buildable. Private seed behavior is
+unchanged: a missing package is reported when planning/building requires it.
 
 ## Publishing a module
 

@@ -347,12 +347,31 @@ class TaxonomyTests(CompositionFixture):
         self.assertEqual(plan["modules"][0]["distribution"], "source")
         self.assertEqual(plan["modules"][0]["payload"], "recipe")
         for broken in (declaration("alpha", category="weapons", kind="perk"), declaration("alpha", tags=["Bad Tag"]),
-                       declaration("alpha", distribution="private"), declaration("alpha", provides={"nope": ["x"]}),
+                       declaration("alpha", distribution="unknown"), declaration("alpha", provides={"nope": ["x"]}),
                        declaration("alpha", provides={"weapons": ["a", "a"]}), {**declaration("alpha"), "seed": "seed.json"}):
             (self.root / "modules" / "alpha" / "module.json").write_text(json.dumps(broken))
             code, row = invoke(["module", "plan", str(self.composition(["alpha"])), "--output", self.out()])
             self.assertEqual(code, 1, broken)
             self.assertEqual(row["error_code"], "input_invalid", broken)
+
+    def test_private_recipe_plans_locally_but_missing_payloads_still_fail(self):
+        directory = self.module("alpha", distribution="private")
+        composition = self.composition(["alpha"])
+        code, row = invoke(["module", "plan", str(composition), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        plan = json.loads((Path(row["result"]["output"]) / "plan.json").read_text())
+        self.assertEqual(plan["modules"][0]["distribution"], "private")
+        self.assertEqual(plan["modules"][0]["payload"], "recipe")
+        (directory / "scripts" / "alpha.gsc").unlink()
+        code, row = invoke(["module", "plan", str(composition), "--output", self.out()])
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "input_missing")
+        (directory / "project.json").unlink()
+        for action in ("plan", "build"):
+            code, row = invoke(["module", action, str(composition), "--output", self.out()])
+            self.assertEqual(code, 1, row)
+            self.assertEqual(row["error_code"], "input_missing")
+            self.assertIn("recipe is missing", row["message"])
 
     def test_composition_title_and_tags(self):
         self.module("alpha")

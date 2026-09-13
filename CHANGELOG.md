@@ -30,6 +30,11 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ### Fixed
 
+- Accept `distribution: private` with recipe-backed modules, preserving the private label
+  independently of payload type. Inspection remains declaration-only; plan/build still
+  validate the recipe and refuse missing inputs. Covered by synthetic inspection and
+  composition tests on Linux; no new native Windows or game qualification is claimed.
+
 - Composition member, load and base-listing paths beginning with `/` are rejected on
   Windows as well as Linux. A Windows path rooted on the current drive is not relative
   to the composition directory. Covered by the inspection metadata tests.
