@@ -195,3 +195,7 @@ tags (`-alpha`, `-beta`, `-rc`) are marked pre-release automatically.
 Install-mod soundbank/profile-link options are covered by isolated filesystem tests. Profile links require native symlink permissions; native Windows link creation and actual DLC package loading remain unverified.
 
 PR 55 review regressions cover missing published inputs, a 4096-entry discovery root without exhausting the selected-input budget, and deeply nested install foundation JSON. Tests use isolated files; no game effect or new native qualification is claimed.
+
+`module inspect` test-contract validation is offline: `tests/test_testing_contracts.py`
+covers closed fields, vocabulary, actor requirements, check types, limits, path containment,
+missing named files and exact-byte hashes. It does not execute a contract or establish gameplay.

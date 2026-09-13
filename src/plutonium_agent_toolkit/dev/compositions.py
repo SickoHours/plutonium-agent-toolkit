@@ -243,6 +243,11 @@ def inspect(path: Path) -> dict:
         else:
             raise Failure(INPUT_INVALID, "Expected a module or composition declaration", field="/")
         result.update(validation="metadata-valid", metadata={key: metadata[key] for key in fields})
+        if kind == "module" and metadata.get("tests"):
+            from .testing_contracts import load_contract
+            contract = load_contract(path.parent, metadata)
+            result["metadata"]["tests"] = {"sha256": contract["sha256"], "steps": len(contract["steps"]),
+                                           "human_steps": len(contract["human_only"]), "maps": list(contract["maps"])}
         return result
     except Failure as exc:
         raise _inspection_failure(exc, result) from exc
@@ -415,7 +420,7 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
     """Authoritative declaration checks; no filesystem or payload resolution."""
     _fields(data, {"schema", "id", "version", "game", "title", "category", "kind", "tags", "recipe", "seed", "bases", "maps",
                             "dependencies", "conflicts", "provides", "resource_contract", "menu_route", "distribution", "source",
-                            "origin", "donor", "lineage"},
+                            "origin", "donor", "lineage", "tests"},
                      {"schema", "id", "version", "bases", "maps"}, where)
     if data["schema"] != 1:
         raise Failure(INPUT_INVALID, f"{where}: expected schema 1", field='/schema')
@@ -473,9 +478,13 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
             raise Failure(INPUT_INVALID, f"{mid}: source.repository is an https URL", field='/source/repository')
         if "commit" in source and (not isinstance(source["commit"], str) or not COMMIT.match(source["commit"])):
             raise Failure(INPUT_INVALID, f"{mid}: source.commit is a 40-character lowercase hex commit id", field='/source/commit')
+    tests = data.get("tests")
+    if tests is not None:
+        _at("/tests", _text, tests, "tests", 4096)
+        _at("/tests", _recipe_path, tests)
     provides = _at("/provides", _provides, data.get("provides"), mid)
     return {"id": mid, "version": data["version"], "game": game, "title": title, "category": category, "kind": kind, "tags": list(tags),
-            "payload": payload, "payload_path": payload_path, "distribution": distribution,
+            "payload": payload, "payload_path": payload_path, "distribution": distribution, "tests": tests,
             "bases": list(bases), "maps": list(maps),
             "dependencies": _at("/dependencies", _ids, data.get("dependencies", []), "dependencies", mid),
             "conflicts": _at("/conflicts", _ids, data.get("conflicts", []), "conflicts", mid),
