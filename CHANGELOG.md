@@ -7,6 +7,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- Added implemented `module compose` for ID-based recipe authoring, per-map foundation loads, dependency/registration inclusion, nested plan receipts and exact-build-gated recipe publication.
+
 - Module plan/build: optional `--allow-unqualified` reports target base/map mismatches in plans and build receipts without changing declarations or evidence.
 
 ### Added

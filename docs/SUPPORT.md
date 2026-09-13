@@ -186,3 +186,7 @@ modding tasks from receipts to compare models and harnesses; it gates nothing.
 tag runs `.github/workflows/release.yml`: tests on Windows, release check against the tag, wheel
 and sdist with SHA-256 sums, GitHub Release with the changelog section as notes. Pre-release
 tags (`-alpha`, `-beta`, `-rc`) are marked pre-release automatically.
+
+## Composition authoring adapter
+
+`module compose` is implemented and covered by synthetic CLI tests for dependency/registration resolution, missing IDs, staged map selection and successful-build-gated publication. It is not a new backend or gameplay qualification. `module plan` and `module build` retain their existing evidence; the opt-in unqualified-target flag adds warning records, not evidence for new target combinations.

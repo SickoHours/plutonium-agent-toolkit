@@ -117,6 +117,13 @@ def add_parser(sub, common):
         q.add_argument("composition", help="Path to composition.json")
         q.add_argument("--allow-unqualified", action="store_true", help="Report base/map mismatches without refusing; does not add evidence")
         common(q)
+    q = actions.add_parser("compose", help="Compose declared IDs against a foundation, or publish a successfully built recipe")
+    q.add_argument("--name"); q.add_argument("--base"); q.add_argument("--map")
+    q.add_argument("--foundation")
+    q.add_argument("--member-root", action="append", default=[])
+    q.add_argument("--module", action="append", default=[])
+    q.add_argument("--publish-to"); q.add_argument("--from-build"); q.add_argument("--composition")
+    common(q)
     q = actions.add_parser("fetch", help="Download a published module or pack at its exact commit into a new directory")
     q.add_argument("reference", help="<owner>/<id>@<commit> (through a recorded registry) or https://github.com/<owner>/<repo>@<commit>")
     q.add_argument("--path", help="Directory inside the repository that holds module.json or composition.json (default: the registry entry's path, or the root)")
@@ -857,6 +864,9 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
 
 
 def execute(args, job: Job) -> dict:
+    if args.action == "compose":
+        from . import compose
+        return compose.execute(args, job)
     if args.action == "fetch":
         from . import registry
 

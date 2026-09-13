@@ -77,6 +77,7 @@ PLANNED = [
     Route("module", "inspect", "Validate one module or composition declaration without resolving payloads", "inert",
           status="implemented", owner=OWNER,
           notes="Argument: <module.json|composition.json> --json. Protocol pat.module-inspect/1; declaration-only, at most 256 KiB, no final-component symlinks, job, payload reads or network; symlinked ancestors allowed. Schema: schemas/module-inspect-v1.schema.json."),
+    Route("module", "compose", "Write and plan a recipe from member IDs and a foundation, or publish a recipe after a successful build", "writes-output", status="implemented", owner=OWNER, notes="Use --name --base --map --foundation --member-root --module with a fresh --output. Publish with --composition --from-build --publish-to. No game actions."),
     Route("module", "plan", "Resolve a composition of declared modules (dependency order, conflicts, base and map fit, "
           "resource budget), list every collision as a decision, and hash every input without running a backend", "writes-output",
           status="available", owner=OWNER,

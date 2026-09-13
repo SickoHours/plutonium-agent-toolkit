@@ -300,3 +300,9 @@ anyone's bytes.
 ### Unqualified targets
 
 `module plan` and `module build` accept `--allow-unqualified`. A module whose declared base or map does not cover the target is listed in `unqualified` in the plan, result and build receipt instead of refusing. Dependency, conflict, game, input and budget checks still apply. Without the flag, base/map mismatches still refuse. This is a stated compatibility risk, never new build or gameplay evidence, and declarations are unchanged.
+
+### Compose and publish
+
+`pat module compose --name b2_example_pack --base b2 --map zm_factory --foundation foundation.json --member-root seeds --member-root modules --module example --output new-job --json` resolves module IDs in root order, includes matching `_registration` declarations and their dependency closure, and writes a recipe and nested plan. A foundation's `link_loads` maps map IDs to file paths; optional `private_descriptor` points to a local expanded descriptor. `mod_zone_header` is copied with its map ipak line adjusted for the target. Available embedded foundation asset listings become base-ownership inputs. Unknown IDs or unstaged maps refuse; target mismatch warnings remain separate from evidence.
+
+The result carries `composition`, `plan`, `plan_receipt`, `undecided` and `unqualified`. Nothing is installed. Build the returned composition with `module build --allow-unqualified` and a fresh output. To save the successfully built recipe as a template, use `module compose --composition <recipe> --from-build <receipt.json> --publish-to <templates/name> --output <new-job>`. Publication checks the exact recipe and package against the successful build receipt, rebases references for the destination and refuses an existing destination. Source declarations and prior recipes remain unchanged.
