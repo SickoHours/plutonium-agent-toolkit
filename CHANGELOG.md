@@ -7,6 +7,14 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- Module metadata accepts T4/T5 source-map lineage entries, preserving multiple maps and source variants separately from qualification evidence.
+
+- Install-mod optionally stages sibling soundbanks and declared mod_load profile links, with hashes in its receipt and the existing rollback behavior.
+
+- Added implemented `module compose` for ID-based recipe authoring, per-map foundation loads, dependency/registration inclusion, nested plan receipts and exact-build-gated recipe publication. The recipe carries the members' title (`--game` to state it); a foundation `mod_zone_header` that is not a list of strings refuses. Install-mod hashes profile-link targets before moving a previous install aside, and a dangling soundbank sibling or malformed foundation `link_loads` refuses as invalid input.
+
+- Module plan/build: optional `--allow-unqualified` reports target base/map mismatches in plans and build receipts without changing declarations or evidence.
+
 ### Added
 
 - **Base tokens named as aliases.** `CONTEXT.md` defines *base token* (`stock`, `b2`) as a

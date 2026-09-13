@@ -77,7 +77,7 @@ class InspectTests(unittest.TestCase):
         self.assertEqual(result["metadata"], {
             "id": "alpha", "version": "1.0", "game": "t6", "title": "alpha", "category": "module", "kind": None,
             "tags": [], "bases": ["stock"], "maps": ["*"], "dependencies": [], "conflicts": [], "origin": None,
-            "donor": None, "distribution": "source", "menu_route": "", "payload": "recipe"})
+            "donor": None, "distribution": "source", "menu_route": "", "payload": "recipe", "lineage": None})
         seed = dict(MODULE)
         seed.pop("recipe")
         seed["seed"] = "seed.json"

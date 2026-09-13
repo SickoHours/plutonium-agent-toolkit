@@ -296,3 +296,19 @@ anyone's bytes.
   record the crash signature per `docs/playbooks/diagnose-a-crash.md`.
 - No map patches, client-script injection or shared core services beyond what a recipe or a
   seed already carries.
+
+### Unqualified targets
+
+`module plan` and `module build` accept `--allow-unqualified`. A module whose declared base or map does not cover the target is listed in `unqualified` in the plan, result and build receipt instead of refusing. Dependency, conflict, game, input and budget checks still apply. Without the flag, base/map mismatches still refuse. This is a stated compatibility risk, never new build or gameplay evidence, and declarations are unchanged.
+
+### Compose and publish
+
+`pat module compose --name b2_example_pack --base b2 --map zm_factory --foundation foundation.json --member-root seeds --member-root modules --module example --output new-job --json` resolves module IDs in root order, includes matching `_registration` declarations and their dependency closure, and writes a recipe and nested plan. The recipe's `game` is the one title every member declares; members of two titles refuse, and `--game t6|iw5` states the title explicitly. A foundation's `link_loads` maps map IDs to file paths; optional `private_descriptor` points to a local expanded descriptor. `mod_zone_header` is copied with its map ipak line adjusted for the target. Available embedded foundation asset listings become base-ownership inputs. Unknown IDs or unstaged maps refuse; target mismatch warnings remain separate from evidence.
+
+The result carries `composition`, `plan`, `plan_receipt`, `undecided` and `unqualified`. Nothing is installed. Build the returned composition with `module build --allow-unqualified` and a fresh output. To save the successfully built recipe as a template, use `module compose --composition <recipe> --from-build <receipt.json> --publish-to <templates/name> --output <new-job>`. Publication checks the exact recipe and package against the successful build receipt, rebases references for the destination and refuses an existing destination. Source declarations and prior recipes remain unchanged.
+
+`game install-mod` accepts `--with-soundbanks` to copy sibling `.sabl`/`.sabs` files and `--profile-foundation foundation.json` to create the descriptor's `mod_load.ff`/`mod_load.ipak` links. Native symlink permissions are required for profile links; a failure restores the previous installation. The receipt lists copied soundbanks and link targets/hashes separately; none of these file operations launches the game.
+
+### Source-map lineage metadata
+
+Optional `lineage` records a T4/T5 source relationship: `[{"game":"t5","map":"zm_factory","source":"Example source variant","note":"Same-map witness; no T6 verification"}]`. One object is accepted for compatibility and normalized to an array by inspection. Arrays contain 1–18 entries, preserving multiple source maps or variants without claiming exclusive authorship. Notes are at most 400 characters. Only `t4`/`t5` and `zm_` map IDs are accepted. Lineage is descriptive metadata; plan/build ignore it and it never widens declared bases/maps or changes any evidence fact.

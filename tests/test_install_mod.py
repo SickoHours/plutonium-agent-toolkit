@@ -34,6 +34,45 @@ class InstallFixture(unittest.TestCase):
 
 
 class InstallModTests(InstallFixture):
+    def test_opt_in_soundbanks_and_profile_links_are_receipted(self):
+        bank = self.mod_ff.parent / "example.all.sabl"
+        bank.write_bytes(b"synthetic bank")
+        load = self.root / "mod_load.ff"
+        load.write_bytes(b"synthetic load")
+        foundation = self.root / "foundation.json"
+        foundation.write_text(json.dumps({"profile_links": {"mod_load.ff": str(load)}}))
+        code, row = invoke(["game", "install-mod", str(self.mod_ff), "example", "--with-soundbanks", "--profile-foundation", str(foundation)])
+        self.assertEqual(code, 0, row)
+        self.assertEqual((self.storage / "mods/example/example.all.sabl").read_bytes(), b"synthetic bank")
+        self.assertTrue((self.storage / "mods/example/mod_load.ff").is_symlink())
+        self.assertEqual(row["result"]["soundbanks"][0]["name"], bank.name)
+        self.assertEqual(row["result"]["profile_links"][0]["name"], "mod_load.ff")
+        self.assertFalse(row["result"]["game_touched"])
+
+
+    def test_dangling_soundbank_link_is_an_invalid_input(self):
+        (self.mod_ff.parent / "gone.all.sabl").symlink_to(self.root / "missing.sabl")
+        code, row = invoke(["game", "install-mod", str(self.mod_ff), "example", "--with-soundbanks"])
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "input_invalid", row)
+        self.assertFalse((self.storage / "mods/example").exists())
+
+    def test_unhashable_profile_link_refuses_before_moving_the_previous_install(self):
+        code, row = invoke(["game", "install-mod", str(self.mod_ff), "example"])
+        self.assertEqual(code, 0, row)
+        installed = self.storage / "mods/example/mod.ff"
+        before = installed.read_bytes()
+        link_dir = self.root / "link_dir"
+        link_dir.mkdir()
+        foundation = self.root / "foundation.json"
+        foundation.write_text(json.dumps({"profile_links": {"mod_load.ff": str(link_dir)}}))
+        self.mod_ff.write_bytes(b"TAffNEWER")
+        code, row = invoke(["game", "install-mod", str(self.mod_ff), "example", "--replace", "--profile-foundation", str(foundation)])
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "input_missing")
+        self.assertEqual(installed.read_bytes(), before, "the previous install is untouched")
+        self.assertFalse(list((Path(os.environ["PAT_HOME"])).rglob("mod-backups/*")), "nothing was moved aside")
+
     def test_install_copies_hashes_and_refuses_overwrite(self):
         code, row = invoke(["game", "install-mod", str(self.mod_ff), "hello_zm"])
         self.assertEqual(code, 0, row)

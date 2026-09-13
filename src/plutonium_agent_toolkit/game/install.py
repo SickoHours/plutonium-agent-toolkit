@@ -19,13 +19,13 @@ from pathlib import Path
 
 from ..core import config
 from ..core.envelope import now
-from ..core.errors import INPUT_INVALID, INPUT_MISSING, OUTPUT_EXISTS, Failure
+from ..core.errors import INPUT_INVALID, INPUT_MISSING, INPUT_LIMIT, OUTPUT_EXISTS, Failure
 from ..core.receipts import sha256_file
 from ..dev import titles
 from .control import MOD_ID, _regular_child, state_dir
 
 
-def install_mod(mod_ff: Path, folder: str, replace: bool = False) -> dict:
+def install_mod(mod_ff: Path, folder: str, replace: bool = False, with_soundbanks: bool = False, profile_foundation: Path | None = None) -> dict:
     src = Path(mod_ff).expanduser().resolve()
     if src.is_symlink() or not src.is_file():
         raise Failure(INPUT_MISSING, f"mod.ff not found: {src}")
@@ -54,6 +54,41 @@ def install_mod(mod_ff: Path, folder: str, replace: bool = False) -> dict:
     # very folder --replace is about to move aside.
     source_bytes = src.read_bytes()
     source_sha = hashlib.sha256(source_bytes).hexdigest()
+    soundbanks = {}
+    if with_soundbanks:
+        banks = sorted(p for p in src.parent.iterdir() if p.suffix.lower() in (".sabl", ".sabs"))
+        if len(banks) > 128:
+            raise Failure(INPUT_LIMIT, "Soundbank staging exceeds 128 files or 512 MiB")
+        total = 0
+        for bank in banks:
+            # A dangling link or a non-file sibling is an invalid input, never a stat() crash.
+            if bank.is_symlink() or not bank.is_file():
+                raise Failure(INPUT_INVALID, "Soundbanks must be regular files beside mod.ff")
+            total += bank.stat().st_size
+        if total > 512 * 1024 * 1024:
+            raise Failure(INPUT_LIMIT, "Soundbank staging exceeds 128 files or 512 MiB")
+        for bank in banks:
+            soundbanks[bank.name] = bank.read_bytes()
+    links = {}
+    if profile_foundation is not None:
+        foundation = Path(profile_foundation).expanduser()
+        if foundation.is_symlink() or not foundation.is_file() or foundation.stat().st_size > 4 * 1024 * 1024:
+            raise Failure(INPUT_INVALID, "Profile foundation must be a bounded regular JSON file")
+        try:
+            declared = json.loads(foundation.read_text(encoding="utf-8")).get("profile_links", {})
+        except (ValueError, AttributeError) as exc:
+            raise Failure(INPUT_INVALID, "Invalid profile foundation") from exc
+        if not isinstance(declared, dict) or set(declared) - {"mod_load.ff", "mod_load.ipak"}:
+            raise Failure(INPUT_INVALID, "Profile links only name mod_load.ff and mod_load.ipak")
+        for name, value in declared.items():
+            if not isinstance(value, str):
+                raise Failure(INPUT_INVALID, "Profile link source must be a path")
+            target = (foundation.parent / value).resolve()
+            if not target.is_file() or target.is_relative_to(dest_dir):
+                raise Failure(INPUT_MISSING, "Profile link source is missing or inside the destination")
+            # Hash now, before anything moves: an unreadable or oversized target refuses the
+            # install instead of failing after the previous mod has been moved aside.
+            links[name] = (target, sha256_file(target))
     backup = None
     if dest_dir.exists():
         if not replace:
@@ -67,6 +102,12 @@ def install_mod(mod_ff: Path, folder: str, replace: bool = False) -> dict:
         dest_dir.mkdir()
         dest.write_bytes(source_bytes)
         dest_sha = sha256_file(dest)
+        for name, data in soundbanks.items():
+            (dest_dir / name).write_bytes(data)
+            if sha256_file(dest_dir / name) != hashlib.sha256(data).hexdigest():
+                raise Failure("hash_mismatch", "Installed soundbank differs from source")
+        for name, (target, _) in links.items():
+            (dest_dir / name).symlink_to(target)
         if dest_sha != source_sha:
             raise Failure("hash_mismatch", "Installed mod.ff does not match the source after copy; inspect the storage volume")
     except (OSError, Failure):
@@ -79,6 +120,8 @@ def install_mod(mod_ff: Path, folder: str, replace: bool = False) -> dict:
     receipt = {"schema_version": 1, "at": now(), "game": game, "storage": str(root), "folder": folder,
                "path": f"mods/{folder}/mod.ff", "sha256": dest_sha,
                "bytes": dest.stat().st_size, "source": str(src), "backup": str(backup) if backup else None,
+               "soundbanks": [{"name": name, "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)} for name, data in soundbanks.items()],
+               "profile_links": [{"name": name, "target": str(target), "sha256": digest} for name, (target, digest) in links.items()],
                "game_touched": False}
     receipts = state_dir() / "installs"
     receipts.mkdir(parents=True, exist_ok=True)
