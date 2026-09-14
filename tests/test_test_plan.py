@@ -26,6 +26,28 @@ class TestPlanRoute(CompositionFixture):
         self.assertEqual(code,1,row);self.assertEqual(row['error_code'],'input_missing',row)
         self.assertEqual(row['details']['field'],'/modules/1/tests')
         self.assertIn('receipt',row)
+    def test_missing_member_contract_points_at_declaration_index(self):
+        self.member('alpha',dependencies=['beta']);self.module('beta')
+        comp=self.composition(['alpha','beta']);out=self.out()
+        code,row=invoke(['test','plan','--composition',str(comp),'--output',out,'--json'])
+        self.assertEqual(code,1,row);self.assertEqual(row['error_code'],'input_missing',row)
+        self.assertEqual(row['details']['field'],'/modules/1/tests')
+    def test_invalid_member_contract_points_at_declaration_index(self):
+        self.member('alpha',dependencies=['beta'])
+        beta=self.module('beta',maps=['zm_transit'],tests='test-contract.json')
+        (beta/'test-contract.json').write_text(json.dumps(contract(module='alpha')))
+        comp=self.composition(['alpha','beta']);out=self.out()
+        code,row=invoke(['test','plan','--composition',str(comp),'--output',out,'--json'])
+        self.assertEqual(code,1,row);self.assertEqual(row['error_code'],'input_invalid',row)
+        self.assertEqual(row['details']['field'],'/modules/1/module')
+    def test_member_contract_outside_map_points_at_declaration_index(self):
+        self.member('alpha',dependencies=['beta'])
+        beta=self.module('beta',maps=['*'],tests='test-contract.json')
+        (beta/'test-contract.json').write_text(json.dumps(contract(module='beta',maps={'zm_factory':{'preconditions':[]}})))
+        comp=self.composition(['alpha','beta']);out=self.out()
+        code,row=invoke(['test','plan','--composition',str(comp),'--output',out,'--json'])
+        self.assertEqual(code,1,row);self.assertEqual(row['error_code'],'input_invalid',row)
+        self.assertEqual(row['details']['field'],'/modules/1/tests/maps/zm_transit')
     def test_wildcard_declaration_plans_the_concrete_contract_map(self):
         m=self.module('alpha',maps=['*'],tests='test-contract.json')
         (m/'test-contract.json').write_text(json.dumps(contract(module='alpha')))

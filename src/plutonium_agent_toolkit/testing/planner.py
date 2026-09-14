@@ -22,12 +22,13 @@ def load(args,job):
     resolved=comp.resolve(composition,modules)
     members=[];contracts={}
     by_id={m['id']:m for m in modules}
-    for index,mid in enumerate(resolved['order']):
-        m=by_id[mid];field=f'/modules/{index}/tests'
+    declaration_index={m['id']:index for index,m in enumerate(modules)}
+    for mid in resolved['order']:
+        m=by_id[mid];field=f"/modules/{declaration_index[mid]}/tests"
         if not m.get('tests'):raise Failure(INPUT_MISSING,'Member has no test contract',field=field)
         try:c=tc.load_contract(m['directory'],m)
         except Failure as exc:
-            exc.details['field']=f'/modules/{index}'+exc.details.get('field','/tests');raise
+            exc.details['field']=f"/modules/{declaration_index[mid]}"+exc.details.get('field','/tests');raise
         contract_path=job.input(m['directory']/m['tests'])
         if job.inputs[str(contract_path)]!=c['sha256']:
             raise Failure('input_changed','Contract changed while loading',field=field)

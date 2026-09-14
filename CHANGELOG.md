@@ -13,6 +13,10 @@ Every entry states what shipped, on which platform it was verified, and what rem
   and gameplay behavior remain unverified.
 - Stitch test contracts in dependency order, with explicit shared-check decisions and human/probe precondition refusals. Covered by offline unit tests on Linux; native Windows and gameplay behavior remain unverified.
 
+- Report test-plan member-contract failures (missing tests, invalid contract, map outside the
+  composition) at the module's declaration-order index, matching the composition recipe. Covered by
+  offline unit tests on Linux; native Windows and gameplay behavior remain unverified.
+
 - Add the offline test-plan route and contract-member loader with receipted missing-input refusals. Covered by offline unit tests on Linux; native Windows and gameplay behavior remain unverified.
 
 - Validate optional per-module test contracts during module inspection, with closed actions, typed checks and exact-byte digests.
