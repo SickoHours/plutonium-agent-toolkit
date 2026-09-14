@@ -14,11 +14,35 @@ def add_parser(sub,common):
     for name in ('start','status','cancel','report'):
         q=actions.add_parser(name);q.add_argument('rest',nargs='*');q.add_argument('--json',action='store_true')
 
+def scoped_decisions(composition,modules):
+    """Pair each recipe decision with the sorted ids of the composition that recorded it.
+
+    Walks the loaded composition tree in the same order ``flatten`` emits modules, so a nested
+    recipe's decision can only govern its own members and never an outer collision. The scope is
+    planner-local: it is not written back into the schema-closed composition decision."""
+    cursor=0;rows=[]
+    def walk(node):
+        nonlocal cursor
+        ids=[];children=[]
+        for member in node['members']:
+            inner=member.get('composition')
+            if inner is None:ids.append(modules[cursor]['id']);cursor+=1
+            else:
+                inner_rows,inner_ids=walk(inner);children+=inner_rows;ids+=inner_ids
+        scope=sorted(set(ids))
+        return [dict(row,scope=scope) for row in node['decisions']]+children,ids
+    rows,_=walk(composition)
+    return rows
+
 def load(args,job):
     path=Path(args.composition)
     if path.is_dir():path=path/'composition.json'
     composition=comp.load_composition(path,job)
-    modules,loads,decisions,header=comp.flatten(composition,job)
+    modules,loads,_,header=comp.flatten(composition,job)
+    decisions=scoped_decisions(composition,modules)
+    for index,m in enumerate(modules):
+        if m['game']!=composition['game']:
+            raise Failure(INPUT_INVALID,'Member targets a different game',field=f"/modules/{index}/game")
     resolved=comp.resolve(composition,modules)
     members=[];contracts={}
     by_id={m['id']:m for m in modules}
@@ -39,7 +63,8 @@ def load(args,job):
 
 def stitch(plan, contracts, decisions):
     """Merge in dependency order without reading files or executing actions."""
-    decisions={r['collision'].casefold():r for r in decisions} if isinstance(decisions,list) else {k.casefold():v for k,v in decisions.items()}
+    decision_rows=([dict(row) for row in decisions] if isinstance(decisions,list)
+                   else [dict(row,collision=row.get('collision',key)) for key,row in decisions.items()])
     result={'schema_version':1,'protocol':'pat.test-plan/1','composition':plan['name'],'base':plan['base'],
             'map':plan['map'],'mode':plan.get('mode','human'),'members':[],'preconditions':[],
             'phases':[],'human_steps':[],'conflicts':[],'not_covered':[],'excluded_steps':[]}
@@ -70,20 +95,24 @@ def stitch(plan, contracts, decisions):
         for i,pre in enumerate(result['preconditions']):
             if pre.get('actor','agent')=='human':raise Failure(INPUT_INVALID,'Background plan requires automated preconditions',field=f'/preconditions/{i}/actor')
     equals={}
-    for s in steps:
+    for s in steps+result['human_steps']:
         ch=s.get('check',{})
-        if ch.get('source')=='harness' and 'equals' in ch:equals.setdefault(ch['key'],[]).append(s)
+        if ch.get('source')=='harness' and 'equals' in ch:equals.setdefault(ch['key'].casefold(),[]).append(s)
     for key,group in sorted(equals.items()):
         values={json.dumps(s['check']['equals'],sort_keys=True) for s in group}
         owners=sorted({s['id'].split('/')[0] for s in group})
         if len(values)<2 or len(owners)<2:continue
-        collision='test:'+key;decision=decisions.get(collision.casefold())
-        resolved=bool(decision and decision.get('owner') in owners and decision.get('reason'))
+        collision='test:'+key
+        decision=next((d for d in reversed(decision_rows)
+                       if d['collision'].casefold()==collision.casefold() and d.get('owner') in owners and d.get('reason')
+                       and (d.get('scope') is None or set(owners)<=set(d['scope']))),None)
+        resolved=bool(decision)
         result['conflicts'].append({'collision':collision,'modules':owners,'resolution':'recorded decision' if resolved else 'undecided',**({'owner':decision['owner'],'reason':decision['reason']} if resolved else {})})
         if resolved:result['excluded_steps'] += [s['id'] for s in group if s['id'].split('/')[0]!=decision['owner']]
     if any(c['resolution']=='undecided' for c in result['conflicts']):
         raise Failure(INPUT_INVALID,'Conflicting member checks require an explicit owner',conflicts=result['conflicts'],field='/conflicts')
     steps=[s for s in steps if s['id'] not in result['excluded_steps']]
+    result['human_steps']=[s for s in result['human_steps'] if s['id'] not in result['excluded_steps']]
     excluded=set(result['excluded_steps'])
     # A pair step must exercise its provider: pick the first surviving step with an action, whether
     # the actor is an agent or a human. A check-only step cannot stand in for a provider.

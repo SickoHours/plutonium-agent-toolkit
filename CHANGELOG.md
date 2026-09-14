@@ -7,6 +7,12 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- Test-plan stitching now folds human harness checks into the shared-check conflict pass and drops
+  owner-excluded human steps from the plan and its interaction pairs; a nested recipe's decision is
+  scoped to its own members and cannot resolve an outer collision; and a flattened member targeting
+  a different game than its composition is refused before resolution. Covered by offline unit tests
+  on Linux; native Windows and gameplay behavior remain unverified.
+
 - Contract validation accepts concrete maps for wildcard declarations and reports excessive
   nesting as `input_invalid`; documentation describes probe inspection without promising
   composition-time enforcement. Covered by offline unit tests on Linux; native Windows
