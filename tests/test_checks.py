@@ -92,8 +92,24 @@ class ExternalSymbols(unittest.TestCase):
     def test_server_only_builtin_in_a_client_script_never_passes(self):
         src='init()\n{\n    precachemodel("model");\n}\n'
         rows=checks.external_symbols('scripts/zm/effects.csc',src)
-        self.assertEqual(rows[0]['outcome'],'failed')
+        self.assertNotEqual(rows[0]['outcome'],'passed')
+        self.assertEqual(rows[0]['outcome'],'not_counted')
         self.assertIn('precachemodel',rows[0]['detail'])
     def test_server_only_builtin_in_a_server_script_resolves(self):
         src='init()\n{\n    precachemodel("model");\n}\n'
         self.assertEqual(checks.external_symbols('scripts/zm/hello.gsc',src)[0]['outcome'],'passed')
+    def test_non_t6_scripts_are_not_judged_against_t6_tables(self):
+        src='init()\n{\n    get_players();\n}\n'
+        rows=checks.external_symbols('scripts/a.gsc',src,game='iw5')
+        self.assertEqual(rows[0]['outcome'],'not_counted')
+    def test_builtin_spelling_is_case_insensitive(self):
+        src='init()\n{\n    PrecacheModel("model");\n}\n'
+        self.assertNotEqual(checks.external_symbols('scripts/zm/effects.csc',src)[0]['outcome'],'passed')
+        self.assertEqual(checks.external_symbols('scripts/zm/hello.gsc',src)[0]['outcome'],'passed')
+    def test_stock_export_spelling_is_case_insensitive(self):
+        rows=checks.external_symbols('scripts/zm/a.gsc','Get_Players();\n')
+        self.assertEqual(rows[0]['outcome'],'failed')
+        self.assertIn('get_players',rows[0]['detail'])
+    def test_an_indented_local_definition_still_resolves(self):
+        src='main()\n{\n    helper();\n}\n    helper()\n    {\n    }\n'
+        self.assertEqual(checks.external_symbols('scripts/zm/a.gsc',src)[0]['outcome'],'passed')
