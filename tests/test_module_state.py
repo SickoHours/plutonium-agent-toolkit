@@ -43,13 +43,15 @@ class ModuleStateTests(unittest.TestCase):
              'outputs':{},'result':{'build_receipt':str(self.verify),
                                     'outputs':{'verified':True,'changed':[],'missing':[],'count':2},
                                     'verification':'recorded hashes match'}}
-        row.update(over);return self.write('verify-receipt.json',row)
+        row.update(over)
+        (self.root/'verification').mkdir(exist_ok=True)
+        return self.write('verification/receipt.json',row)
     def verify_args(self,receipt):
         a=self.args();a.verify=str(receipt);return a
     def test_project_verify_receipt_resolves_the_package_from_its_build_receipt(self):
         d=state.derive(self.verify_args(self.project_verify_receipt()))
         self.assertEqual(d['state'],'offline_verified',d['reasons'])
-        self.assertEqual(Path(d['evidence']['offline_verified']['path']),self.root/'verify-receipt.json')
+        self.assertEqual(Path(d['evidence']['offline_verified']['path']),self.root/'verification'/'receipt.json')
     def test_project_verify_receipt_must_bind_the_build_receipt_it_reports(self):
         self.assertEqual(state.derive(self.verify_args(self.project_verify_receipt(inputs={})))['state'],'composed')
     def test_project_verify_receipt_refuses_a_changed_package(self):
