@@ -31,6 +31,11 @@ Every entry states what shipped, on which platform it was verified, and what rem
   nesting as `input_invalid`; documentation describes probe inspection without promising
   composition-time enforcement. Covered by offline unit tests on Linux; native Windows
   and gameplay behavior remain unverified.
+- Contract loading rejects oversized JSON integers as `input_invalid` instead of leaking
+  `OverflowError`: bounded evidence and `wait_s` values compare against their limit before any
+  float conversion, and unbounded harness `min`/`max` catch the conversion overflow. Finite
+  bool/NaN/Inf rejection is unchanged. Covered by offline unit tests on Linux; native Windows
+  and gameplay behavior remain unverified.
 - Stitch test contracts in dependency order, with explicit shared-check decisions and human/probe precondition refusals. Covered by offline unit tests on Linux; native Windows and gameplay behavior remain unverified.
 
 - Report test-plan member-contract failures (missing tests, invalid contract, map outside the

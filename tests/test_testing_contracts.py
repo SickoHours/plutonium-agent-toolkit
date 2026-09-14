@@ -65,6 +65,26 @@ class ContractTests(unittest.TestCase):
     def test_checks_are_typed(self):
         for check in [{'source':'log','absent':'['},{'source':'dvar','name':'x;quit','equals':'1'}, {'source':'harness','key':'state.x','min':True}, {'source':'screenshot','equals':1}]:
             with self.assertRaises(Failure):tc.validate_contract(contract(steps=[dict(contract()['steps'][0],check=check)]),declaration=DECL)
+    def test_oversized_bounded_integer_is_rejected_without_overflow(self):
+        for value in (10**4000, -(10**4000)):
+            with self.subTest(value='huge integer'):
+                d=contract();d['steps'][0]['evidence']={'clip_before_s':value}
+                with self.assertRaises(Failure) as cm:tc.validate_contract(d,declaration=DECL)
+                self.assertEqual(cm.exception.code,'input_invalid')
+                self.assertEqual(cm.exception.details['field'],'/steps/0/evidence/clip_before_s')
+    def test_oversized_harness_bound_is_rejected_without_overflow(self):
+        for key in ('min','max'):
+            with self.subTest(key=key):
+                d=contract();d['steps'][0]['check']={'source':'harness','key':'state.x',key:10**4000}
+                with self.assertRaises(Failure) as cm:tc.validate_contract(d,declaration=DECL)
+                self.assertEqual(cm.exception.code,'input_invalid')
+                self.assertEqual(cm.exception.details['field'],'/steps/0/check/'+key)
+    def test_number_keeps_finite_bounds_and_rejects_non_finite(self):
+        for value in (0,60,1.5):
+            tc.number(value,'/x',60)
+        for value in (float('nan'),float('inf'),float('-inf'),-1,61,True):
+            with self.subTest(value=repr(value)), self.assertRaises(Failure):
+                tc.number(value,'/x',60)
 
 class InspectContracts(CompositionFixture):
     def test_inspect_accepts_concrete_maps_for_wildcard_module(self):
@@ -86,6 +106,16 @@ class InspectContracts(CompositionFixture):
         self.assertEqual(diagnostic['error_code'], 'input_invalid')
         self.assertEqual(diagnostic['field'], '/')
         self.assertEqual(diagnostic['message'], 'Invalid test contract structure')
+    def test_inspect_reports_oversized_numeric_field_as_diagnostic(self):
+        m=self.module('gobblegum_machine',maps=['zm_transit'],tests='test-contract.json')
+        d=contract();d['steps'][0]['evidence']={'clip_before_s':10**4000}
+        (m/'test-contract.json').write_text(json.dumps(d))
+        code,row=invoke(['module','inspect',str(m/'module.json'),'--json'])
+        self.assertEqual(code,1,row)
+        self.assertEqual(row['error_code'],'input_invalid',row)
+        diagnostic=row['details']['inspection']['diagnostics'][0]
+        self.assertEqual(diagnostic['error_code'],'input_invalid')
+        self.assertEqual(diagnostic['field'],'/steps/0/evidence/clip_before_s')
     def test_inspect_hashes_contract_and_reports_missing(self):
         m=self.module('gobblegum_machine',maps=['zm_transit'],tests='test-contract.json')
         code,row=invoke(['module','inspect',str(m/'module.json'),'--json']);self.assertEqual(code,1,row)

@@ -29,7 +29,9 @@ def role(value, field):
     if value not in ('agent','human'): fail(field,'Expected agent or human')
 
 def number(value, field, maximum):
-    if type(value) not in (int,float) or not math.isfinite(value) or not 0<=value<=maximum: fail(field,'Expected a bounded non-negative number')
+    if type(value) not in (int,float): fail(field,'Expected a bounded non-negative number')
+    if type(value) is float and not math.isfinite(value): fail(field,'Expected a bounded non-negative number')
+    if not 0<=value<=maximum: fail(field,'Expected a bounded non-negative number')
 
 def action(value, field, actor, probe, precondition=False):
     allowed={'verb','arg'} | ({'actor','prompt'} if precondition else set())
@@ -64,7 +66,12 @@ def check(value, field):
         if not isinstance(value['key'],str) or len(value['key'])>200 or not KEY.fullmatch(value['key']): fail(field+'/key','Expected dotted reply key')
         if not set(value)&{'equals','min','max'}: fail(field,'Harness checks need equals, min or max')
         for key in ('min','max'):
-            if key in value and (type(value[key]) not in (int,float) or not math.isfinite(value[key])): fail(field+'/'+key,'Expected finite number')
+            if key not in value: continue
+            bound=value[key]
+            if type(bound) not in (int,float): fail(field+'/'+key,'Expected finite number')
+            try: finite=math.isfinite(bound)
+            except OverflowError: finite=False
+            if not finite: fail(field+'/'+key,'Expected finite number')
         if 'min' in value and 'max' in value and value['min']>value['max']: fail(field+'/max','Maximum precedes minimum')
     if source=='dvar' and (not isinstance(value['name'],str) or not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]{0,63}',value['name'])): fail(field+'/name','Expected dvar identifier')
     if 'equals' in value and (type(value['equals']) not in (str,int,float,bool) or isinstance(value['equals'],str) and len(value['equals'])>200 or type(value['equals']) is float and not math.isfinite(value['equals'])): fail(field+'/equals','Expected bounded scalar')
