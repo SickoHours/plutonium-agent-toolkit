@@ -7,6 +7,13 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- `module state` validates a composition plan (schema, name/base/map, a nonempty list of uniquely
+  identified module rows with a directory and declaration hash, and no undecided collisions)
+  before it claims `composed`; a malformed or undecided plan now reports no state with a reason
+  instead of `composed`, while a source change under an unchanged declaration still revokes to
+  `composed`. Covered by offline unit tests on Linux; native Windows and gameplay behavior remain
+  unverified.
+
 - `module state` keeps an unqualified composition at `composed`: a nonempty plan or build-receipt
   `unqualified` list is rejected before offline promotion and never advances to later rungs.
   Covered by offline unit tests on Linux; native Windows and gameplay behavior remain unverified.

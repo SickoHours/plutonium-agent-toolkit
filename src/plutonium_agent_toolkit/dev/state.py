@@ -22,6 +22,24 @@ def same(path,expected,label):
     actual=sha(path)
     if actual!=expected:raise ValueError(f'{label}: expected {expected}; current {actual}')
 
+def _plan_modules(plan):
+    """The shape this route consumes, checked before any state is claimed. A real composition
+    plan (schema_version 1) names its name/base/map and carries a nonempty list of uniquely
+    identified module rows, each with a directory and its declaration hash."""
+    if plan.get('schema_version')!=1:raise ValueError('Plan is not a module composition plan')
+    for field in ('name','base','map'):
+        if not isinstance(plan.get(field),str) or not plan[field]:raise ValueError('Plan is missing '+field)
+    modules=plan.get('modules')
+    if not isinstance(modules,list) or not modules:raise ValueError('Plan must contain a nonempty modules list')
+    ids=[]
+    for index,module in enumerate(modules):
+        if not isinstance(module,dict):raise ValueError(f'Plan module {index} must be an object')
+        for field in ('id','directory','declaration_sha256'):
+            if not isinstance(module.get(field),str) or not module[field]:raise ValueError(f'Plan module {index} is missing {field}')
+        ids.append(module['id'])
+    if len(set(ids))!=len(ids):raise ValueError('Plan has duplicate module ids')
+    return modules
+
 def derive(args):
     result={'state':None,'evidence':{},'reasons':[]}
     root=Path(args.composition);root=root.parent if root.is_file() else root
@@ -29,11 +47,11 @@ def derive(args):
     try:
         plan=read(plan_path);plan_digest=sha(plan_path)
     except (ValueError,OSError) as e:result['reasons'].append(str(e));return result
-    result['state']='composed';result['evidence']['composed']={'path':str(plan_path),'sha256':plan_digest}
     try:
-        modules=plan['modules'];ids={m['id'] for m in modules}
+        modules=_plan_modules(plan);ids={m['id'] for m in modules}
         for m in modules:same(Path(m['directory'])/'module.json',m['declaration_sha256'],'module '+m['id'])
         if plan.get('undecided'):raise ValueError('Composition has undecided collisions')
+        result['state']='composed';result['evidence']['composed']={'path':str(plan_path),'sha256':plan_digest}
         if not args.verify:return result
         verify_path=Path(args.verify);verify=read(verify_path)
         if verify.get('status')!='succeeded' or verify.get('ok') is not True or verify.get('command') not in ('module build','project verify','project build'):

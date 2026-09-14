@@ -408,6 +408,8 @@ whichever rung remains proven. Package bytes, built plan, all receipt input hash
 member contracts, admitted run-plan digest and latest scoped verdict must match in order.
 Changes revoke later claims and appear in `reasons`; no state file is stored or updated.
 A stale composition plan is reported as composed with its mismatch reason, never offline verified.
+A plan that is not a well-formed composition plan (wrong schema, missing name/base/map, empty or
+malformed module rows, duplicate ids, or undecided collisions) claims no state at all.
 
 ## Checks
 
