@@ -177,6 +177,27 @@ class LedgerFactsTests(unittest.TestCase):
         self.assertIs(ledger.facts(normalized, base="stock", map_id="zm_buried")["facts"]["offline_verified"]["value"], True)
         self.assertIsNone(ledger.facts(normalized, base="b2", map_id="zm_buried")["facts"]["offline_verified"]["value"])
 
+    def test_a_survival_location_never_collapses_into_its_map(self):
+        diner = {**LEDGER["rows"][2], "scope": {"base": "stock", "foundation": "bo2-stock", "map": "zm_transit", "location": "diner"}}
+        normalized, diagnostics = ledger.validate({**LEDGER, "rows": [diner]})
+        self.assertEqual(diagnostics, [])
+        self.assertEqual(normalized["rows"][0]["scope"], {"base": "stock", "foundation": "bo2-stock", "maps": ["zm_transit"], "location": "diner"})
+        self.assertIsNone(ledger.facts(normalized, base="stock", map_id="zm_transit")["facts"]["offline_verified"]["value"],
+                          "a Diner row is not a Green Run row")
+        self.assertIs(ledger.facts(normalized, base="stock", map_id="zm_transit", location="diner")["facts"]["offline_verified"]["value"], True)
+        self.assertIsNone(ledger.facts(normalized, base="stock", map_id="zm_transit", location="cell_block")["facts"]["offline_verified"]["value"])
+        both, _ = ledger.validate({**LEDGER, "rows": [diner, LEDGER["rows"][2]]})
+        self.assertIsNone(ledger.facts(both, base="stock", map_id="zm_transit", location="diner")["facts"]["installed"]["value"])
+        self.assertEqual(ledger.facts(both, base="stock", map_id="zm_transit", location="diner")["facts"]["offline_verified"]["rows"], [0])
+        self.assertEqual(ledger.facts(both, base="stock", map_id="zm_transit")["facts"]["offline_verified"]["rows"], [1])
+        scopes = [(s["scope"]["map"], s["scope"]["location"]) for s in ledger.facts(both)["scopes"]]
+        self.assertEqual(set(scopes), {("zm_transit", None), ("zm_transit", "diner")})
+        for scope, field in [({"base": "stock", "foundation": "bo2-stock", "maps": ["zm_transit", "zm_buried"], "location": "diner"}, "/rows/0/scope/location"),
+                             ({"base": "stock", "foundation": "bo2-stock", "maps": ["*"], "location": "diner"}, "/rows/0/scope/location"),
+                             ({"base": "stock", "foundation": "bo2-stock", "map": "zm_transit", "location": "Diner!"}, "/rows/0/scope/location")]:
+            _, diagnostics = ledger.validate({**LEDGER, "rows": [{**diner, "scope": scope}]})
+            self.assertEqual(diagnostics[0]["field"], field, scope)
+
     def test_per_scope_listing_carries_each_scope_separately(self):
         derived = ledger.facts(self.normalized)
         scopes = {(s["scope"]["base"], s["scope"]["foundation"], s["scope"]["map"]): values(s["facts"]) for s in derived["scopes"]}
@@ -256,7 +277,12 @@ class LedgerCliTests(unittest.TestCase):
         code, row = invoke(["module", "state", "--ledger", str(self.module / "evidence.json"), "--map", "zm_buried", "--json"])
         self.assertEqual(code, 0, row)
         self.assertEqual(values(row["result"]["facts"]), dict.fromkeys(ledger.FACTS))
-        self.assertEqual(row["result"]["query"], {"base": None, "foundation": None, "map": "zm_buried", "package": None})
+        self.assertEqual(row["result"]["query"], {"base": None, "foundation": None, "map": "zm_buried", "location": None, "package": None})
+        code, row = invoke(["module", "state", "--ledger", str(self.module), "--map", "zm_transit", "--location", "diner", "--json"])
+        self.assertEqual(code, 0, row)
+        self.assertEqual(values(row["result"]["facts"]), dict.fromkeys(ledger.FACTS), "no row is scoped to the Diner")
+        code, row = invoke(["module", "state", "--ledger", str(self.module), "--location", "diner", "--json"])
+        self.assertEqual(code, 2, row)
 
     def test_state_ledger_counts_only_valid_rows_and_says_so(self):
         self.write("modules/example/evidence.json", {**LEDGER, "rows": [LEDGER["rows"][2], {"type": "player-accepted"}]})

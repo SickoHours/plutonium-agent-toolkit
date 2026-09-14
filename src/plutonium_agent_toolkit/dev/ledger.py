@@ -39,6 +39,9 @@ MAX_LIST = 64
 SHA256 = re.compile(r"^[0-9a-f]{64}\Z")
 COMMIT = re.compile(r"^[0-9a-f]{7,40}\Z")
 FOUNDATION = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}\Z")
+# A survival location: a fenced area of a stock map with its own route (Reimagined's or QoL's
+# Crazy Place, Diner, Cell Block). A row scoped to one never collapses into the parent map.
+LOCATION = re.compile(r"^[a-z0-9][a-z0-9_]{0,63}\Z")
 RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?(Z|[+-]\d{2}:\d{2})?)?\Z")
 SOURCE_MAP = re.compile(r"^zm_[a-z0-9_]{1,60}\Z")
@@ -108,12 +111,15 @@ def _record(value, what: str, field: str) -> dict:
 
 
 def _scope(value, field: str) -> dict:
-    """Where a row applies: a base token and/or a foundation id, and a map set (``*`` for any).
+    """Where a row applies: a base token and/or a foundation id, a map set (``*`` for any), and
+    optionally one survival ``location`` inside a single map.
 
-    ``map`` (one id) is accepted and normalized to ``maps``. Descriptive keys (``mode``,
-    ``players``, ``profile``) narrow the statement without affecting matching.
+    ``map`` (one id) is accepted and normalized to ``maps``. A ``location`` requires exactly one
+    map and is part of the match: a row about the Diner is not a row about Green Run, and a
+    query for Green Run alone does not see it. Descriptive keys (``mode``, ``players``,
+    ``profile``) narrow the statement without affecting matching.
     """
-    _fields(value, {"base", "foundation", "map", "maps", "mode", "players", "profile"}, set(), "scope", field)
+    _fields(value, {"base", "foundation", "map", "maps", "location", "mode", "players", "profile"}, set(), "scope", field)
     result = {}
     if "base" in value:
         if not isinstance(value["base"], str) or not BASE.match(value["base"]):
@@ -132,6 +138,12 @@ def _scope(value, field: str) -> dict:
             or not all(isinstance(m, str) and (m == "*" or MAP.match(m)) for m in maps):
         raise Failure(INPUT_INVALID, f"scope maps is a non-empty list of at most {MAX_LIST} distinct map ids, or [\"*\"]", field=field + ("/map" if "map" in value else "/maps"))
     result["maps"] = list(maps)
+    if "location" in value:
+        if not isinstance(value["location"], str) or not LOCATION.match(value["location"]):
+            raise Failure(INPUT_INVALID, "scope location is a lowercase survival-location id (letters, digits, underscore)", field=field + "/location")
+        if len(maps) != 1 or maps[0] == "*":
+            raise Failure(INPUT_INVALID, "scope location names one fenced area inside exactly one map", field=field + "/location")
+        result["location"] = value["location"]
     if "mode" in value:
         if value["mode"] not in ("solo", "coop"):
             raise Failure(INPUT_INVALID, "scope mode is solo or coop", field=field + "/mode")
@@ -319,8 +331,11 @@ def row_facts(row: dict) -> dict:
     return {}
 
 
-def matches(row: dict, base=None, foundation=None, map_id=None, package=None) -> bool:
-    """A scoped row matches a query when every given query key agrees with the row's scope."""
+def matches(row: dict, base=None, foundation=None, map_id=None, package=None, location=None) -> bool:
+    """A scoped row matches a query when every given query key agrees with the row's scope.
+    The location is always part of the match: a query without one sees only rows without one,
+    and a query with one sees only rows with that one, so a location never collapses into
+    its parent map in either direction."""
     if row["type"] == "lineage":
         return False
     scope = row["scope"]
@@ -329,6 +344,8 @@ def matches(row: dict, base=None, foundation=None, map_id=None, package=None) ->
     if foundation is not None and scope.get("foundation") != foundation:
         return False
     if map_id is not None and "*" not in scope["maps"] and map_id not in scope["maps"]:
+        return False
+    if scope.get("location") != location:
         return False
     if package is not None and row.get("package_sha256") != package:
         return False
@@ -342,11 +359,11 @@ def _combine(statements: list[tuple[int, bool]]) -> dict:
     return {"value": any(v for _, v in statements), "rows": [i for i, _ in statements]}
 
 
-def facts(ledger: dict, base=None, foundation=None, map_id=None, package=None) -> dict:
+def facts(ledger: dict, base=None, foundation=None, map_id=None, package=None, location=None) -> dict:
     """Per-fact, per-scope derivation. ``facts`` is the queried scope (every row that matches
-    the query keys); ``scopes`` lists each (base, foundation, map) the rows name with its own
-    six facts and the row numbers behind each. A fact no row of the matching type states is
-    ``null``. ``history`` counts the rows that never feed a fact."""
+    the query keys); ``scopes`` lists each (base, foundation, map, location) the rows name with
+    its own six facts and the row numbers behind each. A fact no row of the matching type states
+    is ``null``. ``history`` counts the rows that never feed a fact."""
     rows = ledger["rows"]
     queried = {fact: [] for fact in FACTS}
     per_scope: dict[tuple, dict] = {}
@@ -357,25 +374,25 @@ def facts(ledger: dict, base=None, foundation=None, map_id=None, package=None) -
             history[row["type"]] += 1
         if row["type"] == "lineage":
             continue
-        if matches(row, base, foundation, map_id, package):
+        if matches(row, base, foundation, map_id, package, location):
             for fact, value in stated.items():
                 queried[fact].append((index, value))
         if not stated or (package is not None and row.get("package_sha256") != package):
             continue
         scope = row["scope"]
         for m in scope["maps"]:
-            bucket = per_scope.setdefault((scope.get("base"), scope.get("foundation"), m), {fact: [] for fact in FACTS})
+            bucket = per_scope.setdefault((scope.get("base"), scope.get("foundation"), m, scope.get("location")), {fact: [] for fact in FACTS})
             for fact, value in stated.items():
                 bucket[fact].append((index, value))
-    scopes = [{"scope": {"base": key[0], "foundation": key[1], "map": key[2]},
+    scopes = [{"scope": {"base": key[0], "foundation": key[1], "map": key[2], "location": key[3]},
                "facts": {fact: _combine(bucket[fact]) for fact in FACTS}}
               for key, bucket in sorted(per_scope.items(), key=lambda item: tuple(str(k) for k in item[0]))]
-    return {"query": {"base": base, "foundation": foundation, "map": map_id, "package": package},
+    return {"query": {"base": base, "foundation": foundation, "map": map_id, "location": location, "package": package},
             "facts": {fact: _combine(queried[fact]) for fact in FACTS},
             "scopes": scopes, "history": history}
 
 
-def report(path: Path, base=None, foundation=None, map_id=None, package=None) -> dict:
+def report(path: Path, base=None, foundation=None, map_id=None, package=None, location=None) -> dict:
     """`module state --ledger`: read, validate, derive. An invalid ledger derives nothing."""
     path = Path(path)
     if path.is_dir():
@@ -387,10 +404,10 @@ def report(path: Path, base=None, foundation=None, map_id=None, package=None) ->
               "subject": ledger["subject"]["id"] if ledger else None, "rows": len(ledger["rows"]) if ledger else 0,
               "diagnostics": diagnostics}
     if ledger is None:
-        result.update(facts({"rows": []}, base, foundation, map_id, package))
+        result.update(facts({"rows": []}, base, foundation, map_id, package, location))
         result["reasons"] = ["ledger header is invalid; no fact was derived"]
     else:
-        result.update(facts(ledger, base, foundation, map_id, package))
+        result.update(facts(ledger, base, foundation, map_id, package, location))
         result["reasons"] = [f"{len(diagnostics)} row(s) were not counted; see diagnostics"] if diagnostics else []
     return result
 

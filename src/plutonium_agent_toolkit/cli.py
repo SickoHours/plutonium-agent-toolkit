@@ -15,7 +15,7 @@
     pat ff link <project dir> --zone <name> --output <new dir>
     pat project init|plan|build|verify ... --output <new dir>
     pat module inspect <module.json|composition.json> --json
-    pat module state --composition <dir> [--plan --verify --test-plan --run --verdict] | --ledger <module dir> [--base --foundation --map --package]
+    pat module state --composition <dir> [--plan --verify --test-plan --run --verdict] | --ledger <module dir> [--base --foundation --map --location --package]
     pat module ledger-from-registry <workspace> <module-id> --dry-run --json   propose evidence.json rows; writes nothing
     pat module plan|build <composition.json> --output <new dir>
     pat module declare <mod.ff> --output <new dir>
@@ -317,7 +317,9 @@ def run(argv: list[str]) -> dict:
             for name in ("plan", "verify", "test_plan", "run", "verdict"):
                 if getattr(args, name, None):
                     raise Failure(INVALID_ARGUMENTS, f"--{name.replace('_', '-')} belongs to --composition; --ledger reads evidence.json only")
-            return success(command, ledger.report(Path(args.ledger), args.base, args.foundation, args.map, args.package))
+            if args.location and not args.map:
+                raise Failure(INVALID_ARGUMENTS, "--location names a fenced area inside --map; give the map too")
+            return success(command, ledger.report(Path(args.ledger), args.base, args.foundation, args.map, args.package, args.location))
         return success(command,state.derive(args))
 
     if group == "module" and args.action == "ledger-from-registry":

@@ -57,6 +57,21 @@ no scope and is invalid. `maps` lists the map ids the statement covers, or `["*"
 `map` with one id is accepted and normalized to `maps`. `mode`, `players` and `profile` narrow
 the statement for the reader and never affect matching.
 
+A scope may also name a **survival location**: a fenced area of a stock map with its own route,
+such as Reimagined's or QoL's Crazy Place, Diner or Cell Block. `location` is one lowercase id and
+requires exactly one map:
+
+```json
+{"base": "stock", "map": "zm_transit", "location": "diner"}
+```
+
+A location is part of the match in both directions. A row about the Diner is not a row about
+Green Run: a query for `zm_transit` without a location sees only rows with no location, and a
+query for `zm_transit` with `diner` sees only rows scoped to `diner`. The per-scope listing keys
+each location separately, so location rows never collapse into their parent map. Target sets
+(roadmap Phase 2, "maps as target sets") will list such locations beside stock maps, and a
+composition planned for a location will query the ledger with that location.
+
 ## Row types
 
 The `lineage` field of `module.json` is the first row type, unchanged in shape.
@@ -153,9 +168,10 @@ The facts are a display over rows, computed per query, never stored:
 | `captured` | `captured: true` | `game-tested` |
 | `player_accepted` | `outcome: accepted` | `player-accepted` |
 
-A query names any of `base`, `foundation`, `map`, `package`. A row matches when every named key
-agrees with the row: the base and foundation equal the row's, the map is in the row's `maps` or
-the row says `*`, the package equals the row's `package_sha256`. Among matching rows of the
+A query names any of `base`, `foundation`, `map`, `location`, `package`. A row matches when every
+named key agrees with the row: the base and foundation equal the row's, the map is in the row's
+`maps` or the row says `*`, the package equals the row's `package_sha256`, and the row's location
+equals the query's (both absent, or both the same id). Among matching rows of the
 speaking type, the fact is `true` if any row states true, `false` if rows state only false, and
 `null` (unknown) if no row of that type matches. No fact is inferred from another fact, from a
 declaration, from a composition build, or from an `accepted-in-pack` row. A `player-accepted`
@@ -165,15 +181,16 @@ each, and counts the rows that are history only.
 
 ```sh
 pat module state --ledger modules/rw-icr --base stock --map zm_transit --json
+pat module state --ledger modules/rw-icr --base stock --map zm_transit --location diner --json
 ```
 
 ```json
 {"protocol": "pat.module-ledger/1", "validation": "valid", "subject": "rw_icr", "rows": 11,
- "query": {"base": "stock", "foundation": null, "map": "zm_transit", "package": null},
+ "query": {"base": "stock", "foundation": null, "map": "zm_transit", "location": null, "package": null},
  "facts": {"offline_verified": {"value": true, "rows": [8]}, "installed": {"value": true, "rows": [9]},
            "launched": {"value": null, "rows": []}, "loaded_and_playable": {"value": true, "rows": [9]},
            "captured": {"value": null, "rows": []}, "player_accepted": {"value": true, "rows": [7]}},
- "scopes": [{"scope": {"base": "stock", "foundation": "bo2-stock", "map": "zm_transit"}, "facts": {...}}],
+ "scopes": [{"scope": {"base": "stock", "foundation": "bo2-stock", "map": "zm_transit", "location": null}, "facts": {...}}],
  "history": {"lineage": 7, "authored": 0, "accepted-in-pack": 0, "extracted-from-release": 0, "agent-reviewed": 1},
  "diagnostics": [], "reasons": []}
 ```

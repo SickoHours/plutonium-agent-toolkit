@@ -116,6 +116,7 @@ def add_parser(sub, common):
         q.add_argument("--"+name)
     q.add_argument("--base", help="With --ledger: the base token to query"); q.add_argument("--foundation", help="With --ledger: the foundation id to query")
     q.add_argument("--map", help="With --ledger: the map id to query"); q.add_argument("--package", help="With --ledger: a package sha256 to query")
+    q.add_argument("--location", help="With --ledger: a survival location inside --map; without it only rows with no location match")
     q.add_argument("--json",action="store_true")
     q = actions.add_parser("ledger-from-registry", help="Propose evidence.json rows for one workspace module from the registry and its docs; prints them, writes nothing")
     q.add_argument("workspace", help="Workspace root holding modules/, registry/t6-modules.json and foundations/")

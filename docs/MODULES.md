@@ -422,7 +422,7 @@ matches revokes the claim to composed with the mismatch reason, never offline ve
 A plan that is not a well-formed composition plan (wrong schema, missing name/base/map, empty or
 malformed module rows, duplicate ids, or undecided collisions) claims no state at all.
 
-`pat module state --ledger <module dir|evidence.json> [--base --foundation --map --package] --json`
+`pat module state --ledger <module dir|evidence.json> [--base --foundation --map --location --package] --json`
 is the other subject of the route: it reads a module's evidence ledger and reports each of the
 six facts per scope from the rows, `null` where no row of the matching type exists, with the
 row numbers behind each value. It never reads a plan or receipt and the composition form never

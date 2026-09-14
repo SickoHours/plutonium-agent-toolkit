@@ -10,7 +10,7 @@ Every entry states what shipped, on which platform it was verified, and what rem
 - Add the evidence ledger: `evidence.json` beside `module.json` holds typed, scoped rows
   (`lineage`, `authored`, `accepted-in-pack`, `extracted-from-release`, `built-alone`,
   `agent-reviewed`, `game-tested`, `player-accepted`), each with a scope (base and/or foundation,
-  map set), a record pointer and a hash where one exists; the declaration's `lineage` field is the
+  map set, optionally one survival location inside a map that never collapses into it), a record pointer and a hash where one exists; the declaration's `lineage` field is the
   first row type. `module inspect` validates the ledger when present (defects are diagnostics on
   a `ledger` key, absence adds nothing, the declaration's own validity is untouched);
   `module state --ledger` reports the six facts per fact and per scope from rows of the matching
