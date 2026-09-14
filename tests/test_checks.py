@@ -113,3 +113,7 @@ class ExternalSymbols(unittest.TestCase):
     def test_an_indented_local_definition_still_resolves(self):
         src='main()\n{\n    helper();\n}\n    helper()\n    {\n    }\n'
         self.assertEqual(checks.external_symbols('scripts/zm/a.gsc',src)[0]['outcome'],'passed')
+    def test_an_indented_include_still_covers_its_stock_call(self):
+        for directive in ('#include','#Include'):
+            src='    '+directive+' common_scripts\\utility;\ninit()\n{\n    players = get_players();\n}\n'
+            self.assertEqual(checks.external_symbols('scripts/zm/a.gsc',src)[0]['outcome'],'passed',directive)

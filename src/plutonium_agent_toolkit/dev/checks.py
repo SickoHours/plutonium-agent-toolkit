@@ -38,7 +38,7 @@ def script_result(name,text,passed):
 
 CALL=re.compile(r'(?<![\w\\:.\[])([A-Za-z_][A-Za-z0-9_]*)\s*\(')
 DEF=re.compile(r'^\s*([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*\{',re.M)
-INCLUDE=re.compile(r'^#include\s+([^;]+);',re.M)
+INCLUDE=re.compile(r'^\s*#include\s+([^;]+);',re.M|re.I)
 KEYWORDS=frozenset(('if','while','for','foreach','switch','return','wait','waittill','waittillmatch','endon','notify','thread','spawn','array','assert'))
 
 def mask_noncode(text):
