@@ -125,7 +125,9 @@ def load_contract(directory, declaration, *, probe=False):
     if not path: raise Failure(INPUT_MISSING,'Declaration does not name a test contract',field='/tests')
     _recipe_path(path)
     target=Path(directory)/path
-    if not target.resolve().is_relative_to(Path(directory).resolve()): fail('/tests','Contract leaves module directory')
+    try: inside=target.resolve().is_relative_to(Path(directory).resolve())
+    except RuntimeError as exc: raise Failure(INPUT_INVALID,'Contract path contains a symlink cycle',field='/tests') from exc
+    if not inside: fail('/tests','Contract leaves module directory')
     try: raw=_read_inspection(target)
     except Failure as exc:
         exc.details['field']='/tests';raise

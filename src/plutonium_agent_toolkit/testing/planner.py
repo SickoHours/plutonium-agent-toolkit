@@ -38,11 +38,11 @@ def load(args,job):
 
 def stitch(plan, contracts, decisions):
     """Merge in dependency order without reading files or executing actions."""
-    decisions={r['collision']:r for r in decisions} if isinstance(decisions,list) else decisions
+    decisions={r['collision'].casefold():r for r in decisions} if isinstance(decisions,list) else {k.casefold():v for k,v in decisions.items()}
     result={'schema_version':1,'protocol':'pat.test-plan/1','composition':plan['name'],'base':plan['base'],
             'map':plan['map'],'mode':plan.get('mode','human'),'members':[],'preconditions':[],
             'phases':[],'human_steps':[],'conflicts':[],'not_covered':[],'excluded_steps':[]}
-    members={m['id']:m for m in plan['modules']};first={};steps=[];seen=set();soak=0
+    members={m['id']:m for m in plan['modules']};member_steps={};steps=[];seen=set();soak=0
     for index,mid in enumerate(plan['order']):
         if mid not in contracts:raise Failure(INPUT_MISSING,'Member has no test contract',field=f'/modules/{index}/tests')
         c=contracts[mid]
@@ -59,9 +59,9 @@ def stitch(plan, contracts, decisions):
                     raise Failure(INPUT_INVALID,'Duplicate preconditions disagree about actor',field='/preconditions')
         for s in c['steps']:
             s=copy.deepcopy(s);s['id']=mid+'/'+s['id']
+            member_steps.setdefault(mid,[]).append(s)
             if s['actor']=='human' or s['verifier']=='human':result['human_steps'].append(s)
-            else:
-                steps.append(s);first.setdefault(mid,s)
+            else:steps.append(s)
         for item in c['not_covered']:
             if item not in result['not_covered']:result['not_covered'].append(item)
         soak=max(soak,c['soak']['rounds'])
@@ -76,14 +76,17 @@ def stitch(plan, contracts, decisions):
         values={json.dumps(s['check']['equals'],sort_keys=True) for s in group}
         owners=sorted({s['id'].split('/')[0] for s in group})
         if len(values)<2 or len(owners)<2:continue
-        collision='test:'+key;decision=decisions.get(collision)
+        collision='test:'+key;decision=decisions.get(collision.casefold())
         resolved=bool(decision and decision.get('owner') in owners and decision.get('reason'))
         result['conflicts'].append({'collision':collision,'modules':owners,'resolution':'recorded decision' if resolved else 'undecided',**({'owner':decision['owner'],'reason':decision['reason']} if resolved else {})})
         if resolved:result['excluded_steps'] += [s['id'] for s in group if s['id'].split('/')[0]!=decision['owner']]
     if any(c['resolution']=='undecided' for c in result['conflicts']):
         raise Failure(INPUT_INVALID,'Conflicting member checks require an explicit owner',conflicts=result['conflicts'],field='/conflicts')
     steps=[s for s in steps if s['id'] not in result['excluded_steps']]
-    first={mid:next((s for s in steps if s['id'].startswith(mid+'/')),None) for mid in plan['order']}
+    excluded=set(result['excluded_steps'])
+    # A pair step must exercise its provider: pick the first surviving step with an action, whether
+    # the actor is an agent or a human. A check-only step cannot stand in for a provider.
+    first={mid:next((s for s in member_steps.get(mid,()) if s['id'] not in excluded and s.get('action')),None) for mid in plan['order']}
     pairs=[]
     kinds={'gobblegums','perks','powerups','weapons'}
     for a,b in combinations(plan['order'],2):

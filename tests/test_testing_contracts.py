@@ -3,6 +3,8 @@ import hashlib
 import json
 import sys
 import unittest
+from pathlib import Path
+from unittest import mock
 from plutonium_agent_toolkit.dev import testing_contracts as tc
 from plutonium_agent_toolkit.core.errors import Failure
 from tests.test_compositions import CompositionFixture
@@ -107,3 +109,19 @@ class InspectContracts(CompositionFixture):
         for path in ['../contract.json','/contract.json','a\\b.json']:
             m=self.module('gobblegum_machine',tests=path)
             code,row=invoke(['module','inspect',str(m/'module.json'),'--json']);self.assertEqual(code,1,row)
+    def test_tests_path_symlink_cycle_is_a_structured_failure(self):
+        # Python 3.12 Path.resolve() turns an ELOOP into RuntimeError; the contract must reject
+        # it as input_invalid, not let it escape as an unstructured exception.
+        m=self.module('gobblegum_machine',tests='test-contract.json')
+        (m/'test-contract.json').write_text(json.dumps(contract()))
+        real=Path.resolve
+        def loop(self,*args,**kwargs):
+            if self.name=='test-contract.json': raise RuntimeError('Symlink loop from %r' % str(self))
+            return real(self,*args,**kwargs)
+        with mock.patch.object(Path,'resolve',loop):
+            code,row=invoke(['module','inspect',str(m/'module.json'),'--json'])
+        self.assertEqual(code,1,row)
+        self.assertEqual(row.get('error_code'),'input_invalid',row)
+        diagnostic=row['details']['inspection']['diagnostics'][0]
+        self.assertEqual(diagnostic['error_code'],'input_invalid')
+        self.assertEqual(diagnostic['field'],'/tests')
