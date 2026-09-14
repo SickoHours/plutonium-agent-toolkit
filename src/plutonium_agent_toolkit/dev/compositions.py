@@ -1153,16 +1153,20 @@ def _generate_entry(comp, modules, by_id, order, loaded, compiled, loose, seed_m
                           "An entry needs the module's own recipe; point entry at one of its script targets.",
                           field=f"/modules/{module_index[m['id']]}/entry")
         targets={}
-        for source,member_target,_ in recipe[1]:
+        for source,member_target,instance in recipe[1]:
             posix=member_target.as_posix()
+            # The generated entry is a server script: only a server .gsc target can own its
+            # include and exported function. A plain client target is never a candidate.
+            if instance!='server' or Path(posix).suffix.lower()!='.gsc':
+                continue
             targets[posix.rsplit('.',1)[0].casefold()]=(source,member_target,posix)
         refs={}
         for key in ('replace','register'):
             path,function=m['entry'][key].split('::')
             match=targets.get(path.casefold())
             if match is None:
-                raise Failure(INPUT_INVALID,f"Entry reference {m['entry'][key]} names no recipe script target of module {m['id']}",
-                              "Add the script to the module's recipe or point the entry at one of its target paths, compared case-insensitively.",
+                raise Failure(INPUT_INVALID,f"Entry reference {m['entry'][key]} names no server .gsc recipe script target of module {m['id']}",
+                              "An entry is generated as a server script; point it at one of the module's server .gsc targets, compared case-insensitively.",
                               field=f"/modules/{module_index[m['id']]}/entry")
             refs[key]=match[2].rsplit('.',1)[0]+'::'+function
         resolved_entries[m['id']]=refs

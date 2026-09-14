@@ -470,10 +470,12 @@ composition order.
 The target is reserved case-insensitively against every recipe script, loose asset target and seed
 rawfile before anything is staged, so a source that already maps that path refuses instead of
 silently outliving the entry. The generated script is part of the plan's `scripts`, the script
-limit and the per-script offline checks. An entry reference is normalized to lowercase; it is
-matched to its module's recipe target case-insensitively and the emitted `#include` and call use
-the canonical target path, so a mixed-case target resolves on a case-sensitive host, and a
-reference that names no target refuses. It compiles against an include root holding each entry
+limit and the per-script offline checks. An entry is generated as a server script, so its
+reference must name a server `.gsc` recipe target: a client `.csc` target is refused, a same-stem
+server/client pair resolves to the server target, and a reference that names no such target
+refuses. The reference is normalized to lowercase; it is matched to that target case-insensitively
+and the emitted `#include` and call use the canonical target path, so a mixed-case target resolves
+on a case-sensitive host. It compiles against an include root holding each entry
 member's recipe source at its canonical target path and its admitted source tree at the
 source-relative path, so sibling and transitive `#include` directives resolve; two sources that map
 one path with different bytes refuse. It uses the existing compiler, zone rawfile list and

@@ -39,9 +39,10 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 - Tighten the replacement and entry scans: a name boundary keeps a helper such as `my_replaceFunc`
   from reading as the engine call, `main`/`init` counts only with a function body after its
-  signature and compares case-insensitively, and an entry reference that matches no recipe target
-  case-insensitively refuses instead of compiling against an unstaged path; a matched reference
-  emits the canonical target path so a mixed-case target resolves on a case-sensitive host. Covered
+  signature and compares case-insensitively, and an entry reference must name a server `.gsc`
+  recipe target (a client `.csc` target is refused and a same-stem server/client pair resolves to
+  the server target), matched case-insensitively with the canonical target path emitted; an
+  unmatched reference refuses instead of compiling against an unstaged path. Covered
   by offline unit tests on Linux; native Windows and gameplay behavior remain unverified.
 
 - The same pull request carries the review's other offline corrections: per-VM builtin and literal

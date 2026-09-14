@@ -117,6 +117,32 @@ class GeneratedEntry(CompositionFixture):
         comp=self.composition(['alpha']);code,row=invoke(['module','plan',str(comp),'--output',self.out(),'--json'])
         self.assertEqual(code,1,row);self.assertEqual(row['error_code'],'input_invalid')
         self.assertIn('entry reference',row['message'].lower())
+    def test_entry_reference_to_a_client_script_is_refused(self):
+        # The generated entry runs on the server VM; a .csc/client target cannot own its include.
+        m=self.root/'modules'/'alpha';(m/'scripts').mkdir(parents=True)
+        (m/'scripts'/'hud.csc').write_text('alpha_replace() {}\nalpha_register() {}\n')
+        (m/'project.json').write_text(json.dumps({"schema":1,"game":"t6","mode":"zm","name":"alpha",
+            "scripts":[{"source":"scripts/hud.csc","target":"scripts/zm/alpha.csc","instance":"client"}],"assets":[],"loads":[]}))
+        (m/'module.json').write_text(json.dumps(declaration('alpha',
+            entry={'replace':'scripts/zm/alpha::alpha_replace','register':'scripts/zm/alpha::alpha_register'})))
+        comp=self.composition(['alpha']);code,row=invoke(['module','plan',str(comp),'--output',self.out(),'--json'])
+        self.assertEqual(code,1,row);self.assertEqual(row['error_code'],'input_invalid')
+        self.assertIn('server',row['message'].lower())
+    def test_entry_reference_selects_the_server_target_over_a_same_stem_client(self):
+        m=self.root/'modules'/'alpha';(m/'scripts').mkdir(parents=True)
+        (m/'scripts'/'Alpha.gsc').write_text('alpha_replace() {}\nalpha_register() {}\n')
+        (m/'scripts'/'alpha.csc').write_text('alpha_replace() {}\nalpha_register() {}\n')
+        (m/'project.json').write_text(json.dumps({"schema":1,"game":"t6","mode":"zm","name":"alpha",
+            "scripts":[{"source":"scripts/Alpha.gsc","target":"scripts/zm/Alpha.gsc","instance":"server"},
+                       {"source":"scripts/alpha.csc","target":"scripts/zm/alpha.csc","instance":"client"}],"assets":[],"loads":[]}))
+        (m/'module.json').write_text(json.dumps(declaration('alpha',
+            entry={'replace':'scripts/zm/alpha::alpha_replace','register':'scripts/zm/alpha::alpha_register'})))
+        comp=self.composition(['alpha']);out=self.out()
+        code,row=invoke(['module','build',str(comp),'--output',out,'--json']);self.assertEqual(code,0,row)
+        generated=(Path(out)/'generated-entry'/'zz_stock_pack_test_entry.gsc').read_text()
+        self.assertIn('#include scripts\\zm\\Alpha;',generated)
+        self.assertIn('scripts\\zm\\Alpha::alpha_replace();',generated)
+        self.assertTrue((Path(out)/'generated-entry'/'scripts'/'zm'/'Alpha.gsc').is_file())
     def test_generated_entry_is_in_the_plan_scripts_and_checks(self):
         self.entry_member('alpha');comp=self.composition(['alpha']);out=self.out()
         code,row=invoke(['module','plan',str(comp),'--output',out,'--json']);self.assertEqual(code,0,row)
