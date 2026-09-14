@@ -12,7 +12,9 @@ Every entry states what shipped, on which platform it was verified, and what rem
   plan; probe emission reads and writes `composition.json` as UTF-8 and `module state` reads its
   evidence as UTF-8 on a non-UTF-8 locale; `module state` hashes the plan inside the guarded read
   so a plan deleted, linked or unreadable between read and hash revokes to no state with a reason
-  instead of leaking an exception; and
+  instead of leaking an exception; `module state` converts byte-bounded evidence JSON nested past
+  the parser's recursion budget and a contract path whose `resolve()` hits a symlink cycle into
+  revoked state with a reason instead of leaking `RecursionError`/`RuntimeError`; and
   `module state` rejects malformed `conflicts`, run `package`/`test_plan`, and `verdicts` maps as
   reasons instead of leaking `AttributeError`. Covered by offline unit tests on Linux; native
   Windows and gameplay behavior remain unverified.

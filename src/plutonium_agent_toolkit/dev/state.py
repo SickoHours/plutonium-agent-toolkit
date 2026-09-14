@@ -8,7 +8,8 @@ from .compositions import _read_inspection
 def read(path):
     p=Path(path)
     if not p.is_file() or p.is_symlink() or p.stat().st_size>16*1024**2:raise ValueError('Missing or oversized evidence: '+str(p))
-    value=json.loads(p.read_text(encoding='utf-8'))
+    try:value=json.loads(p.read_text(encoding='utf-8'))
+    except RecursionError as e:raise ValueError('Evidence JSON is too deeply nested: '+str(p)) from e
     if not isinstance(value,dict):raise ValueError('Evidence must be an object: '+str(p))
     return value
 
@@ -76,7 +77,10 @@ def derive(args):
         by_id={m['id']:m for m in modules}
         for m in test['members']:
             directory=Path(by_id[m['id']]['directory']);decl=read(directory/'module.json');contract=decl.get('tests')
-            if not isinstance(contract,str) or not (directory/contract).resolve().is_relative_to(directory.resolve()):raise ValueError('Invalid contract path for '+m['id'])
+            if not isinstance(contract,str):raise ValueError('Invalid contract path for '+m['id'])
+            try:inside=(directory/contract).resolve().is_relative_to(directory.resolve())
+            except RuntimeError as e:raise ValueError('Invalid contract path for '+m['id']) from e
+            if not inside:raise ValueError('Invalid contract path for '+m['id'])
             same(directory/contract,m['contract_sha256'],'contract '+m['id'])
         test_digest=sha(test_path)
         result['state']='ready_for_game_testing';result['evidence']['ready_for_game_testing']={'path':str(test_path),'sha256':test_digest}

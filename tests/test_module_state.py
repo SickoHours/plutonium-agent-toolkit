@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import tempfile
 import unittest
+from unittest import mock
 from plutonium_agent_toolkit.dev import state
 
 class ModuleStateTests(unittest.TestCase):
@@ -135,6 +136,31 @@ class ModuleStateTests(unittest.TestCase):
                 self.assertIsNone(d['state'],label)
                 self.assertEqual(d['evidence'].get('composed'),None,label)
                 self.assertTrue(d['reasons'],label)
+    def test_deeply_nested_plan_json_is_revoked_with_a_reason(self):
+        nested=self.root/'deep-plan.json';nested.write_text('['*20000+']'*20000,encoding='utf-8')
+        self.assertLess(nested.stat().st_size,16*1024**2)
+        a=self.args();a.plan=str(nested)
+        d=state.derive(a)
+        self.assertIsNone(d['state']);self.assertTrue(d['reasons'])
+    def test_deeply_nested_later_evidence_revokes_to_the_last_state(self):
+        for label,key,expected in [('verify','verify','composed'),('test_plan','test_plan','offline_verified'),
+                                   ('run','run','ready_for_game_testing'),('verdict','verdict','game_tested')]:
+            with self.subTest(label=label):
+                nested=self.root/f'deep-{label}.json';nested.write_text('['*20000+']'*20000,encoding='utf-8')
+                self.assertLess(nested.stat().st_size,16*1024**2)
+                a=self.complete();setattr(a,key,str(nested))
+                d=state.derive(a)
+                self.assertEqual(d['state'],expected,label)
+                self.assertTrue(d['reasons'],label)
+    def test_contract_path_symlink_cycle_is_revoked_with_a_reason(self):
+        real=Path.resolve
+        def loop(self,*args,**kwargs):
+            if self.name=='test-contract.json':raise RuntimeError('Symlink loop from %r'%str(self))
+            return real(self,*args,**kwargs)
+        with mock.patch.object(Path,'resolve',loop):
+            d=state.derive(self.complete())
+        self.assertEqual(d['state'],'offline_verified');self.assertTrue(d['reasons'])
+        self.assertIn('Invalid contract path for x',str(d['reasons']))
     def test_evidence_reads_utf8_under_an_ascii_locale(self):
         import locale
         path=self.root/'unicode-receipt.json'
