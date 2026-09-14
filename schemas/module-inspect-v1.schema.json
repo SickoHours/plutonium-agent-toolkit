@@ -457,6 +457,52 @@
               }
             }
           }
+        },
+        "replaces": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "functions",
+            "files"
+          ],
+          "properties": {
+            "functions": {
+              "type": "array",
+              "maxItems": 256,
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z0-9_/]+::[a-z0-9_]+$"
+              }
+            },
+            "files": {
+              "type": "array",
+              "maxItems": 64,
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "entry": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "replace",
+            "register"
+          ],
+          "properties": {
+            "replace": {
+              "type": "string",
+              "pattern": "^[a-z0-9_/]+::[a-z0-9_]+$"
+            },
+            "register": {
+              "type": "string",
+              "pattern": "^[a-z0-9_/]+::[a-z0-9_]+$"
+            }
+          }
         }
       }
     },

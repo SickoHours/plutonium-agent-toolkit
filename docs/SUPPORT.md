@@ -211,3 +211,21 @@ is created by this route. The run requires a terminal `automated-passed` verdict
 Composition pool/compiler checks are offline. Tests cover over-budget refusal, unknown counts,
 missing projectile unions and compiler-reported unresolved symbols. Successful dry-run compilation
 is not a new external-resolution qualification. No runtime pool occupancy is inferred.
+
+Replacement declaration fields are offline-validated: normalization/deduplication, engine-entry
+refusal and typed entry references have synthetic tests. This declares no runtime compatibility.
+
+Declared replacement/entry tests cover normalized references, engine-entry exclusions,
+irresolvable duplicate functions/files, undeclared literal targets, declared-but-unfound
+warnings, generated call order, compiler integration and rawfile readback. These extensions
+remain offline-tested; no new Windows/game/player acceptance qualification is claimed.
+
+The generated entry is offline-tested too: it is present in the plan's scripts, the script limit
+and the per-script checks; its target follows the title namespace and is reserved case-insensitively
+against recipe, loose and seed rawfile targets; an entry reference must name a server `.gsc` recipe
+target (a client `.csc` target or an unmatched reference refuses, and a same-stem server/client pair
+resolves to the server), matched case-insensitively and emitting that canonical path; its include
+root stages each entry member's target source and admitted source tree so sibling and transitive
+`#include` directives resolve; and comments and quoted literals are masked before the replacement and
+`main`/`init` scans, which require a name boundary and a function body. These run against the fake
+compiler and pass on Linux; native Windows and gameplay behavior remain unverified.

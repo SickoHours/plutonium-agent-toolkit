@@ -35,6 +35,7 @@ regression that consumes the failed artifact was added; the preflight playbooks 
 
 | Log text | Cause found | Fix that worked |
 | --- | --- | --- |
+| `COM_ERROR (6): **** Unresolved external : "get_players" with 0 parameters` at map load, then `SV_Shutdown` | Module script re-cut without its stock `#include` lines; the call compiled but could not link | Restore the includes (or qualify the call); `module plan` `externals:` rows catch it offline |
 | `Unresolved external: precachemodel with 1 parameters` | Server-only builtin called from a client script | Remove the client call; keep the server precache |
 | `Unresolved external: setclientfield with 2 parameters` | The include that exports the method was missing | Add the direct include; resolve helpers per instance |
 | `bad animtree token: '{'` | Animation-tree leaves wrapped in an anonymous brace block | Emit a bare leaf list |
