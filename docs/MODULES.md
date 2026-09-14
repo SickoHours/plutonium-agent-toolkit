@@ -324,8 +324,9 @@ record pointers. Missing flags remain null. Runtime verification is the record's
 loaded/playable claim; no launch or capture fact is invented. Records from other maps
 or foundations must stay separate. Top-level registry status and prose are not facts.
 
-An optional local art catalog binds declaration IDs to artwork. Only explicit HUD or
-reference-icon roles are portraits; texture samples are excluded. Icon IDs hash the
+An optional local art catalog binds declaration IDs to artwork. Explicit HUD, reference-icon, `per-item wallbuy`, and `per-item menu art` roles
+are eligible portraits; texture samples are excluded. An explicit binding records the
+item identity and provenance decision; the role alone does not establish either. Icon IDs hash the
 served file bytes, not a source filename. Foundation staging names its descriptor and
 requires its per-map link-load files to exist. This is file presence, not gameplay.
 The route reads files only and returns per-module diagnostics for invalid declarations.
