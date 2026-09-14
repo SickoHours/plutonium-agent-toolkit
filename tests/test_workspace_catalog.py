@@ -67,6 +67,20 @@ class WorkspaceCatalogTests(unittest.TestCase):
         self.assertEqual(len(value['modules']),1)
         self.assertEqual(len(value['diagnostics']),1)
 
+    def test_per_item_art_roles_preserve_role_and_hash_served_bytes(self):
+        import hashlib
+        asset = {'url':'local-media/'+'a'*64+'.webp','binding':{}}
+        media = self.root / 'art' / asset['url']
+        media.parent.mkdir(parents=True)
+        media.write_bytes(b'per-item webp fixture')
+        for role in ['per-item wallbuy', 'per-item menu art']:
+            with self.subTest(role=role):
+                asset['binding']['role'] = role
+                art = self.write('art/local-catalog.json', {'modules':[{'declarationId':'example','artwork':[asset]}]})
+                binding = catalog(str(self.root), str(art))['modules'][0]['icon_binding']
+                self.assertEqual(binding, {'id':'local-'+hashlib.sha256(media.read_bytes()).hexdigest(),
+                                          'role':role, 'source':'local art catalog'})
+
     def test_foundation_staging_comes_from_descriptor_and_file_presence(self):
         self.write('foundations/foundation.json',{'id':'example-base','profile_prefix':'test','maps':{'zm_factory':{},'zm_moon':{}},'private_descriptor':'../base/descriptor.json'})
         self.write('base/descriptor.json',{'link_loads':{'zm_factory':['zone.ff']}})

@@ -19,7 +19,7 @@ MAX_FOUNDATION_ROWS = 256
 MAX_PROVIDES_BYTES = 64 * 1024
 MAX_RETAINED_BYTES = 512 * 1024
 FLAGS = ("offline_verified", "installed", "runtime_verified", "player_accepted")
-ICON_ROLES = {"bound HUD icon", "shared HUD icon", "local reference icon"}
+ICON_ROLES = {"bound HUD icon", "shared HUD icon", "local reference icon", "per-item wallbuy", "per-item menu art"}
 
 
 def read_bytes(path: Path, *, optional=False, limit=MAX_BYTES):
