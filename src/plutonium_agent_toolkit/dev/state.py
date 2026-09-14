@@ -25,9 +25,10 @@ def derive(args):
     result={'state':None,'evidence':{},'reasons':[]}
     root=Path(args.composition);root=root.parent if root.is_file() else root
     plan_path=Path(args.plan) if args.plan else root/'plan.json'
-    try:plan=read(plan_path)
+    try:
+        plan=read(plan_path);plan_digest=sha(plan_path)
     except (ValueError,OSError) as e:result['reasons'].append(str(e));return result
-    result['state']='composed';result['evidence']['composed']={'path':str(plan_path),'sha256':sha(plan_path)}
+    result['state']='composed';result['evidence']['composed']={'path':str(plan_path),'sha256':plan_digest}
     try:
         modules=plan['modules'];ids={m['id'] for m in modules}
         for m in modules:same(Path(m['directory'])/'module.json',m['declaration_sha256'],'module '+m['id'])

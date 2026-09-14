@@ -114,6 +114,27 @@ class ModuleStateTests(unittest.TestCase):
                 a=self.complete();a.test_plan=str(path)
                 d=state.derive(a)
                 self.assertEqual(d['state'],'offline_verified');self.assertTrue(d['reasons'])
+    def test_plan_hash_failure_after_a_successful_read_revokes_instead_of_raising(self):
+        rows=[('deleted','Missing or linked evidence'),('linked','Missing or linked evidence'),('unreadable','Permission denied')]
+        for label,message in rows:
+            with self.subTest(label=label):
+                a=self.args()
+                real_read=state.read
+                def fake_read(path,real=real_read):
+                    value=real(path)
+                    if Path(path)==self.plan:
+                        def boom(_path):raise OSError(message)
+                        self._sha=state.sha;state.sha=boom
+                    return value
+                state.read=fake_read
+                try:
+                    d=state.derive(a)
+                finally:
+                    state.read=real_read
+                    if hasattr(self,'_sha'):state.sha=self._sha;del self._sha
+                self.assertIsNone(d['state'],label)
+                self.assertEqual(d['evidence'].get('composed'),None,label)
+                self.assertTrue(d['reasons'],label)
     def test_evidence_reads_utf8_under_an_ascii_locale(self):
         import locale
         path=self.root/'unicode-receipt.json'
