@@ -340,12 +340,14 @@ The route reads files only and returns per-module diagnostics for invalid declar
 Workspace catalog reads each module declaration once for both metadata and digest. It rejects
 linked registry files with diagnostics, projects at most 256 builds per module and 256
 foundation rows per workspace (64 maps per foundation), and caches shared icon hashes within
-a 64 MiB aggregate image budget. Malformed nested JSON remains a structured failure.
+a 64 MiB aggregate image budget; once that budget is spent, later rows keep their place in
+the catalog with a null `icon_binding` and a diagnostic naming the row. Malformed nested JSON
+remains a structured failure.
 Composition discovery has its own 64 MiB declaration budget; only the selected closure is
 registered against the job's input cap. Publication validates all member, load and owned-list
 paths before creating a saved recipe.
 
-Directory enumeration itself is bounded (512 module-directory entries, 64 foundation-directory
+Directory enumeration itself is bounded (2048 module-directory entries, 64 foundation-directory
 entries), before sorting. Catalog output escapes lone surrogate code points so the JSON reply
 remains UTF-8 encodable. Foundation identity fields must be strings; an explicitly empty
 link-load list is staged, because it requires no additional files.
@@ -353,9 +355,19 @@ Record-pointer labels are bounded before interpolation, so large registry identi
 amplify into hundreds of large retained strings. Non-string binding IDs use the module's
 directory label. Output strings are bounded before UTF-8 escaping as well as afterward.
 Catalog declarations use the same 256 KiB byte limit as declaration inspection. Each module's
-`provides` projection is capped at 64 KiB, and retained data rows share a 512 KiB serialized
-budget; overflow produces diagnostics and sets `truncated`, never partial provides claims.
-Diagnostics are separately bounded. TEST.md reads use a 512 KiB limit on the opened stream,
+`provides` projection is capped at 64 KiB, and one row is capped at 512 KiB serialized
+(`--max-row-bytes`); a larger row becomes a diagnostic for that row only, sets `truncated`, and
+never yields partial provides claims. Retained rows share one 16 MiB reply budget
+(`--max-output-bytes`), sized for well over 1,000 rows of today's average size. Diagnostics are
+separately bounded.
+
+The reply always carries `total` (module rows that projected cleanly, whether or not this reply
+holds them), `page`, `page_size` and `next_page`. Without flags the reply is page 1 holding
+every row. `--page <n> --page-size <k>` (both together, 1-based) return one window of the sorted
+module rows, and `next_page` is null on the last page; foundations and diagnostics are never
+paged. If the reply budget fills inside a page, the first omitted row is named in a diagnostic,
+the count of the rest follows, and `truncated` is set, so nothing is silently dropped: walk with a
+smaller `--page-size`, or raise `--max-output-bytes`. TEST.md reads use a 512 KiB limit on the opened stream,
 and at most 16 load paths per map are inspected, matching composition authoring.
 
 ## Test contract

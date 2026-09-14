@@ -7,17 +7,20 @@ import os
 import re
 from pathlib import Path
 
-from ..core.errors import Failure, INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING
+from ..core.errors import Failure, INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, INVALID_ARGUMENTS
 from .compositions import MAX_DECLARATION_BYTES, validate_declaration_metadata
 
 MAX_BYTES = 64 * 1024 * 1024
-MAX_MODULES = 512
+MAX_MODULES = 2048
 MAX_ICON_BYTES = 64 * 1024 * 1024
 MAX_ICON_FILE_BYTES = 16 * 1024 * 1024
 MAX_FOUNDATION_MAPS = 64
 MAX_FOUNDATION_ROWS = 256
 MAX_PROVIDES_BYTES = 64 * 1024
-MAX_RETAINED_BYTES = 512 * 1024
+# One catalog reply: the default fits well over 1,000 rows of today's average (~3 KiB) row.
+MAX_OUTPUT_BYTES = 16 * 1024 * 1024
+# One module or foundation row; a larger row is a diagnostic for that row only.
+MAX_ROW_BYTES = 512 * 1024
 FLAGS = ("offline_verified", "installed", "runtime_verified", "player_accepted")
 ICON_ROLES = {"bound HUD icon", "shared HUD icon", "local reference icon", "per-item wallbuy", "per-item menu art"}
 
@@ -98,19 +101,38 @@ def safe_output(value):
     return value
 
 
+class RowTooLarge(Failure):
+    """One row exceeds the per-row budget; the row is dropped, the rest of the catalog is kept."""
+
+
+class OutputFull(Failure):
+    """The reply has reached the aggregate output budget; remaining rows belong to another page."""
+
+
 class OutputBudget:
-    def __init__(self):
-        self.remaining = MAX_RETAINED_BYTES
+    def __init__(self, max_output_bytes=None, max_row_bytes=None):
+        self.remaining = MAX_OUTPUT_BYTES if max_output_bytes is None else max_output_bytes
+        self.row_limit = MAX_ROW_BYTES if max_row_bytes is None else max_row_bytes
 
     def take(self, value):
         normalized = safe_output(value)
         encoded = json.dumps(normalized, ensure_ascii=False, allow_nan=False, indent=2)
         # Include indentation when the row is nested in the CLI envelope's result arrays.
         size = len(encoded.encode("utf-8")) + 8 * (encoded.count("\n") + 1)
+        if size > self.row_limit:
+            raise RowTooLarge(INPUT_LIMIT, f"Workspace catalog row exceeds the per-row budget ({size} > {self.row_limit} bytes)")
         if size > self.remaining:
-            raise Failure(INPUT_LIMIT, "Workspace catalog output exceeds the aggregate budget")
+            raise OutputFull(INPUT_LIMIT, "Workspace catalog output exceeds the aggregate budget; request a smaller --page-size or a larger --max-output-bytes")
         self.remaining -= size
         return normalized
+
+
+def positive(value, name, *, optional=False):
+    if value is None and optional:
+        return None
+    if type(value) is not int or value < 1:
+        raise Failure(INVALID_ARGUMENTS, f"{name} must be a positive integer")
+    return value
 
 
 def text(value, limit=2048):
@@ -165,7 +187,16 @@ def latest_test(directory: Path):
     return {"line": number, "text": line[:2048]}
 
 
-def catalog(directory: str, art_catalog: str | None = None):
+def catalog(directory: str, art_catalog: str | None = None, *, page=None, page_size=None,
+            max_output_bytes=None, max_row_bytes=None):
+    """Catalog rows for one workspace. ``page`` (1-based) and ``page_size`` select a window of the
+    module rows; without them every row is returned. Foundations are never paged."""
+    page = positive(page, "--page", optional=True)
+    page_size = positive(page_size, "--page-size", optional=True)
+    max_output_bytes = positive(max_output_bytes, "--max-output-bytes", optional=True)
+    max_row_bytes = positive(max_row_bytes, "--max-row-bytes", optional=True)
+    if (page is None) != (page_size is None):
+        raise Failure(INVALID_ARGUMENTS, "--page and --page-size go together")
     root = Path(directory).expanduser().resolve()
     read_object(root / "workspace.json")
     module_root = root / "modules"
@@ -187,8 +218,22 @@ def catalog(directory: str, art_catalog: str | None = None):
     children = directory_entries(module_root, MAX_MODULES)
     modules = []
     icon_budget = IconBudget()
-    output_budget = OutputBudget()
+    output_budget = OutputBudget(max_output_bytes, max_row_bytes)
     truncated = False
+    total = 0  # Module rows that project cleanly, whether or not this page retains them.
+    first = (page - 1) * page_size if page else 0
+    last = first + page_size if page else None
+    omitted = 0  # Rows inside the window dropped once the aggregate budget was reached.
+
+    def bound_icon(module_art, art_root, label):
+        try:
+            return icon_binding(module_art, art_root, icon_budget)
+        except Failure as exc:
+            if exc.code != INPUT_LIMIT:
+                raise
+            diagnostics.append({"path": label, "message": f"{exc}; icon binding omitted for this row"[:2048]})
+            return None
+
     for child in children:
         declaration = child / "module.json"
         if child.is_symlink() or not child.is_dir() or not declaration.exists():
@@ -226,14 +271,27 @@ def catalog(directory: str, art_catalog: str | None = None):
             symbol = cover_symbol.get("url")
             if not isinstance(symbol, str) or not re.fullmatch(r"library-symbols/[a-z0-9-]+\.svg", symbol):
                 symbol = None
-            modules.append(output_budget.take({"id": module_id, "directory": f"modules/{child.name}",
-                            "declaration_sha256": hashlib.sha256(declaration_bytes).hexdigest(),
-                            "weapon_class": text(registered.get("weapon_class")),
-                            "registry_origin": text(registered.get("origin_primary")),
-                            "icon_binding": icon_binding(module_art, Path(art_catalog).resolve().parent, icon_budget) if art_catalog else None,
-                            "symbol": "symbol-" + Path(symbol).stem if symbol else None,
-                            "provides": provides, "build_records": builds,
-                            "latest_test": latest_test(child)}))
+            row = {"id": module_id, "directory": f"modules/{child.name}",
+                   "declaration_sha256": hashlib.sha256(declaration_bytes).hexdigest(),
+                   "weapon_class": text(registered.get("weapon_class")),
+                   "registry_origin": text(registered.get("origin_primary")),
+                   "icon_binding": None,
+                   "symbol": "symbol-" + Path(symbol).stem if symbol else None,
+                   "provides": provides, "build_records": builds, "latest_test": None}
+            index = total
+            total += 1
+            if index < first or (last is not None and index >= last):
+                continue  # Outside the requested page; counted in total, never read further.
+            row["latest_test"] = latest_test(child)
+            if art_catalog:
+                row["icon_binding"] = bound_icon(module_art, Path(art_catalog).resolve().parent, f"modules/{child.name}")
+            try:
+                modules.append(output_budget.take(row))
+            except OutputFull as exc:
+                omitted += 1
+                if omitted == 1:
+                    diagnostics.append({"path": f"modules/{child.name}", "message": str(exc)[:2048]})
+                truncated = True
         except (Failure, OSError, ValueError) as exc:
             if isinstance(exc, Failure) and exc.code == INPUT_LIMIT:
                 truncated = True
@@ -285,5 +343,11 @@ def catalog(directory: str, art_catalog: str | None = None):
     # Data rows are already normalized and budgeted. Keep diagnostics bounded separately;
     # avoid recursively copying the accumulated module payload a second time.
     bounded_diagnostics = [{"path": safe_output(row["path"])[:256], "message": safe_output(row["message"])[:512]} for row in diagnostics[:64]]
+    if omitted > 1:
+        bounded_diagnostics.append({"path": "modules", "message": f"{omitted} module rows omitted by the aggregate output budget on this page"})
+    current_page = page or 1
+    size = page_size or max(total, 1)
+    next_page = current_page + 1 if page and last is not None and last < total else None
     return {"protocol": "pat.workspace-catalog/1", "modules": modules, "foundations": foundations,
+            "total": total, "page": current_page, "page_size": size, "next_page": next_page,
             "diagnostics": bounded_diagnostics, "truncated": truncated or len(diagnostics) > 64}
