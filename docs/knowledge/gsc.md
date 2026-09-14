@@ -14,8 +14,20 @@ the toolkit infers it from the suffix) and check each against its own side.
 
 ## Where scripts live in a mod
 
-The engine loads `scripts/zm/<name>.gsc` from the mod's fastfile as a rawfile, for every Zombies
-map. A map-specific script sits under `maps/mp/zm_<map>.gsc` in the map's own fastfile. A loose
+A module script is delivered **loose** as a compiled file under the profile folder,
+`mods/<profile>/scripts/zm/<name>.gsc`; the engine logs `Script source "scripts/zm/<name>.gsc"
+loaded successfully from raw` and calls its `main()` and `init()`. The same script packed only as
+a `rawfile` inside `mod.ff` is **not** executed on stock Black Ops II (observed 2026-09-13: eight
+packaged scripts, none executed, no registration prints; the loose copies ran). `module build`
+therefore writes every compiled script under `packages/scripts/` beside `mod.ff` as well as into
+the zone. `game install-mod` copies only `mod.ff` (and optional soundbanks), never
+`packages/scripts/`, so a full install takes a manual second step: after
+`pat game install-mod <build>/packages/mod.ff <profile>`, copy the build's `packages/scripts/`
+directory **contents** into the profile's `scripts/` directory, so `packages/scripts/zm/<name>.gsc`
+lands at `mods/<profile>/scripts/zm/<name>.gsc`. Copy the contents, never the directory itself
+into a path that already ends in `scripts/` or `zm/`, or the loose scripts land under
+`mods/<profile>/scripts/scripts/` or `.../zm/zm/` and the engine never sees them. A map-specific
+script sits under `maps/mp/zm_<map>.gsc` in the map's own fastfile. A loose
 global script under the storage folder's `raw/scripts/zm/` loads for every mod, which is how a
 shared developer menu is delivered; use that only for tooling shared across mods.
 
@@ -35,6 +47,12 @@ and the *engine* must have those scripts loaded too.
 
 ## Traps that compile and fail at load
 
+- **Unresolved external at link time aborts the map.** `COM_ERROR (6): Unresolved external "get_players"
+  with 0 parameters` then `SV_Shutdown`; the client exits and reopens its console log, so the
+  evidence is in the rotated `console_zm.log.NNN`, not the live file. An unqualified call to a
+  stock utility export needs the matching `#include` (`common_scripts\utility`, `maps\mp\_utility`,
+  `maps\mp\zombies\_zm_utility`) or a fully qualified call; `module plan` now reports these as
+  `externals:` check rows from `knowledge/stock-exports.json`.
 - **Unresolved external.** A helper that compiled because a name matched, but the engine could not
   find it in a loaded script. `setclientfield` with two parameters lives in `maps/mp/_utility`;
   include it. Resolve every unqualified call against the includes and exports the engine will
@@ -72,3 +90,13 @@ and the *engine* must have those scripts loaded too.
 `map_restart` reruns the loaded scripts and is the fast loop for script logic. It does not reread
 the fastfile: after a rebuild, reinstall and `reload-mod`. A compile plus a clean startup is
 cheaper than a gameplay pass and must be reported as the cheaper thing.
+
+## Declared function replacements
+
+Call `replaceFunc` from the generated `main()` before the target executes; module registration
+runs from generated `init()`. Engine entry points (`CodeCallback_*`, map/gametype main and
+`gamemode_callback_setup`) belong to the foundation and cannot be detoured by a module.
+One effective registration exists per target, so duplicate declarations are refused rather
+than relying on last-registration-wins behavior. Detours clear on fast_restart; load and
+re-registration evidence is required again. The literal source scan and generated-entry
+readback are offline evidence only; they do not establish runtime detour behavior or gameplay.

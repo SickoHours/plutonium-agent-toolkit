@@ -330,8 +330,9 @@ record pointers. Missing flags remain null. Runtime verification is the record's
 loaded/playable claim; no launch or capture fact is invented. Records from other maps
 or foundations must stay separate. Top-level registry status and prose are not facts.
 
-An optional local art catalog binds declaration IDs to artwork. Only explicit HUD or
-reference-icon roles are portraits; texture samples are excluded. Icon IDs hash the
+An optional local art catalog binds declaration IDs to artwork. Explicit HUD, reference-icon, `per-item wallbuy`, and `per-item menu art` roles
+are eligible portraits; texture samples are excluded. An explicit binding records the
+item identity and provenance decision; the role alone does not establish either. Icon IDs hash the
 served file bytes, not a source filename. Foundation staging names its descriptor and
 requires its per-map link-load files to exist. This is file presence, not gameplay.
 The route reads files only and returns per-module diagnostics for invalid declarations.
@@ -444,3 +445,52 @@ ambiguous candidates, and emits a buildable composition with the probe explicitl
 The probe is first in dependency order. `_pack`/`_pub` compositions refuse every test-only member,
 including through nested compositions. Probe-scoped contracts permit signed `round_set +N`;
 this is a round-counter transition, not proof of N naturally completed gameplay rounds.
+
+## Declared replacement
+
+| Field | Contract |
+| --- | --- |
+| `replaces.functions` | Up to 256 lowercase, deduplicated `script/path::function` targets |
+| `replaces.files` | Up to 64 lowercase, deduplicated relative GSC/CSC paths |
+| `entry.replace`, `entry.register` | Optional paired function references for generated entry ownership |
+
+Engine callbacks, map/gametype main and gamemode_callback_setup are base-owned and refused.
+These fields declare intent; source consistency, collisions and entry generation are checked
+by composition planning/building as described below.
+
+Overlapping declared functions (`function:<target>`) or replaced files (`file:<path>`) are
+hard refusals. Owner decisions do not resolve them: the engine has one effective replacement.
+Ordinary asset/file collision decisions retain their existing behavior.
+
+Literal `replaceFunc(script::function, ...)` targets in recipe source must be declared or planning
+fails with `declaration_mismatch` and the target in the hint. Backslashes and case normalize.
+Comments and quoted literals are masked before the scan, so prose that names `replaceFunc` and a
+`main`/`init` written in a comment are not read as code; a name boundary keeps a helper such as
+`my_replaceFunc` from reading as the engine call, and `main`/`init` counts only with a function
+body after its signature. Declared targets not found in available
+source are warnings, preserving seed workflows.
+This regex scan does not prove dynamically computed replacements or runtime detour behavior.
+
+## Entry script
+
+An entry-managed module exposes its declared replace/register functions and defines neither
+`main()` nor `init()` (a definition inside a comment or a string does not count). The generated
+script is `zz_<composition>_entry` under `titles.script_target` for the composition's game:
+`scripts/zm/zz_<composition>_entry.gsc` on T6, and the flat `scripts/zz_<composition>_entry.gsc`
+namespace on IW5. Its `main` calls replacements and its `init` calls registrations, both in
+composition order.
+
+The target is reserved case-insensitively against every recipe script, loose asset target and seed
+rawfile before anything is staged, so a source that already maps that path refuses instead of
+silently outliving the entry. The generated script is part of the plan's `scripts`, the script
+limit and the per-script offline checks. An entry is generated as a server script, so its
+reference must name a server `.gsc` recipe target: a client `.csc` target is refused, a same-stem
+server/client pair resolves to the server target, and a reference that names no such target
+refuses. The reference is normalized to lowercase; it is matched to that target case-insensitively
+and the emitted `#include` and call use the canonical target path, so a mixed-case target resolves
+on a case-sensitive host. It compiles against an include root holding each entry
+member's recipe source at its canonical target path and its admitted source tree at the
+source-relative path, so sibling and transitive `#include` directives resolve; two sources that map
+one path with different bytes refuse. It uses the existing compiler, zone rawfile list and
+byte-for-byte readback. Root scripts are normally each engine entry points; one generated owner is
+needed for deterministic order. Other modules keep their existing roots.

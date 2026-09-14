@@ -74,6 +74,15 @@
    "source": "docs/knowledge/crashes.md"
   },
   {
+   "cause": "A module script calls a stock helper unqualified without the #include that exports it, or calls a helper its re-cut dropped; the script compiled but could not link at map load and the server shut down",
+   "class": "script-error",
+   "fix": "Restore the stock #include lines or fully qualify the call; regenerate from the owning tool; module plan externals: rows report this offline",
+   "id": "link-unresolved-external",
+   "log_text": "**** Unresolved external :  \"get_players\" with 0 parameters in \"\" at lines 1,1 ****",
+   "regex": "^\\*{4}\\s*Unresolved external\\s*:\\s*\"([A-Za-z0-9_]+)\"\\s+with\\s+(\\d+)\\s+parameters",
+   "source": "docs/knowledge/crashes.md"
+  },
+  {
    "cause": "A menu Lua path failed, often pre-existing and unrelated to the mod under test",
    "class": "ui-lua-error",
    "fix": "Record it separately; do not fold it into the gameplay failure",
