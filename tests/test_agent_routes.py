@@ -325,6 +325,14 @@ class DispatchTests(AgentFixture):
         self.assertEqual(row["error_code"], "input_invalid")
         self.assertIn("thread.create", row["message"])
 
+    def test_dispatch_v1_keeps_strict_instance_validation(self):
+        self.configure_token()
+        code, row = invoke(["agent", "dispatch", "--project", "proj-1", "--title", "t", "--prompt", "p",
+                            "--instance", "provider/instance", "--model", "claude-sonnet-5"])
+        self.assertEqual(row["error_code"], "input_invalid")
+        self.assertIn("provider instance id", row["message"])
+        self.assertEqual([r for r in self.fake.requests if r[0] == "POST"], [])
+
     def test_dispatch_never_picks_a_model(self):
         code, row = invoke(["agent", "dispatch", "--project", "proj-1", "--title", "t", "--prompt", "p"])
         self.assertEqual(code, 2)

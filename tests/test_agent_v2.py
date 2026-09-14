@@ -254,6 +254,17 @@ class V2Tests(unittest.TestCase):
             self.assertEqual(code, 0, row)
             self.assertEqual(self.rpc.call_args.args[3]['threadId'], thread_id)
 
+    def test_cli_dispatch_preserves_opaque_v2_provider_instance_ids(self):
+        from test_agent_routes import invoke
+        instance = 'provider/instance:' + 'nested%253Apart%3A' * 20
+        with patch.object(t3, 'token', return_value='synthetic-secret'):
+            code, row = invoke(['agent', 'dispatch', '--origin', ORIGIN, '--project', 'project-1',
+                                '--title', 'Proof', '--prompt', 'Reply OK.', '--instance', instance,
+                                '--model', 'chosen-model'])
+        self.assertEqual(code, 0, row)
+        body = self.rpc.call_args.args[3]
+        self.assertEqual(body['modelSelection']['instanceId'], instance)
+
     def test_v2_opaque_id_bounds_preserve_v1_validation(self):
         long_id = 'project:command%3A' + 'part' * 40
         self.assertEqual(t3.validate_id(long_id, 'project id', protocol=2), long_id)

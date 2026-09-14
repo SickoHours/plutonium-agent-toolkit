@@ -10,7 +10,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
 - Add T3 Code orchestration protocol 2 behind `agent probe`, `hosts`, `dispatch`, `status`,
   `send` and `interrupt`, preserving protocol 1. V2 launches use one authenticated WebSocket
   RPC, status reads app runs and provider-aware snapshots, and uncertain writes are never retried.
-  V2 graph ids remain opaque through validation and URL encoding.
+  V2 graph ids remain opaque through validation and URL encoding; provider instance ids are
+  validated against the host's selected protocol, so opaque protocol 2 instance ids reach dispatch.
   Fake-transport tests cover both protocols; authenticated V2 native qualification remains pending.
 
 - Contract validation accepts concrete maps for wildcard declarations and reports excessive

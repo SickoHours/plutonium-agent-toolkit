@@ -351,7 +351,10 @@ def read_prompt(text: str) -> str:
 
 
 def model_selection(instance: str, model: str, options: list[str]) -> dict:
-    validate_id(instance, "provider instance id")
+    # The instance id's shape depends on the host's orchestration protocol, which is not known
+    # until dispatch probes it; validate it there with the protocol-aware validator.
+    if not isinstance(instance, str) or not instance.strip():
+        raise Failure(INPUT_INVALID, "Provide the provider instance id exactly as pat agent models lists it")
     if not isinstance(model, str) or not model.strip() or len(model) > MAX_TEXT:
         raise Failure(INPUT_INVALID, "Provide the model slug exactly as pat agent models lists it")
     rows = []
@@ -384,6 +387,8 @@ def dispatch(origin: str, bearer: str, *, project_id: str, title: str, prompt: s
              worktree_path: str | None = None, branch: str | None = None) -> dict:
     info = require_protocol(origin)
     validate_id(project_id, "project id", protocol=info["orchestration_protocol"])
+    validate_id(selection.get("instanceId") if isinstance(selection, dict) else None,
+                "provider instance id", protocol=info["orchestration_protocol"])
     if not title.strip() or len(title) > MAX_TEXT:
         raise Failure(INPUT_INVALID, "Provide a non-empty --title up to 512 characters")
     if runtime_mode not in RUNTIME_MODES:
