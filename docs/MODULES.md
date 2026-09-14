@@ -313,6 +313,12 @@ The result carries `composition`, `plan`, `plan_receipt`, `undecided` and `unqua
 
 Optional `lineage` records a T4/T5 source relationship: `[{"game":"t5","map":"zm_factory","source":"Example source variant","note":"Same-map witness; no T6 verification"}]`. One object is accepted for compatibility and normalized to an array by inspection. Arrays contain 1–18 entries, preserving multiple source maps or variants without claiming exclusive authorship. Notes are at most 400 characters. Only `t4`/`t5` and `zm_` map IDs are accepted. Lineage is descriptive metadata; plan/build ignore it and it never widens declared bases/maps or changes any evidence fact.
 
+`lineage` is also the first row type of the evidence ledger: an optional `evidence.json` beside
+`module.json` holds typed, scoped rows (`lineage`, `authored`, `accepted-in-pack`,
+`extracted-from-release`, `built-alone`, `agent-reviewed`, `game-tested`, `player-accepted`) from
+which the six facts are derived per scope, unknown kept unknown. `module inspect` validates it
+when present; `module state --ledger` reports it. Format: [evidence-ledger.md](evidence-ledger.md).
+
 
 ## Workspace catalog records
 
@@ -415,6 +421,12 @@ unchanged declarations, a stale build input, a mismatched built plan or a packag
 matches revokes the claim to composed with the mismatch reason, never offline verified.
 A plan that is not a well-formed composition plan (wrong schema, missing name/base/map, empty or
 malformed module rows, duplicate ids, or undecided collisions) claims no state at all.
+
+`pat module state --ledger <module dir|evidence.json> [--base --foundation --map --location --package] --json`
+is the other subject of the route: it reads a module's evidence ledger and reports each of the
+six facts per scope from the rows, `null` where no row of the matching type exists, with the
+row numbers behind each value. It never reads a plan or receipt and the composition form never
+reads a ledger. [evidence-ledger.md](evidence-ledger.md) specifies the rows and the derivation.
 
 ## Checks
 

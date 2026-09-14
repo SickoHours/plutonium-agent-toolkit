@@ -1,0 +1,716 @@
+"""The evidence ledger: typed, scoped rows in ``evidence.json`` beside ``module.json``.
+
+Provenance is a ledger, not a flag. A module's history is a list of rows, each of one type
+(``lineage``, ``authored``, ``accepted-in-pack``, ``extracted-from-release``, ``built-alone``,
+``agent-reviewed``, ``game-tested``, ``player-accepted``), each scoped to a base or foundation
+and a map set, each pointing at the record that supports it and carrying a hash where one
+exists. Rows coexist; nothing collapses them. The six facts (offline verified, installed,
+launched, loaded and playable, captured, player accepted) are derived for display only, per
+scope, and a fact with no row of the matching type stays unknown (``null``). Rows about a
+composition the module was part of (``accepted-in-pack``) never feed the facts: nothing is
+inferred from a pack that used a module. The format is specified in ``docs/evidence-ledger.md``.
+
+``validate`` checks a ledger and collects one diagnostic per bad row; ``facts`` derives the
+per-scope facts from valid rows; ``propose`` drafts a ledger for one workspace module from the
+workspace registry and the module's docs without writing anything.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+from pathlib import Path, PureWindowsPath
+
+from ..core.errors import INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, INVALID_ARGUMENTS, Failure
+from .compositions import BASE, MAP, _fields, _pointer
+
+PROTOCOL = "pat.module-ledger/1"
+PROPOSAL_PROTOCOL = "pat.module-ledger-proposal/1"
+FILENAME = "evidence.json"
+TYPES = ("lineage", "authored", "accepted-in-pack", "extracted-from-release", "built-alone",
+         "agent-reviewed", "game-tested", "player-accepted")
+FACTS = ("offline_verified", "installed", "launched", "loaded_and_playable", "captured", "player_accepted")
+OBSERVED = ("installed", "launched", "loaded_and_playable", "captured")
+MAX_BYTES = 1024 * 1024
+MAX_ROWS = 1024
+MAX_DIAGNOSTICS = 32
+MAX_TEXT = 2000
+MAX_LIST = 64
+SHA256 = re.compile(r"^[0-9a-f]{64}\Z")
+COMMIT = re.compile(r"^[0-9a-f]{7,40}\Z")
+FOUNDATION = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}\Z")
+# A survival location: a fenced area of a stock map with its own route (Reimagined's or QoL's
+# Crazy Place, Diner, Cell Block). A row scoped to one never collapses into the parent map.
+LOCATION = re.compile(r"^[a-z0-9][a-z0-9_]{0,63}\Z")
+RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
+DATE = re.compile(r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?(Z|[+-]\d{2}:\d{2})?)?\Z")
+SOURCE_MAP = re.compile(r"^zm_[a-z0-9_]{1,60}\Z")
+COMMON = {"type", "scope", "at", "note", "record", "package_sha256"}
+# Fields beyond COMMON per row type: (allowed, required). Lineage keeps the shape of the
+# module.json field it came from and is scoped by its own game and map.
+SHAPES = {
+    "lineage": ({"type", "game", "map", "source", "note"}, {"game", "map", "source"}),
+    "authored": ({"by", "parent", "changes"}, {"scope"}),
+    "accepted-in-pack": ({"pack", "verdict", "reporter", "not_covered"}, {"pack", "scope", "record"}),
+    "extracted-from-release": ({"release", "use", "commit"}, {"release", "use", "scope"}),
+    "built-alone": ({"receipt", "offline_verified", "parent"}, {"receipt", "scope", "offline_verified"}),
+    "agent-reviewed": ({"by", "outcome"}, {"outcome", "scope"}),
+    "game-tested": ({"run", "result", "capture", *OBSERVED}, {"run", "result", "scope"}),
+    "player-accepted": ({"outcome", "reporter", "quote", "not_covered", "supersedes"}, {"outcome", "record", "scope"}),
+}
+OUTCOMES = {"agent-reviewed": ("passed", "failed", "noted"), "player-accepted": ("accepted", "rejected")}
+RESULTS = ("passed", "failed", "inconclusive")
+
+
+# ----- validation ------------------------------------------------------------------------
+
+def _text(value, what: str, limit: int = MAX_TEXT, field: str = "/") -> str:
+    if not isinstance(value, str) or not value.strip() or len(value) > limit:
+        raise Failure(INPUT_INVALID, f"{what} is a non-empty string of at most {limit} characters", field=field)
+    return value
+
+
+def _hash(value, what: str, field: str) -> str:
+    if not isinstance(value, str) or not SHA256.match(value):
+        raise Failure(INPUT_INVALID, f"{what} is a 64-character lowercase hex SHA-256", field=field)
+    return value
+
+
+def _bool(value, what: str, field: str) -> bool:
+    if type(value) is not bool:
+        raise Failure(INPUT_INVALID, f"{what} is true or false; leave it out when unknown", field=field)
+    return value
+
+
+def _date(value, field: str) -> str:
+    if not isinstance(value, str) or not DATE.match(value):
+        raise Failure(INPUT_INVALID, "at is an ISO date (YYYY-MM-DD) or date-time", field=field)
+    return value
+
+
+def _relative(text: str, what: str, field: str) -> str:
+    """A pointer stays inside the workspace: forward-slash, relative, no parent steps."""
+    if not isinstance(text, str) or not text or len(text) > 4096 or "\\" in text or text != text.strip():
+        raise Failure(INPUT_INVALID, f"{what} path is a forward-slash relative path of at most 4096 characters", field=field)
+    p = Path(text)
+    if p.is_absolute() or PureWindowsPath(text).anchor or text.startswith("/") or ".." in p.parts or not p.parts:
+        raise Failure(INPUT_INVALID, f"{what} path is relative to the workspace root and never climbs out of it: {text}", field=field)
+    return text
+
+
+def _record(value, what: str, field: str) -> dict:
+    _fields(value, {"path", "sha256", "commit"}, {"path"}, what, field)
+    result = {"path": _relative(value["path"], what, field + "/path")}
+    if "sha256" in value:
+        result["sha256"] = _hash(value["sha256"], f"{what} sha256", field + "/sha256")
+    if "commit" in value:
+        if not isinstance(value["commit"], str) or not COMMIT.match(value["commit"]):
+            raise Failure(INPUT_INVALID, f"{what} commit is 7 to 40 lowercase hex characters", field=field + "/commit")
+        result["commit"] = value["commit"]
+    return result
+
+
+def _scope(value, field: str) -> dict:
+    """Where a row applies: a base token and/or a foundation id, a map set (``*`` for any), and
+    optionally one survival ``location`` inside a single map.
+
+    ``map`` (one id) is accepted and normalized to ``maps``. A ``location`` requires exactly one
+    map and is part of the match: a row about the Diner is not a row about Green Run, and a
+    query for Green Run alone does not see it. Descriptive keys (``mode``, ``players``,
+    ``profile``) narrow the statement without affecting matching.
+    """
+    _fields(value, {"base", "foundation", "map", "maps", "location", "mode", "players", "profile"}, set(), "scope", field)
+    result = {}
+    if "base" in value:
+        if not isinstance(value["base"], str) or not BASE.match(value["base"]):
+            raise Failure(INPUT_INVALID, "scope base is a base token (lowercase letters and digits)", field=field + "/base")
+        result["base"] = value["base"]
+    if "foundation" in value:
+        if not isinstance(value["foundation"], str) or not FOUNDATION.match(value["foundation"]):
+            raise Failure(INPUT_INVALID, "scope foundation is a lowercase foundation id (letters, digits, dash)", field=field + "/foundation")
+        result["foundation"] = value["foundation"]
+    if "base" not in result and "foundation" not in result:
+        raise Failure(INPUT_INVALID, "scope names a base token, a foundation id, or both", field=field)
+    if ("map" in value) == ("maps" in value):
+        raise Failure(INPUT_INVALID, "scope names exactly one of map (one id) or maps (a list of ids, or [\"*\"])", field=field)
+    maps = [value["map"]] if "map" in value else value["maps"]
+    if not isinstance(maps, list) or not maps or len(maps) > MAX_LIST or len(set(map(str, maps))) != len(maps) \
+            or not all(isinstance(m, str) and (m == "*" or MAP.match(m)) for m in maps):
+        raise Failure(INPUT_INVALID, f"scope maps is a non-empty list of at most {MAX_LIST} distinct map ids, or [\"*\"]", field=field + ("/map" if "map" in value else "/maps"))
+    result["maps"] = list(maps)
+    if "location" in value:
+        if not isinstance(value["location"], str) or not LOCATION.match(value["location"]):
+            raise Failure(INPUT_INVALID, "scope location is a lowercase survival-location id (letters, digits, underscore)", field=field + "/location")
+        if len(maps) != 1 or maps[0] == "*":
+            raise Failure(INPUT_INVALID, "scope location names one fenced area inside exactly one map", field=field + "/location")
+        result["location"] = value["location"]
+    if "mode" in value:
+        if value["mode"] not in ("solo", "coop"):
+            raise Failure(INPUT_INVALID, "scope mode is solo or coop", field=field + "/mode")
+        result["mode"] = value["mode"]
+    if "players" in value:
+        if type(value["players"]) is not int or not 1 <= value["players"] <= 8:
+            raise Failure(INPUT_INVALID, "scope players is an integer from 1 to 8", field=field + "/players")
+        result["players"] = value["players"]
+    if "profile" in value:
+        result["profile"] = _text(value["profile"], "scope profile", 128, field + "/profile")
+    return result
+
+
+def _strings(value, what: str, field: str, limit: int = 400) -> list:
+    if not isinstance(value, list) or len(value) > MAX_LIST or not all(isinstance(s, str) and s.strip() and len(s) <= limit for s in value):
+        raise Failure(INPUT_INVALID, f"{what} is a list of at most {MAX_LIST} non-empty strings of at most {limit} characters", field=field)
+    return list(value)
+
+
+def _parent(value, field: str) -> dict:
+    _fields(value, {"id", "declaration_sha256", "package_sha256", "record"}, {"id"}, "parent", field)
+    if not isinstance(value["id"], str) or not re.fullmatch(r"[a-z0-9_-]{1,64}", value["id"]):
+        raise Failure(INPUT_INVALID, "parent id is a module id or directory name", field=field + "/id")
+    result = {"id": value["id"]}
+    for key in ("declaration_sha256", "package_sha256"):
+        if key in value:
+            result[key] = _hash(value[key], f"parent {key}", field + "/" + key)
+    if "record" in value:
+        result["record"] = _record(value["record"], "parent record", field + "/record")
+    return result
+
+
+def validate_row(row, field: str) -> dict:
+    """One row, normalized. Raises the first defect with its JSON Pointer."""
+    if not isinstance(row, dict):
+        raise Failure(INPUT_INVALID, "a ledger row is an object", field=field)
+    kind = row.get("type")
+    if kind not in TYPES:
+        raise Failure(INPUT_INVALID, f"row type is one of {list(TYPES)}", field=field + "/type")
+    allowed, required = SHAPES[kind]
+    if kind == "lineage":
+        _fields(row, allowed, required, "lineage row", field)
+        if row["game"] not in ("t4", "t5") or not isinstance(row["map"], str) or not SOURCE_MAP.match(row["map"]):
+            raise Failure(INPUT_INVALID, "lineage requires a T4/T5 game and a zm_ map ID", field=field)
+        note = row.get("note", "")
+        if not isinstance(note, str) or len(note) > 400:
+            raise Failure(INPUT_INVALID, "lineage note is at most 400 characters", field=field + "/note")
+        return {"type": kind, "game": row["game"], "map": row["map"],
+                "source": _text(row["source"], "lineage source", 2048, field + "/source"), "note": note}
+    _fields(row, allowed | COMMON, required | {"type"}, f"{kind} row", field)
+    if row["scope"] is None:
+        raise Failure(INPUT_INVALID, "scope is missing: name the base or foundation and the map set this row applies to", field=field + "/scope")
+    out = {"type": kind, "scope": _scope(row["scope"], field + "/scope")}
+    if "at" in row:
+        out["at"] = _date(row["at"], field + "/at")
+    if "note" in row:
+        out["note"] = _text(row["note"], "note", MAX_TEXT, field + "/note")
+    if "record" in row:
+        out["record"] = _record(row["record"], "record", field + "/record")
+    if "package_sha256" in row:
+        out["package_sha256"] = _hash(row["package_sha256"], "package_sha256", field + "/package_sha256")
+    for key in ("by", "pack", "release", "use", "verdict", "reporter", "quote"):
+        if key in row:
+            out[key] = _text(row[key], key, MAX_TEXT if key in ("verdict", "quote", "use") else 200, field + "/" + key)
+    for key in ("not_covered", "changes"):
+        if key in row:
+            out[key] = _strings(row[key], key, field + "/" + key)
+    if "parent" in row:
+        out["parent"] = _parent(row["parent"], field + "/parent")
+    if "commit" in row:
+        if not isinstance(row["commit"], str) or not COMMIT.match(row["commit"]):
+            raise Failure(INPUT_INVALID, "commit is 7 to 40 lowercase hex characters", field=field + "/commit")
+        out["commit"] = row["commit"]
+    if "supersedes" in row:
+        out["supersedes"] = _hash(row["supersedes"], "supersedes", field + "/supersedes")
+    if kind == "built-alone":
+        out["receipt"] = _record(row["receipt"], "receipt", field + "/receipt")
+        out["offline_verified"] = _bool(row["offline_verified"], "offline_verified", field + "/offline_verified")
+        if "foundation" not in out["scope"]:
+            raise Failure(INPUT_INVALID, "a built-alone row names the foundation it was built on in its scope", field=field + "/scope/foundation")
+    if kind in OUTCOMES:
+        if row["outcome"] not in OUTCOMES[kind]:
+            raise Failure(INPUT_INVALID, f"{kind} outcome is one of {list(OUTCOMES[kind])}", field=field + "/outcome")
+        out["outcome"] = row["outcome"]
+    if kind == "game-tested":
+        if not isinstance(row["run"], str) or not RUN_ID.match(row["run"]):
+            raise Failure(INPUT_INVALID, "run is the run id (letters, digits, dot, underscore, colon, dash)", field=field + "/run")
+        out["run"] = row["run"]
+        if row["result"] not in RESULTS:
+            raise Failure(INPUT_INVALID, f"result is one of {list(RESULTS)}", field=field + "/result")
+        out["result"] = row["result"]
+        if "capture" in row:
+            out["capture"] = _record(row["capture"], "capture", field + "/capture")
+        for key in OBSERVED:
+            if key in row:
+                out[key] = _bool(row[key], key, field + "/" + key)
+    return out
+
+
+def validate(data) -> tuple[dict | None, list[dict]]:
+    """The whole ledger. Returns (normalized ledger or None, diagnostics).
+
+    A malformed header yields no ledger. A bad row is one diagnostic and is dropped from the
+    normalized rows, so a display can still show the rows that are well-formed; the
+    diagnostics say which rows were not counted. Nothing is inferred from a dropped row.
+    """
+    diagnostics = []
+    try:
+        _fields(data, {"schema", "subject", "rows"}, {"schema", "subject", "rows"}, "evidence.json")
+        if data["schema"] != 1:
+            raise Failure(INPUT_INVALID, "evidence.json: expected schema 1", field="/schema")
+        _fields(data["subject"], {"id"}, {"id"}, "subject", "/subject")
+        if not isinstance(data["subject"]["id"], str) or not re.fullmatch(r"[a-z0-9_]{1,64}", data["subject"]["id"]):
+            raise Failure(INPUT_INVALID, "subject id is the module id from module.json", field="/subject/id")
+        rows = data["rows"]
+        if not isinstance(rows, list) or len(rows) > MAX_ROWS:
+            raise Failure(INPUT_INVALID, f"rows is a list of at most {MAX_ROWS} rows", field="/rows")
+    except Failure as exc:
+        return None, [{"field": exc.details.get("field", "/"), "error_code": exc.code, "message": exc.message}]
+    kept = []
+    for index, row in enumerate(rows):
+        try:
+            kept.append(validate_row(row, f"/rows/{index}"))
+        except Failure as exc:
+            if len(diagnostics) < MAX_DIAGNOSTICS:
+                diagnostics.append({"field": exc.details.get("field", f"/rows/{index}"), "error_code": exc.code, "message": exc.message})
+    return {"schema": 1, "subject": {"id": data["subject"]["id"]}, "rows": kept}, diagnostics
+
+
+# ----- reading -----------------------------------------------------------------------------
+
+def read(path: Path) -> tuple[bytes, dict]:
+    """One bounded read of a regular file; symlinks at the final component are refused."""
+    if path.is_symlink() or not path.is_file():
+        raise Failure(INPUT_MISSING, f"Ledger is missing or is a link: {path}")
+    if path.stat().st_size > MAX_BYTES:
+        raise Failure(INPUT_LIMIT, f"Ledger exceeds {MAX_BYTES} bytes: {path}")
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        raise Failure(INPUT_MISSING, f"Cannot read ledger: {path} ({exc})") from exc
+    if len(raw) > MAX_BYTES:
+        raise Failure(INPUT_LIMIT, f"Ledger exceeds {MAX_BYTES} bytes: {path}")
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except (ValueError, RecursionError) as exc:
+        raise Failure(INPUT_INVALID, f"Ledger is not valid JSON: {path}", field="/") from exc
+    return raw, data
+
+
+def inspect(path: Path, expected_id: str | None = None) -> dict:
+    """The ledger summary `module inspect` attaches beside a declaration. Never raises for a
+    malformed ledger: that is a diagnostic, and the declaration's own validity is untouched."""
+    result = {"file": str(path), "sha256": None, "validation": "invalid", "rows": None, "types": None, "diagnostics": []}
+    try:
+        raw, data = read(path)
+        result["sha256"] = hashlib.sha256(raw).hexdigest()
+        ledger, diagnostics = validate(data)
+        if ledger is not None and expected_id is not None and ledger["subject"]["id"] != expected_id:
+            diagnostics.insert(0, {"field": "/subject/id", "error_code": INPUT_INVALID,
+                                   "message": f"ledger subject {ledger['subject']['id']!r} is not the declaration's id {expected_id!r}"})
+        result["diagnostics"] = diagnostics[:MAX_DIAGNOSTICS]
+        if ledger is not None:
+            result["rows"] = len(ledger["rows"])
+            result["types"] = sorted({row["type"] for row in ledger["rows"]})
+            if not diagnostics:
+                result["validation"] = "valid"
+    except Failure as exc:
+        result["diagnostics"] = [{"field": exc.details.get("field", "/"), "error_code": exc.code, "message": exc.message}]
+    return result
+
+
+# ----- derivation ------------------------------------------------------------------------
+
+def row_facts(row: dict) -> dict:
+    """What one row states about the six facts. Only rows about the module alone speak; an
+    accepted-in-pack row is history of a composition and says nothing here."""
+    kind = row["type"]
+    if kind == "built-alone":
+        return {"offline_verified": row["offline_verified"]}
+    if kind == "game-tested":
+        return {key: row[key] for key in OBSERVED if key in row}
+    if kind == "player-accepted":
+        return {"player_accepted": row["outcome"] == "accepted"}
+    return {}
+
+
+def matches(row: dict, base=None, foundation=None, map_id=None, package=None, location=None) -> bool:
+    """A scoped row matches a query when every given query key agrees with the row's scope.
+    The location is always part of the match: a query without one sees only rows without one,
+    and a query with one sees only rows with that one, so a location never collapses into
+    its parent map in either direction."""
+    if row["type"] == "lineage":
+        return False
+    scope = row["scope"]
+    if base is not None and scope.get("base") != base:
+        return False
+    if foundation is not None and scope.get("foundation") != foundation:
+        return False
+    if map_id is not None and "*" not in scope["maps"] and map_id not in scope["maps"]:
+        return False
+    if scope.get("location") != location:
+        return False
+    if package is not None and row.get("package_sha256") != package:
+        return False
+    return True
+
+
+def _combine(statements: list[tuple[int, bool]]) -> dict:
+    """True when any row states true, false when rows state only false, null when no row speaks."""
+    if not statements:
+        return {"value": None, "rows": []}
+    return {"value": any(v for _, v in statements), "rows": [i for i, _ in statements]}
+
+
+def facts(ledger: dict, base=None, foundation=None, map_id=None, package=None, location=None) -> dict:
+    """Per-fact, per-scope derivation. ``facts`` is the queried scope (every row that matches
+    the query keys); ``scopes`` lists each (base, foundation, map, location) the rows name with
+    its own six facts and the row numbers behind each. A fact no row of the matching type states
+    is ``null``. ``history`` counts the rows that never feed a fact."""
+    rows = ledger["rows"]
+    queried = {fact: [] for fact in FACTS}
+    per_scope: dict[tuple, dict] = {}
+    history = {kind: 0 for kind in TYPES if kind not in ("built-alone", "game-tested", "player-accepted")}
+    for index, row in enumerate(rows):
+        stated = row_facts(row)
+        if not stated:
+            history[row["type"]] += 1
+        if row["type"] == "lineage":
+            continue
+        if matches(row, base, foundation, map_id, package, location):
+            for fact, value in stated.items():
+                queried[fact].append((index, value))
+        if not stated or (package is not None and row.get("package_sha256") != package):
+            continue
+        scope = row["scope"]
+        for m in scope["maps"]:
+            bucket = per_scope.setdefault((scope.get("base"), scope.get("foundation"), m, scope.get("location")), {fact: [] for fact in FACTS})
+            for fact, value in stated.items():
+                bucket[fact].append((index, value))
+    scopes = [{"scope": {"base": key[0], "foundation": key[1], "map": key[2], "location": key[3]},
+               "facts": {fact: _combine(bucket[fact]) for fact in FACTS}}
+              for key, bucket in sorted(per_scope.items(), key=lambda item: tuple(str(k) for k in item[0]))]
+    return {"query": {"base": base, "foundation": foundation, "map": map_id, "location": location, "package": package},
+            "facts": {fact: _combine(queried[fact]) for fact in FACTS},
+            "scopes": scopes, "history": history}
+
+
+def report(path: Path, base=None, foundation=None, map_id=None, package=None, location=None) -> dict:
+    """`module state --ledger`: read, validate, derive. An invalid ledger derives nothing."""
+    path = Path(path)
+    if path.is_dir():
+        path = path / FILENAME
+    raw, data = read(path)
+    ledger, diagnostics = validate(data)
+    result = {"protocol": PROTOCOL, "ledger": str(path), "sha256": hashlib.sha256(raw).hexdigest(),
+              "validation": "valid" if ledger is not None and not diagnostics else "invalid",
+              "subject": ledger["subject"]["id"] if ledger else None, "rows": len(ledger["rows"]) if ledger else 0,
+              "diagnostics": diagnostics}
+    if ledger is None:
+        result.update(facts({"rows": []}, base, foundation, map_id, package, location))
+        result["reasons"] = ["ledger header is invalid; no fact was derived"]
+    else:
+        result.update(facts(ledger, base, foundation, map_id, package, location))
+        result["reasons"] = [f"{len(diagnostics)} row(s) were not counted; see diagnostics"] if diagnostics else []
+    return result
+
+
+# ----- migration proposal ------------------------------------------------------------------
+
+def _load_json(path: Path, limit: int = 16 * 1024 * 1024):
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > limit:
+        return None
+    try:
+        return json.loads(path.read_bytes().decode("utf-8"))
+    except (OSError, ValueError, RecursionError):
+        return None
+
+
+def _digest(path: Path) -> str | None:
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > 64 * 1024 * 1024:
+        return None
+    with path.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def _pointer_for(root: Path, text, sources: dict, notes: list, what: str) -> dict | None:
+    """A registry path becomes a record pointer. Absolute paths and paths that leave the
+    workspace are kept verbatim so the worker sees them, and noted; validation flags them."""
+    if not isinstance(text, str) or not text.strip():
+        return None
+    p = Path(text)
+    if p.is_absolute():
+        try:
+            rel = p.resolve().relative_to(root.resolve())
+        except (ValueError, OSError):
+            notes.append(f"{what}: absolute path outside the workspace kept verbatim; relativize or replace it before writing: {text}")
+            return {"path": text}
+        text = rel.as_posix()
+    pointer = {"path": text}
+    digest = _digest(root / text)
+    if digest is None:
+        notes.append(f"{what}: {text} is not a readable file in the workspace; the pointer has no hash")
+    else:
+        pointer["sha256"] = digest
+        sources[text] = digest
+    return pointer
+
+
+def _scope_from(row: dict, foundations: dict) -> dict | None:
+    foundation = row.get("foundation")
+    base = row.get("base")
+    if isinstance(foundation, str) and base is None:
+        base = foundations.get(foundation)
+    map_id = row.get("map")
+    scope = {}
+    if isinstance(base, str):
+        scope["base"] = base
+    if isinstance(foundation, str):
+        scope["foundation"] = foundation
+    if isinstance(map_id, str):
+        scope["maps"] = [map_id]
+    return scope or None
+
+
+def _declared_scope(declaration: dict, notes: list, what: str) -> dict | None:
+    """A row about the module alone whose source names no base or map takes the declaration's
+    own bases and maps, which are the module's statement about itself, never a pack's. The
+    worker is told so it can narrow the scope to what the record actually covered."""
+    bases = declaration.get("bases")
+    maps = declaration.get("maps")
+    if not (isinstance(bases, list) and len(bases) == 1 and isinstance(bases[0], str)) or not isinstance(maps, list) or not maps \
+            or not all(isinstance(m, str) for m in maps):
+        notes.append(f"{what}: names no foundation or map and module.json declares several bases; fill the scope before writing")
+        return None
+    notes.append(f"{what}: names no foundation or map; scope taken from module.json bases/maps ({bases[0]}: {', '.join(maps)}), narrow it to what the record covered")
+    return {"base": bases[0], "maps": list(maps)}
+
+
+def _acceptance_signal(record: dict) -> bool:
+    status = record.get("status")
+    return any(record.get(key) is True for key in ("accepted", "player_accepted", "gameplay_accepted")) \
+        or (isinstance(status, str) and status.startswith("accepted"))
+
+
+def propose(workspace: str, module_id: str) -> dict:
+    """Draft ``evidence.json`` rows for ``modules/<module_id>`` from the workspace registry's
+    ``build_revisions`` and the module's docs. Prints the proposal; writes nothing."""
+    if not re.fullmatch(r"[a-z0-9_-]{1,64}", module_id or ""):
+        raise Failure(INVALID_ARGUMENTS, "module id is the directory name under modules/ (lowercase letters, digits, underscore, dash)")
+    root = Path(workspace).expanduser()
+    if not root.is_dir():
+        raise Failure(INPUT_MISSING, f"Workspace directory is missing: {root}")
+    directory = root / "modules" / module_id
+    declaration = _load_json(directory / "module.json", 256 * 1024)
+    if not isinstance(declaration, dict):
+        raise Failure(INPUT_MISSING, f"Module directory has no readable module.json: modules/{module_id}")
+    subject = declaration.get("id") if isinstance(declaration.get("id"), str) else module_id
+    notes, sources, rows = [], {}, []
+    if (directory / FILENAME).exists():
+        notes.append(f"modules/{module_id}/{FILENAME} already exists; this proposal is a fresh draft, not a merge")
+    foundations = {}
+    foundation_root = root / "foundations"
+    if foundation_root.is_dir():
+        for file in sorted(foundation_root.glob("*.json")):
+            info = _load_json(file, 1024 * 1024)
+            if isinstance(info, dict) and isinstance(info.get("id"), str) and isinstance(info.get("profile_prefix"), str):
+                foundations[info["id"]] = info["profile_prefix"]
+    # 1. The declaration's lineage field, verbatim, is the first row type.
+    lineage = declaration.get("lineage")
+    for entry in ([lineage] if isinstance(lineage, dict) else lineage if isinstance(lineage, list) else []):
+        if isinstance(entry, dict):
+            rows.append({"type": "lineage", **{k: entry[k] for k in ("game", "map", "source", "note") if k in entry}})
+    # 2. The registry row: by id, or by the modular directory it names.
+    registry = _load_json(root / "registry" / "t6-modules.json")
+    catalog = registry.get("modules") if isinstance(registry, dict) else None
+    catalog = catalog if isinstance(catalog, list) else []
+    top_evidence = registry.get("evidence", {}) if isinstance(registry, dict) else {}
+    # The registry row is found by the directory it names, else by an id equal to the directory
+    # name or the declaration id (dashes and underscores are interchangeable between the two).
+    names = {module_id, subject, module_id.replace("_", "-"), subject.replace("_", "-")}
+    registered = next((m for m in catalog if isinstance(m, dict) and isinstance(m.get("modular"), dict)
+                       and m["modular"].get("directory") == f"modules/{module_id}"), None) \
+        or next((m for m in catalog if isinstance(m, dict) and m.get("id") in names), None)
+    if registered is None:
+        notes.append(f"registry/t6-modules.json has no row for {module_id}; only the module's own files were read")
+        registered = {}
+    modular = registered.get("modular") if isinstance(registered.get("modular"), dict) else {}
+    accepted_doc = _load_json(directory / "docs" / "ACCEPTED.json", 4 * 1024 * 1024)
+    accepted_doc = accepted_doc if isinstance(accepted_doc, dict) else None
+    verdict_hashes = set()
+    if accepted_doc and isinstance(accepted_doc.get("verdicts"), list):
+        pointer = _pointer_for(root, f"modules/{module_id}/docs/ACCEPTED.json", sources, notes, "ACCEPTED.json")
+        for verdict in accepted_doc["verdicts"]:
+            if not isinstance(verdict, dict) or verdict.get("outcome") not in ("accepted", "rejected"):
+                continue
+            scope_in = verdict.get("scope") if isinstance(verdict.get("scope"), dict) else {}
+            build = verdict.get("build") if isinstance(verdict.get("build"), dict) else {}
+            row = {"type": "player-accepted", "outcome": verdict["outcome"], "record": pointer,
+                   "scope": _scope_from(scope_in, foundations)}
+            for key in ("mode", "players", "profile"):
+                if key in scope_in and row["scope"] is not None:
+                    row["scope"][key] = scope_in[key]
+            if isinstance(verdict.get("at"), str):
+                row["at"] = verdict["at"]
+            if isinstance(verdict.get("reporter"), str):
+                row["reporter"] = verdict["reporter"]
+            if isinstance(verdict.get("quote"), str):
+                row["quote"] = verdict["quote"]
+            sha = build.get("mod_ff_sha256")
+            if isinstance(sha, str) and SHA256.match(sha):
+                row["package_sha256"] = sha
+                verdict_hashes.add(sha)
+            elif sha:
+                notes.append(f"ACCEPTED.json verdict names a short package hash {sha!r}; the row carries no package_sha256")
+            if isinstance(verdict.get("not_covered"), list):
+                row["not_covered"] = [s for s in verdict["not_covered"] if isinstance(s, str)]
+            if isinstance(verdict.get("supersedes"), str) and SHA256.match(verdict["supersedes"]):
+                row["supersedes"] = verdict["supersedes"]
+            rows.append(row)
+    elif accepted_doc:
+        notes.append("docs/ACCEPTED.json has no verdicts list; it was left as a pointer for the worker to read")
+    # 3. build_revisions: built alone, observed in the game, accepted by the player.
+    for revision in registered.get("build_revisions", []) if isinstance(registered.get("build_revisions"), list) else []:
+        if not isinstance(revision, dict):
+            continue
+        rid = revision.get("id", "?")
+        members = revision.get("modules")
+        if (isinstance(members, list) and len(members) > 1) or revision.get("composition"):
+            notes.append(f"build revision {rid!r} is a composition build; nothing is inferred from it for the module alone")
+            continue
+        scope = _scope_from(revision, foundations)
+        sha = revision.get("sha256") if isinstance(revision.get("sha256"), str) and SHA256.match(revision.get("sha256", "")) else None
+        receipt = _pointer_for(root, revision.get("receipt"), sources, notes, f"build revision {rid!r} receipt")
+        evidence = _pointer_for(root, revision.get("evidence"), sources, notes, f"build revision {rid!r} evidence")
+        if receipt is None:
+            notes.append(f"build revision {rid!r} names no receipt; the built-alone row points at its evidence file instead and needs the receipt before it is worth much")
+            receipt = evidence
+        if scope is None:
+            scope = _declared_scope(declaration, notes, f"build revision {rid!r}")
+        elif "maps" not in scope:
+            declared_maps = declaration.get("maps")
+            if isinstance(declared_maps, list) and declared_maps and all(isinstance(m, str) for m in declared_maps):
+                scope["maps"] = list(declared_maps)
+                notes.append(f"build revision {rid!r} names no map; maps taken from module.json ({', '.join(declared_maps)}), narrow them to what the receipt covered")
+            else:
+                notes.append(f"build revision {rid!r} names no map; fill the scope before writing")
+        built = {"type": "built-alone", "receipt": receipt or {"path": ""}, "scope": scope,
+                 "offline_verified": revision.get("offline_verified") is True}
+        if sha:
+            built["package_sha256"] = sha
+        for key in ("scope", "variant_scope", "note"):
+            if isinstance(revision.get(key), str):
+                built["note"] = revision[key]
+                break
+        rows.append(built)
+        observed = {key: revision[key] for key in ("installed", "runtime_verified") if type(revision.get(key)) is bool}
+        if observed.get("installed") or observed.get("runtime_verified"):
+            tested = {"type": "game-tested", "run": revision.get("run_id") if isinstance(revision.get("run_id"), str) else f"registry:{rid}",
+                      "result": "passed" if observed.get("runtime_verified") else "inconclusive", "scope": scope}
+            if "installed" in observed:
+                tested["installed"] = observed["installed"]
+            if "runtime_verified" in observed:
+                tested["loaded_and_playable"] = observed["runtime_verified"]
+            if sha:
+                tested["package_sha256"] = sha
+            if evidence:
+                tested["record"] = evidence
+            if not isinstance(revision.get("run_id"), str):
+                notes.append(f"build revision {rid!r} names no run id; the game-tested row carries a registry placeholder, replace it with the run")
+            for key in ("runtime_scope", "testing"):
+                if isinstance(revision.get(key), str):
+                    tested["note"] = revision[key]
+                    break
+            rows.append(tested)
+        if revision.get("player_accepted") is True and sha not in verdict_hashes:
+            record = _pointer_for(root, f"modules/{module_id}/docs/ACCEPTED.json", sources, notes, "ACCEPTED.json") \
+                if (directory / "docs" / "ACCEPTED.json").is_file() else evidence
+            accepted = {"type": "player-accepted", "outcome": "accepted", "scope": scope, "record": record or {"path": ""}}
+            if sha:
+                accepted["package_sha256"] = sha
+            if isinstance(revision.get("player_acceptance_scope"), str):
+                accepted["note"] = revision["player_acceptance_scope"]
+            if record is None:
+                notes.append(f"build revision {rid!r} says player accepted but names no verdict record; the row needs one")
+            rows.append(accepted)
+    # 4. Pack history: archive records the registry cites for an accepted status.
+    status = registered.get("status", "")
+    for path in registered.get("evidence", []) if isinstance(registered.get("evidence"), list) else []:
+        if not isinstance(path, str) or not path.startswith("archive/"):
+            continue
+        if not path.endswith(".json"):
+            notes.append(f"archive record {path} is prose; read it and add a row by hand if it carries a verdict")
+            continue
+        record = _load_json(root / path, 16 * 1024 * 1024)
+        if not isinstance(record, dict) or not (isinstance(status, str) and status.startswith("accepted")) or not _acceptance_signal(record):
+            continue
+        pointer = _pointer_for(root, path, sources, notes, path)
+        known = top_evidence.get(path, {}) if isinstance(top_evidence, dict) else {}
+        if isinstance(known, dict) and isinstance(known.get("sha256"), str) and pointer.get("sha256") not in (None, known["sha256"]):
+            notes.append(f"{path}: registry records sha256 {known['sha256']} but the file now hashes {pointer['sha256']}")
+        pack = Path(path).parts[2] if len(Path(path).parts) > 2 else Path(path).stem
+        row = {"type": "accepted-in-pack", "pack": pack, "record": pointer, "scope": _scope_from(record, foundations)}
+        identities = known.get("top_level_build_identities", {}) if isinstance(known, dict) else {}
+        sha = record.get("mod_ff_sha256") or (identities.get("mod_ff_sha256") if isinstance(identities, dict) else None)
+        if isinstance(sha, str) and SHA256.match(sha):
+            row["package_sha256"] = sha
+        for key in ("accepted_utc", "accepted_on", "date"):
+            if isinstance(record.get(key), str):
+                row["at"] = record[key][:10] if not DATE.match(record[key]) else record[key]
+                break
+        for key in ("user_verdict", "verdict", "owner_verdict_summary", "state"):
+            if isinstance(record.get(key), str):
+                row["verdict"] = record[key]
+                break
+        if isinstance(record.get("scope"), str):
+            row["note"] = record["scope"]
+        if row["scope"] is None:
+            notes.append(f"{path} names no map or foundation; fill the accepted-in-pack scope before writing")
+        rows.append(row)
+    # 5. LINEAGE.json: where the bytes came from, and the parent of an overlay.
+    lineage_doc = _load_json(directory / "docs" / "LINEAGE.json", 4 * 1024 * 1024)
+    if isinstance(lineage_doc, dict):
+        parent = lineage_doc.get("parent") if isinstance(lineage_doc.get("parent"), dict) else {}
+        if isinstance(parent.get("source"), str):
+            row = {"type": "extracted-from-release", "release": parent["source"],
+                   "use": registered.get("scope") if isinstance(registered.get("scope"), str) else "see the release record",
+                   "scope": _scope_from({"foundation": parent.get("evidence_base"), "map": parent.get("map")}, foundations)}
+            if isinstance(parent.get("source_commit"), str) and COMMIT.match(parent["source_commit"]):
+                row["commit"] = parent["source_commit"]
+            if isinstance(parent.get("mod_ff_sha256"), str) and SHA256.match(parent["mod_ff_sha256"]):
+                row["package_sha256"] = parent["mod_ff_sha256"]
+            pointer = _pointer_for(root, parent["source"], sources, notes, "LINEAGE.json parent source")
+            if pointer:
+                row["record"] = pointer
+            if row["scope"] is None:
+                notes.append("LINEAGE.json parent names no evidence_base or map; fill the extracted-from-release scope before writing")
+            rows.append(row)
+        elif isinstance(parent.get("module_id"), str):
+            row = {"type": "authored", "scope": _scope_from(lineage_doc, foundations),
+                   "parent": {"id": parent["module_id"]}}
+            for key in ("declaration_sha256", "mod_ff_sha256"):
+                if isinstance(parent.get(key), str) and SHA256.match(parent[key]):
+                    row["parent"]["package_sha256" if key == "mod_ff_sha256" else key] = parent[key]
+            if isinstance(parent.get("declaration"), str):
+                pointer = _pointer_for(root, parent["declaration"], sources, notes, "LINEAGE.json parent declaration")
+                if pointer:
+                    row["parent"]["record"] = pointer
+            if isinstance(lineage_doc.get("changes"), list):
+                row["changes"] = [s for s in lineage_doc["changes"] if isinstance(s, str)]
+            rows.append(row)
+    # 6. The registry's standalone review, when a test record backs it.
+    test_record = directory / "docs" / "TEST.md"
+    if registered.get("standalone_module_verified") is True and test_record.is_file():
+        row = {"type": "agent-reviewed", "outcome": "noted", "scope": _scope_from(modular, foundations),
+               "record": _pointer_for(root, f"modules/{module_id}/docs/TEST.md", sources, notes, "TEST.md")}
+        if isinstance(registered.get("dependency_audit"), str):
+            row["note"] = registered["dependency_audit"]
+        if row["scope"] is None:
+            row["scope"] = _declared_scope(declaration, notes, "registry standalone review")
+        rows.append(row)
+    proposal = {"schema": 1, "subject": {"id": subject}, "rows": rows}
+    ledger, diagnostics = validate(proposal)
+    # Derived from the rows that validate, so the worker sees what the draft would state; a
+    # row with a diagnostic is not counted, exactly as `module state --ledger` would treat it.
+    derived = facts(ledger) if ledger is not None else None
+    return {"protocol": PROPOSAL_PROTOCOL, "workspace": str(root), "module": module_id, "directory": f"modules/{module_id}",
+            "target": f"modules/{module_id}/{FILENAME}", "written": False, "registry_row": registered.get("id"),
+            "proposal": proposal, "validation": "valid" if ledger is not None and not diagnostics else "invalid",
+            "diagnostics": diagnostics, "notes": notes, "sources": sources, "derived": derived}

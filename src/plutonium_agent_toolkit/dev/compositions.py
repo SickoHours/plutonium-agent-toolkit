@@ -108,11 +108,21 @@ MAX_NESTING = 4
 def add_parser(sub, common):
     p = sub.add_parser("module", help="Declared modules composed into one mod on a named base: plan, build, declare")
     actions = p.add_subparsers(dest="action", required=True)
-    q = actions.add_parser("state", help="Derive composition evidence state from current hashes")
-    q.add_argument("--composition",required=True)
+    q = actions.add_parser("state", help="Derive composition evidence state from current hashes, or read a module's evidence ledger per fact and scope")
+    g = q.add_mutually_exclusive_group(required=True)
+    g.add_argument("--composition", help="Composition directory (or composition.json) whose plan and receipts are checked by hash")
+    g.add_argument("--ledger", help="A module directory or its evidence.json; reports the six facts per scope from ledger rows, unknown kept unknown")
     for name in ("plan","verify","test-plan","run","verdict"):
         q.add_argument("--"+name)
+    q.add_argument("--base", help="With --ledger: the base token to query"); q.add_argument("--foundation", help="With --ledger: the foundation id to query")
+    q.add_argument("--map", help="With --ledger: the map id to query"); q.add_argument("--package", help="With --ledger: a package sha256 to query")
+    q.add_argument("--location", help="With --ledger: a survival location inside --map; without it only rows with no location match")
     q.add_argument("--json",action="store_true")
+    q = actions.add_parser("ledger-from-registry", help="Propose evidence.json rows for one workspace module from the registry and its docs; prints them, writes nothing")
+    q.add_argument("workspace", help="Workspace root holding modules/, registry/t6-modules.json and foundations/")
+    q.add_argument("module_id", help="Directory name under modules/")
+    q.add_argument("--dry-run", action="store_true", default=True, help="Always on: the proposal is printed, never written")
+    q.add_argument("--json", action="store_true")
     q = actions.add_parser("inspect", help="Validate one declaration's metadata without resolving payloads or creating a job")
     q.add_argument("declaration", help="Path to module.json or composition.json")
     q.add_argument("--json", action="store_true")
@@ -248,6 +258,14 @@ def inspect(path: Path) -> dict:
         else:
             raise Failure(INPUT_INVALID, "Expected a module or composition declaration", field="/")
         result.update(validation="metadata-valid", metadata={key: metadata[key] for key in fields if key not in ("replaces","entry") or key in data})
+        if kind == "module":
+            ledger_path = path.parent / "evidence.json"
+            if ledger_path.exists() or ledger_path.is_symlink():
+                # The ledger beside the declaration is read when present. Its defects are
+                # diagnostics on the ledger summary, never on the declaration: a malformed
+                # ledger leaves the declaration metadata-valid and the exit status 0.
+                from . import ledger
+                result["ledger"] = ledger.inspect(ledger_path, metadata["id"])
         if kind == "module" and metadata.get("tests"):
             from .testing_contracts import load_contract, requires_probe
             # A module is inspected alone; whether a probe member exists is a composition fact.
