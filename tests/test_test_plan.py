@@ -176,6 +176,71 @@ class NestedDecisionScopeTests(CompositionFixture):
         outer=self.outer('stock_outer_test',[{'path':'../stock_inner_test'}])
         code,row=invoke(['test','plan','--composition',str(outer),'--output',self.out(),'--json'])
         self.assertEqual(code,0,row)
+class EmittedCompositionTests(CompositionFixture):
+    def plan_member(self,mid,**over):
+        m=self.module(mid,maps=['zm_transit'],tests='test-contract.json',**over)
+        (m/'test-contract.json').write_text(json.dumps(contract(module=mid,maps={'zm_transit':{'preconditions':[]}})))
+        return m
+    def probe_member(self,mid):
+        m=self.plan_member(mid);c=json.loads((m/'test-contract.json').read_text())
+        c['maps']['zm_transit']['preconditions']=[{'verb':'power_on','actor':'agent'}]
+        (m/'test-contract.json').write_text(json.dumps(c));return m
+    def outer(self,name,modules,**extra):
+        d=self.root/'packs'/name;d.mkdir(parents=True,exist_ok=True)
+        row={'schema':1,'name':name,'base':'stock','map':'zm_transit','modules':modules};row.update(extra)
+        (d/'composition.json').write_text(json.dumps(row));return d/'composition.json'
+    def test_emitted_probe_composition_roundtrips_roles_pins_and_nested_metadata(self):
+        from pathlib import Path
+        self.plan_member('base_mod');self.probe_member('needy')
+        self.module('inner_a',maps=['zm_transit'],tests='test-contract.json',script_target='scripts/zm/shared.gsc')
+        self.module('inner_b',maps=['zm_transit'],tests='test-contract.json',script_target='scripts/zm/shared.gsc')
+        (self.root/'modules'/'inner_a'/'test-contract.json').write_text(json.dumps(contract(module='inner_a',maps={'zm_transit':{'preconditions':[]}})))
+        (self.root/'modules'/'inner_b'/'test-contract.json').write_text(json.dumps(contract(module='inner_b',maps={'zm_transit':{'preconditions':[]}})))
+        self.composition(['inner_a','inner_b'],name='stock_inner_test',
+                         decisions=[{'collision':'scripts/zm/shared.gsc','owner':'inner_a','reason':'inner owns the shared file'}],
+                         zone_header=['>level.ipak_read,inner_zm'])
+        self.plan_member('test_probe',tags=['test-only'])
+        (self.root/'packs'/'zones').mkdir(parents=True,exist_ok=True);(self.root/'packs'/'zones'/'extra.ff').write_bytes(b'ff')
+        (self.root/'packs'/'listings').mkdir(parents=True,exist_ok=True);(self.root/'packs'/'listings'/'base.csv').write_text('rawfile, shared_asset\n')
+        outer=self.outer('stock_outer_test',[{'path':'../stock_inner_test'},
+                                             {'path':'../../modules/base_mod','role':'base','name':'example/base_mod','commit':'a'*40},
+                                             '../../modules/needy'],
+                         zone_header=['>level.ipak_read,outer_zm'],loads=['../zones/extra.ff'],base_owned=['../listings/base.csv'])
+        out=self.out();code,row=invoke(['test','plan','--composition',str(outer),'--output',out,'--json']);self.assertEqual(code,0,row)
+        emitted=json.loads((Path(out)/'composition.json').read_text())
+        base=next(e for e in emitted['modules'] if isinstance(e,dict) and e.get('role')=='base')
+        self.assertEqual(base['name'],'example/base_mod');self.assertEqual(base['commit'],'a'*40)
+        paths=[e if isinstance(e,str) else e['path'] for e in emitted['modules']]
+        self.assertIn('test_probe',[Path(p).name for p in paths])
+        self.assertTrue(all('\\' not in p for p in paths))
+        reload_out=self.out()
+        code,reloaded=invoke(['module','plan',str(Path(out)/'composition.json'),'--output',reload_out,'--json']);self.assertEqual(code,0,reloaded)
+        res=reloaded['result'];doc=json.loads((Path(res['output'])/'plan.json').read_text())
+        self.assertEqual(res['base_member'],'base_mod')
+        self.assertEqual(res['undecided'],[])
+        self.assertTrue(any(d['collision']=='scripts/zm/shared.gsc' and d['owner']=='inner_a' for d in res['decisions']))
+        self.assertEqual(res['base_owned_names'],1)
+        self.assertIn('>level.ipak_read,inner_zm',doc['zone_header']);self.assertIn('>level.ipak_read,outer_zm',doc['zone_header'])
+        self.assertTrue(any(str(p).endswith('extra.ff') for p in doc['loads']))
+        pinned=next(m for m in doc['modules'] if m['id']=='base_mod')
+        self.assertEqual(pinned['role'],'base');self.assertEqual(pinned['reference'],{'name':'example/base_mod','commit':'a'*40})
+    def test_emitted_composition_paths_are_posix_even_when_relpath_uses_backslashes(self):
+        from pathlib import Path
+        from unittest.mock import patch
+        from plutonium_agent_toolkit.core.jobs import Job
+        from plutonium_agent_toolkit.testing import planner
+        source=self.root/'packs'/'stock_pack_test';source.mkdir(parents=True,exist_ok=True)
+        (source/'composition.json').write_text(json.dumps({'schema':1,'name':'stock_pack_test','base':'stock','map':'zm_transit','modules':['../../modules/alpha'],'loads':['../z/base.ff'],'base_owned':['../l/base.csv']}))
+        job=Job(self.root/'emit-job','test plan',[],timeout=600)
+        plan={'source':str(source/'composition.json'),'modules':[{'id':'alpha','directory':str(self.root/'modules'/'alpha')}],'probe':True}
+        real=planner.os.path.relpath
+        def windows(path,start=None):return real(path,start).replace('/','\\')
+        with patch.object(planner.os.path,'relpath',windows):planner.emit_composition(plan,job)
+        data=json.loads((job.root/'composition.json').read_text())
+        self.assertEqual(data['modules'],['../modules/alpha'])
+        self.assertEqual(data['loads'],['../packs/z/base.ff'])
+        self.assertEqual(data['base_owned'],['../packs/l/base.csv'])
+
 class ProbePlanning(TestPlanRoute):
     def test_probe_is_added_and_background_soak_is_automated(self):
         m,c=self.member('alpha');c['maps']['zm_transit']['preconditions']=[{'verb':'power_on','actor':'agent'}];(m/'test-contract.json').write_text(json.dumps(c))
