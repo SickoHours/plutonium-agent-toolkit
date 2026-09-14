@@ -246,7 +246,7 @@ def hosts(origin: str, bearer: str) -> dict:
 
 def status(origin: str, bearer: str, thread_id: str, message_limit: int = 4) -> dict:
     info = require_protocol(origin)
-    validate_id(thread_id, "thread id")
+    validate_id(thread_id, "thread id", protocol=info["orchestration_protocol"])
     path = "/api/orchestration/threads/" + urllib.parse.quote(thread_id, safe="")
     code, parsed = _request(origin, "GET", path, token=bearer)
     if code != 200 or not isinstance(parsed, dict):
@@ -265,7 +265,7 @@ def status(origin: str, bearer: str, thread_id: str, message_limit: int = 4) -> 
             "model_selection": thread.get("modelSelection"), "runtime_mode": thread.get("runtimeMode"),
             "interaction_mode": thread.get("interactionMode"), "worktree_path": thread.get("worktreePath"),
             "branch": thread.get("branch"), **_turn(thread), "message_count": len(messages), "recent_messages": recent,
-            "thread_url": f"{origin}/{info['environment_id']}/{thread.get('id')}",
+            "thread_url": f"{origin}/{info['environment_id']}/{urllib.parse.quote(thread_id, safe='')}",
             "verification": "Server read model only. A completed turn means the provider returned; whether the task is done is in the messages and the receipts the agent wrote."}
 
 
@@ -327,7 +327,9 @@ def _small_json(path: Path) -> dict:
 
 # ----- writes ---------------------------------------------------------------------------
 
-def validate_id(value: str, what: str) -> str:
+def validate_id(value: str, what: str, *, protocol: int = 1) -> str:
+    if protocol == 2:
+        return t3_v2.validate_id(value, what)
     if not isinstance(value, str) or not ID_RE.match(value):
         raise Failure(INPUT_INVALID, f"Invalid {what}: {value!r}")
     return value
@@ -381,7 +383,7 @@ def dispatch(origin: str, bearer: str, *, project_id: str, title: str, prompt: s
              runtime_mode: str = "full-access", interaction_mode: str = "default",
              worktree_path: str | None = None, branch: str | None = None) -> dict:
     info = require_protocol(origin)
-    validate_id(project_id, "project id")
+    validate_id(project_id, "project id", protocol=info["orchestration_protocol"])
     if not title.strip() or len(title) > MAX_TEXT:
         raise Failure(INPUT_INVALID, "Provide a non-empty --title up to 512 characters")
     if runtime_mode not in RUNTIME_MODES:

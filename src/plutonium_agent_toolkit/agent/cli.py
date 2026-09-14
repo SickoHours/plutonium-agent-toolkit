@@ -80,8 +80,8 @@ def run(args, command: str) -> dict:
                                             interaction_mode=args.interaction_mode, worktree_path=args.worktree,
                                             branch=args.branch))
     if args.action == "send":
-        return success(command, t3.send(origin, bearer, t3.validate_id(args.thread_id, "thread id"),
+        return success(command, t3.send(origin, bearer, args.thread_id,
                                         t3.read_prompt(args.prompt), queue=args.queue))
     if args.action == "interrupt":
-        return success(command, t3.interrupt(origin, bearer, t3.validate_id(args.thread_id, "thread id")))
+        return success(command, t3.interrupt(origin, bearer, args.thread_id))
     raise Failure(INVALID_ARGUMENTS, f"Unknown agent action {args.action!r}")

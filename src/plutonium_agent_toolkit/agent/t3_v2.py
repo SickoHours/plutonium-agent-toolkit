@@ -16,6 +16,16 @@ RUN_STATES = (*BUSY_STATES, 'completed', 'interrupted', 'failed', 'cancelled', '
 APPROVAL_KINDS = ('command', 'file-read', 'file-change', 'mcp-elicitation')
 
 
+def validate_id(value: str, what: str) -> str:
+    # V2 graph ids are opaque trimmed strings (including encoded nested command ids).
+    # Keep an explicit transport bound and reject control bytes and dot path segments.
+    if (not isinstance(value, str) or not value or value != value.strip() or
+            value in ('.', '..') or len(value.encode('utf-8')) > 4096 or
+            any(ord(c) < 32 or ord(c) == 127 for c in value)):
+        raise Failure(INPUT_INVALID, f'Invalid V2 {what}; use the opaque id from agent hosts (up to 4096 UTF-8 bytes)')
+    return value
+
+
 def _state(state):
     if state in BUSY_STATES:
         return 'running'

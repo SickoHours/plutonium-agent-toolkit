@@ -226,3 +226,39 @@ class V2Tests(unittest.TestCase):
         self.assertIn('thread creation', ctx.exception.details['note'])
         self.assertIn('thread_id', ctx.exception.details)
         self.assertEqual(self.rpc.call_count, 1)
+
+    def test_opaque_v2_graph_ids_round_trip_through_cli_and_encoded_urls(self):
+        from urllib.parse import quote
+        from test_agent_routes import invoke
+        thread_id = 'thread:delegated-task:command%3A' + 'nested%253Apart%3A' * 15
+        self.projection['thread']['id'] = thread_id
+        self.projection['runs'][0]['threadId'] = thread_id
+        path = '/api/orchestration/threads/' + quote(thread_id, safe='')
+        original = self.request
+
+        def request(origin, method, route, **kwargs):
+            if route == path:
+                return 200, {'projection': self.projection, 'snapshotSequence': 4}
+            return original(origin, method, route, **kwargs)
+
+        self.http.side_effect = request
+        with patch.object(t3, 'token', return_value='synthetic-secret'):
+            code, row = invoke(['agent', 'status', thread_id, '--origin', ORIGIN])
+            self.assertEqual(code, 0, row)
+            self.assertEqual(row['result']['thread_id'], thread_id)
+            self.assertEqual(row['result']['thread_url'], ORIGIN + '/env-1/' + quote(thread_id, safe=''))
+            code, row = invoke(['agent', 'send', thread_id, '--origin', ORIGIN, '--prompt', 'Next', '--queue'])
+            self.assertEqual(code, 0, row)
+            self.assertEqual(self.rpc.call_args.args[3]['threadId'], thread_id)
+            code, row = invoke(['agent', 'interrupt', thread_id, '--origin', ORIGIN])
+            self.assertEqual(code, 0, row)
+            self.assertEqual(self.rpc.call_args.args[3]['threadId'], thread_id)
+
+    def test_v2_opaque_id_bounds_preserve_v1_validation(self):
+        long_id = 'project:command%3A' + 'part' * 40
+        self.assertEqual(t3.validate_id(long_id, 'project id', protocol=2), long_id)
+        with self.assertRaises(Failure):
+            t3.validate_id(long_id, 'project id', protocol=1)
+        for bad in ('', ' leading', 'trailing ', '..', 'a\nheader', 'a' * 4097):
+            with self.subTest(bad=bad[:20]), self.assertRaises(Failure):
+                t3.validate_id(bad, 'thread id', protocol=2)
