@@ -254,16 +254,25 @@ class V2Tests(unittest.TestCase):
             self.assertEqual(code, 0, row)
             self.assertEqual(self.rpc.call_args.args[3]['threadId'], thread_id)
 
-    def test_cli_dispatch_preserves_opaque_v2_provider_instance_ids(self):
+    def test_cli_dispatch_uses_provider_slug_schema_separately_from_graph_ids(self):
         from test_agent_routes import invoke
-        instance = 'provider/instance:' + 'nested%253Apart%3A' * 20
+        instance = 'P' + 'a' * 63
         with patch.object(t3, 'token', return_value='synthetic-secret'):
             code, row = invoke(['agent', 'dispatch', '--origin', ORIGIN, '--project', 'project-1',
                                 '--title', 'Proof', '--prompt', 'Reply OK.', '--instance', instance,
                                 '--model', 'chosen-model'])
-        self.assertEqual(code, 0, row)
-        body = self.rpc.call_args.args[3]
-        self.assertEqual(body['modelSelection']['instanceId'], instance)
+            self.assertEqual(code, 0, row)
+            self.assertEqual(self.rpc.call_args.args[3]['modelSelection']['instanceId'], instance)
+            self.rpc.reset_mock()
+            for invalid in ('provider/instance:' + 'nested%253Apart%3A' * 20,
+                            'a' * 65, '1provider', 'provider.pool'):
+                with self.subTest(instance=invalid[:30]):
+                    code, row = invoke(['agent', 'dispatch', '--origin', ORIGIN, '--project', 'project-1',
+                                        '--title', 'Proof', '--prompt', 'Reply OK.', '--instance', invalid,
+                                        '--model', 'chosen-model'])
+                    self.assertEqual(code, 1, row)
+                    self.assertEqual(row['error_code'], 'input_invalid')
+            self.rpc.assert_not_called()
 
     def test_v2_opaque_id_bounds_preserve_v1_validation(self):
         long_id = 'project:command%3A' + 'part' * 40

@@ -19,7 +19,9 @@ server; the rest read from it or from its settings on disk.
 
 V2 project and thread ids are opaque strings, including long percent-encoded graph ids.
 The client accepts up to 4096 UTF-8 bytes and URL-encodes ids when reading or linking threads.
-Protocol 1 retains its existing id validation.
+Provider-instance ids are different: V2 requires a 1–64-character slug beginning with a
+letter and containing only letters, digits, underscores or hyphens. Protocol 1 retains its
+existing id validation.
 
 The public descriptor selects the client; the release version alone does not identify the
 protocol. Both versions retain the same CLI and user-configured bearer. V2 gates its WebSocket
