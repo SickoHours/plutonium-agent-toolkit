@@ -66,6 +66,16 @@ def derive(args):
         elif not all(verify.get('inputs',{}).get(str(Path(m['directory'])/'module.json'))==m['declaration_sha256'] for m in modules):
             raise ValueError('Build receipt is not bound to these declarations')
         for path,expected in verify.get('inputs',{}).items():same(path,expected,'build input '+path)
+        # An unqualified target carries no evidence; a build that lists one never advances past
+        # composed even when it succeeds (docs/MODULES.md, "Unqualified targets"). The plan is
+        # bound to the build's own plan.json, and the build result repeats the list, so neither a
+        # caller plan nor an omitted warning can hide it.
+        plan_unqualified=plan.get('unqualified')
+        if plan_unqualified is None:plan_unqualified=summary.get('unqualified')
+        if plan_unqualified is not None and not isinstance(plan_unqualified,list):
+            raise ValueError('Plan unqualified targets must be a list')
+        if plan_unqualified or summary.get('unqualified'):
+            raise ValueError('Composition has unqualified targets')
         result['state']='offline_verified';result['evidence']['offline_verified']={'path':str(verify_path),'mod_ff_sha256':digest}
         if not args.test_plan:return result
         test_path=Path(args.test_plan);test=read(test_path)

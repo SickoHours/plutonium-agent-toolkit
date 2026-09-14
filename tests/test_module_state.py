@@ -35,6 +35,27 @@ class ModuleStateTests(unittest.TestCase):
         self.decl.write_text(self.decl.read_text()+' ');d=state.derive(a);self.assertEqual(d['state'],'composed');self.assertIn('x',str(d['reasons']));self.assertIn(self.sha(self.decl),str(d['reasons']))
     def test_changed_contract_revokes_readiness(self):
         self.contract.write_text('{}');self.assertEqual(state.derive(self.complete())['state'],'offline_verified')
+    def set_plan_unqualified(self,entries):
+        plan=json.loads(self.plan.read_text(encoding='utf-8'));plan['unqualified']=entries
+        self.plan.write_text(json.dumps(plan),encoding='utf-8')
+        receipt=json.loads(self.verify.read_text(encoding='utf-8'))
+        receipt['outputs']['plan.json']=self.sha(self.plan)
+        self.verify.write_text(json.dumps(receipt),encoding='utf-8')
+    def test_nonempty_unqualified_plan_never_advances_past_composed(self):
+        self.set_plan_unqualified([{'id':'x','declared_bases':['other_base'],'declared_maps':['zm_transit'],'base':'stock','map':'zm_transit'}])
+        d=state.derive(self.complete())
+        self.assertEqual(d['state'],'composed')
+        self.assertNotIn('offline_verified',d['evidence'])
+        self.assertTrue(d['reasons']);self.assertIn('unqualified',str(d['reasons']))
+    def test_receipt_result_unqualified_blocks_promotion_even_when_the_plan_omits_it(self):
+        receipt=json.loads(self.verify.read_text(encoding='utf-8'))
+        receipt['result']['unqualified']=[{'id':'x'}]
+        self.verify.write_text(json.dumps(receipt),encoding='utf-8')
+        d=state.derive(self.complete())
+        self.assertEqual(d['state'],'composed');self.assertTrue(d['reasons'])
+    def test_empty_unqualified_plan_still_advances(self):
+        self.set_plan_unqualified([])
+        self.assertEqual(state.derive(self.complete())['state'],'player_accepted')
     def test_failed_run_and_latest_rejection_do_not_accept(self):
         self.write('run.json',{'verdict':'inconclusive'});self.assertEqual(state.derive(self.complete())['state'],'ready_for_game_testing')
     def test_wrong_package_never_promotes(self):

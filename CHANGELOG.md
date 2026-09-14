@@ -7,6 +7,10 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- `module state` keeps an unqualified composition at `composed`: a nonempty plan or build-receipt
+  `unqualified` list is rejected before offline promotion and never advances to later rungs.
+  Covered by offline unit tests on Linux; native Windows and gameplay behavior remain unverified.
+
 - Test planning admits a probe declared in any map of a member contract, not only the
   composition's selected map, so whole-contract validation no longer revokes an otherwise valid
   plan; probe emission reads and writes `composition.json` as UTF-8 and `module state` reads its
