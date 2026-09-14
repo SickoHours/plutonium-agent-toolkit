@@ -38,3 +38,47 @@ class ModuleStateTests(unittest.TestCase):
         self.write('run.json',{'verdict':'inconclusive'});self.assertEqual(state.derive(self.complete())['state'],'ready_for_game_testing')
     def test_wrong_package_never_promotes(self):
         self.package.write_bytes(b'changed');self.assertEqual(state.derive(self.complete())['state'],'composed')
+    def project_verify_receipt(self,**over):
+        row={'status':'succeeded','ok':True,'command':'project verify','inputs':{str(self.verify):self.sha(self.verify)},
+             'outputs':{},'result':{'build_receipt':str(self.verify),
+                                    'outputs':{'verified':True,'changed':[],'missing':[],'count':2},
+                                    'verification':'recorded hashes match'}}
+        row.update(over);return self.write('verify-receipt.json',row)
+    def verify_args(self,receipt):
+        a=self.args();a.verify=str(receipt);return a
+    def test_project_verify_receipt_resolves_the_package_from_its_build_receipt(self):
+        d=state.derive(self.verify_args(self.project_verify_receipt()))
+        self.assertEqual(d['state'],'offline_verified',d['reasons'])
+        self.assertEqual(Path(d['evidence']['offline_verified']['path']),self.root/'verify-receipt.json')
+    def test_project_verify_receipt_must_bind_the_build_receipt_it_reports(self):
+        self.assertEqual(state.derive(self.verify_args(self.project_verify_receipt(inputs={})))['state'],'composed')
+    def test_project_verify_receipt_refuses_a_changed_package(self):
+        receipt=self.project_verify_receipt();self.package.write_bytes(b'changed')
+        self.assertEqual(state.derive(self.verify_args(receipt))['state'],'composed')
+    def test_project_verify_receipt_refuses_a_changed_build_receipt(self):
+        receipt=self.project_verify_receipt()
+        self.verify.write_text(json.dumps({**json.loads(self.verify.read_text()),'result':{'mod_ff':'somewhere.ff'}}))
+        self.assertEqual(state.derive(self.verify_args(receipt))['state'],'composed')
+    def test_malformed_outputs_or_result_maps_are_rejected(self):
+        for bad in ({'outputs':{'mod.ff':self.sha(self.package)},'result':['nope']},
+                    {'outputs':['nope'],'result':{'mod_ff':'mod.ff'}}):
+            path=self.write('malformed.json',{'status':'succeeded','ok':True,'command':'module build',**bad})
+            d=state.derive(self.verify_args(path))
+            self.assertEqual(d['state'],'composed');self.assertTrue(d['reasons'])
+    def test_project_verify_rejects_a_malformed_build_receipt(self):
+        bad=self.write('bad-build.json',{'status':'succeeded','ok':True,'command':'module build','outputs':['nope'],'result':{'mod_ff':'mod.ff'}})
+        receipt=self.project_verify_receipt(inputs={str(bad):self.sha(bad)},
+                                            result={'build_receipt':str(bad),'outputs':{'verified':True}})
+        self.assertEqual(state.derive(self.verify_args(receipt))['state'],'composed')
+    def test_malformed_inputs_map_is_rejected(self):
+        path=self.write('bad-inputs.json',{'status':'succeeded','ok':True,'command':'module build','inputs':[],
+                                           'outputs':{'mod.ff':self.sha(self.package)},'result':{'mod_ff':'mod.ff'}})
+        d=state.derive(self.verify_args(path));self.assertEqual(d['state'],'composed');self.assertTrue(d['reasons'])
+    def test_project_verify_rejects_a_malformed_inputs_map(self):
+        self.assertEqual(state.derive(self.verify_args(self.project_verify_receipt(inputs=[])))['state'],'composed')
+    def test_project_verify_rejects_a_malformed_build_inputs_map(self):
+        bad=self.write('bad-build-inputs.json',{'status':'succeeded','ok':True,'command':'module build','inputs':[],
+                                                'outputs':{'mod.ff':self.sha(self.package)},'result':{'mod_ff':'mod.ff'}})
+        receipt=self.project_verify_receipt(inputs={str(bad):self.sha(bad)},
+                                            result={'build_receipt':str(bad),'outputs':{'verified':True}})
+        self.assertEqual(state.derive(self.verify_args(receipt))['state'],'composed')

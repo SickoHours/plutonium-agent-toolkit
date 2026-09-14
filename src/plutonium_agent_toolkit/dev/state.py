@@ -37,9 +37,26 @@ def derive(args):
         if verify.get('status')!='succeeded' or verify.get('ok') is not True or verify.get('command') not in ('module build','project verify','project build'):
             raise ValueError('Offline receipt did not succeed')
         outputs=verify.get('outputs',{});summary=verify.get('result',{})
+        if not isinstance(outputs,dict) or not isinstance(summary,dict):raise ValueError('Receipt outputs/result must be objects')
+        if not isinstance(verify.get('inputs',{}),dict):raise ValueError('Receipt inputs must be an object')
+        receipt_path=verify_path
+        if verify.get('command')=='project verify':
+            # A verify receipt has no package of its own: it points at the build receipt it
+            # re-hashed, and must bind that file in its own inputs before we read it.
+            build_ref=summary.get('build_receipt')
+            if not isinstance(build_ref,str) or not build_ref:raise ValueError('Verify receipt has no build receipt path')
+            receipt_path=Path(build_ref);expected=verify.get('inputs',{}).get(str(receipt_path))
+            if not isinstance(expected,str):raise ValueError('Verify receipt is not bound to its build receipt')
+            same(receipt_path,expected,'build receipt')
+            verify=read(receipt_path)
+            if verify.get('status')!='succeeded' or verify.get('ok') is not True or verify.get('command') not in ('module build','project build'):
+                raise ValueError('Referenced build receipt did not succeed')
+            outputs=verify.get('outputs',{});summary=verify.get('result',{})
+            if not isinstance(outputs,dict) or not isinstance(summary,dict):raise ValueError('Build receipt outputs/result must be objects')
+            if not isinstance(verify.get('inputs',{}),dict):raise ValueError('Build receipt inputs must be an object')
         mod=summary.get('mod_ff')
         if not isinstance(mod,str) or Path(mod).is_absolute() or '..' in Path(mod).parts:raise ValueError('Receipt has no relative package path')
-        package=verify_path.parent/mod;digest=outputs.get(mod) or summary.get('mod_ff_sha256')
+        package=receipt_path.parent/mod;digest=outputs.get(mod) or summary.get('mod_ff_sha256')
         if not digest:raise ValueError('Receipt has no package digest')
         same(package,digest,'package')
         # The built plan and the entire admitted source graph must still match.
