@@ -7,6 +7,10 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- Clarified `docs/MODULES.md` that `module state` checks the built plan only when the receipt
+  records it, and otherwise requires the plan's member declaration hashes to be bound in the
+  receipt's inputs. Documentation only; no behavior change and no new platform verification.
+
 - `module state` validates a composition plan (schema, name/base/map, a nonempty list of uniquely
   identified module rows with a directory and declaration hash, and no undecided collisions)
   before it claims `composed`; a malformed or undecided plan now reports no state with a reason

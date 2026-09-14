@@ -404,9 +404,11 @@ plans refuse human preconditions/soak. A plan is preparation, not evidence that 
 `pat module state --composition DIR --plan PLAN --verify RECEIPT --test-plan TEST_PLAN
 --run RUN --verdict ACCEPTED --json` computes composed, offline_verified,
 ready_for_game_testing, game_tested, then player_accepted. Optional evidence paths stop at
-whichever rung remains proven. Package bytes, built plan, all receipt input hashes, exact
-member contracts, admitted run-plan digest and latest scoped verdict must match in order.
-Changes revoke later claims and appear in `reasons`; no state file is stored or updated.
+whichever rung remains proven. Package bytes, the built plan when present in receipt outputs,
+all receipt input hashes, exact member contracts, admitted run-plan digest and latest scoped
+verdict must match in order. Without a built plan in the receipt, the plan's member declaration
+hashes must be bound in the receipt's inputs instead. Changes revoke later claims and appear in
+`reasons`; no state file is stored or updated.
 A stale composition plan is reported as composed with its mismatch reason, never offline verified.
 A plan that is not a well-formed composition plan (wrong schema, missing name/base/map, empty or
 malformed module rows, duplicate ids, or undecided collisions) claims no state at all.
