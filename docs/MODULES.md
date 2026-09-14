@@ -409,7 +409,9 @@ all receipt input hashes, exact member contracts, admitted run-plan digest and l
 verdict must match in order. Without a built plan in the receipt, the plan's member declaration
 hashes must be bound in the receipt's inputs instead. Changes revoke later claims and appear in
 `reasons`; no state file is stored or updated.
-A stale composition plan is reported as composed with its mismatch reason, never offline verified.
+A plan whose current member declaration hashes no longer match claims no state at all; with
+unchanged declarations, a stale build input, a mismatched built plan or a package that no longer
+matches revokes the claim to composed with the mismatch reason, never offline verified.
 A plan that is not a well-formed composition plan (wrong schema, missing name/base/map, empty or
 malformed module rows, duplicate ids, or undecided collisions) claims no state at all.
 
