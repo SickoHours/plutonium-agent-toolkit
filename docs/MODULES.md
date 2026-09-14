@@ -383,3 +383,18 @@ Evidence may request a screenshot and clip-before/after seconds. `wait_s` is bou
 300 seconds and each clip window to 60 seconds. Validation proves structure, not gameplay.
 Excessively nested contract structures return an `input_invalid` diagnostic at `/` when
 validation cannot copy them safely.
+
+## Stitched test plan
+
+`pat test plan --composition DIR --mode human --output NEW --json` reads the composition's
+member contracts and writes protocol `pat.test-plan/1` with exact contract hashes. Member
+steps follow dependency order; ids are prefixed by member. Preconditions deduplicate by verb
+and argument, preserving the first position; conflicting actors refuse. Shared weapon, perk,
+powerup or gobblegum providers get explicit pairwise setup/check actions in both directions.
+
+Conflicting harness equality checks in one phase refuse with `test:<key>` until a composition
+decision names an owner and reason. The losing steps are excluded and named in `excluded_steps`
+and `not_covered`; the planner never silently turns a failed assertion into a passed one.
+The four phases are load, members, interactions and soak. Human-only verification remains in
+`human_steps`. Until a probe exists, nonzero soak is a human round-advance step, and background
+plans refuse human preconditions/soak. A plan is preparation, not evidence that actions ran.

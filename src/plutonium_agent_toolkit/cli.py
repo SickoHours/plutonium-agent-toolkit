@@ -118,6 +118,8 @@ def build_parser() -> Parser:
     media.add_parsers(sub, common)
     models.add_parser(sub, common)
     weapons.add_parser(sub, common)
+    from .testing import planner
+    planner.add_parser(sub, common)
 
     r = sub.add_parser("registry", help="Registries of published modules and packs (files anyone can host)")
     ra = r.add_subparsers(dest="action", required=True)
@@ -164,7 +166,7 @@ def build_parser() -> Parser:
     g.add_argument("--json", action="store_true")
 
     # Planned/deferred groups accept any action so they can answer with a structured refusal.
-    for group in sorted({r.group for r in routes()} - {"dev", "gsc", "ff", "project", "module", "registry", "workspace", "knowledge", "game", "agent", "plane", "mcp", "audio", "image", "lua", "model", "weapon"}):
+    for group in sorted({r.group for r in routes()} - {"dev", "gsc", "ff", "project", "module", "registry", "workspace", "knowledge", "game", "agent", "plane", "mcp", "audio", "image", "lua", "model", "weapon", "test"}):
         g = sub.add_parser(group)
         g.add_argument("action")
         g.add_argument("rest", nargs=argparse.REMAINDER)
@@ -182,7 +184,7 @@ JOB_GROUPS = {"gsc": "scripts", "ff": "fastfiles", "project": "projects", "modul
               "image": "media", "lua": "media", "model": "models", "weapon": "weapons"}
 # Single actions that are jobs inside a group whose other actions are not (registry add|list|search|show
 # take no --output; registry baseline writes a report and a receipt into a new directory).
-JOB_ACTIONS = {("registry", "baseline"): "baseline"}
+JOB_ACTIONS = {("registry", "baseline"): "baseline", ("test", "plan"): "testing.planner"}
 
 
 def is_job(group: str, action: str) -> bool:
@@ -199,7 +201,7 @@ def run_job(args, argv: list[str]) -> dict:
     if route.requires_windows and not os.environ.get("PAT_DEV_UNGATED"):
         platform.require_windows(f"{args.group} {args.action}")
     owner = JOB_ACTIONS.get((args.group, args.action), JOB_GROUPS.get(args.group))
-    module = import_module(f".dev.{owner}", __package__)
+    module = import_module("." + (owner if "." in owner else "dev." + owner), __package__)
     job = Job(Path(args.output), f"{args.group} {args.action}", argv, timeout=max(args.timeout, 60) * 4)
     try:
         result = module.execute(args, job)

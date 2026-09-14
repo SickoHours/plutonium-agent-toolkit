@@ -7,6 +7,11 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- Test-plan stitching now folds human harness checks into the shared-check conflict pass and drops
+  owner-excluded human steps from the plan and its interaction pairs; a nested recipe's decision is
+  scoped to its own members and cannot resolve an outer collision; and a flattened member targeting
+  a different game than its composition is refused before resolution. Covered by offline unit tests
+  on Linux; native Windows and gameplay behavior remain unverified.
 - Add T3 Code orchestration protocol 2 behind `agent probe`, `hosts`, `dispatch`, `status`,
   `send` and `interrupt`, preserving protocol 1. V2 launches use one authenticated WebSocket
   RPC, status reads app runs and provider-aware snapshots, and uncertain writes are never retried.
@@ -18,6 +23,13 @@ Every entry states what shipped, on which platform it was verified, and what rem
   nesting as `input_invalid`; documentation describes probe inspection without promising
   composition-time enforcement. Covered by offline unit tests on Linux; native Windows
   and gameplay behavior remain unverified.
+- Stitch test contracts in dependency order, with explicit shared-check decisions and human/probe precondition refusals. Covered by offline unit tests on Linux; native Windows and gameplay behavior remain unverified.
+
+- Report test-plan member-contract failures (missing tests, invalid contract, map outside the
+  composition) at the module's declaration-order index, matching the composition recipe. Covered by
+  offline unit tests on Linux; native Windows and gameplay behavior remain unverified.
+
+- Add the offline test-plan route and contract-member loader with receipted missing-input refusals. Covered by offline unit tests on Linux; native Windows and gameplay behavior remain unverified.
 
 - Validate optional per-module test contracts during module inspection, with closed actions, typed checks and exact-byte digests.
 - Document the still-unexecuted native Windows issue 8 comparison experiment.
