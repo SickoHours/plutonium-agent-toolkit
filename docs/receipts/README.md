@@ -19,3 +19,14 @@ native Windows 11 receipts.
 A receipt proves the exact scope in its `steps`. `docs/SUPPORT.md` links the receipt from each
 route's row. A later failure in the same scope is recorded as a new receipt, not by editing an
 old one.
+
+## Protocol 2 public probe, 2026-09-13
+
+[agent-probe-v2-2026-09-13.json](0.1.0b1/agent-probe-v2-2026-09-13.json) records
+native Linux public probes against T3 Code `0.0.40`: the original client reported protocol 2
+with `drivable: false`, and the protocol 2 client reports `drivable: true`. The record retains
+both `agent hosts` failures (`config_missing`, exit 1). The opted-in trivial-launch test skipped
+because the configured bearer was absent. This is descriptor compatibility evidence only;
+no authenticated V2 hosts, launch, status, send, interrupt, provider completion or game behavior
+was observed. The record was generated with the qualification runner's command, environment,
+redaction and receipt helpers; private identifiers are redacted.

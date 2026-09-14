@@ -7,6 +7,11 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- Add T3 Code orchestration protocol 2 behind `agent probe`, `hosts`, `dispatch`, `status`,
+  `send` and `interrupt`, preserving protocol 1. V2 launches use one authenticated WebSocket
+  RPC, status reads app runs and provider-aware snapshots, and uncertain writes are never retried.
+  Fake-transport tests cover both protocols; authenticated V2 native qualification remains pending.
+
 - Contract validation accepts concrete maps for wildcard declarations and reports excessive
   nesting as `input_invalid`; documentation describes probe inspection without promising
   composition-time enforcement. Covered by offline unit tests on Linux; native Windows

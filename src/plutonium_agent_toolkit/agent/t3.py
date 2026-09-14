@@ -1,26 +1,11 @@
-"""T3 Code (orchestration protocol 1) as an agent host.
+"""T3 Code agent hosts: protocol 1 HTTP writes and protocol 2 WebSocket writes.
 
-The nightly T3 Code server serves an authenticated HTTP API beside its WebSocket. This module
-drives the three endpoints the toolkit needs and nothing else:
-
-    GET  /.well-known/t3/environment          public descriptor (no token)
-    GET  /api/orchestration/shell             projects and thread shells      scope orchestration:read
-    GET  /api/orchestration/threads/<id>      one thread with messages        scope orchestration:read
-    POST /api/orchestration/dispatch          one client command              scope orchestration:operate
-
-Commands are the server's own ``ClientOrchestrationCommand`` union (``thread.create``,
-``thread.turn.start``, ``thread.turn.interrupt``); ids are client-allocated UUIDs and the server
-stamps ``createdAt`` with its own clock, so the value sent only has to be a string. The
-bearer token comes from the user's own T3 Code CLI (``t3 auth session issue``); the toolkit
-never mints, reads or stores a login, only the token the user configured.
-
-Orchestrator V2 (protocol 2) removes the HTTP dispatch endpoint and gates the WebSocket on
-``?orchestrationProtocol=2``. ``probe`` reports which protocol a host speaks; every other route
-refuses a protocol-2 host instead of guessing, so the V2 client can be added as one more module
-without changing these contracts.
+Both versions expose public discovery and authenticated HTTP snapshots. Protocol-specific
+commands and projections live in t3_v2; the user-configured bearer stays in request headers.
 """
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import re
@@ -33,9 +18,10 @@ from pathlib import Path
 from ..core import config
 from ..core.envelope import now
 from ..core.errors import (BACKEND_FAILED, BACKEND_TIMEOUT, BUSY, CONFIG_INVALID, CONFIG_MISSING, DELIVERY_UNCERTAIN,
-                           INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, NOT_IMPLEMENTED, UNSUPPORTED_PLATFORM, Failure)
+                           INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, NOT_IMPLEMENTED, Failure)
+from . import t3_v2
 
-PROTOCOL = 1
+PROTOCOLS = (1, 2)
 MAX_BODY = 8 * 1024 * 1024
 MAX_PROMPT = 200_000
 MAX_TEXT = 512
@@ -99,7 +85,12 @@ def normalize_origin(text: str) -> str:
 
 def is_loopback(origin: str) -> bool:
     host = urllib.parse.urlsplit(origin).hostname or ""
-    return host.lower() in LOOPBACK or host.startswith("127.")
+    if host.lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 def require_token_safe_origin(origin: str, state: dict | None) -> None:
@@ -113,6 +104,12 @@ def require_token_safe_origin(origin: str, state: dict | None) -> None:
 
 # ----- HTTP -----------------------------------------------------------------------------
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        # Snapshot reads carry the same local-only bearer as WebSocket writes.
+        return None
+
+
 def _request(origin: str, method: str, path: str, *, token: str | None = None, body: dict | None = None,
              timeout: int = TIMEOUT) -> tuple[int, dict | list | None]:
     data = None
@@ -123,8 +120,9 @@ def _request(origin: str, method: str, path: str, *, token: str | None = None, b
     if token:
         headers["Authorization"] = "Bearer " + token
     request = urllib.request.Request(origin + path, data=data, method=method, headers=headers)
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - origin validated above
+        with opener.open(request, timeout=timeout) as response:  # noqa: S310 - origin validated above
             payload = response.read(MAX_BODY + 1)
             status = response.status
     except urllib.error.HTTPError as exc:
@@ -165,7 +163,7 @@ def _fail_http(status: int, parsed, what: str) -> Failure:
         return Failure(INPUT_MISSING, f"{what}: not found ({code or 404})")
     if status == 426:
         return Failure(NOT_IMPLEMENTED, f"{what}: the server requires a newer orchestration protocol (426)",
-                       "This host runs Orchestrator V2; pat drives protocol 1 only. See docs/AGENT-HOSTS.md.")
+                       "The host requires a different orchestration protocol; probe it again. See docs/AGENT-HOSTS.md.")
     return Failure(BACKEND_FAILED, f"{what}: HTTP {status} ({code or 'no code'})")
 
 
@@ -177,24 +175,25 @@ def probe(origin: str) -> dict:
     environment = parsed.get("environmentId")
     if not isinstance(version, str) or not isinstance(environment, str):
         raise Failure(INPUT_INVALID, "The descriptor lacks serverVersion or environmentId; this is not a T3 Code server")
-    protocol = parsed.get("orchestrationProtocolVersion")
-    protocol = protocol if isinstance(protocol, int) else 1
+    protocol = parsed.get("orchestrationProtocolVersion", 1)
+    if type(protocol) is not int or protocol < 1:
+        raise Failure(INPUT_INVALID, "The descriptor has an invalid orchestrationProtocolVersion")
     capabilities = parsed.get("capabilities")
     return {
         "origin": origin, "server_version": version, "environment_id": environment, "label": parsed.get("label"),
         "platform": parsed.get("platform"), "orchestration_protocol": protocol,
         "capabilities": sorted(capabilities) if isinstance(capabilities, dict) else [],
-        "drivable": protocol == PROTOCOL,
+        "drivable": protocol in PROTOCOLS,
         "thread_url": origin + "/" + environment + "/<thread-id>",
     }
 
 
-def require_protocol_1(origin: str) -> dict:
+def require_protocol(origin: str) -> dict:
     info = probe(origin)
-    if info["orchestration_protocol"] != PROTOCOL:
+    if info["orchestration_protocol"] not in PROTOCOLS:
         raise Failure(NOT_IMPLEMENTED,
-                      f"The server at {origin} speaks orchestration protocol {info['orchestration_protocol']}; pat drives protocol 1 (the nightly HTTP dispatch)",
-                      "Orchestrator V2 hosts need the WebSocket launchThread client, which this release does not carry. See docs/AGENT-HOSTS.md.",
+                      f"The server at {origin} speaks orchestration protocol {info['orchestration_protocol']}; pat drives protocols 1 and 2",
+                      "This protocol version is not supported. See docs/AGENT-HOSTS.md.",
                       probe=info)
     return info
 
@@ -220,14 +219,19 @@ def _turn(thread: dict) -> dict:
         "provider": session.get("providerName"), "settled_at": thread.get("settledAt"),
         "pending_approvals": bool(thread.get("hasPendingApprovals")),
         "pending_user_input": bool(thread.get("hasPendingUserInput")),
+        **thread.get("_v2", {}),
     }
 
 
 def hosts(origin: str, bearer: str) -> dict:
-    info = require_protocol_1(origin)
+    info = require_protocol(origin)
     status, parsed = _request(origin, "GET", "/api/orchestration/shell", token=bearer)
     if status != 200 or not isinstance(parsed, dict):
         raise _fail_http(status, parsed, "hosts")
+    if not isinstance(parsed.get("projects"), list) or not isinstance(parsed.get("threads"), list):
+        raise Failure(INPUT_INVALID, "The shell snapshot lacks projects or threads")
+    if info["orchestration_protocol"] == 2:
+        parsed = {**parsed, "threads": [t3_v2.shell_thread(t) for t in parsed["threads"] if isinstance(t, dict)]}
     projects = [{"id": p.get("id"), "title": p.get("title"), "workspace_root": p.get("workspaceRoot"),
                  "default_model_selection": p.get("defaultModelSelection")}
                 for p in parsed.get("projects", []) if isinstance(p, dict)]
@@ -241,17 +245,22 @@ def hosts(origin: str, bearer: str) -> dict:
 
 
 def status(origin: str, bearer: str, thread_id: str, message_limit: int = 4) -> dict:
-    info = require_protocol_1(origin)
+    info = require_protocol(origin)
     validate_id(thread_id, "thread id")
     path = "/api/orchestration/threads/" + urllib.parse.quote(thread_id, safe="")
     code, parsed = _request(origin, "GET", path, token=bearer)
-    if code != 200 or not isinstance(parsed, dict) or not isinstance(parsed.get("thread"), dict):
+    if code != 200 or not isinstance(parsed, dict):
         raise _fail_http(code, parsed, "status")
-    thread = parsed["thread"]
+    if info["orchestration_protocol"] == 2:
+        thread = t3_v2.projection_thread(parsed.get("projection"), thread_id)
+    else:
+        thread = parsed.get("thread")
+        if not isinstance(thread, dict) or thread.get("id") != thread_id:
+            raise Failure(INPUT_INVALID, "The thread snapshot lacks the requested thread")
     messages = [m for m in thread.get("messages", []) if isinstance(m, dict)]
     recent = [{"id": m.get("id"), "role": m.get("role"), "streaming": bool(m.get("streaming")),
                "created_at": m.get("createdAt"), "text": str(m.get("text", ""))[:4000]}
-              for m in messages[-message_limit:]]
+              for m in (messages[-message_limit:] if message_limit else [])]
     return {"probe": info, "thread_id": thread.get("id"), "project_id": thread.get("projectId"), "title": thread.get("title"),
             "model_selection": thread.get("modelSelection"), "runtime_mode": thread.get("runtimeMode"),
             "interaction_mode": thread.get("interactionMode"), "worktree_path": thread.get("worktreePath"),
@@ -371,7 +380,7 @@ def _dispatch(origin: str, bearer: str, command: dict, what: str) -> dict:
 def dispatch(origin: str, bearer: str, *, project_id: str, title: str, prompt: str, selection: dict,
              runtime_mode: str = "full-access", interaction_mode: str = "default",
              worktree_path: str | None = None, branch: str | None = None) -> dict:
-    info = require_protocol_1(origin)
+    info = require_protocol(origin)
     validate_id(project_id, "project id")
     if not title.strip() or len(title) > MAX_TEXT:
         raise Failure(INPUT_INVALID, "Provide a non-empty --title up to 512 characters")
@@ -381,11 +390,15 @@ def dispatch(origin: str, bearer: str, *, project_id: str, title: str, prompt: s
         raise Failure(INPUT_INVALID, f"--interaction-mode must be one of {INTERACTION_MODES}")
     if worktree_path is not None and not Path(worktree_path).is_absolute():
         raise Failure(INPUT_INVALID, "--worktree must be an absolute path the server can see")
+    if branch is not None and (not isinstance(branch, str) or not branch.strip() or len(branch) > MAX_TEXT):
+        raise Failure(INPUT_INVALID, "--branch must be non-empty and at most 512 characters")
     thread_id = str(uuid.uuid4())
     stamp = now()
     create = {"type": "thread.create", "commandId": str(uuid.uuid4()), "threadId": thread_id, "projectId": project_id,
               "title": title.strip(), "modelSelection": selection, "runtimeMode": runtime_mode,
               "interactionMode": interaction_mode, "branch": branch, "worktreePath": worktree_path, "createdAt": stamp}
+    if info["orchestration_protocol"] == 2:
+        return t3_v2.launch(origin, bearer, info, create, prompt)
     try:
         created = _dispatch(origin, bearer, create, "dispatch thread.create")
     except Failure as exc:
@@ -418,6 +431,8 @@ def send(origin: str, bearer: str, thread_id: str, prompt: str, queue: bool = Fa
         raise Failure(BUSY, f"Thread {thread_id} has a running turn; nothing was sent",
                       "Wait for turn_state to leave running, interrupt it, or pass --queue to let the server adopt the message afterwards.",
                       turn_id=current["turn_id"])
+    if current["probe"]["orchestration_protocol"] == 2:
+        return t3_v2.send(origin, bearer, current, prompt, queue)
     message_id = str(uuid.uuid4())
     command = {"type": "thread.turn.start", "commandId": str(uuid.uuid4()), "threadId": thread_id,
                "message": {"messageId": message_id, "role": "user", "text": prompt, "attachments": []},
@@ -430,6 +445,8 @@ def send(origin: str, bearer: str, thread_id: str, prompt: str, queue: bool = Fa
 
 def interrupt(origin: str, bearer: str, thread_id: str) -> dict:
     current = status(origin, bearer, thread_id, message_limit=0)
+    if current["probe"]["orchestration_protocol"] == 2:
+        return t3_v2.interrupt(origin, bearer, current)
     command = {"type": "thread.turn.interrupt", "commandId": str(uuid.uuid4()), "threadId": thread_id, "createdAt": now()}
     if current["turn_id"]:
         command["turnId"] = current["turn_id"]

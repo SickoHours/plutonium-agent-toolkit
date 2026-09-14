@@ -11,7 +11,7 @@ ACTIONS = ("probe", "hosts", "models", "dispatch", "status", "send", "interrupt"
 
 
 def add_parser(sub) -> None:
-    p = sub.add_parser("agent", help="Hand work to a running T3 Code server as a thread (orchestration protocol 1)")
+    p = sub.add_parser("agent", help="Hand work to a running T3 Code server as a thread (orchestration protocols 1 and 2)")
     actions = p.add_subparsers(dest="action", required=True)
 
     def origin(q):

@@ -35,6 +35,7 @@ class FakeT3:
         self.requests = []
         self.threads = {}
         self.sequence = 0
+        self.redirect = False
         self.projects = [{"id": "proj-1", "title": "Mods", "workspaceRoot": "/tmp/mods", "defaultModelSelection": None,
                           "scripts": [], "createdAt": "2026-09-10T00:00:00Z", "updatedAt": "2026-09-10T00:00:00Z"}]
         self.running_turn = None  # thread id whose latest turn is running
@@ -120,6 +121,11 @@ def make_handler(fake: FakeT3):
                 return self._send(200, fake.descriptor())
             if not self._authorized():
                 return None
+            if self.path == "/api/orchestration/shell" and fake.redirect:
+                self.send_response(302)
+                self.send_header("Location", "/redirected")
+                self.end_headers()
+                return
             if self.path == "/api/orchestration/shell":
                 return self._send(200, {"snapshotSequence": fake.sequence, "projects": fake.projects,
                                         "threads": [fake.shell_thread(t) for t in fake.threads.values()], "updatedAt": "2026-09-10T00:00:00Z"})
@@ -359,18 +365,24 @@ class DispatchTests(AgentFixture):
 class ProtocolTwoTests(AgentFixture):
     protocol = 2
 
-    def test_a_v2_host_is_reported_and_refused_before_any_command(self):
+    def test_a_v2_host_is_reported_as_drivable_without_a_token(self):
         code, row = invoke(["agent", "probe"])
         self.assertEqual(code, 0, row)
         self.assertEqual(row["result"]["orchestration_protocol"], 2)
-        self.assertFalse(row["result"]["drivable"])
+        self.assertTrue(row["result"]["drivable"])
+
+    def test_unknown_protocol_is_refused_before_commands(self):
+        from unittest.mock import patch
+        from plutonium_agent_toolkit.agent import t3
         self.configure_token()
-        code, row = invoke(["agent", "dispatch", "--project", "proj-1", "--title", "t", "--prompt", "p",
-                            "--instance", "claude_pool", "--model", "claude-sonnet-5"])
+        with patch.object(self.fake, "descriptor", return_value={
+                "serverVersion": "future", "environmentId": "env-1", "orchestrationProtocolVersion": 3}):
+            self.assertFalse(t3.probe(self.origin)["drivable"])
+            code, row = invoke(["agent", "dispatch", "--project", "proj-1", "--title", "t", "--prompt", "p",
+                                "--instance", "claude_pool", "--model", "claude-sonnet-5"])
         self.assertEqual(code, 1)
         self.assertEqual(row["error_code"], "not_implemented")
-        self.assertEqual(row["details"]["probe"]["orchestration_protocol"], 2)
-        self.assertEqual([r for r in self.fake.requests if r[0] == "POST"], [], "nothing dispatched to a V2 host")
+        self.assertEqual([r for r in self.fake.requests if r[0] == "POST"], [])
 
 
 if __name__ == "__main__":
@@ -402,6 +414,8 @@ class ReviewRegressionTests(AgentFixture):
         self.assertTrue(t3.is_loopback("http://[::1]:3773"))
         self.assertTrue(t3.is_loopback("http://localhost:3773"))
         self.assertFalse(t3.is_loopback("https://attacker.example"))
+        self.assertFalse(t3.is_loopback("http://127.attacker.example"))
+        self.assertTrue(t3.is_loopback("http://127.0.0.2:3773"))
         for bad in ("http://127.0.0.1:99999", "http://127.0.0.1/path", "ftp://127.0.0.1", "http://127.0.0.1:3773?x=1"):
             with self.assertRaises(Exception, msg=bad):
                 t3.normalize_origin(bad)
@@ -429,3 +443,27 @@ class ReviewRegressionTests(AgentFixture):
         self.assertEqual(code, 1, row)
         self.assertIn("thread_id", row["details"])
         self.assertIn("command_id", row["details"])
+
+
+class SnapshotRedirectTests(AgentFixture):
+    def test_authenticated_reads_never_follow_redirects_on_either_protocol(self):
+        self.configure_token()
+        self.fake.redirect = True
+        for protocol in (1, 2):
+            self.fake.protocol = protocol
+            code, row = invoke(["agent", "hosts"])
+            self.assertEqual(code, 1)
+            self.assertEqual(row["error_code"], "backend_failed")
+        self.assertNotIn('/redirected', [r[1] for r in self.fake.requests])
+
+
+class MessageLimitRegressionTests(AgentFixture):
+    def test_zero_messages_omits_v1_message_bodies(self):
+        self.configure_token()
+        code, row = invoke(['agent', 'dispatch', '--project', 'proj-1', '--title', 'Proof',
+                            '--prompt', 'Reply OK.', '--instance', 'claude_pool', '--model', 'claude-sonnet-5'])
+        self.assertEqual(code, 0, row)
+        code, row = invoke(['agent', 'status', row['result']['thread_id'], '--messages', '0'])
+        self.assertEqual(code, 0, row)
+        self.assertEqual(row['result']['recent_messages'], [])
+        self.assertEqual(row['result']['message_count'], 1)
