@@ -45,9 +45,11 @@ def evaluate(plan):
 def check_scripts(compiled,args,job,game):
     rows=[]
     for index,(source,target,instance) in enumerate(compiled):
-        child=Job(job.root/'checks'/f'script-{index:03d}','gsc check',[],timeout=max(args.timeout,60)*4)
+        job.check_deadline()
+        remaining=max(1,int(job.deadline-__import__('time').monotonic()))
+        child=Job(job.root/'checks'/f'script-{index:03d}','gsc check',[],timeout=remaining);child.deadline=job.deadline
         try:
-            result=scripts.execute(SimpleNamespace(input=str(source),instance=instance,game=game,action='check',includes=None,timeout=args.timeout),child)
+            result=scripts.execute(SimpleNamespace(input=str(source),instance=instance,game=game,action='check',includes=str(source.parent),timeout=min(args.timeout,remaining)),child)
             child.finish(result);text='';passed=True
         except Failure as error:
             child.fail(error);passed=False;text=error.message+' '+str(error.details.get('first_error',''))
