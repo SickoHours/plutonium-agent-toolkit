@@ -84,3 +84,41 @@ class ModuleStateTests(unittest.TestCase):
         receipt=self.project_verify_receipt(inputs={str(bad):self.sha(bad)},
                                             result={'build_receipt':str(bad),'outputs':{'verified':True}})
         self.assertEqual(state.derive(self.verify_args(receipt))['state'],'composed')
+    def test_malformed_verdicts_artifact_returns_reasons_not_a_traceback(self):
+        rows=[{'verdicts':'nope'},
+              {'verdicts':['nope']},
+              {'verdicts':[{'outcome':'accepted','build':['nope'],'scope':{'map':'zm_transit','base':'stock'}}]},
+              {'verdicts':[{'outcome':'accepted','build':{'mod_ff_sha256':self.sha(self.package)},'scope':'nope'}]}]
+        for row in rows:
+            with self.subTest(row=row):
+                path=self.write('bad-verdict.json',row)
+                a=self.complete();a.verdict=str(path)
+                d=state.derive(a)
+                self.assertEqual(d['state'],'game_tested');self.assertTrue(d['reasons'])
+    def test_malformed_run_package_and_test_plan_maps_are_rejected(self):
+        for extra in ({'package':['nope']},{'test_plan':'nope'}):
+            with self.subTest(extra=extra):
+                row={'verdict':'automated-passed','package':{'sha256':self.sha(self.package)},
+                     'test_plan':{'sha256':self.sha(self.testplan),'path':str(self.testplan)}}
+                row.update(extra)
+                path=self.write('bad-run.json',row)
+                a=self.complete();a.run=str(path)
+                d=state.derive(a)
+                self.assertEqual(d['state'],'ready_for_game_testing');self.assertTrue(d['reasons'])
+    def test_malformed_test_plan_conflicts_are_rejected(self):
+        for conflicts in ('nope',['nope']):
+            with self.subTest(conflicts=conflicts):
+                path=self.write('bad-test-plan.json',{'protocol':'pat.test-plan/1','composition':'stock_x_test','base':'stock',
+                                                      'map':'zm_transit','members':[{'id':'x','contract_sha256':self.sha(self.contract)}],
+                                                      'conflicts':conflicts})
+                a=self.complete();a.test_plan=str(path)
+                d=state.derive(a)
+                self.assertEqual(d['state'],'offline_verified');self.assertTrue(d['reasons'])
+    def test_evidence_reads_utf8_under_an_ascii_locale(self):
+        import locale
+        path=self.root/'unicode-receipt.json'
+        path.write_text(json.dumps({'note':'café'},ensure_ascii=False),encoding='utf-8')
+        previous=locale.setlocale(locale.LC_CTYPE)
+        self.addCleanup(locale.setlocale,locale.LC_CTYPE,previous)
+        locale.setlocale(locale.LC_CTYPE,'C')
+        self.assertEqual(state.read(path),{'note':'café'})

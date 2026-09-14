@@ -8,7 +8,7 @@ from .compositions import _read_inspection
 def read(path):
     p=Path(path)
     if not p.is_file() or p.is_symlink() or p.stat().st_size>16*1024**2:raise ValueError('Missing or oversized evidence: '+str(p))
-    value=json.loads(p.read_text())
+    value=json.loads(p.read_text(encoding='utf-8'))
     if not isinstance(value,dict):raise ValueError('Evidence must be an object: '+str(p))
     return value
 
@@ -69,7 +69,9 @@ def derive(args):
         test_path=Path(args.test_plan);test=read(test_path)
         if test.get('protocol')!='pat.test-plan/1' or test.get('composition')!=plan['name'] or test.get('map')!=plan['map'] or test.get('base')!=plan['base']:raise ValueError('Test plan composition/base/map mismatch')
         if {m['id'] for m in test['members']}!=ids or len(test['members'])!=len(ids):raise ValueError('Test plan member set mismatch')
-        if any(c.get('resolution')=='undecided' for c in test.get('conflicts',[])):raise ValueError('Undecided test conflict')
+        conflicts=test.get('conflicts',[])
+        if not isinstance(conflicts,list) or not all(isinstance(c,dict) for c in conflicts):raise ValueError('Test plan conflicts must be a list of objects')
+        if any(c.get('resolution')=='undecided' for c in conflicts):raise ValueError('Undecided test conflict')
         by_id={m['id']:m for m in modules}
         for m in test['members']:
             directory=Path(by_id[m['id']]['directory']);decl=read(directory/'module.json');contract=decl.get('tests')
@@ -80,14 +82,20 @@ def derive(args):
         if not args.run:return result
         run=read(args.run)
         if run.get('verdict')!='automated-passed':raise ValueError('Run has no completed automated-passed verdict')
-        if run.get('package',{}).get('sha256')!=digest:raise ValueError('Run package digest mismatch')
+        run_package=run.get('package',{})
+        if not isinstance(run_package,dict):raise ValueError('Run package must be an object')
+        if run_package.get('sha256')!=digest:raise ValueError('Run package digest mismatch')
         pin=run.get('test_plan',{})
+        if not isinstance(pin,dict):raise ValueError('Run test plan must be an object')
         if pin.get('sha256')!=test_digest:raise ValueError('Run test-plan digest mismatch')
         if not pin.get('path'):raise ValueError('Run has no admitted test-plan artifact')
         same(pin['path'],test_digest,'run admitted plan')
         result['state']='game_tested';result['evidence']['game_tested']={'path':str(args.run),'mod_ff_sha256':digest,'test_plan_sha256':test_digest}
         if not args.verdict:return result
-        accepted=read(args.verdict);verdicts=accepted.get('verdicts',[accepted]);scoped=[v for v in verdicts if v.get('build',{}).get('mod_ff_sha256')==digest and v.get('scope',{}).get('map')==plan['map'] and v.get('scope',{}).get('base',plan['base'])==plan['base']]
+        accepted=read(args.verdict);verdicts=accepted.get('verdicts',[accepted])
+        if not isinstance(verdicts,list) or not all(isinstance(v,dict) for v in verdicts):raise ValueError('Verdicts must be a list of objects')
+        if not all(isinstance(v.get('build',{}),dict) and isinstance(v.get('scope',{}),dict) for v in verdicts):raise ValueError('Verdict build and scope must be objects')
+        scoped=[v for v in verdicts if v.get('build',{}).get('mod_ff_sha256')==digest and v.get('scope',{}).get('map')==plan['map'] and v.get('scope',{}).get('base',plan['base'])==plan['base']]
         if not scoped or scoped[-1].get('outcome')!='accepted':raise ValueError('No current accepted verdict for this package/map/base')
         result['state']='player_accepted';result['evidence']['player_accepted']={'path':str(args.verdict),'mod_ff_sha256':digest,'map':plan['map']}
     except (KeyError,ValueError,TypeError,OSError) as e:result['reasons'].append(str(e))

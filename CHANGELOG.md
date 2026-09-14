@@ -7,6 +7,14 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- Test planning admits a probe declared in any map of a member contract, not only the
+  composition's selected map, so whole-contract validation no longer revokes an otherwise valid
+  plan; probe emission reads and writes `composition.json` as UTF-8 and `module state` reads its
+  evidence as UTF-8 on a non-UTF-8 locale; and
+  `module state` rejects malformed `conflicts`, run `package`/`test_plan`, and `verdicts` maps as
+  reasons instead of leaking `AttributeError`. Covered by offline unit tests on Linux; native
+  Windows and gameplay behavior remain unverified.
+
 - Auto-include a local test-only probe for agent preconditions and refuse test-only members in release compositions. Covered by offline unit tests on Linux; native Windows and gameplay behavior remain unverified.
 
 - Report counted, failed and uncounted pool checks on composition plans and run per-script compiler dry runs before linking. Covered by offline unit tests on Linux; native Windows and gameplay behavior remain unverified.

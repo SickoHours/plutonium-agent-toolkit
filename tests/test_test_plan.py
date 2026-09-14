@@ -240,6 +240,23 @@ class EmittedCompositionTests(CompositionFixture):
         self.assertEqual(data['modules'],['../modules/alpha'])
         self.assertEqual(data['loads'],['../packs/z/base.ff'])
         self.assertEqual(data['base_owned'],['../packs/l/base.csv'])
+    def test_emitted_composition_reads_and_writes_utf8_under_an_ascii_locale(self):
+        import locale
+        from pathlib import Path
+        from plutonium_agent_toolkit.core.jobs import Job
+        from plutonium_agent_toolkit.testing import planner
+        source=self.root/'packs'/'stock_unicode_test';source.mkdir(parents=True,exist_ok=True)
+        row={'schema':1,'name':'stock_unicode_é_test','base':'stock','map':'zm_transit','modules':['../../modules/alpha']}
+        (source/'composition.json').write_text(json.dumps(row,ensure_ascii=False),encoding='utf-8')
+        job=Job(self.root/'emit-unicode-job','test plan',[],timeout=600)
+        plan={'source':str(source/'composition.json'),'modules':[],'probe':False}
+        previous=locale.setlocale(locale.LC_CTYPE)
+        self.addCleanup(locale.setlocale,locale.LC_CTYPE,previous)
+        locale.setlocale(locale.LC_CTYPE,'C')
+        planner.emit_composition(plan,job)
+        data=json.loads((job.root/'composition.json').read_text(encoding='utf-8'))
+        self.assertEqual(data['name'],'stock_unicode_é_test')
+        self.assertEqual(data['modules'],['../modules/alpha'])
 
 class ProbePlanning(TestPlanRoute):
     def test_probe_is_added_and_background_soak_is_automated(self):
@@ -251,6 +268,19 @@ class ProbePlanning(TestPlanRoute):
         plan=json.loads((Path(out)/'test-plan.json').read_text());self.assertTrue(plan['probe']);self.assertIn('test_probe',[m['id'] for m in plan['members']])
         self.assertEqual(plan['phases'][3]['steps'][0]['actor'],'agent')
         self.assertTrue((Path(out)/'composition.json').is_file())
+    def test_probe_verb_in_a_non_selected_map_still_admits_the_probe(self):
+        from pathlib import Path
+        m=self.module('alpha',maps=['zm_transit','zm_factory'],tests='test-contract.json')
+        c=contract(module='alpha',maps={'zm_transit':{'preconditions':[]},
+                                        'zm_factory':{'preconditions':[{'verb':'power_on','actor':'agent'}]}})
+        (m/'test-contract.json').write_text(json.dumps(c))
+        self.member('test_probe',tags=['test-only'])
+        comp=self.composition(['alpha']);out=self.out()
+        code,row=invoke(['test','plan','--composition',str(comp),'--output',out,'--json'])
+        self.assertEqual(code,0,row)
+        plan=json.loads((Path(out)/'test-plan.json').read_text())
+        self.assertTrue(plan['probe'])
+        self.assertIn('test_probe',[x['id'] for x in plan['members']])
     def test_release_profile_refuses_probe_contract(self):
         m,c=self.member('alpha');c['maps']['zm_transit']['preconditions']=[{'verb':'god','arg':'on','actor':'agent'}];(m/'test-contract.json').write_text(json.dumps(c))
         comp=self.composition(['alpha'],name='stock_x_pack')

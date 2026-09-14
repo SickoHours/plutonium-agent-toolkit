@@ -165,7 +165,7 @@ def prepare_probe(composition,modules,job):
             exc.details['field']=f"/modules/{i}"+exc.details.get('field','/tests');raise
         path=job.input(m['directory']/m['tests'])
         if job.inputs[str(path)]!=contract['sha256']:raise Failure('input_changed','Probe contract changed during admission')
-        for row in list(contract['maps'].get(composition['map'],{}).get('preconditions',[]))+contract['steps']:
+        for row in [p for map_row in contract['maps'].values() for p in map_row.get('preconditions',[])]+contract['steps']:
             a=row.get('action',row)
             if a.get('verb') in tc.PROBE_VERBS and row.get('actor','agent')=='agent':needed=True
     existing=next((m for m in modules if m['id']=='test_probe'),None)
@@ -195,7 +195,7 @@ def emit_composition(plan,job):
     nested recipe's decisions; rewriting the top-level paths relative to the job keeps every
     nested composition, its decisions and its scope exactly as authored. A newly admitted probe
     is appended once as a top-level member."""
-    source=Path(plan['source']);data=json.loads(source.read_text())
+    source=Path(plan['source']);data=json.loads(source.read_text(encoding='utf-8'))
     modules=[]
     for entry in data.get('modules',[]):
         row={'path':entry} if isinstance(entry,str) else dict(entry)
@@ -206,4 +206,4 @@ def emit_composition(plan,job):
         data[key]=[_relative_posix((source.parent/p).resolve(),job.root) for p in data.get(key,[])]
     added=plan.get('probe_module')
     if added:data['modules'].append(_relative_posix(Path(added).resolve(),job.root))
-    (job.root/'composition.json').write_text(json.dumps(data,indent=2)+'\n')
+    (job.root/'composition.json').write_text(json.dumps(data,indent=2)+'\n',encoding='utf-8')
