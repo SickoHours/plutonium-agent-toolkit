@@ -126,6 +126,7 @@ Lives in the module's directory beside its payload. The payload is one of two th
 | `source` | no | Where the module comes from: an `https` `repository` URL and, ideally, the 40-hex `commit`. Carried into the plan so a pack can say what it was built from |
 | `origin` | no | One lowercase word for the game or series the thing's identity comes from (`bo3`, `waw`, `saints-row`), or `unverified` when nobody has established it. It drives the title: an ICR-1 converted from a community pack is still "ICR-1 (Black Ops III)". Never defaulted to the donor. A browse word, never a resolution rule |
 | `donor` | no | One line of credit, at most 400 characters, for where the bytes came from: a conversion pack and its author, a capture, a person. It drives the credit line, never the title. Preserved on every re-cut |
+| `placements` | no | What the module needs placed on each target, never where: a list of `{needs, occupant?, count, fallback}` rows (`needs` a location-table row kind such as `perk-machine` or `wall-buy`; `count` `1`, an integer or `"any"`; `fallback` `refuse`, `rotation-slot`, `wunderfizz`, `spawn-room-default` or `omit`). `module plan --workspace W --target KEY` checks each need against the target's location table. Format: [target-sets.md](target-sets.md) |
 
 Origin and donor are two facts, and a card shows both: "ICR-1 (Black Ops III)" with "from Chronicles
 Reawakened v3.5 (Kosmoes), converted for T6" under it. A module whose origin is in doubt says
@@ -227,6 +228,12 @@ string (`kind: name`), or the same seed asset. Each undecided row names the modu
 record the owner. The agent is the runtime that resolves it; the planner is the linter that
 lists it. The plan hash changes only when the recipe changes, so a recorded decision is part of
 what was built.
+
+With `--workspace <workspace> --target <foundation>/<map>/<mode>[/<location>]` (repeatable), the
+plan also reads each target's location table as a hashed input and reports under `placements`,
+per target, which members' declared `placements` needs the table satisfies, which fall back and
+which are refused; a refused need fails the plan as a `placements:<target>` check. No provider
+module is generated. Format and rules: [target-sets.md](target-sets.md).
 
 Proof of a successful plan: `ok: true`, `result.modules[]` in dependency order with each
 member's `payload` (`recipe` or `seed`) and `role`, `result.base_member`, `result.decisions`,
@@ -434,10 +441,11 @@ matches revokes the claim to composed with the mismatch reason, never offline ve
 A plan that is not a well-formed composition plan (wrong schema, missing name/base/map, empty or
 malformed module rows, duplicate ids, or undecided collisions) claims no state at all.
 
-`pat module state --ledger <module dir|evidence.json> [--base --foundation --map --location --package] --json`
+`pat module state --ledger <module dir|evidence.json> [--base --foundation --map --location --package --target] --json`
 is the other subject of the route: it reads a module's evidence ledger and reports each of the
 six facts per scope from the rows, `null` where no row of the matching type exists, with the
-row numbers behind each value. It never reads a plan or receipt and the composition form never
+row numbers behind each value, and per `{base, map, location}` target under `by_target`;
+`--target <foundation>/<map>/<mode>[/<location>]` queries one target ([target-sets.md](target-sets.md)). It never reads a plan or receipt and the composition form never
 reads a ledger. [evidence-ledger.md](evidence-ledger.md) specifies the rows and the derivation.
 
 ## Checks

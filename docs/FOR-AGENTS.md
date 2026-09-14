@@ -164,6 +164,11 @@ inventing a result.
   `attach-to-a-pack.md`). A pack someone else built is a base member of the next pack; a pack that
   is only a fastfile is declared as a seed first. Collisions the planner lists are yours to decide
   and record, not to skip.
+- A survival location (the Diner, Cell Block, The Crazy Place) is a target beside its parent map,
+  never a module; a module that needs a perk machine, wall buy or gum site declares `placements`
+  and the target's location table supplies the site at plan time (`docs/target-sets.md`,
+  `pat target list|inspect|validate`, `pat module plan --workspace --target`). Nothing in a table
+  is evidence; its six facts are always false.
 - Keep build outputs in fresh directories, never overwriting; the receipt ties source to package.
 - When the person wants a page instead of a terminal, `pat plane serve` gives them one whose every
   control is one of these routes with its own receipt (`docs/CONTROL-PLANE.md`); the judgement calls
