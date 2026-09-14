@@ -222,7 +222,9 @@ remain offline-tested; no new Windows/game/player acceptance qualification is cl
 
 The generated entry is offline-tested too: it is present in the plan's scripts, the script limit
 and the per-script checks; its target follows the title namespace and is reserved case-insensitively
-against recipe, loose and seed rawfile targets; its include root stages each entry member's target
-source and admitted source tree so sibling and transitive `#include` directives resolve; and comments
-and quoted literals are masked before the replacement and `main`/`init` scans. These run against the
-fake compiler and pass on Linux; native Windows and gameplay behavior remain unverified.
+against recipe, loose and seed rawfile targets; an entry reference is matched to its recipe target
+case-insensitively and emits that canonical path, and one that matches no target refuses; its include
+root stages each entry member's target source and admitted source tree so sibling and transitive
+`#include` directives resolve; and comments and quoted literals are masked before the replacement and
+`main`/`init` scans, which require a name boundary and a function body. These run against the fake
+compiler and pass on Linux; native Windows and gameplay behavior remain unverified.

@@ -463,7 +463,7 @@ def mask_gsc(text):
 
 
 def scan_replacements(text):
-    pattern=re.compile(r"replacefunc\s*\(\s*([A-Za-z0-9_\\/]+)::([A-Za-z0-9_]+)",re.I)
+    pattern=re.compile(r"(?<![\w])replacefunc\s*\(\s*([A-Za-z0-9_\\/]+)::([A-Za-z0-9_]+)",re.I)
     return {path.replace(chr(92),'/').lower()+'::'+name.lower() for path,name in pattern.findall(mask_gsc(text))}
 
 def replacement_warnings(modules,loaded):
@@ -473,7 +473,7 @@ def replacement_warnings(modules,loaded):
         if m['id'] in loaded:
             for source,_,_ in loaded[m['id']][1]:
                 text=mask_gsc(source.read_text(encoding='utf-8'))
-                if m.get('entry') and re.search(r'(?m)^\s*(?:main|init)\s*\(',text):
+                if m.get('entry') and re.search(r'(?im)^\s*(?:main|init)\s*\([^)]*\)\s*\{',text):
                     raise Failure(INPUT_INVALID,'An entry-managed module cannot define main or init',field=f'/modules/{i}/entry')
                 found.update(scan_replacements(text))
         declared=set(m.get('replaces',{}).get('functions',[]))
@@ -1123,7 +1123,9 @@ def _generate_entry(comp, modules, by_id, order, loaded, compiled, loose, seed_m
     an existing owner refuses instead of silently outliving the entry. Each entry member's
     recipe source is staged at its target path and its admitted source tree (the same bounded
     ``input_tree`` the recipe already hashed) at the source-relative path, so sibling and
-    transitive ``#include`` directives resolve. Two sources that map to one include path with
+    transitive ``#include`` directives resolve. A reference is matched to its module's recipe
+    target case-insensitively and the emitted include and call use that canonical target path;
+    a reference that matches no target refuses. Two sources that map to one include path with
     different bytes refuse rather than overwrite.
     """
     entry_modules=[m for m in modules if m.get('entry')]
@@ -1138,6 +1140,32 @@ def _generate_entry(comp, modules, by_id, order, loaded, compiled, loose, seed_m
     if any(name.casefold()==reserved for name in owned):
         raise Failure(INPUT_INVALID,f"Generated entry target {target.as_posix()} is already owned by another source",
                       "Rename the colliding script or rawfile target; the build reserves this path for the generated entry.")
+    # A reference is normalized to lowercase by `_function`, so match it to the module's recipe
+    # target case-insensitively and emit the canonical target path. On a case-sensitive host the
+    # emitted #include must name a file that was actually staged; a reference that matches no
+    # target is refused instead of compiling against a path nothing provides.
+    module_index={m['id']:i for i,m in enumerate(modules)}
+    resolved_entries={}
+    for m in entry_modules:
+        recipe=loaded.get(m['id'])
+        if recipe is None:
+            raise Failure(INPUT_INVALID,f"Entry-managed module {m['id']} has no recipe script to include",
+                          "An entry needs the module's own recipe; point entry at one of its script targets.",
+                          field=f"/modules/{module_index[m['id']]}/entry")
+        targets={}
+        for source,member_target,_ in recipe[1]:
+            posix=member_target.as_posix()
+            targets[posix.rsplit('.',1)[0].casefold()]=(source,member_target,posix)
+        refs={}
+        for key in ('replace','register'):
+            path,function=m['entry'][key].split('::')
+            match=targets.get(path.casefold())
+            if match is None:
+                raise Failure(INPUT_INVALID,f"Entry reference {m['entry'][key]} names no recipe script target of module {m['id']}",
+                              "Add the script to the module's recipe or point the entry at one of its target paths, compared case-insensitively.",
+                              field=f"/modules/{module_index[m['id']]}/entry")
+            refs[key]=match[2].rsplit('.',1)[0]+'::'+function
+        resolved_entries[m['id']]=refs
     root=job.root/'generated-entry'
     root.mkdir(parents=True,exist_ok=True)
     staged={}
@@ -1151,8 +1179,6 @@ def _generate_entry(comp, modules, by_id, order, loaded, compiled, loose, seed_m
         staged[key]=(source,digest,rel)
     for m in entry_modules:
         recipe=loaded.get(m['id'])
-        if recipe is None:
-            continue
         for source,member_target,_ in recipe[1]:
             stage(member_target.as_posix(),source,job.inputs[str(source)])
         for source,_,_ in recipe[1]:
@@ -1167,8 +1193,9 @@ def _generate_entry(comp, modules, by_id, order, loaded, compiled, loose, seed_m
         dest=root/rel
         dest.parent.mkdir(parents=True,exist_ok=True)
         shutil.copyfile(source,dest)
+    ordered=[{**by_id[mid],'entry':resolved_entries[mid]} if mid in resolved_entries else by_id[mid] for mid in order]
     generated=root/target.name
-    generated.write_text(entry_source(comp['name'],[by_id[mid] for mid in order]),encoding='utf-8')
+    generated.write_text(entry_source(comp['name'],ordered),encoding='utf-8')
     return {"script":(generated,target,"server"),
             "plan":{"source":str(generated),"target":target.as_posix(),"sha256":sha256_file(generated),
                     "include_root":str(root),"include_files":len(staged)}}

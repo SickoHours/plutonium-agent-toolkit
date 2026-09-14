@@ -452,7 +452,9 @@ Ordinary asset/file collision decisions retain their existing behavior.
 Literal `replaceFunc(script::function, ...)` targets in recipe source must be declared or planning
 fails with `declaration_mismatch` and the target in the hint. Backslashes and case normalize.
 Comments and quoted literals are masked before the scan, so prose that names `replaceFunc` and a
-`main`/`init` written in a comment are not read as code. Declared targets not found in available
+`main`/`init` written in a comment are not read as code; a name boundary keeps a helper such as
+`my_replaceFunc` from reading as the engine call, and `main`/`init` counts only with a function
+body after its signature. Declared targets not found in available
 source are warnings, preserving seed workflows.
 This regex scan does not prove dynamically computed replacements or runtime detour behavior.
 
@@ -468,9 +470,12 @@ composition order.
 The target is reserved case-insensitively against every recipe script, loose asset target and seed
 rawfile before anything is staged, so a source that already maps that path refuses instead of
 silently outliving the entry. The generated script is part of the plan's `scripts`, the script
-limit and the per-script offline checks. It compiles against an include root holding each entry
-member's recipe source at its target path and its admitted source tree at the source-relative path,
-so sibling and transitive `#include` directives resolve; two sources that map one path with
-different bytes refuse. It uses the existing compiler, zone rawfile list and byte-for-byte
-readback. Root scripts are normally each engine entry points; one generated owner is needed for
-deterministic order. Other modules keep their existing roots.
+limit and the per-script offline checks. An entry reference is normalized to lowercase; it is
+matched to its module's recipe target case-insensitively and the emitted `#include` and call use
+the canonical target path, so a mixed-case target resolves on a case-sensitive host, and a
+reference that names no target refuses. It compiles against an include root holding each entry
+member's recipe source at its canonical target path and its admitted source tree at the
+source-relative path, so sibling and transitive `#include` directives resolve; two sources that map
+one path with different bytes refuse. It uses the existing compiler, zone rawfile list and
+byte-for-byte readback. Root scripts are normally each engine entry points; one generated owner is
+needed for deterministic order. Other modules keep their existing roots.

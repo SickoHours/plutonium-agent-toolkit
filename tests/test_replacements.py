@@ -55,6 +55,14 @@ class ReplacementScan(CompositionFixture):
         (m/'scripts/alpha.gsc').write_text('// replaceFunc(maps\\mp\\zombies\\_zm::round_think, ::mine);\nmain() {}\n')
         comp=self.composition(['alpha']);code,row=invoke(['module','plan',str(comp),'--output',self.out(),'--json'])
         self.assertEqual(code,0,row)
+    def test_helper_name_is_not_a_replacefunc_call(self):
+        # A word boundary: `my_replaceFunc(...)` is a helper, not the engine replacement call.
+        self.assertEqual(c.scan_replacements('my_replaceFunc(maps\\mp\\zombies\\_zm::round_think, ::mine);'),set())
+    def test_helper_name_does_not_fail_the_plan(self):
+        m=self.module('alpha')
+        (m/'scripts/alpha.gsc').write_text('my_replaceFunc(maps\\mp\\zombies\\_zm::round_think, ::mine);\nmain() {}\n')
+        comp=self.composition(['alpha']);code,row=invoke(['module','plan',str(comp),'--output',self.out(),'--json'])
+        self.assertEqual(code,0,row)
 
 class GeneratedEntry(CompositionFixture):
     def entry_member(self,mid):
@@ -79,6 +87,36 @@ class GeneratedEntry(CompositionFixture):
         (m/'scripts/alpha.gsc').write_text('/*\nmain()\n*/\nalpha_replace() {}\nalpha_register() {}\n')
         comp=self.composition(['alpha']);code,row=invoke(['module','plan',str(comp),'--output',self.out(),'--json'])
         self.assertEqual(code,0,row)
+    def test_main_call_at_column_zero_is_not_a_definition(self):
+        m=self.entry_member('alpha')
+        (m/'scripts/alpha.gsc').write_text('main();\nalpha_replace() {}\nalpha_register() {}\n')
+        comp=self.composition(['alpha']);code,row=invoke(['module','plan',str(comp),'--output',self.out(),'--json'])
+        self.assertEqual(code,0,row)
+    def test_entry_main_definition_is_case_insensitive(self):
+        m=self.entry_member('alpha')
+        (m/'scripts/alpha.gsc').write_text('Main()\n{\n}\nalpha_replace() {}\nalpha_register() {}\n')
+        comp=self.composition(['alpha']);code,row=invoke(['module','plan',str(comp),'--output',self.out(),'--json'])
+        self.assertEqual(code,1,row);self.assertEqual(row['details']['field'],'/modules/0/entry')
+    def test_entry_reference_matching_is_case_insensitive_and_emits_the_canonical_include(self):
+        m=self.root/'modules'/'alpha';(m/'scripts').mkdir(parents=True)
+        (m/'scripts'/'alpha.gsc').write_text('alpha_replace() {}\nalpha_register() {}\n')
+        (m/'project.json').write_text(json.dumps({"schema":1,"game":"t6","mode":"zm","name":"alpha",
+            "scripts":[{"source":"scripts/alpha.gsc","target":"scripts/zm/Alpha.gsc","instance":"server"}],"assets":[],"loads":[]}))
+        (m/'module.json').write_text(json.dumps(declaration('alpha',
+            entry={'replace':'scripts/zm/alpha::alpha_replace','register':'scripts/zm/alpha::alpha_register'})))
+        comp=self.composition(['alpha']);out=self.out()
+        code,row=invoke(['module','build',str(comp),'--output',out,'--json']);self.assertEqual(code,0,row)
+        generated=(Path(out)/'generated-entry'/'zz_stock_pack_test_entry.gsc').read_text()
+        self.assertIn('#include scripts\\zm\\Alpha;',generated)
+        self.assertIn('scripts\\zm\\Alpha::alpha_replace();',generated)
+        self.assertTrue((Path(out)/'generated-entry'/'scripts'/'zm'/'Alpha.gsc').is_file())
+    def test_entry_reference_to_an_unknown_target_is_refused(self):
+        m=self.entry_member('alpha')
+        (m/'module.json').write_text(json.dumps(declaration('alpha',
+            entry={'replace':'scripts/zm/other::alpha_replace','register':'scripts/zm/other::alpha_register'})))
+        comp=self.composition(['alpha']);code,row=invoke(['module','plan',str(comp),'--output',self.out(),'--json'])
+        self.assertEqual(code,1,row);self.assertEqual(row['error_code'],'input_invalid')
+        self.assertIn('entry reference',row['message'].lower())
     def test_generated_entry_is_in_the_plan_scripts_and_checks(self):
         self.entry_member('alpha');comp=self.composition(['alpha']);out=self.out()
         code,row=invoke(['module','plan',str(comp),'--output',out,'--json']);self.assertEqual(code,0,row)
@@ -91,7 +129,7 @@ class GeneratedEntry(CompositionFixture):
         m=self.entry_member('alpha')
         (m/'scripts'/'maps'/'mp').mkdir(parents=True)
         (m/'scripts'/'maps'/'mp'/'_utility.gsc').write_text('utility_think() {}\n')
-        (m/'scripts'/'alpha.gsc').write_text('alpha_replace() { maps\\mp\\_utility::utility_think(); }\nalpha_register() {}\n')
+        (m/'scripts'/'alpha.gsc').write_text('#include maps\\mp\\_utility;\n\nalpha_replace() { utility_think(); }\nalpha_register() {}\n')
         comp=self.composition(['alpha']);out=self.out()
         from plutonium_agent_toolkit.dev import scripts
         seen=[];real=scripts.execute
