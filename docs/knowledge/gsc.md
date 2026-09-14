@@ -20,7 +20,14 @@ loaded successfully from raw` and calls its `main()` and `init()`. The same scri
 a `rawfile` inside `mod.ff` is **not** executed on stock Black Ops II (observed 2026-09-13: eight
 packaged scripts, none executed, no registration prints; the loose copies ran). `module build`
 therefore writes every compiled script under `packages/scripts/` beside `mod.ff` as well as into
-the zone, and an install stage carries both. A map-specific script sits under `maps/mp/zm_<map>.gsc` in the map's own fastfile. A loose
+the zone. `game install-mod` copies only `mod.ff` (and optional soundbanks), never
+`packages/scripts/`, so a full install takes a manual second step: after
+`pat game install-mod <build>/packages/mod.ff <profile>`, copy the build's `packages/scripts/`
+directory **contents** into the profile's `scripts/` directory, so `packages/scripts/zm/<name>.gsc`
+lands at `mods/<profile>/scripts/zm/<name>.gsc`. Copy the contents, never the directory itself
+into a path that already ends in `scripts/` or `zm/`, or the loose scripts land under
+`mods/<profile>/scripts/scripts/` or `.../zm/zm/` and the engine never sees them. A map-specific
+script sits under `maps/mp/zm_<map>.gsc` in the map's own fastfile. A loose
 global script under the storage folder's `raw/scripts/zm/` loads for every mod, which is how a
 shared developer menu is delivered; use that only for tooling shared across mods.
 

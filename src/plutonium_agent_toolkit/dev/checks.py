@@ -37,24 +37,75 @@ def script_result(name,text,passed):
             'detail':('; '.join(errors)[:800] or ('gsc check failed' if not passed else 'gsc check passed syntax/compilation; runtime external resolution is not proven'))}
 
 CALL=re.compile(r'(?<![\w\\:.\[])([a-z_][a-z0-9_]*)\s*\(')
-DEF=re.compile(r'^([a-z_][a-z0-9_]*)\s*\(',re.M)
+DEF=re.compile(r'^([a-z_][a-z0-9_]*)\s*\([^)]*\)\s*\{',re.M)
 INCLUDE=re.compile(r'^#include\s+([^;]+);',re.M)
 KEYWORDS=frozenset(('if','while','for','foreach','switch','return','wait','waittill','waittillmatch','endon','notify','thread','spawn','array','assert'))
 
+def mask_noncode(text):
+    """Blank comments and string literals, keeping every newline, so the line-anchored scans see
+    only executable GSC. A quote inside a string is backslash-escaped; `//` or `/*` inside a
+    string is text, not a comment."""
+    output=list(text);i=0;size=len(text);state='code'
+    while i<size:
+        char=text[i]
+        if state=='code':
+            if char=='/' and i+1<size and text[i+1]=='/':output[i]=output[i+1]=' ';i+=2;state='line'
+            elif char=='/' and i+1<size and text[i+1]=='*':output[i]=output[i+1]=' ';i+=2;state='block'
+            elif char=='"':output[i]=' ';i+=1;state='string'
+            else:i+=1
+        elif state=='line':
+            if char=='\n':state='code';i+=1
+            else:output[i]=' ';i+=1
+        elif state=='block':
+            if char=='*' and i+1<size and text[i+1]=='/':output[i]=output[i+1]=' ';i+=2;state='code'
+            else:
+                if char!='\n':output[i]=' '
+                i+=1
+        else:
+            if char=='\\' and i+1<size:
+                if text[i]!='\n':output[i]=' '
+                if text[i+1]!='\n':output[i+1]=' '
+                i+=2
+            elif char=='"':output[i]=' ';i+=1;state='code'
+            else:
+                if char!='\n':output[i]=' '
+                i+=1
+    return ''.join(output)
+
+def _script_vm(name):
+    """The script VM a target path belongs to; None when the suffix does not name one, which keeps
+    the check conservative instead of passing."""
+    lowered=name.lower()
+    if lowered.endswith('.csc'):return 'client'
+    if lowered.endswith('.gsc'):return 'server'
+    return None
+
 def external_symbols(name,text):
     """Unqualified calls resolved against the stock export table: failed when the call needs an
-    #include the script lacks; passed when every known call resolves; not_counted when a call is
-    neither a local function, a witnessed builtin, nor a stock export (the engine decides)."""
+    #include the script lacks or names a builtin witnessed only on the other VM; passed when every
+    known call resolves on this script's VM; not_counted when a call is neither a local function,
+    a builtin witnessed on this VM, nor a stock export (the engine decides), including when the
+    target suffix does not name a VM."""
     exports=knowledge.load('stock-exports.json')['exports']
-    text=re.sub(r'/\*.*?\*/','',text,flags=re.S);text=re.sub(r'//[^\n]*','',text)
+    text=mask_noncode(text)
+    vm=_script_vm(name)
     includes={inc.strip().replace(chr(92),'/').lower() for inc in INCLUDE.findall(text)}
-    defined=set(DEF.findall(text));missing=[];unknown=[]
+    defined=set(DEF.findall(text));missing=[];wrong=[];unknown=[]
     for call in sorted(set(CALL.findall(text))-defined-KEYWORDS):
         owners=[path for path,names in exports.items() if call in names]
         if owners:
             if not any(o in includes for o in owners):missing.append(f'{call} ({" or ".join(owners)})')
-        elif knowledge.builtin(call).get('verdict')!='builtin':unknown.append(call)
-    if missing:return [{'id':'externals:'+name,'outcome':'failed','detail':'Unqualified stock calls without #include: '+'; '.join(missing)[:800]}]
+            continue
+        if vm is None:unknown.append(call);continue
+        witness=knowledge.builtin(call,vm)
+        if witness.get('verdict')=='builtin':continue
+        if witness.get('also_on'):wrong.append(f'{call} (witnessed on {", ".join(witness["also_on"])} only)')
+        else:unknown.append(call)
+    if missing or wrong:
+        detail=[]
+        if missing:detail.append('Unqualified stock calls without #include: '+'; '.join(missing))
+        if wrong:detail.append(f'Calls not available on the {vm} script VM: '+'; '.join(wrong))
+        return [{'id':'externals:'+name,'outcome':'failed','detail':'; '.join(detail)[:800]}]
     if unknown:return [{'id':'externals:'+name,'outcome':'not_counted','detail':'Calls not in the stock export table or builtin witness list: '+', '.join(unknown)[:400]}]
     return [{'id':'externals:'+name,'outcome':'passed','detail':'Every unqualified call is local, a witnessed builtin, or covered by an #include'}]
 

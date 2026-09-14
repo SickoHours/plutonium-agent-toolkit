@@ -73,3 +73,27 @@ class ExternalSymbols(unittest.TestCase):
     def test_unknown_names_stay_not_counted(self):
         src='init()\n{\n    totally_unknown_thing();\n}\n'
         self.assertEqual(checks.external_symbols('scripts/zm/a.gsc',src)[0]['outcome'],'not_counted')
+    def test_a_string_literal_is_not_an_unqualified_call(self):
+        src='init()\n{\n    iprintln("get_players(");\n}\n'
+        self.assertEqual(checks.external_symbols('scripts/zm/a.gsc',src)[0]['outcome'],'passed')
+    def test_escaped_quotes_and_comment_looking_strings_are_masked(self):
+        src=('init()\n{\n'
+             '    iprintln("a \\" get_players( b");\n'
+             '    iprintln("// setclientfield( in a string");\n'
+             '    iprintln("/* get_player_equipment( in a string */");\n'
+             '}\n')
+        self.assertEqual(checks.external_symbols('scripts/zm/a.gsc',src)[0]['outcome'],'passed')
+    def test_a_call_at_column_zero_is_not_a_local_definition(self):
+        src='get_players();\n'
+        self.assertEqual(checks.external_symbols('scripts/zm/a.gsc',src)[0]['outcome'],'failed')
+    def test_a_local_definition_followed_by_a_body_is_not_an_external(self):
+        src='helper()\n{\n}\ninit()\n{\n    helper();\n}\n'
+        self.assertEqual(checks.external_symbols('scripts/zm/a.gsc',src)[0]['outcome'],'passed')
+    def test_server_only_builtin_in_a_client_script_never_passes(self):
+        src='init()\n{\n    precachemodel("model");\n}\n'
+        rows=checks.external_symbols('scripts/zm/effects.csc',src)
+        self.assertEqual(rows[0]['outcome'],'failed')
+        self.assertIn('precachemodel',rows[0]['detail'])
+    def test_server_only_builtin_in_a_server_script_resolves(self):
+        src='init()\n{\n    precachemodel("model");\n}\n'
+        self.assertEqual(checks.external_symbols('scripts/zm/hello.gsc',src)[0]['outcome'],'passed')
