@@ -17,6 +17,38 @@ Every entry states what shipped, on which platform it was verified, and what rem
   from 512 to 2048. Callers passing no flags keep the same shape plus the new fields. Verified
   by offline unit tests on Linux with a synthetic 400-module workspace and against a 192-module
   private workspace read-only; native Windows remains unverified.
+- Add target sets (`docs/target-sets.md`): a target is `<foundation>/<map>/<mode>[/<location>]`,
+  one of five kinds (`stock-map`, `stock-location`, `survival-location`, `dlc5-map`,
+  `custom-map`); survival locations (Reimagined's and QoL's fenced areas of stock maps such as
+  the Diner, Cell Block or The Crazy Place) are targets beside their parent map, each with a
+  fence cited to its route script and its own ledger. A **route** names which provider
+  implements a target, and one entry is one target on one route: where two providers ship the
+  same location, the entry id carries the route (`<key>@<route>`), the table is
+  `registry/locations/<key>.<route>.json`, and both are kept. `pat target list <workspace>`
+  lists the maps a workspace's foundations stage plus the locations its `registry/targets.json`
+  names, grouped by parent for the maps filter, with every such pair under `route_choices`;
+  `pat target inspect <workspace> <key> [--route R]` returns the entry and the location table
+  summary, or `route_choice` with the routes when a bare key is ambiguous;
+  `pat target validate <workspace>` applies the location-table rules (shape, target string and
+  route-suffixed path, one route, six facts false, literal or expression per row, vector arity,
+  unique ids, cited record listed, high confidence with file and line, literal equals cited
+  text, no T6 claim in a note) and the target-file rules (id and route agree, kind fits the key,
+  a location's parent present, no duplicate `(target, route)`, each `location_table` at the path
+  its id names and on disk, each `placements` count equal to its table's rows, the file's
+  `targets` count equal to its distinct keys), exit 1 with every diagnostic. The module
+  declaration gains an optional `placements` field (`needs`, `occupant`, `count`, `fallback`)
+  validated by `module inspect` when present; `module plan --workspace W --target KEY` reads the
+  target's location table as a hashed input and reports, per target, which needs it satisfies,
+  which fall back and which are refused, as a `placements:<target>` check, generating no
+  provider — and refuses a target two routes provide until one is named, the way two
+  `replaceFunc` owners of one function are refused. Ledger scope is `{base, map, location}`:
+  `module state --ledger` adds a `by_target` view and a `--target KEY` query, and the registry
+  proposal keeps a verdict's `location`. All three target routes are inert and read workspace
+  files only. Covered by offline unit tests on Linux with fixtures shaped like a private
+  workspace's real files, and exercised read-only against that workspace's 42 tables, 1,553
+  placement rows and 46 entries with no diagnostic; native Windows and gameplay behavior remain
+  unverified, and no coordinate is checked against a map.
+
 - Add the evidence ledger: `evidence.json` beside `module.json` holds typed, scoped rows
   (`lineage`, `authored`, `accepted-in-pack`, `extracted-from-release`, `built-alone`,
   `agent-reviewed`, `game-tested`, `player-accepted`), each with a scope (base and/or foundation,

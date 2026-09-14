@@ -387,13 +387,40 @@ def facts(ledger: dict, base=None, foundation=None, map_id=None, package=None, l
     scopes = [{"scope": {"base": key[0], "foundation": key[1], "map": key[2], "location": key[3]},
                "facts": {fact: _combine(bucket[fact]) for fact in FACTS}}
               for key, bucket in sorted(per_scope.items(), key=lambda item: tuple(str(k) for k in item[0]))]
+    # The app's view: every {base, map, location} the rows name, foundations folded together,
+    # a location kept apart from its parent map in its own row.
+    by_target: dict[tuple, dict] = {}
+    for key, bucket in per_scope.items():
+        target = by_target.setdefault((key[0], key[2], key[3]), {fact: [] for fact in FACTS})
+        for fact in FACTS:
+            target[fact] += bucket[fact]
+    targets = [{"base": key[0], "map": key[1], "location": key[2],
+                "facts": {fact: _combine(sorted(set(bucket[fact]))) for fact in FACTS}}
+               for key, bucket in sorted(by_target.items(), key=lambda item: tuple(str(k) for k in item[0]))]
     return {"query": {"base": base, "foundation": foundation, "map": map_id, "location": location, "package": package},
             "facts": {fact: _combine(queried[fact]) for fact in FACTS},
-            "scopes": scopes, "history": history}
+            "scopes": scopes, "by_target": targets, "history": history}
 
 
-def report(path: Path, base=None, foundation=None, map_id=None, package=None, location=None) -> dict:
-    """`module state --ledger`: read, validate, derive. An invalid ledger derives nothing."""
+def query_from_target(key: str) -> dict:
+    """A target key ``<foundation>/<map>/<mode>[/<location>]`` (``docs/target-sets.md``) as a
+    ledger query: its foundation, map and location. The mode narrows nothing here; rows carry
+    ``mode`` as description only."""
+    from .targets import parse_key
+    parts = parse_key(key)
+    return {"foundation": parts["foundation"], "map_id": parts["map"], "location": parts["location"]}
+
+
+def report(path: Path, base=None, foundation=None, map_id=None, package=None, location=None, target=None) -> dict:
+    """`module state --ledger`: read, validate, derive. An invalid ledger derives nothing.
+    ``target`` is a target key; it supplies foundation, map and location and refuses to
+    disagree with any of them given separately."""
+    if target is not None:
+        parts = query_from_target(target)
+        for name, given, from_key in (("foundation", foundation, parts["foundation"]), ("map", map_id, parts["map_id"]), ("location", location, parts["location"])):
+            if given is not None and given != from_key:
+                raise Failure(INVALID_ARGUMENTS, f"--{name} {given!r} disagrees with --target {target!r} ({from_key!r})")
+        foundation, map_id, location = parts["foundation"], parts["map_id"], parts["location"]
     path = Path(path)
     if path.is_dir():
         path = path / FILENAME
@@ -466,6 +493,10 @@ def _scope_from(row: dict, foundations: dict) -> dict | None:
         scope["foundation"] = foundation
     if isinstance(map_id, str):
         scope["maps"] = [map_id]
+        # A record scoped {base, map, location} (docs/target-sets.md) keeps its location: a
+        # verdict on the Diner is not a verdict on Green Run.
+        if isinstance(row.get("location"), str):
+            scope["location"] = row["location"]
     return scope or None
 
 

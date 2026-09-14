@@ -17,6 +17,8 @@
     pat module inspect <module.json|composition.json> --json
     pat module state --composition <dir> [--plan --verify --test-plan --run --verdict] | --ledger <module dir> [--base --foundation --map --location --package]
     pat module ledger-from-registry <workspace> <module-id> --dry-run --json   propose evidence.json rows; writes nothing
+    pat target list|validate <workspace> [--targets-file PATH] --json          maps and survival locations as targets; location tables checked
+    pat target inspect <workspace> <foundation>/<map>/<mode>[/<location>][@<route>] [--route R] --json
     pat module plan|build <composition.json> --output <new dir>
     pat module declare <mod.ff> --output <new dir>
     pat module fetch <owner/id@commit | https://github.com/o/r@commit> --output <new dir>
@@ -41,7 +43,7 @@ from . import __version__
 from .core import config, platform
 from .core.discovery import find, manifest, routes
 from .core.envelope import emit, failure, success
-from .core.errors import INVALID_ARGUMENTS, NOT_IMPLEMENTED, OPERATION_FAILED, Failure
+from .core.errors import INPUT_INVALID, INVALID_ARGUMENTS, NOT_IMPLEMENTED, OPERATION_FAILED, Failure
 
 # Importing the route modules registers their contracts.
 from .agent import routes as _agent_routes  # noqa: F401
@@ -140,6 +142,20 @@ def build_parser() -> Parser:
 
     baseline.add_parser(ra, common)  # registry baseline is a job: --output and --timeout like every other job
 
+    t = sub.add_parser("target", help="Targets: stock maps, DLC5 maps and survival locations as <foundation>/<map>/<mode>[/<location>], with their location tables")
+    ta = t.add_subparsers(dest="action", required=True)
+    for action, help_text in (("list", "List every target the workspace knows, grouped by parent map"),
+                              ("validate", "Validate every location table and the target file; exit 1 on any defect")):
+        q = ta.add_parser(action, help=help_text)
+        q.add_argument("workspace", help="Workspace root holding foundations/ and registry/")
+        q.add_argument("--targets-file", help="Target file to read instead of <workspace>/registry/targets.json")
+        q.add_argument("--json", action="store_true")
+    q = ta.add_parser("inspect", help="One target's entry and its location table summary")
+    q.add_argument("workspace", help="Workspace root holding foundations/ and registry/")
+    q.add_argument("target", help="<foundation>/<map>/<mode>[/<location>][@<route>]")
+    q.add_argument("--route", help="Which provider's entry and table to read when more than one provides this target")
+    q.add_argument("--targets-file", help="Target file to read instead of <workspace>/registry/targets.json")
+    q.add_argument("--json", action="store_true")
     k = sub.add_parser("knowledge", help="Generated T6 facts shipped with the toolkit: builtins per script VM, engine limits with per-map occupancy, crash signatures")
     ka = k.add_subparsers(dest="action", required=True)
     q = ka.add_parser("builtin", help="Does this call exist on a script VM, with which argument counts")
@@ -172,7 +188,7 @@ def build_parser() -> Parser:
     g.add_argument("--json", action="store_true")
 
     # Planned/deferred groups accept any action so they can answer with a structured refusal.
-    for group in sorted({r.group for r in routes()} - {"dev", "gsc", "ff", "project", "module", "registry", "workspace", "knowledge", "game", "agent", "plane", "mcp", "audio", "image", "lua", "model", "weapon", "test"}):
+    for group in sorted({r.group for r in routes()} - {"dev", "gsc", "ff", "project", "module", "registry", "workspace", "knowledge", "target", "game", "agent", "plane", "mcp", "audio", "image", "lua", "model", "weapon", "test"}):
         g = sub.add_parser(group)
         g.add_argument("action")
         g.add_argument("rest", nargs=argparse.REMAINDER)
@@ -323,9 +339,9 @@ def run(argv: list[str]) -> dict:
             for name in ("plan", "verify", "test_plan", "run", "verdict"):
                 if getattr(args, name, None):
                     raise Failure(INVALID_ARGUMENTS, f"--{name.replace('_', '-')} belongs to --composition; --ledger reads evidence.json only")
-            if args.location and not args.map:
+            if args.location and not args.map and not args.target:
                 raise Failure(INVALID_ARGUMENTS, "--location names a fenced area inside --map; give the map too")
-            return success(command, ledger.report(Path(args.ledger), args.base, args.foundation, args.map, args.package, args.location))
+            return success(command, ledger.report(Path(args.ledger), args.base, args.foundation, args.map, args.package, args.location, args.target))
         return success(command,state.derive(args))
 
     if group == "module" and args.action == "ledger-from-registry":
@@ -354,6 +370,19 @@ def run(argv: list[str]) -> dict:
             return success(command, registry.search(" ".join(args.words), category=args.category, kind=args.kind, tag=args.tag,
                                                         base=args.base, map_id=args.map, entry_kind=args.entry_kind, origin=args.origin))
         return success(command, registry.show(args.name))
+    if group == "target":
+        from .dev import targets
+
+        if args.action == "list":
+            return success(command, targets.list_targets(args.workspace, args.targets_file))
+        if args.action == "inspect":
+            return success(command, targets.inspect_target(args.workspace, args.target, args.targets_file, args.route))
+        report = targets.validate_workspace(args.workspace, args.targets_file)
+        if not report["ok"]:
+            raise Failure(INPUT_INVALID, f"{report['diagnostics_total']} defect(s) in the workspace's location tables or target file",
+                          "Each diagnostic names the table or entry and the rule it broke; docs/target-sets.md lists the rules.", report=report)
+        return success(command, report)
+
     if group == "knowledge":
         from .dev import knowledge
 

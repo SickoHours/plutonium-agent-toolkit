@@ -598,6 +598,73 @@
               "pattern": "^[a-z0-9_/]+::[a-z0-9_]+$"
             }
           }
+        },
+        "placements": {
+          "description": "Present only when the declaration names placements: what the module needs placed on each target, never where. Format: docs/target-sets.md.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "needs",
+              "occupant",
+              "count",
+              "fallback"
+            ],
+            "properties": {
+              "needs": {
+                "enum": [
+                  "perk-machine",
+                  "pack-a-punch",
+                  "wall-buy",
+                  "gobblegum",
+                  "wunderfizz",
+                  "mystery-box",
+                  "rotation-slot",
+                  "player-spawn",
+                  "zone-fence",
+                  "buildable-table",
+                  "power-switch"
+                ]
+              },
+              "occupant": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 120
+              },
+              "count": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 256
+                  },
+                  {
+                    "const": "any"
+                  }
+                ]
+              },
+              "fallback": {
+                "enum": [
+                  "refuse",
+                  "rotation-slot",
+                  "wunderfizz",
+                  "spawn-room-default",
+                  "omit"
+                ]
+              },
+              "note": {
+                "type": "string",
+                "maxLength": 400
+              }
+            }
+          }
         }
       }
     },

@@ -53,7 +53,7 @@ import shutil
 from pathlib import Path, PureWindowsPath
 from types import SimpleNamespace
 
-from ..core.errors import BACKEND_FAILED, INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, Failure
+from ..core.errors import BACKEND_FAILED, INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, INVALID_ARGUMENTS, Failure
 from ..core.jobs import Job
 from ..core.receipts import FILE_FLAGS, sha256_file
 from . import fastfiles, projects, scripts, seeds, titles
@@ -117,6 +117,7 @@ def add_parser(sub, common):
     q.add_argument("--base", help="With --ledger: the base token to query"); q.add_argument("--foundation", help="With --ledger: the foundation id to query")
     q.add_argument("--map", help="With --ledger: the map id to query"); q.add_argument("--package", help="With --ledger: a package sha256 to query")
     q.add_argument("--location", help="With --ledger: a survival location inside --map; without it only rows with no location match")
+    q.add_argument("--target", help="With --ledger: a target key <foundation>/<map>/<mode>[/<location>] supplying foundation, map and location at once")
     q.add_argument("--json",action="store_true")
     q = actions.add_parser("ledger-from-registry", help="Propose evidence.json rows for one workspace module from the registry and its docs; prints them, writes nothing")
     q.add_argument("workspace", help="Workspace root holding modules/, registry/t6-modules.json and foundations/")
@@ -131,6 +132,9 @@ def add_parser(sub, common):
         q = actions.add_parser(action, help=help_text)
         q.add_argument("composition", help="Path to composition.json")
         q.add_argument("--allow-unqualified", action="store_true", help="Report base/map mismatches without refusing; does not add evidence")
+        q.add_argument("--workspace", help="Workspace root whose registry/locations tables answer the members' placements needs (docs/target-sets.md)")
+        q.add_argument("--target", action="append", default=[], metavar="KEY",
+                       help="A target <foundation>/<map>/<mode>[/<location>][@<route>] to check placements against; repeatable. Its map must be the composition's, and a location two routes provide names one")
         common(q)
     q = actions.add_parser("compose", help="Compose declared IDs against a foundation, or publish a successfully built recipe")
     q.add_argument("--name"); q.add_argument("--base"); q.add_argument("--map")
@@ -163,7 +167,7 @@ MAX_DECLARATION_BYTES = 256 * 1024
 MAX_INSPECTION_TEXT = 2048
 MAX_INSPECTION_CODE = 200
 MODULE_METADATA_FIELDS = ("id", "version", "game", "title", "category", "kind", "tags", "bases", "maps",
-                          "dependencies", "conflicts", "origin", "donor", "distribution", "menu_route", "payload", "lineage", "replaces", "entry")
+                          "dependencies", "conflicts", "origin", "donor", "distribution", "menu_route", "payload", "lineage", "replaces", "entry", "placements")
 COMPOSITION_METADATA_FIELDS = ("name", "title", "game", "tags", "base", "map", "origin", "donor", "members")
 
 
@@ -257,7 +261,7 @@ def inspect(path: Path) -> dict:
             fields = COMPOSITION_METADATA_FIELDS
         else:
             raise Failure(INPUT_INVALID, "Expected a module or composition declaration", field="/")
-        result.update(validation="metadata-valid", metadata={key: metadata[key] for key in fields if key not in ("replaces","entry") or key in data})
+        result.update(validation="metadata-valid", metadata={key: metadata[key] for key in fields if key not in ("replaces","entry","placements") or key in data})
         if kind == "module":
             ledger_path = path.parent / "evidence.json"
             if ledger_path.exists() or ledger_path.is_symlink():
@@ -503,6 +507,13 @@ def replacement_warnings(modules,loaded):
     return warnings
 
 
+def _placements(value, mid):
+    """What a module needs placed on each target (a perk machine, a wall buy, ...), never
+    where; ``docs/target-sets.md``. Absent is not an error and adds nothing."""
+    from .targets import validate_placements
+    return validate_placements(value, mid)
+
+
 def _function(value):
     if not isinstance(value,str) or len(value)>256 or not FUNCTION.fullmatch(value.lower()):
         raise Failure(INPUT_INVALID,'Expected script/path::function')
@@ -539,7 +550,7 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
     """Authoritative declaration checks; no filesystem or payload resolution."""
     _fields(data, {"schema", "id", "version", "game", "title", "category", "kind", "tags", "recipe", "seed", "bases", "maps",
                             "dependencies", "conflicts", "provides", "resource_contract", "menu_route", "distribution", "source",
-                            "origin", "donor", "lineage", "tests", "replaces", "entry"},
+                            "origin", "donor", "lineage", "tests", "replaces", "entry", "placements"},
                      {"schema", "id", "version", "bases", "maps"}, where)
     if data["schema"] != 1:
         raise Failure(INPUT_INVALID, f"{where}: expected schema 1", field='/schema')
@@ -605,6 +616,7 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
     return {"id": mid, "version": data["version"], "game": game, "title": title, "category": category, "kind": kind, "tags": list(tags),
             "payload": payload, "payload_path": payload_path, "distribution": distribution, "tests": tests,
             "replaces":_at("/replaces",_replaces,data.get("replaces")), "entry":_at("/entry",_entry,data.get("entry")),
+            "placements": _placements(data.get("placements"), mid),
             "bases": list(bases), "maps": list(maps),
             "dependencies": _at("/dependencies", _ids, data.get("dependencies", []), "dependencies", mid),
             "conflicts": _at("/conflicts", _ids, data.get("conflicts", []), "conflicts", mid),
@@ -1013,7 +1025,7 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
                "distribution": m["distribution"], "dependencies": m["dependencies"], "conflicts": m["conflicts"],
                "bases": m["bases"], "maps": m["maps"], "provides": m["provides"], "resource_contract": m["resource_contract"],
                "menu_route": m["menu_route"], "source": m["source"], "reference": m.get("reference"),
-               "origin": m["origin"], "donor": m["donor"], "replaces":m["replaces"], "entry":m["entry"]}
+               "origin": m["origin"], "donor": m["donor"], "replaces":m["replaces"], "entry":m["entry"], "placements": m.get("placements")}
         if m["recipe"] is not None:
             row["recipe_sha256"] = job.inputs[str(m["recipe"].resolve())]
         else:
@@ -1097,6 +1109,8 @@ def execute(args, job: Job) -> dict:
         plan["checks"] += [{"id":"symbols:"+t.as_posix(),"outcome":"not_counted","detail":"gsc check runs before the build link"} for _,t,_ in compiled]
     if generated_entry is not None:
         plan["generated_entry"] = generated_entry["plan"]
+    plan["placements"] = _placement_checks(comp, modules, args, job)
+    plan["checks"] += [{"id": "placements:" + row["target"], "outcome": row["outcome"], "detail": row["detail"]} for row in plan["placements"]]
     (job.root / "plan.json").write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
     summary = {"plan": "plan.json", "name": comp["name"], "title": comp["title"], "base": comp["base"], "map": comp["map"],
                "base_member": plan["base_member"],
@@ -1107,6 +1121,7 @@ def execute(args, job: Job) -> dict:
                "scripts": len(compiled), "assets": len(loose), "seeds": len(seed_modules), "loads": len(loads),
                "decisions": decided, "undecided": undecided, "base_owned_names": len(comp.get("base_owned") or ())}
     summary["checks"] = plan["checks"]
+    summary["placements"] = plan["placements"]
     if any(c["outcome"]=="failed" for c in plan["checks"]):
         raise Failure(INPUT_INVALID,"Offline checks failed",checks=plan["checks"])
     if args.action == "plan":
@@ -1117,6 +1132,50 @@ def execute(args, job: Job) -> dict:
                       "Read plan.json's undecided list, record an owner for each under decisions in the composition (or rename a target), then build.",
                       undecided=undecided)
     return _build_composition(comp, plan, compiled, loose, seed_modules, loads, decided, header, args, job)
+
+
+def _placement_checks(comp: dict, modules: list[dict], args, job: Job) -> list[dict]:
+    """Per target, which declared placements needs a location table can satisfy and which it
+    cannot (``docs/target-sets.md``). A check only: no provider module is generated. Without
+    ``--target`` the needs are listed against the composition's own map as ``not_counted``."""
+    from . import targets as target_sets
+    declared = [m for m in modules if m.get("placements")]
+    keys = list(getattr(args, "target", None) or [])
+    workspace = getattr(args, "workspace", None)
+    if not declared and not keys:
+        return []
+    if keys and not workspace:
+        raise Failure(INVALID_ARGUMENTS, "--target needs --workspace: the location tables live under the workspace's registry/locations",
+                      "Run: pat target list <workspace> --json")
+    root = Path(workspace).expanduser() if workspace else None
+    if root is not None and not root.is_dir():
+        raise Failure(INPUT_MISSING, f"Workspace directory is missing: {root}")
+    if not keys:
+        row = target_sets.resolve_placements(declared, None, f"{comp['base']}/{comp['map']}")
+        row["detail"] = f"no --target given; {len(row['needs'])} need(s) listed against map {comp['map']}, nothing resolved"
+        return [row]
+    rows = []
+    for entry_id in keys:
+        key, _ = target_sets.parse_id(entry_id)
+        parts = target_sets.parse_key(key)
+        if parts["map"] != comp["map"]:
+            raise Failure(INVALID_ARGUMENTS, f"Target {entry_id} is on map {parts['map']} but the composition is planned for {comp['map']}",
+                          "A composition is planned for one map; its targets are that map and the survival locations inside it.")
+        resolved = target_sets.table_for(root, entry_id)
+        table = None
+        if resolved["path"]:
+            path = root / resolved["path"]
+            job.input(path, limit=target_sets.MAX_TABLE_BYTES)
+            loaded = target_sets.load_table(path)
+            if loaded["errors"]:
+                raise Failure(INPUT_INVALID, f"Location table for {entry_id} is invalid; run pat target validate {root} --json",
+                              diagnostics=loaded["errors"][:32])
+            table = loaded["doc"]
+        row = target_sets.resolve_placements(declared, table, entry_id)
+        row["route"] = resolved["route"]
+        row["table_path"] = resolved["path"]
+        rows.append(row)
+    return rows
 
 
 def entry_source(name, members):

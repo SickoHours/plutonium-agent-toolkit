@@ -99,6 +99,9 @@ words are defined once in [CONTEXT.md](CONTEXT.md).
 add a script, port a feature, four preflights, diagnose a crash, compose a pack, package and install.
 [docs/MODULES.md](docs/MODULES.md) specifies the module declaration and composition recipe that
 let an agent compose several mods, from local directories or fetched repositories, into one pack;
+[docs/target-sets.md](docs/target-sets.md) specifies targets (stock maps, DLC5 maps and survival
+locations as `<foundation>/<map>/<mode>[/<location>]`), the per-target location tables `pat target`
+validates, and the `placements` contract a module declares against them;
 [docs/REGISTRY.md](docs/REGISTRY.md) specifies the registry file that lists them by name at exact
 commits, with `pat registry` and `pat module fetch`, and the static baseline a registry runs
 before listing (`pat registry baseline`; a check of files, not a security audit); the toolkit
