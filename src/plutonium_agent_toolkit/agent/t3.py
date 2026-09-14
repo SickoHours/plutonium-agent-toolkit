@@ -27,6 +27,7 @@ MAX_PROMPT = 200_000
 MAX_TEXT = 512
 MAX_OPTIONS = 16
 ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z")
+PROVIDER_INSTANCE_V2_RE = re.compile(r"[A-Za-z][A-Za-z0-9_-]{0,63}\Z")
 OPTION_ID_RE = re.compile(r"[A-Za-z][A-Za-z0-9_-]{0,63}\Z")
 RUNTIME_MODES = ("approval-required", "auto-accept-edits", "auto", "full-access")
 INTERACTION_MODES = ("default", "plan")
@@ -351,8 +352,8 @@ def read_prompt(text: str) -> str:
 
 
 def model_selection(instance: str, model: str, options: list[str]) -> dict:
-    # The instance id's shape depends on the host's orchestration protocol, which is not known
-    # until dispatch probes it; validate it there with the protocol-aware validator.
+    # Dispatch validates the instance after probing the host. Provider routing keys have a
+    # distinct schema from opaque V2 graph ids; they are not thread or project identifiers.
     if not isinstance(instance, str) or not instance.strip():
         raise Failure(INPUT_INVALID, "Provide the provider instance id exactly as pat agent models lists it")
     if not isinstance(model, str) or not model.strip() or len(model) > MAX_TEXT:
@@ -387,8 +388,14 @@ def dispatch(origin: str, bearer: str, *, project_id: str, title: str, prompt: s
              worktree_path: str | None = None, branch: str | None = None) -> dict:
     info = require_protocol(origin)
     validate_id(project_id, "project id", protocol=info["orchestration_protocol"])
-    validate_id(selection.get("instanceId") if isinstance(selection, dict) else None,
-                "provider instance id", protocol=info["orchestration_protocol"])
+    instance = selection.get("instanceId") if isinstance(selection, dict) else None
+    if info["orchestration_protocol"] == 2:
+        # T3 contracts/providerInstance.ts: ProviderInstanceId is a 1..64-character slug,
+        # not the opaque makeEntityId schema used by ThreadId and ProjectId.
+        if not isinstance(instance, str) or not PROVIDER_INSTANCE_V2_RE.fullmatch(instance):
+            raise Failure(INPUT_INVALID, "V2 provider instance ids must be 1-64 characters: a letter followed by letters, digits, underscores or hyphens")
+    else:
+        validate_id(instance, "provider instance id")
     if not title.strip() or len(title) > MAX_TEXT:
         raise Failure(INPUT_INVALID, "Provide a non-empty --title up to 512 characters")
     if runtime_mode not in RUNTIME_MODES:
