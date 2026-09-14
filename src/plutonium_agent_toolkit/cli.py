@@ -188,7 +188,7 @@ JOB_ACTIONS = {("registry", "baseline"): "baseline", ("test", "plan"): "testing.
 
 
 def is_job(group: str, action: str) -> bool:
-    return (group in JOB_GROUPS and (group, action) != ("module", "inspect")) or (group, action) in JOB_ACTIONS
+    return (group in JOB_GROUPS and (group, action) not in (("module", "inspect"),("module","state"))) or (group, action) in JOB_ACTIONS
 
 
 def run_job(args, argv: list[str]) -> dict:
@@ -307,6 +307,10 @@ def run(argv: list[str]) -> dict:
     if group == "workspace" and args.action == "catalog":
         from .dev import workspace_catalog
         return success(command, workspace_catalog.catalog(args.directory, args.art_catalog))
+
+    if group == "module" and args.action == "state":
+        from .dev import state
+        return success(command,state.derive(args))
 
     if group == "module" and args.action == "inspect":
         from .dev import compositions

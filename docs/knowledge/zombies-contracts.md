@@ -78,3 +78,9 @@ effect's longest lifetime plus one second, owned live resources return to baseli
 equip/use/replace cycles plus down, revive, death, respawn, menu and disconnect cases; then a
 representative soak. A crash, pool exhaustion or sustained growth blocks acceptance regardless of
 percentages.
+
+Test-only preconditions can be implemented by a separate module with its own correlated mailbox,
+without changing a player menu. Stock call targets inspected for this implementation include
+`_zm_perks::give_perk`, native power-switch trigger notifications, and native door trigger
+notifications. Do not equate door notifications with all quest gates opening, or round-counter
+advancement with a natural soak. A test-only member must never reach a release pack.

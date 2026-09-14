@@ -1,4 +1,5 @@
 """Offline composition test-plan loading and deterministic stitching."""
+import os
 import copy
 import hashlib
 from itertools import combinations
@@ -40,6 +41,7 @@ def load(args,job):
     composition=comp.load_composition(path,job)
     modules,loads,_,header=comp.flatten(composition,job)
     decisions=scoped_decisions(composition,modules)
+    probe=prepare_probe(composition,modules,job);probe_active=probe['active']
     for index,m in enumerate(modules):
         if m['game']!=composition['game']:
             raise Failure(INPUT_INVALID,'Member targets a different game',field=f"/modules/{index}/game")
@@ -50,7 +52,7 @@ def load(args,job):
     for mid in resolved['order']:
         m=by_id[mid];field=f"/modules/{declaration_index[mid]}/tests"
         if not m.get('tests'):raise Failure(INPUT_MISSING,'Member has no test contract',field=field)
-        try:c=tc.load_contract(m['directory'],m)
+        try:c=tc.load_contract(m['directory'],m,probe=probe_active)
         except Failure as exc:
             exc.details['field']=f"/modules/{declaration_index[mid]}"+exc.details.get('field','/tests');raise
         contract_path=job.input(m['directory']/m['tests'])
@@ -59,7 +61,8 @@ def load(args,job):
         if composition['map'] not in c['maps']:raise Failure(INPUT_INVALID,'Member contract does not cover the composition map',field=field+'/maps/'+composition['map'])
         contracts[mid]=c
         members.append({'id':mid,'directory':str(m['directory']),'declaration_sha256':job.inputs[str(m['declaration'])],'provides':m['provides'],'tests':m['tests']})
-    return dict(name=composition['name'],base=composition['base'],map=composition['map'],order=resolved['order'],modules=members,mode=args.mode),contracts,decisions
+    return dict(name=composition['name'],base=composition['base'],map=composition['map'],order=resolved['order'],modules=members,mode=args.mode,
+                probe=probe_active,probe_module=(str(probe['added']['directory']) if probe['added'] else None),source=str(composition['source'])),contracts,decisions
 
 def stitch(plan, contracts, decisions):
     """Merge in dependency order without reading files or executing actions."""
@@ -67,7 +70,7 @@ def stitch(plan, contracts, decisions):
                    else [dict(row,collision=row.get('collision',key)) for key,row in decisions.items()])
     result={'schema_version':1,'protocol':'pat.test-plan/1','composition':plan['name'],'base':plan['base'],
             'map':plan['map'],'mode':plan.get('mode','human'),'members':[],'preconditions':[],
-            'phases':[],'human_steps':[],'conflicts':[],'not_covered':[],'excluded_steps':[]}
+            'phases':[],'human_steps':[],'conflicts':[],'not_covered':[],'excluded_steps':[],'probe':plan.get('probe',False)}
     members={m['id']:m for m in plan['modules']};member_steps={};steps=[];seen=set();soak=0
     for index,mid in enumerate(plan['order']):
         if mid not in contracts:raise Failure(INPUT_MISSING,'Member has no test contract',field=f'/modules/{index}/tests')
@@ -128,9 +131,9 @@ def stitch(plan, contracts, decisions):
     error={'source':'log','absent':'script error|Unresolved external|out of space'}
     soak_steps=[]
     if soak:
-        soak_steps=[{'id':'soak','actor':'human','verifier':'agent','prompt':f'Advance {soak} additional rounds, then verify the log.',
+        soak_steps=[{'id':'soak','actor':'agent' if plan.get('probe') else 'human','verifier':'agent','prompt':f'Advance {soak} additional rounds, then verify the log.',
                      'action':{'verb':'round_set','arg':'+'+str(soak)},'check':error}]
-        if result['mode']=='background':raise Failure(INPUT_INVALID,'Background soak needs a test probe',field='/phases/3/steps/0/actor')
+        if result['mode']=='background' and not plan.get('probe'):raise Failure(INPUT_INVALID,'Background soak needs a test probe',field='/phases/3/steps/0/actor')
     result['phases']=[{'name':'load','steps':[{'id':'load-clean','actor':'agent','verifier':'agent','action':{'verb':'check_load'},'check':error}]},
                       {'name':'members','steps':steps},{'name':'interactions','steps':pairs},{'name':'soak','steps':soak_steps}]
     for sid in result['excluded_steps']:result['not_covered'].append('Owner decision excluded check/action '+sid)
@@ -139,7 +142,68 @@ def stitch(plan, contracts, decisions):
 def execute(args,job):
     plan,contracts,decisions=load(args,job)
     result=stitch(plan,contracts,decisions)
+    if plan.get('probe'):
+        emit_composition(plan,job)
     (job.root/'test-plan.json').write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8')
     return {'test_plan':'test-plan.json','composition':result['composition'],'members':len(result['members']),
             'steps':sum(len(p['steps']) for p in result['phases']),'human_steps':len(result['human_steps']),
             'verification':'Contracts stitched offline; no game action, capture or player acceptance'}
+
+
+def prepare_probe(composition,modules,job):
+    """Add a declared local test probe before both test planning and package building.
+
+    Returns ``{"active": bool, "added": declaration or None}`` so the caller can tell whether the
+    probe was newly admitted and must be written into an emitted composition."""
+    needed=False
+    for i,m in enumerate(modules):
+        if not m.get('tests'):continue
+        # Validate with probe scope to discover the requested capability; scope is then admitted below.
+        try:contract=tc.load_contract(m['directory'],m,probe=True)
+        except Failure as exc:
+            # Keep the declaration-order index the planner loop (and the module routes) report.
+            exc.details['field']=f"/modules/{i}"+exc.details.get('field','/tests');raise
+        path=job.input(m['directory']/m['tests'])
+        if job.inputs[str(path)]!=contract['sha256']:raise Failure('input_changed','Probe contract changed during admission')
+        for row in [p for map_row in contract['maps'].values() for p in map_row.get('preconditions',[])]+contract['steps']:
+            a=row.get('action',row)
+            if a.get('verb') in tc.PROBE_VERBS and row.get('actor','agent')=='agent':needed=True
+    existing=next((m for m in modules if m['id']=='test_probe'),None)
+    if needed or existing:
+        if not composition['name'].endswith(('_test','_probe')):raise Failure(INPUT_INVALID,'Test probe is forbidden in release profiles',field='/modules')
+        added=None
+        if not existing:
+            candidates={m['directory'].parent/'test_probe' for m in modules}
+            candidates.add(composition['source'].parent.parent.parent/'modules/test_probe')
+            found=sorted({p.resolve() for p in candidates if (p/'module.json').is_file()})
+            if len(found)!=1:raise Failure(INPUT_MISSING,'Provide exactly one sibling test_probe module',field='/modules/test_probe')
+            existing=comp.load_declaration(found[0],job);modules.append(existing);added=existing
+            if existing.get('game')!=composition['game'] or composition['base'] not in existing.get('bases',()) \
+                    or ('*' not in existing.get('maps',()) and composition['map'] not in existing.get('maps',())):
+                raise Failure(INPUT_INVALID,'Test probe does not cover this composition game, base and map',field='/modules/test_probe')
+        if existing['id']!='test_probe' or 'test-only' not in existing['tags']:raise Failure(INPUT_INVALID,'Probe declaration must be test-only',field='/modules/test_probe')
+        return {'active':True,'added':added}
+    return {'active':False,'added':None}
+
+def _relative_posix(path,root):
+    return str(os.path.relpath(path,root)).replace('\\','/')
+
+def emit_composition(plan,job):
+    """Copy the source recipe into the job, keeping its nested members intact.
+
+    The flattened member list would drop each member's role and pinned reference and detach a
+    nested recipe's decisions; rewriting the top-level paths relative to the job keeps every
+    nested composition, its decisions and its scope exactly as authored. A newly admitted probe
+    is appended once as a top-level member."""
+    source=Path(plan['source']);data=json.loads(source.read_text(encoding='utf-8'))
+    modules=[]
+    for entry in data.get('modules',[]):
+        row={'path':entry} if isinstance(entry,str) else dict(entry)
+        row['path']=_relative_posix((source.parent/row['path']).resolve(),job.root)
+        modules.append(row if isinstance(entry,dict) else row['path'])
+    data['modules']=modules
+    for key in ('loads','base_owned'):
+        data[key]=[_relative_posix((source.parent/p).resolve(),job.root) for p in data.get(key,[])]
+    added=plan.get('probe_module')
+    if added:data['modules'].append(_relative_posix(Path(added).resolve(),job.root))
+    (job.root/'composition.json').write_text(json.dumps(data,indent=2)+'\n',encoding='utf-8')

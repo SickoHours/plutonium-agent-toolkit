@@ -124,5 +124,7 @@ PLANNED = [
           notes="Argument: [--map <zm_map>]. Counts are zone contents from listings, decompiled text and WeaponDefs, never runtime pools; null means nothing on disk counts it."),
 ]
 
+register(Route("module", "state", "Derive composition evidence state from exact artifact hashes", "inert", status="implemented", owner=OWNER))
+
 for route in AVAILABLE + PLANNED:
     register(route)

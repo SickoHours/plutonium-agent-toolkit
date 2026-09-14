@@ -74,3 +74,9 @@ nobody has recorded yet, not a clean load; record it here in the same change as 
 If the cause is ambiguous, say so. Never claim a leak, a fixed crash or a crash-free game from a
 pattern search, a screenshot or an unrelated passing suite. Diagnosis reads; it does not fix.
 `docs/playbooks/diagnose-a-crash.md` is the finite version of this page.
+
+Composition checks front known signatures: `pool:sound-assets` refuses a counted floor over
+32 banks; `pool:projectile-fx-registrations` needs exact FX union evidence and otherwise remains
+uncounted; `pool:actor-client-field-set` remains uncounted without a numeric bound.
+`symbols:<script>` retains compiler-reported unresolved externals/errors before linking;
+compiler success does not establish runtime export availability.

@@ -398,3 +398,37 @@ and `not_covered`; the planner never silently turns a failed assertion into a pa
 The four phases are load, members, interactions and soak. Human-only verification remains in
 `human_steps`. Until a probe exists, nonzero soak is a human round-advance step, and background
 plans refuse human preconditions/soak. A plan is preparation, not evidence that actions ran.
+
+## Derived evidence state
+
+`pat module state --composition DIR --plan PLAN --verify RECEIPT --test-plan TEST_PLAN
+--run RUN --verdict ACCEPTED --json` computes composed, offline_verified,
+ready_for_game_testing, game_tested, then player_accepted. Optional evidence paths stop at
+whichever rung remains proven. Package bytes, the built plan when present in receipt outputs,
+all receipt input hashes, exact member contracts, admitted run-plan digest and latest scoped
+verdict must match in order. Without a built plan in the receipt, the plan's member declaration
+hashes must be bound in the receipt's inputs instead. Changes revoke later claims and appear in
+`reasons`; no state file is stored or updated.
+A plan whose current member declaration hashes no longer match claims no state at all; with
+unchanged declarations, a stale build input, a mismatched built plan or a package that no longer
+matches revokes the claim to composed with the mismatch reason, never offline verified.
+A plan that is not a well-formed composition plan (wrong schema, missing name/base/map, empty or
+malformed module rows, duplicate ids, or undecided collisions) claims no state at all.
+
+## Checks
+
+Composition plans contain `checks` with `passed`, `failed` or `not_counted`. Pool checks
+use shipped map occupancy plus declared contributions; a floor above the observed bound
+fails before linking, while incomplete counts remain uncounted. Projectile FX union requires
+weapon blobs and is not inferred from weapon count. Soundbank listing is only a floor.
+Builds run a receipted `gsc check` dry run per script before linking. Compiler-reported unresolved
+externals fail; successful compilation alone cannot prove runtime external resolution and that
+symbol check remains `not_counted`. Plans themselves do not run the compiler.
+
+Probe actions with an agent actor cause `test plan` and `module build` to include exactly one
+local sibling module named `test_probe`, tagged `test-only`, on `_test`/`_probe` profiles.
+The planner searches member siblings and the workspace's modules directory, refuses missing or
+ambiguous candidates, and emits a buildable composition with the probe explicitly included.
+The probe is first in dependency order. `_pack`/`_pub` compositions refuse every test-only member,
+including through nested compositions. Probe-scoped contracts permit signed `round_set +N`;
+this is a round-counter transition, not proof of N naturally completed gameplay rounds.

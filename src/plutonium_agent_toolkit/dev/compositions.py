@@ -108,6 +108,11 @@ MAX_NESTING = 4
 def add_parser(sub, common):
     p = sub.add_parser("module", help="Declared modules composed into one mod on a named base: plan, build, declare")
     actions = p.add_subparsers(dest="action", required=True)
+    q = actions.add_parser("state", help="Derive composition evidence state from current hashes")
+    q.add_argument("--composition",required=True)
+    for name in ("plan","verify","test-plan","run","verdict"):
+        q.add_argument("--"+name)
+    q.add_argument("--json",action="store_true")
     q = actions.add_parser("inspect", help="Validate one declaration's metadata without resolving payloads or creating a job")
     q.add_argument("declaration", help="Path to module.json or composition.json")
     q.add_argument("--json", action="store_true")
@@ -742,7 +747,7 @@ def _order(modules: list[dict]) -> list[str]:
     """Dependency order (a module after everything it depends on); refuses cycles. Base-role
     members sort first among equals so the base's assets are staged before attachments."""
     pending = {m["id"]: set(m["dependencies"]) for m in modules}
-    rank = {m["id"]: 0 if m.get("role") == "base" else 1 for m in modules}
+    rank = {m["id"]: -1 if m["id"]=="test_probe" else 0 if m.get("role") == "base" else 1 for m in modules}
     order: list[str] = []
     while pending:
         ready = sorted((mid for mid, deps in pending.items() if not deps - set(order)), key=lambda mid: (rank[mid], mid))
@@ -755,6 +760,9 @@ def _order(modules: list[dict]) -> list[str]:
 
 
 def resolve(comp: dict, modules: list[dict], allow_unqualified: bool = False) -> dict:
+    for i,m in enumerate(modules):
+        if "test-only" in m["tags"] and comp["name"].endswith(("_pack","_pub")):
+            raise Failure(INPUT_INVALID,"Test-only member cannot reach a release profile",field=f"/modules/{i}")
     ids = [m["id"] for m in modules]
     if len(set(ids)) != len(ids):
         duplicates = sorted({i for i in ids if ids.count(i) > 1})
@@ -910,6 +918,8 @@ def execute(args, job: Job) -> dict:
         return seeds.declare(Path(args.package).expanduser(), args, job)
     comp = load_composition(Path(args.composition), job)
     modules, loads, decisions, header = flatten(comp, job)
+    from ..testing.planner import prepare_probe
+    prepare_probe(comp,modules,job)
     mixed = sorted({m["id"] for m in modules if m.get("game", titles.DEFAULT_TITLE) != comp["game"]})
     if mixed:
         raise Failure(INPUT_INVALID, f"Composition targets game {comp['game']} but these members target another game: {mixed}",
@@ -951,6 +961,12 @@ def execute(args, job: Job) -> dict:
         "verification": "composition resolved (dependency order, conflicts, budget); base/map mismatches listed in unqualified; collisions listed as decisions; "
                         "declarations, recipes, seeds and declared inputs hashed; backend presence checked; nothing compiled",
     }
+    from . import checks as offline_checks
+    plan["checks"] = offline_checks.evaluate(plan)
+    if args.action == "build":
+        plan["checks"] += offline_checks.check_scripts(compiled,args,job,comp["game"])
+    else:
+        plan["checks"] += [{"id":"symbols:"+t.as_posix(),"outcome":"not_counted","detail":"gsc check runs before the build link"} for _,t,_ in compiled]
     (job.root / "plan.json").write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
     summary = {"plan": "plan.json", "name": comp["name"], "title": comp["title"], "base": comp["base"], "map": comp["map"],
                "base_member": plan["base_member"],
@@ -960,6 +976,9 @@ def execute(args, job: Job) -> dict:
         "resource_totals": resolved["resource_totals"], "budget": comp["budget"],
                "scripts": len(compiled), "assets": len(loose), "seeds": len(seed_modules), "loads": len(loads),
                "decisions": decided, "undecided": undecided, "base_owned_names": len(comp.get("base_owned") or ())}
+    summary["checks"] = plan["checks"]
+    if any(c["outcome"]=="failed" for c in plan["checks"]):
+        raise Failure(INPUT_INVALID,"Offline checks failed",checks=plan["checks"])
     if args.action == "plan":
         return {**summary, "backends": checks, "backends_available": plan["backends_available"],
                 "input_files": plan["input_files"], "verification": plan["verification"]}

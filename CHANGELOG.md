@@ -7,6 +7,41 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- Clarified `docs/MODULES.md` that `module state` checks the built plan only when the receipt
+  records it, and otherwise requires the plan's member declaration hashes to be bound in the
+  receipt's inputs. Documentation only; no behavior change and no new platform verification.
+
+- `module state` validates a composition plan (schema, name/base/map, a nonempty list of uniquely
+  identified module rows with a directory and declaration hash, and no undecided collisions)
+  before it claims `composed`; a malformed or undecided plan now reports no state with a reason
+  instead of `composed`, while a source change under an unchanged declaration still revokes to
+  `composed`. Covered by offline unit tests on Linux; native Windows and gameplay behavior remain
+  unverified.
+
+- `module state` keeps an unqualified composition at `composed`: a nonempty plan or build-receipt
+  `unqualified` list is rejected before offline promotion and never advances to later rungs.
+  Covered by offline unit tests on Linux; native Windows and gameplay behavior remain unverified.
+
+- Test planning admits a probe declared in any map of a member contract, not only the
+  composition's selected map, so whole-contract validation no longer revokes an otherwise valid
+  plan; probe emission reads and writes `composition.json` as UTF-8 and `module state` reads its
+  evidence as UTF-8 on a non-UTF-8 locale; `module state` hashes the plan inside the guarded read
+  so a plan deleted, linked or unreadable between read and hash revokes to no state with a reason
+  instead of leaking an exception; `module state` converts byte-bounded evidence JSON nested past
+  the parser's recursion budget and a contract path whose `resolve()` hits a symlink cycle into
+  revoked state with a reason instead of leaking `RecursionError`/`RuntimeError`; and
+  `module state` rejects malformed `conflicts`, run `package`/`test_plan`, and `verdicts` maps as
+  reasons instead of leaking `AttributeError`. Covered by offline unit tests on Linux; native
+  Windows and gameplay behavior remain unverified.
+
+- Auto-include a local test-only probe for agent preconditions and refuse test-only members in release compositions. Covered by offline unit tests on Linux; native Windows and gameplay behavior remain unverified.
+
+- Report counted, failed and uncounted pool checks on composition plans and run per-script compiler dry runs before linking. Covered by offline unit tests on Linux; native Windows and gameplay behavior remain unverified.
+
+- Derive composition evidence state from package, source, contract, run and scoped verdict hashes. Covered by offline unit tests on Linux; native Windows and gameplay behavior remain unverified.
+
+- Emitted probe compositions preserve nested recipes, member roles and pinned references; pre-link script checks use the module's sibling includes and the parent's remaining deadline; emitted composition paths are POSIX on every host. `project verify` receipts resolve the package through the build receipt they bind and reject malformed receipt maps. Covered by offline unit tests on Linux; native Windows and gameplay behavior remain unverified.
+
 - Test-plan stitching now folds human harness checks into the shared-check conflict pass and drops
   owner-excluded human steps from the plan and its interaction pairs; a nested recipe's decision is
   scoped to its own members and cannot resolve an outer collision; and a flattened member targeting
@@ -22,6 +57,11 @@ Every entry states what shipped, on which platform it was verified, and what rem
 - Contract validation accepts concrete maps for wildcard declarations and reports excessive
   nesting as `input_invalid`; documentation describes probe inspection without promising
   composition-time enforcement. Covered by offline unit tests on Linux; native Windows
+  and gameplay behavior remain unverified.
+- Contract loading rejects oversized JSON integers as `input_invalid` instead of leaking
+  `OverflowError`: bounded evidence and `wait_s` values compare against their limit before any
+  float conversion, and unbounded harness `min`/`max` catch the conversion overflow. Finite
+  bool/NaN/Inf rejection is unchanged. Covered by offline unit tests on Linux; native Windows
   and gameplay behavior remain unverified.
 - Stitch test contracts in dependency order, with explicit shared-check decisions and human/probe precondition refusals. Covered by offline unit tests on Linux; native Windows and gameplay behavior remain unverified.
 
