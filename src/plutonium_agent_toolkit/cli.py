@@ -99,6 +99,10 @@ def build_parser() -> Parser:
     q = wsa.add_parser("catalog", help="Read source-labelled workspace build records and optional icon bindings")
     q.add_argument("directory")
     q.add_argument("--art-catalog")
+    q.add_argument("--page", type=int, help="1-based page of module rows to return; requires --page-size")
+    q.add_argument("--page-size", type=int, help="Module rows per page; with --page the reply carries total and next_page")
+    q.add_argument("--max-output-bytes", type=int, help="Aggregate budget for the retained rows of one reply (default 16 MiB)")
+    q.add_argument("--max-row-bytes", type=int, help="Budget for one row; a larger row becomes its own diagnostic (default 512 KiB)")
     q.add_argument("--json", action="store_true")
     b = dev.add_parser("builtin", help="Fetch the built-in modules and packs the shipped registry lists into the toolkit home; rerun verifies")
     b.add_argument("--plan", action="store_true", help="Report each built-in's state without touching the network")
@@ -308,7 +312,9 @@ def run(argv: list[str]) -> dict:
 
     if group == "workspace" and args.action == "catalog":
         from .dev import workspace_catalog
-        return success(command, workspace_catalog.catalog(args.directory, args.art_catalog))
+        return success(command, workspace_catalog.catalog(
+            args.directory, args.art_catalog, page=args.page, page_size=args.page_size,
+            max_output_bytes=args.max_output_bytes, max_row_bytes=args.max_row_bytes))
 
     if group == "module" and args.action == "state":
         from .dev import state

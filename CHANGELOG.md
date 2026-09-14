@@ -7,6 +7,16 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- Scale `workspace catalog` past the aggregate output cut. The reply budget rises from 512 KiB
+  to 16 MiB and is a flag (`--max-output-bytes`); one row has its own 512 KiB budget
+  (`--max-row-bytes`) and an oversized row is a diagnostic for that row only; an exhausted icon
+  budget nulls a row's `icon_binding` with a diagnostic instead of dropping the row; and
+  `--page <n> --page-size <k>` walk the sorted module rows in windows. Every reply now carries
+  `total`, `page`, `page_size` and `next_page`, and a budget overflow names the first omitted
+  row and counts the rest, so no row is silently omitted. The module-directory entry bound rises
+  from 512 to 2048. Callers passing no flags keep the same shape plus the new fields. Verified
+  by offline unit tests on Linux with a synthetic 400-module workspace and against a 192-module
+  private workspace read-only; native Windows remains unverified.
 - Add the evidence ledger: `evidence.json` beside `module.json` holds typed, scoped rows
   (`lineage`, `authored`, `accepted-in-pack`, `extracted-from-release`, `built-alone`,
   `agent-reviewed`, `game-tested`, `player-accepted`), each with a scope (base and/or foundation,

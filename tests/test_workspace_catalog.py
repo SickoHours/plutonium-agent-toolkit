@@ -102,7 +102,7 @@ class WorkspaceCatalogTests(unittest.TestCase):
         self.assertEqual(result['modules'], [])
         self.assertIn('coverSymbol must be an object', result['diagnostics'][0]['message'])
 
-    def test_icon_bytes_have_an_aggregate_budget(self):
+    def test_icon_budget_overflow_is_a_per_row_diagnostic_not_an_omission(self):
         from unittest.mock import patch
         from plutonium_agent_toolkit.dev import workspace_catalog as wc
         declaration = json.loads((self.root/'modules/example/module.json').read_text())
@@ -117,8 +117,15 @@ class WorkspaceCatalogTests(unittest.TestCase):
         art = self.write('art.json', {'modules':artworks})
         with patch.object(wc, 'MAX_ICON_BYTES', 3):
             result = catalog(str(self.root), str(art))
-        self.assertEqual(len(result['modules']), 1)
+        self.assertEqual([row['id'] for row in result['modules']], ['example', 'second'])
+        self.assertIsNotNone(result['modules'][0]['icon_binding'])
+        self.assertIsNone(result['modules'][1]['icon_binding'])
+        self.assertEqual(result['total'], 2)
+        self.assertEqual(len(result['diagnostics']), 1)
+        self.assertEqual(result['diagnostics'][0]['path'], 'modules/second')
         self.assertIn('aggregate budget', result['diagnostics'][0]['message'])
+        self.assertIn('icon binding omitted', result['diagnostics'][0]['message'])
+        self.assertFalse(result['truncated'])
 
     def test_shared_icon_is_read_once_per_catalog(self):
         from unittest.mock import patch
@@ -313,19 +320,104 @@ class WorkspaceCatalogTests(unittest.TestCase):
         self.assertTrue(result['truncated'])
         self.assertIn('provides exceeds', result['diagnostics'][0]['message'])
 
-    def test_aggregate_output_budget_limits_retained_modules(self):
-        from unittest.mock import patch
-        from plutonium_agent_toolkit.dev import workspace_catalog as wc
-        first = catalog(str(self.root))['modules'][0]
-        encoded = json.dumps(first, ensure_ascii=False, allow_nan=False, indent=2)
-        row_size = len(encoded.encode()) + 8 * (encoded.count('\n') + 1)
+    def row_size(self, row):
+        encoded = json.dumps(row, ensure_ascii=False, allow_nan=False, indent=2)
+        return len(encoded.encode()) + 8 * (encoded.count('\n') + 1)
+
+    def test_aggregate_output_budget_limits_retained_modules_and_counts_the_rest(self):
+        row_size = self.row_size(catalog(str(self.root))['modules'][0])
         declaration = json.loads((self.root/'modules/example/module.json').read_text())
-        self.write('modules/second_/module.json', dict(declaration, id='second_'))
-        with patch.object(wc, 'MAX_RETAINED_BYTES', row_size):
-            result = catalog(str(self.root))
-        self.assertEqual(len(result['modules']), 1)
+        for name in ('second_', 'third__'):
+            self.write(f'modules/{name}/module.json', dict(declaration, id=name))
+        result = catalog(str(self.root), max_output_bytes=row_size)
+        self.assertEqual([row['id'] for row in result['modules']], ['example'])
+        self.assertEqual(result['total'], 3)
         self.assertTrue(result['truncated'])
-        self.assertIn('output exceeds', result['diagnostics'][0]['message'])
+        self.assertEqual(result['diagnostics'][0]['path'], 'modules/second_')
+        self.assertIn('output exceeds the aggregate budget', result['diagnostics'][0]['message'])
+        self.assertIn('--page-size', result['diagnostics'][0]['message'])
+        self.assertIn('2 module rows omitted', result['diagnostics'][1]['message'])
+        code, reply = invoke(['workspace','catalog',str(self.root),'--max-output-bytes',str(row_size),'--json'])
+        self.assertEqual(code, 0, reply)
+        self.assertEqual(len(reply['result']['modules']), 1)
+        # Paging around the same budget retains every row without raising it.
+        seen = []
+        page = 1
+        while page:
+            part = catalog(str(self.root), page=page, page_size=1, max_output_bytes=row_size)
+            self.assertEqual(part['diagnostics'], [])
+            seen += [row['id'] for row in part['modules']]
+            page = part['next_page']
+        self.assertEqual(seen, ['example', 'second_', 'third__'])
+
+    def test_default_output_budget_fits_a_thousand_average_rows(self):
+        from plutonium_agent_toolkit.dev import workspace_catalog as wc
+        self.write('registry/t6-modules.json', {'modules':[{'id':'example','weapon_class':'Pistols','build_revisions':[{'id':f'b{i}','foundation':'stock','map':'zm_transit','runtime_verified':True,'receipt':'jobs/one/receipt.json','recorded_at':'2026-09-01'} for i in range(4)]}]})
+        row = catalog(str(self.root))['modules'][0]
+        self.assertGreaterEqual(wc.MAX_OUTPUT_BYTES, 1000 * max(self.row_size(row), 4096))
+
+    def test_oversized_row_is_its_own_diagnostic_and_other_rows_stay(self):
+        declaration = json.loads((self.root/'modules/example/module.json').read_text())
+        self.write('modules/big/module.json', dict(declaration, id='big', provides={'soundbanks':[f'bank{i}' for i in range(400)]}))
+        small = self.row_size(catalog(str(self.root))['modules'][1])
+        result = catalog(str(self.root), max_row_bytes=small + 64)
+        self.assertEqual([row['id'] for row in result['modules']], ['example'])
+        self.assertEqual(result['total'], 2)
+        self.assertTrue(result['truncated'])
+        self.assertEqual(result['diagnostics'][0]['path'], 'modules/big')
+        self.assertIn('per-row budget', result['diagnostics'][0]['message'])
+
+    def test_four_hundred_modules_are_all_listed_and_page_stably(self):
+        declaration = json.loads((self.root/'modules/example/module.json').read_text())
+        (self.root/'modules/example').rename(self.root/'modules/zz_example')
+        ids = [f'mod{i:03d}' for i in range(399)]
+        for mid in ids:
+            self.write(f'modules/{mid}/module.json', dict(declaration, id=mid))
+        self.write('registry/t6-modules.json', {'modules':[{'id':mid,'weapon_class':'Pistols','build_revisions':[{'id':'r1','foundation':'stock','map':'zm_transit','runtime_verified':True}]} for mid in ids]})
+        expected = ids + ['example']
+        whole = catalog(str(self.root))
+        self.assertEqual([row['id'] for row in whole['modules']], expected)
+        self.assertEqual(whole['total'], 400)
+        self.assertEqual((whole['page'], whole['page_size'], whole['next_page']), (1, 400, None))
+        self.assertEqual(whole['diagnostics'], [])
+        self.assertFalse(whole['truncated'])
+        self.assertTrue(all(row['build_records'] for row in whole['modules'][:-1]))
+        code, reply = invoke(['workspace','catalog',str(self.root),'--json'])
+        self.assertEqual(code, 0, reply)
+        self.assertEqual(len(reply['result']['modules']), 400)
+        walked, page, pages = [], 1, 0
+        while page:
+            code, reply = invoke(['workspace','catalog',str(self.root),'--page',str(page),'--page-size','150','--json'])
+            self.assertEqual(code, 0, reply)
+            part = reply['result']
+            self.assertEqual((part['total'], part['page'], part['page_size']), (400, page, 150))
+            self.assertEqual(part['diagnostics'], [])
+            self.assertFalse(part['truncated'])
+            walked += [row['id'] for row in part['modules']]
+            pages += 1
+            page = part['next_page']
+        self.assertEqual(pages, 3)
+        self.assertEqual(walked, expected)
+        self.assertEqual([row['id'] for row in catalog(str(self.root), page=3, page_size=150)['modules']], expected[300:])
+        beyond = catalog(str(self.root), page=4, page_size=150)
+        self.assertEqual((beyond['modules'], beyond['total'], beyond['next_page']), ([], 400, None))
+
+    def test_page_arguments_are_validated_together(self):
+        for argv in (['--page','1'], ['--page-size','5'], ['--page','0','--page-size','5'], ['--page','1','--page-size','0'], ['--max-output-bytes','0'], ['--max-row-bytes','-1']):
+            with self.subTest(argv=argv):
+                code, reply = invoke(['workspace','catalog',str(self.root),*argv,'--json'])
+                self.assertEqual(code, 2, reply)
+                self.assertEqual(reply['error_code'], 'invalid_arguments')
+
+    def test_invalid_rows_outside_the_page_still_count_as_diagnostics_not_total(self):
+        declaration = json.loads((self.root/'modules/example/module.json').read_text())
+        self.write('modules/aaa/module.json', {'schema':99})
+        self.write('modules/zzz/module.json', dict(declaration, id='zzz'))
+        part = catalog(str(self.root), page=2, page_size=1)
+        self.assertEqual([row['id'] for row in part['modules']], ['zzz'])
+        self.assertEqual(part['total'], 2)
+        self.assertIsNone(part['next_page'])
+        self.assertEqual(part['diagnostics'][0]['path'], 'modules/aaa')
 
     def test_module_read_uses_the_declaration_byte_limit(self):
         file = self.root/'modules/example/module.json'
