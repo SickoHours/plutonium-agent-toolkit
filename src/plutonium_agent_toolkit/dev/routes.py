@@ -124,7 +124,10 @@ PLANNED = [
           notes="Argument: [--map <zm_map>]. Counts are zone contents from listings, decompiled text and WeaponDefs, never runtime pools; null means nothing on disk counts it."),
 ]
 
-register(Route("module", "state", "Derive composition evidence state from exact artifact hashes", "inert", status="implemented", owner=OWNER))
+register(Route("module", "state", "Derive composition evidence state from exact artifact hashes, or report a module's six facts per scope from its evidence ledger", "inert", status="implemented", owner=OWNER,
+               notes="--composition DIR [--plan --verify --test-plan --run --verdict] derives the composition rungs by hash. --ledger <module dir|evidence.json> [--base --foundation --map --package] reads evidence.json rows and reports each of the six facts per scope; a fact with no row of the matching type is null (unknown), and accepted-in-pack rows never feed a fact. Format: docs/evidence-ledger.md."))
+register(Route("module", "ledger-from-registry", "Propose evidence.json rows for one workspace module from the registry's build_revisions and the module's docs; prints the proposal and writes nothing", "inert", status="implemented", owner=OWNER,
+               notes="Arguments: <workspace> <module-id> [--dry-run] --json. Reads registry/t6-modules.json, foundations/*.json, modules/<id>/module.json, docs/ACCEPTED.json, docs/LINEAGE.json, docs/TEST.md and the archive records the registry cites. Every proposal is a dry run: the worker reviews the rows and notes, then writes modules/<id>/evidence.json itself. Format: docs/evidence-ledger.md."))
 
 for route in AVAILABLE + PLANNED:
     register(route)

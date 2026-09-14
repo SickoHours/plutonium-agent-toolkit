@@ -7,6 +7,20 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- Add the evidence ledger: `evidence.json` beside `module.json` holds typed, scoped rows
+  (`lineage`, `authored`, `accepted-in-pack`, `extracted-from-release`, `built-alone`,
+  `agent-reviewed`, `game-tested`, `player-accepted`), each with a scope (base and/or foundation,
+  map set), a record pointer and a hash where one exists; the declaration's `lineage` field is the
+  first row type. `module inspect` validates the ledger when present (defects are diagnostics on
+  a `ledger` key, absence adds nothing, the declaration's own validity is untouched);
+  `module state --ledger` reports the six facts per fact and per scope from rows of the matching
+  type only, `null` where no row speaks, nothing inferred from an `accepted-in-pack` row; and
+  `module ledger-from-registry <workspace> <module-id> --dry-run` proposes rows from a
+  workspace's registry `build_revisions`, `docs/ACCEPTED.json`, `docs/LINEAGE.json`, `docs/TEST.md`
+  and cited archive records, printing them and writing nothing. Format: `docs/evidence-ledger.md`.
+  Covered by offline unit tests on Linux with fixtures shaped like the workspace's real rows;
+  native Windows and gameplay behavior remain unverified.
+
 - Clarified `docs/MODULES.md` that `module state` checks the built plan only when the receipt
   records it, and otherwise requires the plan's member declaration hashes to be bound in the
   receipt's inputs. Documentation only; no behavior change and no new platform verification.
