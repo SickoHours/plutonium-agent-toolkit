@@ -17,6 +17,31 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 - Validate declared function/file replacements and generated entry references.
 
+- Include the generated entry script in the composition plan's `scripts`, the script limit and the
+  per-script offline checks, and reserve its target case-insensitively against recipe, loose and
+  seed rawfile targets before anything is staged. Covered by offline unit tests on Linux; native
+  Windows and gameplay behavior remain unverified.
+
+- Stage each entry member's recipe source at its target path, and its admitted source tree at its
+  source-relative path, under the generated entry's include root so sibling and transitive
+  `#include` directives resolve; two sources mapping one include path with different bytes refuse
+  rather than overwrite. Covered by offline unit tests on Linux; native Windows and gameplay
+  behavior remain unverified.
+
+- Derive the generated entry target from the title namespace (`scripts/zm/` on T6, the flat
+  `scripts/` on IW5) instead of always placing it under `scripts/zm/`, and pass the composition's
+  game to the per-script external check so T6 stock-export evidence is not applied to IW5. Covered
+  by offline unit tests on Linux; native Windows and gameplay behavior remain unverified.
+
+- Mask GSC comments and quoted literals before the `replaceFunc` and `main`/`init` scans, so prose
+  in a comment or string is not read as a replacement or an entry definition. Covered by offline
+  unit tests on Linux; native Windows and gameplay behavior remain unverified.
+
+- The same pull request carries the review's other offline corrections: per-VM builtin and literal
+  masking in the external-symbol checks, the by-suffix script VM, and the install-staging and
+  module-inspect documentation notes (group B). These remain offline-tested; native Windows and
+  gameplay behavior remain unverified.
+
 - Clarified `docs/MODULES.md` that `module state` checks the built plan only when the receipt
   records it, and otherwise requires the plan's member declaration hashes to be bound in the
   receipt's inputs. Documentation only; no behavior change and no new platform verification.

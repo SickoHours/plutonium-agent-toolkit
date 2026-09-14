@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 from plutonium_agent_toolkit.core.errors import Failure
 from plutonium_agent_toolkit.dev import compositions as c
 from tests.test_compositions import declaration, CompositionFixture
@@ -43,6 +44,17 @@ class ReplacementScan(CompositionFixture):
         self.assertEqual(code,0,row);self.assertTrue(json.loads((Path(out)/'plan.json').read_text())['warnings'])
     def test_scan_normalizes_case_and_separators(self):
         self.assertEqual(c.scan_replacements('replaceFunc(MAPS\\MP\\ZOMBIES\\_ZM::Round_Think, ::mine);'),{'maps/mp/zombies/_zm::round_think'})
+    def test_replacefunc_text_in_comments_and_strings_is_ignored(self):
+        # Prose in a comment or a quoted literal makes no replacement call: the scan sees code only.
+        text=('// replaceFunc(maps\\mp\\zombies\\_zm::round_think, ::mine);\n'
+              '/* replaceFunc(maps\\mp\\zombies\\_zm::other_think, ::mine); */\n'
+              'note() { iprintln( "replaceFunc(maps\\\\mp\\\\zombies\\\\_zm::string_think, ::mine)" ); }\n')
+        self.assertEqual(c.scan_replacements(text),set())
+    def test_comment_only_replacement_does_not_fail_the_plan(self):
+        m=self.module('alpha')
+        (m/'scripts/alpha.gsc').write_text('// replaceFunc(maps\\mp\\zombies\\_zm::round_think, ::mine);\nmain() {}\n')
+        comp=self.composition(['alpha']);code,row=invoke(['module','plan',str(comp),'--output',self.out(),'--json'])
+        self.assertEqual(code,0,row)
 
 class GeneratedEntry(CompositionFixture):
     def entry_member(self,mid):
@@ -62,6 +74,69 @@ class GeneratedEntry(CompositionFixture):
         m=self.entry_member('alpha');(m/'scripts/alpha.gsc').write_text('main() {}')
         comp=self.composition(['alpha']);code,row=invoke(['module','plan',str(comp),'--output',self.out(),'--json'])
         self.assertEqual(code,1,row);self.assertEqual(row['details']['field'],'/modules/0/entry')
+    def test_main_in_a_block_comment_is_not_an_entry_definition(self):
+        m=self.entry_member('alpha')
+        (m/'scripts/alpha.gsc').write_text('/*\nmain()\n*/\nalpha_replace() {}\nalpha_register() {}\n')
+        comp=self.composition(['alpha']);code,row=invoke(['module','plan',str(comp),'--output',self.out(),'--json'])
+        self.assertEqual(code,0,row)
+    def test_generated_entry_is_in_the_plan_scripts_and_checks(self):
+        self.entry_member('alpha');comp=self.composition(['alpha']);out=self.out()
+        code,row=invoke(['module','plan',str(comp),'--output',out,'--json']);self.assertEqual(code,0,row)
+        plan=json.loads((Path(out)/'plan.json').read_text())
+        target='scripts/zm/zz_stock_pack_test_entry.gsc'
+        self.assertIn(target,[s['target'] for s in plan['scripts']])
+        self.assertEqual(plan['generated_entry']['target'],target)
+        self.assertIn('externals:'+target,[check['id'] for check in plan['checks']])
+    def test_generated_entry_include_tree_is_staged_when_the_compiler_runs(self):
+        m=self.entry_member('alpha')
+        (m/'scripts'/'maps'/'mp').mkdir(parents=True)
+        (m/'scripts'/'maps'/'mp'/'_utility.gsc').write_text('utility_think() {}\n')
+        (m/'scripts'/'alpha.gsc').write_text('alpha_replace() { maps\\mp\\_utility::utility_think(); }\nalpha_register() {}\n')
+        comp=self.composition(['alpha']);out=self.out()
+        from plutonium_agent_toolkit.dev import scripts
+        seen=[];real=scripts.execute
+        def capture(args,child):
+            root=Path(args.includes)
+            seen.append({'input':args.input,'scripts_zm':(root/'scripts'/'zm'/'alpha.gsc').is_file(),
+                         'utility':(root/'maps'/'mp'/'_utility.gsc').is_file()})
+            return real(args,child)
+        with patch.object(c.scripts,'execute',capture):
+            code,row=invoke(['module','build',str(comp),'--output',out,'--json'])
+        self.assertEqual(code,0,row)
+        entry_calls=[call for call in seen if call['input'].endswith('zz_stock_pack_test_entry.gsc')]
+        self.assertTrue(entry_calls,seen)
+        self.assertTrue(all(call['scripts_zm'] and call['utility'] for call in entry_calls),entry_calls)
+        root=Path(out)/'generated-entry'
+        self.assertTrue((root/'scripts'/'zm'/'alpha.gsc').is_file())
+        self.assertTrue((root/'maps'/'mp'/'_utility.gsc').is_file())
+    def test_generated_entry_target_reservation_is_case_insensitive(self):
+        self.entry_member('alpha')
+        self.module('beta',script_target='scripts/zm/ZZ_stock_pack_test_entry.gsc')
+        comp=self.composition(['alpha','beta']);code,row=invoke(['module','build',str(comp),'--output',self.out(),'--json'])
+        self.assertEqual(code,1,row);self.assertEqual(row['error_code'],'input_invalid')
+        self.assertIn('generated entry',row['message'].lower())
+    def test_generated_entry_counts_against_the_script_limit(self):
+        from plutonium_agent_toolkit.dev import projects
+        self.module('alpha');self.entry_member('gamma')
+        comp=self.composition(['alpha','gamma'])
+        with patch.object(projects,'MAX_SCRIPTS',2):
+            code,row=invoke(['module','plan',str(comp),'--output',self.out(),'--json'])
+        self.assertEqual(code,1,row);self.assertEqual(row['error_code'],'input_limit')
+    def test_iw5_entry_target_uses_the_title_namespace(self):
+        d=self.root/'modules'/'alpha';(d/'scripts').mkdir(parents=True)
+        (d/'scripts'/'alpha.gsc').write_text('alpha_replace() {}\nalpha_register() {}\n')
+        (d/'project.json').write_text(json.dumps({"schema":1,"game":"iw5","mode":"mp","name":"alpha",
+            "scripts":[{"source":"scripts/alpha.gsc","target":"scripts/alpha.gsc","instance":"server"}],"assets":[],"loads":[]}))
+        (d/'module.json').write_text(json.dumps(declaration('alpha',game='iw5',
+            entry={'replace':'scripts/alpha::alpha_replace','register':'scripts/alpha::alpha_register'})))
+        pack=self.root/'packs'/'stock_iw5_test';pack.mkdir(parents=True)
+        (pack/'composition.json').write_text(json.dumps({"schema":1,"name":"stock_iw5_test","game":"iw5","base":"stock",
+            "map":"mp_dome","modules":["../../modules/alpha"],"loads":[]}))
+        code,row=invoke(['module','plan',str(pack/'composition.json'),'--output',self.out(),'--json'])
+        self.assertEqual(code,0,row)
+        plan=json.loads((Path(row['result']['output'])/'plan.json').read_text())
+        self.assertIn('scripts/zz_stock_iw5_test_entry.gsc',[s['target'] for s in plan['scripts']])
+        self.assertNotIn('scripts/zm/zz_stock_iw5_test_entry.gsc',[s['target'] for s in plan['scripts']])
 
 class LooseScripts(CompositionFixture):
     def test_compiled_scripts_are_emitted_loose_beside_the_package(self):

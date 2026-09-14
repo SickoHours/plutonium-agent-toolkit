@@ -219,3 +219,10 @@ Declared replacement/entry tests cover normalized references, engine-entry exclu
 irresolvable duplicate functions/files, undeclared literal targets, declared-but-unfound
 warnings, generated call order, compiler integration and rawfile readback. These extensions
 remain offline-tested; no new Windows/game/player acceptance qualification is claimed.
+
+The generated entry is offline-tested too: it is present in the plan's scripts, the script limit
+and the per-script checks; its target follows the title namespace and is reserved case-insensitively
+against recipe, loose and seed rawfile targets; its include root stages each entry member's target
+source and admitted source tree so sibling and transitive `#include` directives resolve; and comments
+and quoted literals are masked before the replacement and `main`/`init` scans. These run against the
+fake compiler and pass on Linux; native Windows and gameplay behavior remain unverified.

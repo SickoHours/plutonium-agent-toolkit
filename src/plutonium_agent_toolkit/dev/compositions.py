@@ -427,9 +427,44 @@ def validate_lineage(value):
 
 FUNCTION = re.compile(r'^[a-z0-9_/]+::[a-z0-9_]+$')
 
+def mask_gsc(text):
+    """Blank comments and quoted literals so a lexical scan sees only executable GSC.
+
+    Same length, newlines kept, so callers that anchor on line starts still see the code
+    lines. ``replaceFunc`` prose in a comment or a string, and ``main``/``init`` in a comment,
+    are not code and must not be read as one.
+    """
+    chars=list(text);index=0;length=len(text)
+    while index<length:
+        char=text[index]
+        if char=='/' and index+1<length and text[index+1]=='/':
+            chars[index]=chars[index+1]=' ';index+=2
+            while index<length and text[index]!='\n':chars[index]=' ';index+=1
+        elif char=='/' and index+1<length and text[index+1]=='*':
+            chars[index]=chars[index+1]=' ';index+=2
+            while index<length and not (text[index]=='*' and index+1<length and text[index+1]=='/'):
+                if text[index]!='\n':chars[index]=' '
+                index+=1
+            if index<length:
+                chars[index]=' '
+                if index+1<length:chars[index+1]=' '
+                index+=2
+        elif char in ('"',"'"):
+            quote=char;chars[index]=' ';index+=1
+            while index<length and text[index]!=quote:
+                if text[index]=='\\' and index+1<length:
+                    chars[index]=chars[index+1]=' ';index+=2;continue
+                if text[index]!='\n':chars[index]=' '
+                index+=1
+            if index<length:chars[index]=' ';index+=1
+        else:
+            index+=1
+    return ''.join(chars)
+
+
 def scan_replacements(text):
     pattern=re.compile(r"replacefunc\s*\(\s*([A-Za-z0-9_\\/]+)::([A-Za-z0-9_]+)",re.I)
-    return {path.replace(chr(92),'/').lower()+'::'+name.lower() for path,name in pattern.findall(text)}
+    return {path.replace(chr(92),'/').lower()+'::'+name.lower() for path,name in pattern.findall(mask_gsc(text))}
 
 def replacement_warnings(modules,loaded):
     warnings=[]
@@ -437,7 +472,7 @@ def replacement_warnings(modules,loaded):
         found=set()
         if m['id'] in loaded:
             for source,_,_ in loaded[m['id']][1]:
-                text=source.read_text(encoding='utf-8')
+                text=mask_gsc(source.read_text(encoding='utf-8'))
                 if m.get('entry') and re.search(r'(?m)^\s*(?:main|init)\s*\(',text):
                     raise Failure(INPUT_INVALID,'An entry-managed module cannot define main or init',field=f'/modules/{i}/entry')
                 found.update(scan_replacements(text))
@@ -1001,6 +1036,9 @@ def execute(args, job: Job) -> dict:
             loose += l
             loads += [p for p in extra_loads if p not in loads]
     seed_modules = [by_id[mid] for mid in resolved["order"] if by_id[mid]["seed"]]
+    generated_entry = _generate_entry(comp, modules, by_id, resolved["order"], loaded, compiled, loose, seed_modules, job)
+    if generated_entry is not None:
+        compiled.append(generated_entry["script"])
     if len(compiled) > projects.MAX_SCRIPTS or len(loose) > projects.MAX_ASSETS or len(loads) > projects.MAX_LOADS or len(seed_modules) > MAX_MODULES:
         raise Failure(INPUT_LIMIT, f"A composition holds at most {projects.MAX_SCRIPTS} scripts, {projects.MAX_ASSETS} assets, {projects.MAX_LOADS} loads and {MAX_MODULES} seeds")
     decided, undecided, refused = collisions(modules, loaded, decisions, comp.get("base_owned"))
@@ -1034,11 +1072,13 @@ def execute(args, job: Job) -> dict:
     for source,target,_ in compiled:
         try: text=Path(source).read_text(encoding="utf-8",errors="replace")
         except OSError: continue
-        plan["checks"] += offline_checks.external_symbols(target.as_posix(),text)
+        plan["checks"] += offline_checks.external_symbols(target.as_posix(),text,comp["game"])
     if args.action == "build":
         plan["checks"] += offline_checks.check_scripts(compiled,args,job,comp["game"])
     else:
         plan["checks"] += [{"id":"symbols:"+t.as_posix(),"outcome":"not_counted","detail":"gsc check runs before the build link"} for _,t,_ in compiled]
+    if generated_entry is not None:
+        plan["generated_entry"] = generated_entry["plan"]
     (job.root / "plan.json").write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
     summary = {"plan": "plan.json", "name": comp["name"], "title": comp["title"], "base": comp["base"], "map": comp["map"],
                "base_member": plan["base_member"],
@@ -1073,6 +1113,67 @@ def entry_source(name, members):
     return '\n'.join(lines)+'\n'
 
 
+def _generate_entry(comp, modules, by_id, order, loaded, compiled, loose, seed_modules, job):
+    """Write the generated entry script and the include root it is compiled against.
+
+    Returns ``None`` when no member owns an entry; otherwise ``{"script": (source, target,
+    instance), "plan": {...}}``. The target follows ``titles.script_target`` (T6
+    ``scripts/zm/``, IW5 the flat ``scripts/`` namespace) and is reserved case-insensitively
+    against every staged recipe/loose target and seed rawfile before anything is written, so
+    an existing owner refuses instead of silently outliving the entry. Each entry member's
+    recipe source is staged at its target path and its admitted source tree (the same bounded
+    ``input_tree`` the recipe already hashed) at the source-relative path, so sibling and
+    transitive ``#include`` directives resolve. Two sources that map to one include path with
+    different bytes refuse rather than overwrite.
+    """
+    entry_modules=[m for m in modules if m.get('entry')]
+    if not entry_modules:
+        return None
+    target=Path(titles.script_target(comp['game'],'zz_'+comp['name']+'_entry'))
+    reserved=target.as_posix().casefold()
+    owned=[t.as_posix() for _,t,_ in compiled]+[t.as_posix() for _,t,_,_ in loose]
+    for m in seed_modules:
+        if m['seed'] and not m['seed'].get('private'):
+            owned += [row.split(',',1)[1] for row in m['seed']['embedded'] if row.startswith('rawfile,')]
+    if any(name.casefold()==reserved for name in owned):
+        raise Failure(INPUT_INVALID,f"Generated entry target {target.as_posix()} is already owned by another source",
+                      "Rename the colliding script or rawfile target; the build reserves this path for the generated entry.")
+    root=job.root/'generated-entry'
+    root.mkdir(parents=True,exist_ok=True)
+    staged={}
+    def stage(rel,source,digest):
+        key=rel.casefold()
+        if key in staged:
+            if staged[key][1]!=digest:
+                raise Failure(INPUT_INVALID,f"Two entry sources map to {rel} with different bytes: {staged[key][0]} and {source}",
+                              "Rename one so the generated entry's include tree is unambiguous.")
+            return
+        staged[key]=(source,digest,rel)
+    for m in entry_modules:
+        recipe=loaded.get(m['id'])
+        if recipe is None:
+            continue
+        for source,member_target,_ in recipe[1]:
+            stage(member_target.as_posix(),source,job.inputs[str(source)])
+        for source,_,_ in recipe[1]:
+            source_dir=source.parent
+            for rel,digest in job.trees.get(str(source_dir),{}).items():
+                if Path(rel).suffix.lower() in ('.gsc','.csc'):
+                    stage(rel,source_dir/rel,digest)
+    if target.name.casefold() in staged:
+        raise Failure(INPUT_INVALID,f"Generated entry target {target.as_posix()} collides with a staged include file",
+                      "Rename the module script that maps to the entry path.")
+    for source,_,rel in staged.values():
+        dest=root/rel
+        dest.parent.mkdir(parents=True,exist_ok=True)
+        shutil.copyfile(source,dest)
+    generated=root/target.name
+    generated.write_text(entry_source(comp['name'],[by_id[mid] for mid in order]),encoding='utf-8')
+    return {"script":(generated,target,"server"),
+            "plan":{"source":str(generated),"target":target.as_posix(),"sha256":sha256_file(generated),
+                    "include_root":str(root),"include_files":len(staged)}}
+
+
 def _build_composition(comp: dict, plan: dict, compiled, loose, seed_modules, loads, decided, header, args, job: Job) -> dict:
     base_owned_names = len(comp.get("base_owned") or ())
     missing = [c["id"] for c in plan["backends"] if not c["available"]]
@@ -1100,15 +1201,6 @@ def _build_composition(comp: dict, plan: dict, compiled, loose, seed_modules, lo
                 return m["id"]
         return None
     compiled=list(compiled)
-    if any(m.get("entry") for m in plan["modules"]):
-        target=Path("scripts/zm")/("zz_"+comp["name"]+"_entry.gsc")
-        if any(t==target for _,t,_ in compiled):raise Failure(INPUT_INVALID,"Generated entry target is already owned")
-        generated=job.root/"generated-entry"/target.name
-        generated.parent.mkdir()
-        generated.write_text(entry_source(comp["name"],plan["modules"]),encoding="utf-8")
-        compiled.append((generated,target,"server"))
-        plan["generated_entry"]={"source":str(generated),"target":target.as_posix(),"sha256":sha256_file(generated)}
-        (job.root/"plan.json").write_text(json.dumps(plan,indent=2)+"\n",encoding="utf-8")
     for index, (source, target, instance) in enumerate(compiled):
         key = target.as_posix().casefold()
         mid = owner_for(target.as_posix(), source)

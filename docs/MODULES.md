@@ -451,13 +451,26 @@ Ordinary asset/file collision decisions retain their existing behavior.
 
 Literal `replaceFunc(script::function, ...)` targets in recipe source must be declared or planning
 fails with `declaration_mismatch` and the target in the hint. Backslashes and case normalize.
-Declared targets not found in available source are warnings, preserving seed workflows.
+Comments and quoted literals are masked before the scan, so prose that names `replaceFunc` and a
+`main`/`init` written in a comment are not read as code. Declared targets not found in available
+source are warnings, preserving seed workflows.
 This regex scan does not prove dynamically computed replacements or runtime detour behavior.
 
 ## Entry script
 
 An entry-managed module exposes its declared replace/register functions and defines neither
-`main()` nor `init()`. The build generates `scripts/zm/zz_<composition>_entry.gsc`: main calls
-replacements, init calls registrations, both in composition order. It uses the existing compiler,
-zone rawfile list and byte-for-byte readback. Root scripts are normally each engine entry points;
-one generated owner is needed for deterministic order. Other modules keep their existing roots.
+`main()` nor `init()` (a definition inside a comment or a string does not count). The generated
+script is `zz_<composition>_entry` under `titles.script_target` for the composition's game:
+`scripts/zm/zz_<composition>_entry.gsc` on T6, and the flat `scripts/zz_<composition>_entry.gsc`
+namespace on IW5. Its `main` calls replacements and its `init` calls registrations, both in
+composition order.
+
+The target is reserved case-insensitively against every recipe script, loose asset target and seed
+rawfile before anything is staged, so a source that already maps that path refuses instead of
+silently outliving the entry. The generated script is part of the plan's `scripts`, the script
+limit and the per-script offline checks. It compiles against an include root holding each entry
+member's recipe source at its target path and its admitted source tree at the source-relative path,
+so sibling and transitive `#include` directives resolve; two sources that map one path with
+different bytes refuse. It uses the existing compiler, zone rawfile list and byte-for-byte
+readback. Root scripts are normally each engine entry points; one generated owner is needed for
+deterministic order. Other modules keep their existing roots.
