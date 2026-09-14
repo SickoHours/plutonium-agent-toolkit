@@ -95,8 +95,8 @@ be an absolute path the server can see; the thread records it and the provider s
   and unclassified server defects remain uncertain. Server error bodies and transport exception
   text are omitted to protect the bearer.
 - HTTP 401 becomes `config_invalid` (issue a new token); 403 becomes `config_invalid` with the
-  missing scope; 400 becomes `input_invalid` with the server's reason, which usually means the
-  command shape is bound to a server version this release did not see: compare `serverVersion`
+  missing scope; 400 becomes `input_invalid` with the server's error code (the reason text is not printed).
+  A rejection may mean the command shape differs from the server's contract: compare `serverVersion`
   from `probe` with the version in the receipt linked from `docs/SUPPORT.md`.
 
 ## Qualifying on a host
