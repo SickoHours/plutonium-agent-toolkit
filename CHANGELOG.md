@@ -7,11 +7,13 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
-- Auto-include a local test-only probe for agent preconditions and refuse test-only members in release compositions.
+- Auto-include a local test-only probe for agent preconditions and refuse test-only members in release compositions. Covered by offline unit tests on Linux; native Windows and gameplay behavior remain unverified.
 
-- Report counted, failed and uncounted pool checks on composition plans and run per-script compiler dry runs before linking.
+- Report counted, failed and uncounted pool checks on composition plans and run per-script compiler dry runs before linking. Covered by offline unit tests on Linux; native Windows and gameplay behavior remain unverified.
 
-- Derive composition evidence state from package, source, contract, run and scoped verdict hashes.
+- Derive composition evidence state from package, source, contract, run and scoped verdict hashes. Covered by offline unit tests on Linux; native Windows and gameplay behavior remain unverified.
+
+- Emitted probe compositions preserve nested recipes, member roles and pinned references; pre-link script checks use the module's sibling includes and the parent's remaining deadline; emitted composition paths are POSIX on every host. `project verify` receipts resolve the package through the build receipt they bind and reject malformed receipt maps. Covered by offline unit tests on Linux; native Windows and gameplay behavior remain unverified.
 
 - Test-plan stitching now folds human harness checks into the shared-check conflict pass and drops
   owner-excluded human steps from the plan and its interaction pairs; a nested recipe's decision is
