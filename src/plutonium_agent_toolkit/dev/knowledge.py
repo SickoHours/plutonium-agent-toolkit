@@ -11,7 +11,9 @@ and nothing here reads the network or the game.
 - ``engine-limits.json``: the limits page as rows, each naming the occupancy field that counts
   against it, or ``null`` when nothing on disk does.
 - ``occupancy.json``: per map, what the zones the engine loads for it already carry (counts only)
-  against each limit.
+  against each limit. A map row may also carry ``banks_present``, the optional list of image bank
+  names that map's client ``zone/all`` folder holds; a generator fills it only from a measured
+  install, and ``pool:image-bank-slots`` uses it to stop counting header reads the engine skips.
 - ``crash-signatures.json``: the crashes table as regexes with class, cause found and fix that
   worked.
 - ``map-scripts.json``: per map, the compiled script asset paths the zones the engine loads for it
