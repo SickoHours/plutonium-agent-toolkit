@@ -7,6 +7,27 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- Count the pools that refused two real packs at mod selection before the engine does. Two
+  engine-limit rows join the shipped table: `rawfile-assets` (1,024; the map's rawfiles plus
+  every recipe script, delivered `rawfile` row and seed `rawfile,` root) and `image-bank-slots`
+  (16 open image banks; the client's startup set plus every distinct `>level.ipak_read` header
+  line beyond it). `module plan|build` now maps the composition's base token to the occupancy
+  foundation (`b2` to `dlc5-beta2`, or the workspace's `profile_prefix` with `--workspace`);
+  before this every pool check on a `b2` composition ran against empty occupancy and passed. A
+  failed pool row names `contribution`, `base` and its largest `contributors`, the refusal
+  message carries every failed row, and the plan and summary carry a per-member `footprint`
+  (rawfiles, scripts, soundbanks). Recipe asset rows accept `"deliver": false` on `rawfile`
+  rows: the file is hashed as an input and never staged or rooted, for model exports and source
+  WAVs another row already compiles; withheld rows are listed. Seeds root T6 `script` assets.
+  `map-scripts:<script>` rows refuse an `#include` or qualified call into a stock script path
+  the target map's zones do not carry on that foundation (`knowledge/map-scripts.json`, per map,
+  paths only). Six crash signatures with the fix that worked: the rawfile limit, `no free ipak
+  slots`, an animation state missing from its tree after two members replaced the same files,
+  the client/server clientfield mismatch, `cannot cast undefined to bool` in the visionset
+  manager, and the imported-WeaponDef precache access violation. Verified by offline unit tests
+  on Linux against the fake backends and the shipped knowledge; the bounds are the numbers the
+  Der Riese client reported on 2026-09-14 and remain observations, not specifications.
+
 - Scale `workspace catalog` past the aggregate output cut. The reply budget rises from 512 KiB
   to 16 MiB and is a flag (`--max-output-bytes`); one row has its own 512 KiB budget
   (`--max-row-bytes`) and an oversized row is a diagnostic for that row only; an exhausted icon

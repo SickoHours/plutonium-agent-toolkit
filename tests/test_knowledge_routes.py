@@ -61,6 +61,19 @@ class DataTests(unittest.TestCase):
                 self.assertTrue(row[key], f"{row['id']} lacks {key}")
         self.assertIn("client-field-set-out-of-space", ids)
         self.assertIn("unresolved-external", ids)
+        for needed in ("exceeded-rawfile-limit", "no-free-ipak-slots", "animstatedef-state-not-in-animtree",
+                       "clientfield-registrations-mismatch", "cannot-cast-undefined-to-bool", "precacheitem-access-violation"):
+            self.assertIn(needed, ids)
+
+    def test_map_scripts_table_covers_every_occupancy_map_with_paths_only(self):
+        table = json.loads((DATA / "map-scripts.json").read_text(encoding="utf-8"))
+        occupancy = json.loads((DATA / "occupancy.json").read_text(encoding="utf-8"))
+        self.assertEqual(set(table["maps"]), set(occupancy["maps"]))
+        for map_id, row in table["maps"].items():
+            self.assertEqual(row["foundation"], occupancy["maps"][map_id]["foundation"], map_id)
+            self.assertGreater(len(row["scripts"]), 100, map_id)
+            self.assertTrue(all(p.endswith((".gsc", ".csc")) for p in row["scripts"]), map_id)
+            self.assertIn("common_scripts/utility.gsc", row["scripts"], map_id)
 
     def test_limits_and_occupancy_agree(self):
         limits = json.loads((DATA / "engine-limits.json").read_text(encoding="utf-8"))["rows"]
@@ -76,6 +89,8 @@ class DataTests(unittest.TestCase):
                 if limit["count_source"] is None:
                     self.assertIsNone(cell["count"], f"{map_id}: {limit['id']} has no countable source")
             self.assertEqual(row["limits"]["sound-assets"]["count"], row["assets"].get("soundbank"), map_id)
+            self.assertEqual(row["limits"]["rawfile-assets"]["count"], row["assets"].get("rawfile"), map_id)
+            self.assertEqual(row["limits"]["image-bank-slots"]["count"], row["ipak_slots"], map_id)
             self.assertNotIn("loadfx", row, "names stay private; only counts travel")
             self.assertNotIn("weapon_names", row)
 

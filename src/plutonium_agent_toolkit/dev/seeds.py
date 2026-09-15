@@ -44,6 +44,9 @@ SKIP = {"Loaded", "Loading", "Failed", "Unloaded", "Loading", "Zone", "Content",
 # asset arrives as a dependency of one of these; naming the leaves too is harmless but noisy.
 ROOT_TYPES = ("weapon", "soundbank", "xanim", "xmodel", "material", "fx", "rawfile", "localize", "image",
               "techniqueset", "menu", "menulist", "font", "stringtable", "tracer", "physpreset", "physconstraints",
+              # T6 compiled script assets (`script,<path>`): a seed that embeds native helper scripts
+              # loses them silently unless they are roots, and seed_roots_verified still passes.
+              "script",
               # IW5 (docs/knowledge/iw5.md): compiled scripts, weapon attachments, leaderboards, vehicles.
               "scriptfile", "attachment", "leaderboard", "vehicle")
 # Types that only ever come from the base or are generated per zone: never roots.

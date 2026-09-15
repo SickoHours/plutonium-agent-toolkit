@@ -124,6 +124,7 @@ def load_recipe(path: Path, job: Job) -> tuple[dict, list, list, list]:
     base = src.parent
     targets: set[str] = set()
     compiled, loose, loads = [], [], []
+    withheld: list[dict] = []
     for row in scripts_rows:
         _fields(row, {"source", "target", "instance"}, {"source", "target"}, "script")
         target = _zone_target(row["target"])
@@ -143,9 +144,15 @@ def load_recipe(path: Path, job: Job) -> tuple[dict, list, list, list]:
         targets.add(key)
         compiled.append((job.input(source), target, instance))
     for row in asset_rows:
-        _fields(row, {"source", "target", "type", "name"}, {"source", "target", "type"}, "asset")
+        _fields(row, {"source", "target", "type", "name", "deliver"}, {"source", "target", "type"}, "asset")
         target = _zone_target(row["target"])
         asset_type = row["type"]
+        deliver = row.get("deliver", True)
+        if not isinstance(deliver, bool):
+            raise Failure(INPUT_INVALID, f"deliver is true or false: {row['target']}")
+        if not deliver and asset_type != "rawfile":
+            raise Failure(INPUT_INVALID, f"deliver: false applies to rawfile rows only; {asset_type} assets are always linked: {row['target']}",
+                          "An authoring input (a model export, a source WAV) that another asset row already compiles is a rawfile row with deliver: false.")
         if not isinstance(asset_type, str) or not NAME.match(asset_type):
             raise Failure(INPUT_INVALID, f"Asset type must be an OAT asset type identifier: {asset_type!r}")
         name = row.get("name", target.as_posix())
@@ -155,11 +162,19 @@ def load_recipe(path: Path, job: Job) -> tuple[dict, list, list, list]:
         if key in targets:
             raise Failure(INPUT_INVALID, f"Duplicate target {target.as_posix()}")
         targets.add(key)
+        if not deliver:
+            # The file is an input the build must hash (a model or bank row reads it) but never a
+            # zone asset: rooting it would spend an engine rawfile slot on bytes the compiled
+            # asset already carries. It is registered as an input and left out of `loose`.
+            job.input(_rel(row["source"], base))
+            withheld.append({"source": row["source"], "target": target.as_posix()})
+            continue
         loose.append((job.input(_rel(row["source"], base)), target, asset_type, _zone_target(name).as_posix()))
     for text in load_rows:
         loads.append(job.input(_rel(text, base)))
     for source, _, _ in compiled:
         job.input_tree(source.parent)
+    data["_withheld"] = withheld
     return data, compiled, loose, loads
 
 
@@ -176,6 +191,7 @@ def _plan(data, compiled, loose, loads, job: Job) -> dict:
         "scripts": [{"source": str(p), "target": t.as_posix(), "instance": i} for p, t, i in compiled],
         "assets": [{"source": str(p), "target": t.as_posix(), "type": k, "name": n} for p, t, k, n in loose],
         "loads": [str(p) for p in loads],
+        "withheld": data.get("_withheld", []),
         "backends": checks, "backends_available": all(c["available"] for c in checks),
         "input_files": len(job.inputs),
         "verification": "recipe and declared inputs validated and hashed; backend presence checked; nothing compiled",
@@ -293,5 +309,5 @@ def execute(args, job: Job) -> dict:
     plan = _plan(data, compiled, loose, loads, job)
     if args.action == "plan":
         return {"plan": "plan.json", **{k: plan[k] for k in ("name", "backends", "backends_available", "input_files", "verification")},
-                "scripts": len(compiled), "assets": len(loose), "loads": len(loads)}
+                "scripts": len(compiled), "assets": len(loose), "loads": len(loads), "withheld": len(plan["withheld"])}
     return _build(data, compiled, loose, loads, plan, args, job)

@@ -14,6 +14,8 @@ and nothing here reads the network or the game.
   against each limit.
 - ``crash-signatures.json``: the crashes table as regexes with class, cause found and fix that
   worked.
+- ``map-scripts.json``: per map, the compiled script asset paths the zones the engine loads for it
+  carry, so a plan can refuse a module that includes or calls into a script the target lacks.
 
 These are inert lookups: no job directory, no receipt beyond the stdout JSON and exit status.
 """
@@ -27,7 +29,7 @@ from pathlib import Path
 from ..core.errors import OPERATION_FAILED, INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, INVALID_ARGUMENTS, Failure
 
 DATA = Path(__file__).resolve().parent.parent / "knowledge"
-FILES = ("builtins.json", "engine-limits.json", "crash-signatures.json", "occupancy.json", "stock-exports.json")
+FILES = ("builtins.json", "engine-limits.json", "crash-signatures.json", "occupancy.json", "stock-exports.json", "map-scripts.json")
 VMS = ("server", "client")
 NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}\Z")
 MAP = re.compile(r"^[a-z][a-z0-9_]{1,40}\Z")
