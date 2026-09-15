@@ -67,6 +67,9 @@ CATEGORY = re.compile(r"^[a-z][a-z0-9-]{0,31}\Z")
 TAG = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}\Z")
 COMMIT = re.compile(r"^[0-9a-f]{40}\Z")
 NAME_REF = re.compile(r"^[a-z0-9][a-z0-9-]{0,38}/[a-z0-9_]{1,64}\Z")
+# A `recipes` key is one target: the foundation id as `foundations/<id>.json` names it, then the map.
+RECIPE_TARGET = re.compile(r"^[a-z0-9-]{1,32}/zm_[a-z0-9_]{1,32}\Z")
+MAX_RECIPES = 32
 STAGES = ("test", "probe", "pack", "pub")
 CONTRACT_FIELDS = ("threads", "entities", "hud", "network_fields")
 # The taxonomy people browse by. `category` is the shelf; `kind` narrows it; `tags` are free
@@ -172,7 +175,8 @@ MAX_DECLARATION_BYTES = 256 * 1024
 MAX_INSPECTION_TEXT = 2048
 MAX_INSPECTION_CODE = 200
 MODULE_METADATA_FIELDS = ("id", "version", "game", "title", "category", "kind", "tags", "bases", "maps",
-                          "dependencies", "conflicts", "origin", "donor", "distribution", "menu_route", "payload", "lineage", "replaces", "entry", "placements")
+                          "dependencies", "conflicts", "origin", "donor", "distribution", "menu_route", "payload", "recipes",
+                          "lineage", "replaces", "entry", "placements")
 COMPOSITION_METADATA_FIELDS = ("name", "title", "game", "tags", "base", "map", "origin", "donor", "members")
 
 
@@ -266,7 +270,10 @@ def inspect(path: Path) -> dict:
             fields = COMPOSITION_METADATA_FIELDS
         else:
             raise Failure(INPUT_INVALID, "Expected a module or composition declaration", field="/")
-        result.update(validation="metadata-valid", metadata={key: metadata[key] for key in fields if key not in ("replaces","entry","placements") or key in data})
+        result.update(validation="metadata-valid", metadata={key: metadata[key] for key in fields if key not in ("replaces","entry","placements","recipes") or key in data})
+        if kind == "module" and "recipes" in data:
+            # The targets the module names a cut for, not the paths: inspection resolves no payload.
+            result["metadata"]["recipes"] = sorted(metadata["recipes"])
         if kind == "module":
             ledger_path = path.parent / "evidence.json"
             if ledger_path.exists() or ledger_path.is_symlink():
@@ -545,6 +552,26 @@ def _replaces(value):
         out[key]=normalized
     return out
 
+def _recipes(value, mid: str) -> dict[str, str]:
+    """The per-target adapter recipes a declaration names: ``<foundation>/<map>`` to a recipe path
+    relative to the module directory. Lexical only; that each file exists, parses as an adapter
+    recipe and was cut for its own key is checked where the directory is known (``load_declaration``)."""
+    if value is None:
+        return {}
+    if not isinstance(value, dict) or len(value) > MAX_RECIPES:
+        raise Failure(INPUT_INVALID, f"{mid}: recipes maps at most {MAX_RECIPES} '<foundation>/<map>' targets to recipe paths", field='/recipes')
+    out: dict[str, str] = {}
+    for key, path in value.items():
+        if not isinstance(key, str) or not RECIPE_TARGET.match(key):
+            raise Failure(INPUT_INVALID, f"{mid}: a recipes key is '<foundation>/<map>', the foundation id as foundations/<id>.json names it: {key!r}",
+                          field='/recipes' + _pointer(key))
+        field = "/recipes" + _pointer(key)
+        _at(field, _text, path, f"{mid}: recipes[{key}]", 4096)
+        _at(field, _recipe_path, path)
+        out[key] = path
+    return out
+
+
 def _entry(value):
     if value is None:return None
     _fields(value,{'replace','register'},{'replace','register'},'entry')
@@ -553,7 +580,7 @@ def _entry(value):
 
 def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
     """Authoritative declaration checks; no filesystem or payload resolution."""
-    _fields(data, {"schema", "id", "version", "game", "title", "category", "kind", "tags", "recipe", "seed", "bases", "maps",
+    _fields(data, {"schema", "id", "version", "game", "title", "category", "kind", "tags", "recipe", "recipes", "seed", "bases", "maps",
                             "dependencies", "conflicts", "provides", "resource_contract", "menu_route", "distribution", "source",
                             "origin", "donor", "lineage", "tests", "replaces", "entry", "placements"},
                      {"schema", "id", "version", "bases", "maps"}, where)
@@ -588,6 +615,9 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
     payload_path = _at("/" + payload, _text, data[payload], f"{mid}: {payload}", 4096)
     if payload == "recipe":
         _at("/recipe", _recipe_path, payload_path)
+    recipes = _recipes(data.get("recipes"), mid)
+    if recipes and payload != "recipe":
+        raise Failure(INPUT_INVALID, f"{mid}: recipes belongs to a recipe payload; a seed is one package, not a cut per target", field='/recipes')
     distribution = data.get("distribution", "seed" if "seed" in data else "source")
     if distribution not in DISTRIBUTIONS:
         raise Failure(INPUT_INVALID, f"{mid}: distribution is one of {list(DISTRIBUTIONS)}", field='/distribution')
@@ -619,7 +649,7 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
         _at("/tests", _recipe_path, tests)
     provides = _at("/provides", _provides, data.get("provides"), mid)
     return {"id": mid, "version": data["version"], "game": game, "title": title, "category": category, "kind": kind, "tags": list(tags),
-            "payload": payload, "payload_path": payload_path, "distribution": distribution, "tests": tests,
+            "payload": payload, "payload_path": payload_path, "recipes": recipes, "distribution": distribution, "tests": tests,
             "replaces":_at("/replaces",_replaces,data.get("replaces")), "entry":_at("/entry",_entry,data.get("entry")),
             "placements": _placements(data.get("placements"), mid),
             "bases": list(bases), "maps": list(maps),
@@ -632,7 +662,43 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
             "origin": _at("/origin", _origin, data.get("origin"), mid), "donor": _at("/donor", _donor, data.get("donor"), mid)}
 
 
-def load_declaration(directory: Path, job: Job) -> dict:
+def _recipe_for_target(declaration: dict, directory: Path, job: Job, target: tuple[str | None, str | None] | None) -> tuple[Path, str | None]:
+    """The recipe a composition on ``target`` builds this adapter from, and the ``recipes`` key
+    it came from (``None`` for the default). An adapter recipe is a cut for one foundation and
+    one map, so a module composed on another target needs the cut for it; ``recipes`` names one
+    per target and ``recipe`` stays the default. Every entry is validated here, not only the
+    chosen one: a key whose file was cut for another target is a declaration defect wherever the
+    pack is aimed."""
+    from . import adapters
+
+    chosen_key = None
+    foundation, map_id = target or (None, None)
+    if foundation and map_id and f"{foundation}/{map_id}" in declaration["recipes"]:
+        chosen_key = f"{foundation}/{map_id}"
+    chosen = projects._rel(declaration["payload_path"], directory)
+    mid = declaration["id"]
+    for key, relative in declaration["recipes"].items():
+        path = projects._rel(relative, directory)
+        if path.is_symlink() or not path.is_file():
+            raise Failure(INPUT_MISSING, f"{mid}: recipes[{key}] is missing: {relative}")
+        src = job.input(path, limit=adapters.MAX_RECIPE_BYTES)
+        try:
+            data = json.loads(src.read_text(encoding="utf-8"))
+        except (ValueError, OSError) as exc:
+            raise Failure(INPUT_INVALID, f"{mid}: recipes[{key}] is not valid JSON: {relative}") from exc
+        if not adapters.is_adapter_recipe(data):
+            raise Failure(INPUT_INVALID, f"{mid}: recipes[{key}] is not an adapter recipe: {relative}",
+                          "A per-target entry names another cut of the same donor conversion: schema 1 with foundation, map and module.")
+        if f"{data['foundation']}/{data['map']}" != key:
+            raise Failure(INPUT_INVALID, f"{mid}: recipes[{key}] was cut for {data['foundation']}/{data['map']}: {relative}",
+                          "A recipes key is the target its own recipe names; re-cut the recipe or file it under its own key.",
+                          field='/recipes' + _pointer(key))
+        if key == chosen_key:
+            chosen = path
+    return chosen, chosen_key
+
+
+def load_declaration(directory: Path, job: Job, target: tuple[str | None, str | None] | None = None) -> dict:
     path = directory / "module.json"
     if path.is_symlink() or not path.is_file():
         raise Failure(INPUT_MISSING, f"Module directory has no module.json: {directory}")
@@ -645,6 +711,7 @@ def load_declaration(directory: Path, job: Job) -> dict:
     mid = declaration["id"]
     distribution = declaration["distribution"]
     recipe = seed = adapter = None
+    recipe_key = None
     if declaration["payload"] == "recipe":
         recipe = projects._rel(declaration["payload_path"], directory)
         if recipe.is_symlink() or not recipe.is_file():
@@ -658,8 +725,13 @@ def load_declaration(directory: Path, job: Job) -> dict:
             except (ValueError, OSError):
                 shape = None
             if adapters.is_adapter_recipe(shape):
+                recipe, recipe_key = _recipe_for_target(declaration, directory, job, target)
                 adapter = adapters.load_recipe(recipe, directory, job, mid)
                 recipe = None
+        if recipe is not None and declaration["recipes"]:
+            raise Failure(INPUT_INVALID, f"{mid}: recipes belongs to an adapter recipe; {declaration['payload_path']} is a project recipe the toolkit compiles itself",
+                          "A project recipe is compiled and linked against whatever the composition targets; only a donor-converted cut is per target.",
+                          field='/recipes')
     else:
         seed_rel = declaration["payload_path"]
         if distribution == "private" and not (directory / seed_rel).is_file():
@@ -692,7 +764,8 @@ def load_declaration(directory: Path, job: Job) -> dict:
             provides.setdefault(pkind, list(names))
     declaration.pop("payload")
     declaration.pop("payload_path")
-    return declaration | {"directory": directory, "recipe": recipe, "seed": seed, "adapter": adapter, "declaration": src}
+    return declaration | {"directory": directory, "recipe": recipe, "seed": seed, "adapter": adapter,
+                          "recipe_key": recipe_key, "declaration": src}
 
 
 # ----- compositions ----------------------------------------------------------------------
@@ -866,10 +939,12 @@ def load_composition(path: Path, job: Job, depth: int = 0, seen: tuple = ()) -> 
     return comp | {"members": members, "loads": loads, "base_owned": base_owned, "source": src}
 
 
-def flatten(comp: dict, job: Job) -> tuple[list[dict], list[Path], list[dict], list[str]]:
+def flatten(comp: dict, job: Job, target: tuple[str | None, str | None] | None = None) -> tuple[list[dict], list[Path], list[dict], list[str]]:
     """Every module in this composition and its nested compositions, with the loads and
     decisions gathered along the way. A nested composition's decisions apply to its own
-    collisions; the outer recipe records the ones between its members."""
+    collisions; the outer recipe records the ones between its members. ``target`` is the pack's
+    ``(foundation, map)``, which an adapter member's ``recipes`` picks its cut by; a nested
+    composition declares the same base and map, so the outer target is its target too."""
     modules: list[dict] = []
     loads: list[Path] = list(comp["loads"])
     decisions: list[dict] = list(comp["decisions"])
@@ -877,13 +952,13 @@ def flatten(comp: dict, job: Job) -> tuple[list[dict], list[Path], list[dict], l
     header: list[str] = list(comp["zone_header"])
     for member in comp["members"]:
         if member["kind"] == "module":
-            declaration = load_declaration(member["directory"], job)
+            declaration = load_declaration(member["directory"], job, target)
             declaration["role"] = member["role"]
             declaration["reference"] = member["reference"]
             declaration["via"] = comp["name"]
             modules.append(declaration)
         else:
-            inner_modules, inner_loads, inner_decisions, inner_header = flatten(member["composition"], job)
+            inner_modules, inner_loads, inner_decisions, inner_header = flatten(member["composition"], job, target)
             header += [h for h in inner_header if h not in header]
             for declaration in inner_modules:
                 if member["role"] == "base":
@@ -1257,7 +1332,9 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
         elif m.get("adapter") is not None:
             a = m["adapter"]
             row["recipe_sha256"] = job.inputs[str(a["recipe"].resolve())]
+            row["recipes"] = sorted(m.get("recipes") or ())
             row["adapter"] = {"foundation": a["foundation"], "map": a["map"], "profile": a["profile"],
+                              "recipe_key": m.get("recipe_key"),
                               "prepared_present": a["prepared_present"], "declared_roots": len(a["embedded"]),
                               "loose_scripts": [s["target"] for s in a["scripts"]], "soundbank": a["soundbank"], "aliases": a["aliases"]}
         else:
@@ -1279,7 +1356,11 @@ def execute(args, job: Job) -> dict:
     if args.action == "declare":
         return seeds.declare(Path(args.package).expanduser(), args, job)
     comp = load_composition(Path(args.composition), job)
-    modules, loads, decisions, header = flatten(comp, job)
+    from . import checks as offline_checks
+    # The pack's target in the workspace's own foundation ids, resolved once: an adapter member
+    # whose declaration names a recipe for it is planned and built from that cut, not the default.
+    pack_foundation = offline_checks.foundation_of(comp["base"], getattr(args, "workspace", None))
+    modules, loads, decisions, header = flatten(comp, job, (pack_foundation, comp["map"]))
     from ..testing.planner import prepare_probe
     try:
         prepare_probe(comp,modules,job)
@@ -1290,7 +1371,6 @@ def execute(args, job: Job) -> dict:
     if mixed:
         raise Failure(INPUT_INVALID, f"Composition targets game {comp['game']} but these members target another game: {mixed}",
                       "Every module in a composition targets the same game; split the pack or fix the members' module.json game.")
-    from . import checks as offline_checks
     resolved = resolve(comp, modules, getattr(args, "allow_unqualified", False))
     if resolved["refusals"]:
         raise refuse(resolved["refusals"], "; ".join(sorted({r["kind"] for r in resolved["refusals"]})),
@@ -1342,7 +1422,7 @@ def execute(args, job: Job) -> dict:
         late_refusals.append(_refusal("replacement", "Overlapping declared replacements cannot be resolved by an owner decision",
                                       "Two members declare the same replacement target; one of them must stop replacing it.",
                                       modules=[mid for row in refused for mid in row["modules"]], collisions=refused))
-    foundation = offline_checks.foundation_of(comp["base"], getattr(args, "workspace", None))
+    foundation = pack_foundation
     # The native-WeaponDef rule is a declaration check: the shipped per-map table names what the
     # map already registers, and a composition's own base listings add to it.
     owned_weapons = (comp.get("base_owned") or set()) | native_weapons(comp["map"], foundation)
@@ -1369,7 +1449,8 @@ def execute(args, job: Job) -> dict:
         "seeds": [{"id": m["id"], "package": str(m["seed"]["package"]), "roots": m["seed"]["roots"],
                    "soundbanks": [n for n in m["seed"]["files"] if n != "mod.ff"],
                    "strings": str(m["seed"]["strings"]) if m["seed"].get("strings") else None} for m in seed_modules],
-        "adapters": [{"id": m["id"], "recipe": str(m["adapter"]["recipe"]), "foundation": m["adapter"]["foundation"], "map": m["adapter"]["map"],
+        "adapters": [{"id": m["id"], "recipe": str(m["adapter"]["recipe"]), "recipe_key": m.get("recipe_key"),
+                      "foundation": m["adapter"]["foundation"], "map": m["adapter"]["map"],
                       "roots": m["adapter"]["embedded"], "soundbanks": [m["adapter"]["soundbank"]] if m["adapter"]["soundbank"] else [],
                       "aliases": m["adapter"]["aliases"], "loose_scripts": [s["target"] for s in m["adapter"]["scripts"]],
                       "prepared_present": m["adapter"]["prepared_present"]} for m in adapter_modules],
@@ -1445,11 +1526,13 @@ def execute(args, job: Job) -> dict:
         plan["adapter_builds"] = []
         # The builder is told the pack's target only in the workspace's own foundation ids: a
         # token the toolkit maps for occupancy ("stock") is not a foundation the builder knows.
+        # A member whose declaration named a recipe for this target is already cut for it, so
+        # `target_argv` finds nothing to override and the builder hears no flags.
         workspace = getattr(args, "workspace", None)
         from . import targets
-        pack_foundation = targets.foundation_for_base(Path(workspace).expanduser(), comp["base"]) if workspace else None
+        builder_foundation = targets.foundation_for_base(Path(workspace).expanduser(), comp["base"]) if workspace else None
         for m in adapter_modules:
-            m["seed"] = adapters.build(m, args, job, workspace, pack_foundation, comp["map"])
+            m["seed"] = adapters.build(m, args, job, workspace, builder_foundation, comp["map"])
             plan["adapter_builds"].append(m["seed"]["report"])
         seed_modules = [by_id[mid] for mid in resolved["order"] if by_id[mid]["seed"]]
         plan["seeds"] = [{"id": m["id"], "package": str(m["seed"]["package"]), "roots": m["seed"]["roots"],
