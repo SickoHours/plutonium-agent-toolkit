@@ -7,6 +7,22 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- `ff extract` refuses an asset type the pinned OpenAssetTools build cannot dump instead of
+  reporting an empty success. `--types fx` on a T6 zone used to exit zero having written nothing,
+  because OAT registers no T6 FX dumper (and no FX loader), so a caller could not tell "this zone
+  has no effects" from "this backend cannot write effects out". `dev/backends.json` gains
+  `asset_dumpers`: per game, which of the title's asset type names have a registered dumper, read
+  from the upstream OAT source at the pinned commit, with T6 populated (28 dumpable, 32 not,
+  including `fx` and `fximpacttable`) and the `techset`/`gfxlightdef` aliases resolved. `ff extract`
+  takes `--game`, and with it a type the table refuses fails with `backend_unavailable` and a hint
+  naming the type, the backend and the `ff link` route that does carry such an asset — before any
+  backend runs. Without `--game` the title is only known once the readback names it, so the same
+  refusal lands after the run; a request mixing dumpable and undumpable types still extracts and
+  lists the rest under `types_not_dumpable`. A title with no table is never judged, and
+  `ff inspect` is unaffected, because listing an asset needs no dumper. Offline unit tests on Linux
+  against the fake Unlinker, which now models a type it cannot dump as an empty exit-zero dump;
+  nothing was built, installed or played.
+
 - `module plan` and `module build` refuse a client script that registers a mystery-box weapon no
   member of the pack provides (`box-registration:<script>`). A `.csc` that calls
   `addzombieboxweapon` on a `_zm` name absent from every member's `provides.weapons` faults the
