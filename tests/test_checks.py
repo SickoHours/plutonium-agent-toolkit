@@ -117,6 +117,34 @@ class ExternalSymbols(unittest.TestCase):
         for directive in ('#include','#Include'):
             src='    '+directive+' common_scripts\\utility;\ninit()\n{\n    players = get_players();\n}\n'
             self.assertEqual(checks.external_symbols('scripts/zm/a.gsc',src)[0]['outcome'],'passed',directive)
+    def test_a_client_script_is_not_refused_for_a_server_only_export(self):
+        """A `.csc` links against client scripts only; no stock client script includes a `maps/` path,
+        so resolving a server export here would demand an include that cannot exist."""
+        src='init()\n{\n    e = self get_player_equipment();\n}\n'
+        rows=checks.external_symbols('scripts/zm/weapon.csc',src)
+        self.assertEqual(rows[0]['outcome'],'not_counted')
+        self.assertNotIn('maps/mp/zombies/_zm_utility',rows[0]['detail'])
+    def test_a_server_script_is_still_refused_for_the_same_export(self):
+        src='init()\n{\n    e = self get_player_equipment();\n}\n'
+        rows=checks.external_symbols('scripts/zm/weapon.gsc',src)
+        self.assertEqual(rows[0]['outcome'],'failed')
+        self.assertIn('maps/mp/zombies/_zm_utility',rows[0]['detail'])
+    def test_a_client_export_with_its_client_include_resolves(self):
+        src=('#include clientscripts\\mp\\_utility;\n#include clientscripts\\mp\\zombies\\_zm_utility;\n'
+             'init()\n{\n    level.a = add_to_array(level.a,self);\n    onplayerconnect_callback(::watch);\n}\nwatch()\n{\n}\n')
+        self.assertEqual(checks.external_symbols('scripts/zm/weapon.csc',src)[0]['outcome'],'passed')
+    def test_a_client_export_without_its_client_include_fails_naming_the_client_path(self):
+        src='init()\n{\n    level.a = add_to_array(level.a,self);\n}\n'
+        rows=checks.external_symbols('scripts/zm/weapon.csc',src)
+        self.assertEqual(rows[0]['outcome'],'failed')
+        self.assertIn('clientscripts/mp/_utility',rows[0]['detail'])
+        self.assertNotIn('common_scripts/utility',rows[0]['detail'])
+    def test_a_vm_with_no_export_rows_is_not_counted_rather_than_failed(self):
+        table={'schema':1,'exports':{'common_scripts/utility':{'vm':'server','functions':['add_to_array']}}}
+        with patch.object(checks.knowledge,'load',return_value=table):
+            rows=checks.external_symbols('scripts/zm/weapon.csc','init()\n{\n    add_to_array(level.a,self);\n}\n')
+        self.assertEqual(rows[0]['outcome'],'not_counted')
+        self.assertIn('client',rows[0]['detail'])
 
 class PoolAccounting(unittest.TestCase):
     """The two pools that refused real packs at mod selection on 2026-09-14 are counted offline."""

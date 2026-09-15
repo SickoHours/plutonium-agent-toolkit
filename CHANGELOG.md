@@ -22,6 +22,15 @@ Every entry states what shipped, on which platform it was verified, and what rem
   aimed: the file must exist, parse as an adapter recipe and declare its own key's foundation and
   map, and a `recipes` entry on a `project.json` recipe or a `seed` payload is refused.
   `recipes` widens nothing by itself; `bases` and `maps` still grow only by a receipt.
+- The `externals:` check resolves stock exports per script VM. `knowledge/stock-exports.json` now
+  carries a `vm` on every row; the seven existing rows are `server`, and two `client` rows
+  (`clientscripts/mp/_utility` for `add_to_array`, `clientscripts/mp/zombies/_zm_utility` for
+  `onplayerconnect_callback`) come from the per-VM symbol tables of the shipped `patch_zm` zone.
+  `module plan` judges a script only against the rows of its own VM, so a `.csc` that includes the
+  client utilities is no longer refused with a hint to include a server `maps/...` path no stock
+  client script carries, and a VM with no rows in the table returns `not_counted` instead of a
+  refusal. A `.gsc` missing a server include still fails as before. Verified by offline unit tests
+  on Linux; nothing was built, installed or played.
 
 - The crash catalog reads the Plutonium crash text, not only the console log. Five confirmed
   T6 crashes were replayed against their saved `console_zm.log` tails and not one contains the
