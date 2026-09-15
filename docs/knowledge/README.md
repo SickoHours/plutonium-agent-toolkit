@@ -36,3 +36,11 @@ Zombies zones: `pat knowledge builtin <name>` (which script VM a call exists on,
 argument counts), `pat knowledge limits [--map <zm_map>]` (the limits and what a map's loaded
 zones already carry against each) and `pat knowledge signature --log <slice>` (which recorded
 crash line this is and what fixed it). Ask the data before designing to a number or a name.
+
+A fourth table has no route of its own: `knowledge/stock-exports.json` holds the function exports
+of the stock Zombies scripts, keyed by script VM, and `module plan` resolves a script's unqualified
+calls against the rows of that script's own VM to raise its `externals:` rows. Server rows judge a
+`.gsc`, client rows judge a `.csc`, and neither judges the other: a client script links against
+`clientscripts/...`, never against a `maps/...` path. The server rows are the complete exports of
+the seven scripts named there; the client rows carry only the names proven so far, so a client call
+the table does not hold stays `not_counted` rather than refused.
