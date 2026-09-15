@@ -7,6 +7,11 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- The shipped knowledge JSON is re-exported from the workspace generator at `2026-09-15T11:54:18Z`.
+  One data row is new: the `box-weapon-not-found` crash signature (`AddZombieBoxWeapon: Failed to
+  find weapon <name>`), the fault a client box registration raises for a weapon no loaded zone
+  carries. The other five files change only their export marker; every data row re-exports
+  byte-for-byte, which is what the generator-output test added in #84 asserts.
 - A composition never roots an image or material name its own base already carries. A pack that
   ports content from another game loads that game's zones beside the target's, and OpenAssetTools'
   Linker resolves every name a member's material closure reaches from whichever loaded zone answers
