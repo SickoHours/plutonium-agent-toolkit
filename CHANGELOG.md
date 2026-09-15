@@ -7,6 +7,30 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- A pack whose images have no pixels is refused instead of built. `image-sources` is a plan-time
+  check: an `image` asset row whose file is on this machine passes (the linker reads the `.iwi`
+  from disk and the build stages it beside the package, with no bank and no header read spent), a
+  declared row whose file is missing or empty fails, and an
+  image a member's zone listing only references is `not_counted` — bank contents cannot be read
+  without the banks, so the plan never calls such an image loadable on its own. `module plan` and
+  `module build` take `--image-report PATH`, a readback of the package measured with the client's
+  banks beside it (`docs/MODULES.md`); every image it reports without pixels becomes a failed row
+  naming the image, the member that brought it in and where the measurement found the pixels, and
+  refuses the plan. The report is hashed as a build input, and only names and hints are read from
+  it, never paths.
+
+  The other half of that is a delivery the toolkit was not doing. A T6 fastfile carries an image's
+  header and never its pixels: linking fifteen freshly rooted 1024x1024 textures into a real pack's
+  `mod.ff` grew it by sixty-four bytes, and the readback still could not find data for any of them.
+  `project build` and `module build` now stage the zone's images into `packages/images/` beside
+  `mod.ff`, the way a seed's soundbanks already travel beside it, and record them on the receipt as
+  `images_beside_package`; with that folder in place the same readback resolved all fifteen. A zone
+  target part may now also contain `~`, `$` and `&`, which T6's asset pipeline generates in the
+  names of derived textures (`~$black-rgb&~-rt5_weapon_mesh~5d8c5c3e`) and a module that ships one
+  as its own asset has to name exactly; separators, `..` and absolute paths stay refused. Verified
+  on Linux by the test suite and by a readback of a real three-weapon pack; the rendering itself is
+  not claimed here.
+
 - The `externals:` check resolves stock exports per script VM. `knowledge/stock-exports.json` now
   carries a `vm` on every row; the seven existing rows are `server`, and two `client` rows
   (`clientscripts/mp/_utility` for `add_to_array`, `clientscripts/mp/zombies/_zm_utility` for
