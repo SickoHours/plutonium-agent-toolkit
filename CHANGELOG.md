@@ -7,6 +7,17 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- `pool:image-bank-slots` stops counting image bank reads the engine never performs. A map's row in
+  `knowledge/occupancy.json` may now carry `banks_present`, the optional inventory of banks that
+  map's client `zone/all` folder holds; when it is there, a `>level.ipak_read` line naming a bank
+  outside it becomes its own `not_counted` row ("skipped by the engine, costs no slot") and is left
+  out of the count, because the engine skips such a read with `ipak file not found` and charges no
+  slot for it. Without the inventory nothing changes and every distinct read still counts, which is
+  the conservative answer for a machine whose `zone/all` nobody measured. Found on a composition
+  that read four banks beyond the startup set where only one existed, so the count was pessimistic
+  by three. The field is optional, no shipped map carries one, and only a generator that measured a
+  real install should fill it. Offline unit tests on Linux; nothing was built, installed or played.
+
 - `module plan` and `module build` refuse a client script that registers a mystery-box weapon no
   member of the pack provides (`box-registration:<script>`). A `.csc` that calls
   `addzombieboxweapon` on a `_zm` name absent from every member's `provides.weapons` faults the
