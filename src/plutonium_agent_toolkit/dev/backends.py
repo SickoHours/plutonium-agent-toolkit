@@ -582,6 +582,32 @@ def doctor() -> dict:
     return result
 
 
+def dumper_games() -> dict:
+    """The per-game asset dumper tables from ``backends.json``.
+
+    A game key maps to ``dumpable`` and ``not_dumpable`` type name lists plus the
+    ``aliases`` OpenAssetTools accepts for a type. The tables are read from the
+    upstream OAT source at the pinned commit, not from a running binary, so a
+    locally built Unlinker with more dumpers is not described by them.
+    """
+    return pins().get("asset_dumpers", {}).get("games", {})
+
+
+def undumpable_types(game: str | None, types) -> list[str]:
+    """Which of ``types`` the pinned backend cannot write out for ``game``.
+
+    Empty when the game has no table, so an unknown game is never judged. Aliases
+    resolve to their canonical type; a name in neither list is unknown to this
+    table and is left to the backend rather than refused here.
+    """
+    table = dumper_games().get((game or "").lower())
+    if not table:
+        return []
+    aliases = table.get("aliases", {})
+    refused = set(table.get("not_dumpable", []))
+    return [t for t in types if aliases.get(t, t) in refused]
+
+
 def executable(name: str) -> list[str]:
     """Return the argv prefix for a backend executable.
 

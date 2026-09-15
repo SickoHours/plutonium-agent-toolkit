@@ -9,10 +9,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from ..core.errors import BACKEND_FAILED, INPUT_INVALID, INPUT_MISSING, Failure
+from ..core.errors import BACKEND_FAILED, BACKEND_UNAVAILABLE, INPUT_INVALID, INPUT_MISSING, Failure
 from ..core.jobs import Job
 from ..core.receipts import sha256_file
-from .backends import executable
+from .backends import dumper_games, executable, undumpable_types
 
 IDENTIFIER = re.compile(r"^[A-Za-z0-9_]{1,64}\Z")
 # Diagnostics only: anchored at line start so an asset *named* "fatal error.gsc" in a
@@ -31,6 +31,8 @@ def add_parser(sub, common):
     q.add_argument("input", help="Fastfile (.ff)")
     q.add_argument("--load", action="append", default=[])
     q.add_argument("--types", help="Comma-separated OAT asset types, e.g. rawfile,image")
+    q.add_argument("--game", help="Title of the fastfile (t6, iw5, ...). Given here, an asset type the pinned "
+                                  "backend has no dumper for is refused before anything runs")
     q.add_argument("--model-format", choices=["GLTF", "GLB", "OBJ", "XMODEL_EXPORT", "XMODEL_BIN"], default="GLTF")
     q.add_argument("--image-format", choices=["DDS", "IWI"], default="DDS")
     common(q)
@@ -40,6 +42,26 @@ def add_parser(sub, common):
     q.add_argument("--load", action="append", default=[], help="Dependency fastfile; repeat as needed")
     q.add_argument("--assets", action="append", default=[], help="Extra asset search directory; repeat as needed")
     common(q)
+
+
+def refuse_undumpable(game: str | None, types: list[str]) -> list[str]:
+    """Refuse the requested types the pinned backend has no dumper for, and return the rest.
+
+    OpenAssetTools registers a dumper per asset type per game, and a type with none is dumped as
+    nothing at all: ``--types fx`` on a T6 zone exits zero, writes no effect and says nothing,
+    which reads to a caller exactly like a zone with no effects in it. The table in
+    ``backends.json`` names what the pinned build can dump, so the difference is reportable
+    instead of silent. A game the table does not cover is never judged.
+    """
+    refused = undumpable_types(game, types)
+    if refused and len(refused) == len(types):
+        raise Failure(BACKEND_UNAVAILABLE,
+                      f"The pinned OpenAssetTools build has no {game} dumper for: {', '.join(refused)}",
+                      f"Unlinker registers no asset dumper for {'/'.join(refused)} on {game}, so extracting "
+                      f"{'them' if len(refused) > 1 else 'it'} writes nothing and reports success. Ask for a type it "
+                      "can dump, or root the asset in an OAT project and link it against the donor zone with "
+                      "`pat ff link` to carry it and its closure in a fastfile of your own.")
+    return refused
 
 
 def check_readback_log(log: Path) -> str:
@@ -103,6 +125,8 @@ def execute(args, job: Job) -> dict:
     if src.suffix.lower() != ".ff":
         raise Failure(INPUT_INVALID, "Expected a .ff fastfile")
     argv = [*executable("unlinker"), "--no-color"]
+    declared = (getattr(args, "game", None) or "").lower()
+    requested, refused = [], []
     if args.action == "inspect":
         argv += ["--skip-obj", "--list"]
     else:
@@ -111,6 +135,13 @@ def execute(args, job: Job) -> dict:
         if args.types:
             if not re.fullmatch(r"[a-z0-9_,]{1,512}", args.types):
                 raise Failure(INPUT_INVALID, "Asset types are comma-separated lowercase identifiers")
+            requested = [t for t in args.types.split(",") if t]
+            if declared:
+                if declared not in dumper_games():
+                    raise Failure(INPUT_INVALID, f"No asset dumper table for {args.game}",
+                                  f"Known titles: {', '.join(sorted(dumper_games())) or 'none'}. Omit --game to let "
+                                  "the readback name the title instead.")
+                refused = refuse_undumpable(declared, requested)
             argv += ["--include-assets", args.types]
     for zone in args.load:
         # A package this job produced (an adapter member's stage, built under the job root) is
@@ -127,9 +158,15 @@ def execute(args, job: Job) -> dict:
                           "only. Load the game's own zone/english/*.ff instead (docs/knowledge/iw5.md).", log=log_name) from exc
         raise
     text = check_readback_log(log)
+    zone = re.search(r"(?m)^Zone '[^']+' \((\w+)\)", text) or re.search(r'(?m)^Loaded zone "[^"]+" \((\w+)\)', text)
+    game = zone.group(1) if zone else None
+    if requested and not declared:
+        # Without --game the title is only known once the readback names it, which is too late to
+        # refuse before running; it is not too late to say why the output is empty.
+        refused = refuse_undumpable((game or "").lower(), requested)
+    extra = {"types_not_dumpable": refused} if refused else {}
     if args.action == "extract" and not any(p.is_file() for p in (job.root / "assets").rglob("*")):
         raise Failure(BACKEND_FAILED, "No assets were extracted", log=log.name)
-    zone = re.search(r"(?m)^Zone '[^']+' \((\w+)\)", text) or re.search(r'(?m)^Loaded zone "[^"]+" \((\w+)\)', text)
     return {"input": str(src), "inventory_log": log.name, "listing": text[:65536], "listing_truncated": len(text) > 65536,
-            "game": zone.group(1) if zone else None,
+            "game": game, **extra,
             "verification": "OpenAssetTools readback; not gameplay acceptance"}

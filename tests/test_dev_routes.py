@@ -171,6 +171,71 @@ class DevRouteTests(DevRouteFixture):
         self.assertEqual(code, 1)
         self.assertEqual(row["error_code"], "backend_failed")
 
+    def test_ff_extract_refuses_a_type_the_pinned_backend_cannot_dump(self):
+        # OAT registers no T6 FX dumper, so `--types fx` used to exit zero with nothing written and
+        # no way for the caller to tell "no such asset" from "cannot dump this type".
+        import base64
+        ff = self.root / "sample.ff"
+        ff.write_text(json.dumps({"zone": "sample", "rawfiles": {"scripts/zm/a.gsc": base64.b64encode(b"X").decode()}}))
+        out = self.out()
+        code, row = invoke(["ff", "extract", str(ff), "--types", "fx", "--game", "t6", "--output", out])
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "backend_unavailable")
+        self.assertIn("fx", row["message"])
+        self.assertIn("Unlinker", row["hint"])
+        self.assertIn("ff link", row["hint"])
+        # Refused before anything ran: the job recorded no backend step and wrote no assets.
+        receipt = json.loads((Path(out) / "receipt.json").read_text())
+        self.assertEqual(receipt["status"], "failed")
+        self.assertEqual(receipt["steps"], [])
+        self.assertFalse((Path(out) / "assets").exists())
+
+    def test_ff_extract_names_the_undumpable_type_after_the_readback_when_the_game_is_not_declared(self):
+        import base64
+        ff = self.root / "sample.ff"
+        ff.write_text(json.dumps({"zone": "sample", "rawfiles": {"scripts/zm/a.gsc": base64.b64encode(b"X").decode()}}))
+        code, row = invoke(["ff", "extract", str(ff), "--types", "fx", "--output", self.out()])
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "backend_unavailable")
+        # A type the backend can dump is still extracted, and the readback names the title.
+        code, row = invoke(["ff", "extract", str(ff), "--types", "rawfile", "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        self.assertEqual(row["result"]["game"], "T6")
+        self.assertNotIn("types_not_dumpable", row["result"])
+
+    def test_ff_extract_reports_a_partly_undumpable_request_and_still_extracts_the_rest(self):
+        import base64
+        ff = self.root / "sample.ff"
+        ff.write_text(json.dumps({"zone": "sample", "rawfiles": {"scripts/zm/a.gsc": base64.b64encode(b"X").decode()}}))
+        for argv in (["--types", "rawfile,fx", "--game", "t6"], ["--types", "rawfile,fx"]):
+            code, row = invoke(["ff", "extract", str(ff), *argv, "--output", self.out()])
+            self.assertEqual(code, 0, row)
+            self.assertEqual(row["result"]["types_not_dumpable"], ["fx"], argv)
+            self.assertTrue((Path(row["result"]["output"]) / "assets" / "scripts/zm/a.gsc").is_file())
+
+    def test_ff_extract_judges_nothing_for_a_title_with_no_dumper_table(self):
+        import base64
+        ff = self.root / "sample.ff"
+        ff.write_text(json.dumps({"zone": "sample", "game": "IW5",
+                                  "rawfiles": {"scripts/zm/a.gsc": base64.b64encode(b"X").decode()}}))
+        code, row = invoke(["ff", "extract", str(ff), "--types", "rawfile", "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        self.assertEqual(row["result"]["game"], "IW5")
+        self.assertNotIn("types_not_dumpable", row["result"])
+        # A declared title the table does not cover is a usage error, not a silent pass.
+        code, row = invoke(["ff", "extract", str(ff), "--types", "fx", "--game", "iw5", "--output", self.out()])
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "input_invalid")
+
+    def test_ff_inspect_is_unaffected_by_the_dumper_table(self):
+        import base64
+        ff = self.root / "sample.ff"
+        ff.write_text(json.dumps({"zone": "sample", "rawfiles": {"scripts/zm/a.gsc": base64.b64encode(b"X").decode()}}))
+        code, row = invoke(["ff", "inspect", str(ff), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        self.assertIn("rawfile, scripts/zm/a.gsc", row["result"]["listing"])
+        self.assertNotIn("types_not_dumpable", row["result"])
+
     def test_dev_routes_run_on_any_platform_without_a_gate(self):
         # The file tools are not platform-gated. The old PAT_DEV_UNGATED hook is gone;
         # removing it changes nothing, and no route returns unsupported_platform here.
