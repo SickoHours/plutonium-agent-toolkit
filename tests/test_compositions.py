@@ -973,9 +973,9 @@ class PoolAndDeliveryTests(CompositionFixture):
         code, result = invoke(["module", "plan", str(self.composition(["skull"], name="stock_image_test")), "--output", self.out()])
         self.assertEqual(code, 0, result)
         rows = {c["id"]: c for c in result["result"]["checks"] if c["id"].startswith("image-sources")}
-        self.assertEqual(rows["image-sources:halo_tex"]["outcome"], "passed")
-        self.assertIn("stages it beside the package", rows["image-sources:halo_tex"]["detail"])
-        self.assertEqual(rows["image-sources"]["outcome"], "passed")
+        self.assertEqual(rows["image-sources:halo_tex"]["outcome"], "not_counted")
+        self.assertIn("storage/t6/images", rows["image-sources:halo_tex"]["detail"])
+        self.assertEqual(rows["image-sources"]["outcome"], "not_counted")
         report = self.root / "shipped-check.json"
         report.write_text(json.dumps({"pack": "stock_image_test", "images": [{"name": "halo_tex", "pixels": "present"}]}))
         code, result = invoke(["module", "plan", str(self.composition(["skull"], name="stock_image_test")), "--output", self.out(),
@@ -991,14 +991,15 @@ class PoolAndDeliveryTests(CompositionFixture):
                                                 "type": "image", "name": name}])
         code, result = invoke(["module", "plan", str(self.composition(["thundergun"], name="stock_generated_image_test")), "--output", self.out()])
         self.assertEqual(code, 0, result)
-        self.assertEqual(next(c for c in result["result"]["checks"] if c["id"] == f"image-sources:{name}")["outcome"], "passed")
+        self.assertEqual(next(c for c in result["result"]["checks"] if c["id"] == f"image-sources:{name}")["outcome"], "not_counted")
         from plutonium_agent_toolkit.dev.projects import _zone_target
         for bad in ("images/../escape.iwi", "/images/x.iwi", "images/a:b.iwi"):
             with self.assertRaises(Exception):
                 _zone_target(bad)
 
     def test_a_pack_s_images_travel_beside_the_package(self):
-        """The fastfile carries an image's header, never its pixels; the client reads images/ in the mod's folder."""
+        """The fastfile carries an image's header, never its pixels. packages/images/ is the artifact
+        that carries them; the engine reads a bank or storage/t6/images, never the mod folder."""
         row = {"source": "assets/images/halo_tex.iwi", "target": "images/halo_tex.iwi", "type": "image", "name": "halo_tex"}
         self.module_with_assets("skull", [row])
         code, result = invoke(["module", "build", str(self.composition(["skull"], name="stock_image_delivery_test")), "--output", self.out()])
@@ -1031,3 +1032,112 @@ class PoolAndDeliveryTests(CompositionFixture):
         summary = next(c for c in result["result"]["checks"] if c["id"] == "image-sources")
         self.assertEqual(summary["outcome"], "not_counted")
         self.assertIn("readback beside the banks", summary["detail"])
+
+
+class DonorShadowingTests(CompositionFixture):
+    """A donor zone loaded beside the base must never answer a name the base already carries.
+
+    A T6 fastfile carries an image's header and never its pixels, so a donor's copy of a stock name
+    puts a foreign header in front of the base's pixels and the shared camo textures render wrong on
+    every weapon, the pack's and the map's alike. The composer excludes every base-owned image and
+    material name from the zone; these tests are the executable half of that section in
+    docs/MODULES.md.
+    """
+
+    def zone(self, name, assets=(), pulls=()):
+        """A loadable fastfile for the fakes. ``pulls`` are the names this zone drags in on its own,
+        which is how a material closure reaches a base-owned image without anyone rooting it."""
+        d = self.root / "packs" / "zones"
+        d.mkdir(parents=True, exist_ok=True)
+        path = d / f"{name}.ff"
+        path.write_text(json.dumps({"zone": name, "rawfiles": {}, "assets": list(assets), "pulls": list(pulls)}))
+        return path
+
+    def listings(self, **zones):
+        d = self.root / "packs" / "listings"
+        d.mkdir(parents=True, exist_ok=True)
+        for zone_name, rows in zones.items():
+            (d / f"{zone_name}-list.txt").write_text("".join(f"{row}\n" for row in rows))
+        return d
+
+    def pack(self, name, **extra):
+        self.module("skull")
+        return self.composition(["skull"], name=name, loads=["../zones/common_zm.ff", "../zones/moon.ff"], **extra)
+
+    def setUp(self):
+        super().setUp()
+        self.zone("common_zm")
+        # The donor carries the base's camo image and a material of its own; only the first shadows.
+        self.zone("moon", pulls=["image,camo_gold_nml", "material,mtl_moon_only"])
+        self.listings(common_zm=["image, camo_gold_nml", "material, mtl_stock", "image, ,ref_only"])
+
+    def test_a_base_owned_name_is_excluded_and_the_donor_copy_never_reaches_the_package(self):
+        comp = self.pack("stock_shadow_test", base_owned=["../listings/common_zm-list.txt"])
+        code, row = invoke(["module", "build", str(comp), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        # A reference row (type, ,name) is not a base copy, so it is never excluded.
+        self.assertEqual(row["result"]["base_owned_excluded"], {"image": 1, "material": 1})
+        self.assertEqual(row["result"]["donor_shadowing"]["outcome"], "passed")
+        self.assertEqual(row["result"]["donor_shadowing"]["count"], 0)
+        package = json.loads((Path(row["result"]["output"]) / row["result"]["mod_ff"]).read_text())
+        self.assertNotIn("image,camo_gold_nml", package["assets"])
+        self.assertIn("image,camo_gold_nml", package["referenced"])
+        self.assertIn("material,mtl_moon_only", package["assets"], "a donor name the base does not carry is still the pack's to root")
+        zone_text = (Path(row["result"]["output"]) / "project" / "zone_source" / "mod.zone").read_text()
+        self.assertIn("ignore,mod_base_owned", zone_text)
+        rows = (Path(row["result"]["output"]) / "project" / "zone_source" / "assetlist" / "mod_base_owned.csv").read_text().splitlines()
+        self.assertEqual(sorted(rows), ["image,camo_gold_nml", "material,mtl_stock"])
+
+    def test_without_a_base_listing_the_plan_refuses_and_names_how_many_zones_are_loaded(self):
+        code, row = invoke(["module", "plan", str(self.pack("stock_shadow2_test")), "--output", self.out()])
+        self.assertEqual(code, 1, row)
+        check = next(c for c in row["details"]["checks"] if c["id"] == "donor-shadowing")
+        self.assertEqual(check["outcome"], "failed")
+        self.assertEqual(check["count"], 2, "with no listing at all, no load can be shown to be part of the base")
+        self.assertEqual(sorted(check["names"]), ["common_zm", "moon"])
+        self.assertIn("no base listing", check["detail"])
+
+    def test_base_listings_are_derived_from_the_loads_so_a_cart_hand_lists_nothing(self):
+        comp = self.pack("stock_shadow3_test")
+        code, row = invoke(["module", "plan", str(comp), "--output", self.out(),
+                            "--base-listings", str(self.root / "packs" / "listings")])
+        self.assertEqual(code, 0, row)
+        self.assertEqual(row["result"]["base_owned_names"], 2, "the reference row is not a base copy")
+        check = next(c for c in row["result"]["checks"] if c["id"] == "donor-shadowing")
+        self.assertEqual(check["outcome"], "passed")
+        doc = json.loads((Path(row["result"]["output"]) / "plan.json").read_text())
+        self.assertEqual(doc["base_loads"], ["common_zm"], "the load with a listing is the base's; the one without it is the donor")
+        self.assertEqual([Path(p).name for p in doc["base_listings"]], ["common_zm-list.txt"])
+        self.assertEqual(doc["base_owned_assets"], {"image": 1, "material": 1})
+        code, row = invoke(["module", "plan", str(comp), "--output", self.out(), "--base-listings", str(self.root / "nope")])
+        self.assertEqual(row["error_code"], "input_missing")
+
+    def test_a_foundation_descriptor_can_name_the_listings_directory(self):
+        from plutonium_agent_toolkit.dev import targets
+        (self.root / "foundations").mkdir(parents=True, exist_ok=True)
+        (self.root / "foundations" / "stock-fnd.json").write_text(json.dumps(
+            {"schema": 1, "id": "stock-fnd", "profile_prefix": "stock", "maps": {"zm_transit": {}},
+             "base_listings": "packs/listings"}))
+        self.assertEqual(targets.base_listing_dirs(self.root, "stock-fnd"), [self.root / "packs" / "listings"])
+        self.assertEqual(targets.base_listing_dirs(self.root, "absent-fnd"), [])
+
+    def test_a_foundation_link_load_is_the_base_even_with_no_listing_staged_here(self):
+        """A build against the foundation's own zones and nothing else has no donor, so it needs no
+        listing: `module qualify` links exactly that way."""
+        (self.root / "foundations").mkdir(parents=True, exist_ok=True)
+        (self.root / "foundations" / "stock-fnd.json").write_text(json.dumps(
+            {"schema": 1, "id": "stock-fnd", "profile_prefix": "stock",
+             "maps": {"zm_transit": {"link_loads": ["common_zm"]}}}))
+        self.module("skull")
+        comp = self.composition(["skull"], name="stock_shadow4_test", loads=["../zones/common_zm.ff"])
+        code, row = invoke(["module", "plan", str(comp), "--output", self.out(), "--workspace", str(self.root)])
+        self.assertEqual(code, 0, row)
+        check = next(c for c in row["result"]["checks"] if c["id"] == "donor-shadowing")
+        self.assertEqual(check["outcome"], "passed")
+        self.assertIn("no donor zone", check["detail"])
+        # Add the donor back and the same composition is refused again: only the declared zone is base.
+        comp = self.composition(["skull"], name="stock_shadow5_test", loads=["../zones/common_zm.ff", "../zones/moon.ff"])
+        code, row = invoke(["module", "plan", str(comp), "--output", self.out(), "--workspace", str(self.root)])
+        self.assertEqual(code, 1, row)
+        check = next(c for c in row["details"]["checks"] if c["id"] == "donor-shadowing")
+        self.assertEqual((check["outcome"], check["count"], check["names"]), ("failed", 1, ["moon"]))

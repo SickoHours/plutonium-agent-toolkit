@@ -206,14 +206,18 @@ def _plan(data, compiled, loose, loads, job: Job) -> dict:
 
 
 def stage_images(raw: Path, packages: Path) -> list[str]:
-    """Copy the zone's images beside the package, the way the seeds' soundbanks travel beside it.
+    """Copy the zone's images beside the package as an artifact, next to the seeds' soundbanks.
 
     A T6 fastfile carries an image's header and never its pixels: a `mod.ff` with fifteen freshly
     rooted 1024x1024 textures in it is sixty-four bytes larger than the same zone without them.
-    The client reads the pixels from an image bank the zone header names, or from `images/<name>.iwi`
-    in the mod's own folder. So an `image` asset row is only half a delivery: without the file
-    beside the package the image draws blank, which is the failure `image-sources` reports.
-    Returns the staged names; the caller records them on the receipt."""
+    Unlike a soundbank, though, `packages/images/` is **not** a delivery: measured on Plutonium
+    2026-09-15, a mod folder's `images/` is never opened by the engine (a pack that staged 25 `.iwi`
+    files there drew zero console mentions of them). The client reads an image's pixels from an
+    image bank a `>level.ipak_read` header line names, or from Plutonium's global loose path
+    `storage/t6/images`. The copy is kept because it is the exact bytes the header describes and the
+    only thing that can be moved into either route, but `image-sources` does not count it as pixels.
+    Writing into `storage/t6/images` is global to every mod on the machine and is the user's call,
+    not this build's. Returns the staged names; the caller records them on the receipt."""
     source = raw / "images"
     if not source.is_dir():
         return []

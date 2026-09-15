@@ -106,7 +106,8 @@ def _link(args, job: Job) -> dict:
         # an output the receipt inventories, not an input; everything else is hashed as an input.
         produced = Path(zone).resolve()
         argv += ["-l", str(produced) if produced.is_relative_to(job.root) else str(job.input(zone))]
-    check_link_log(job.run([*argv, args.zone], cwd=base, timeout=args.timeout))
+    link_log = job.run([*argv, args.zone], cwd=base, timeout=args.timeout)
+    check_link_log(link_log)
     packages = sorted(out.rglob("*.ff"))
     if not packages:
         raise Failure(BACKEND_FAILED, "Linker produced no fastfile")
@@ -115,7 +116,10 @@ def _link(args, job: Job) -> dict:
         log = job.run([*executable("unlinker"), "--no-color", "--skip-obj", "--list", str(p)], timeout=args.timeout)
         check_readback_log(log)
         verified.append({"path": p.relative_to(job.root).as_posix(), "sha256": sha256_file(p), "inventory_log": log.name})
-    return {"packages": verified, "verification": "linked and read back by OpenAssetTools; gameplay untested"}
+    # The link log names the zone every asset's copy came from ("(src: <zone>)"); a caller that
+    # loads donor zones beside the base reads it back to prove none of them answered a base name.
+    return {"packages": verified, "link_log": link_log.name,
+            "verification": "linked and read back by OpenAssetTools; gameplay untested"}
 
 
 def execute(args, job: Job) -> dict:

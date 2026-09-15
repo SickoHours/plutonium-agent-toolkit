@@ -145,6 +145,10 @@ def add_parser(sub, common):
                        help="A target <foundation>/<map>/<mode>[/<location>][@<route>] to check placements against; repeatable. Its map must be the composition's, and a location two routes provide names one")
         q.add_argument("--image-report", metavar="PATH",
                        help="A readback measurement of which of this pack's images have no pixels in any bank the client opens (docs/MODULES.md); without it the image-sources check cannot decide a referenced image and says so")
+        q.add_argument("--base-listings", action="append", default=[], metavar="DIR",
+                       help="A directory of asset listings of the base's zones (<zone>-list.txt, the shape an unlinker --list prints); repeatable. "
+                            "Every load with a listing here is a base zone and its image and material names are excluded from the pack's zone, so a "
+                            "donor load can never shadow one. Without it, --workspace reads the same directory from foundations/<id>.json's base_listings")
         common(q)
     from . import qualify as qualify_route
     qualify_route.add_parser(actions, common)
@@ -776,30 +780,65 @@ def load_declaration(directory: Path, job: Job, target: tuple[str | None, str | 
 # ----- compositions ----------------------------------------------------------------------
 
 LISTING_ROW = re.compile(r"^([a-z0-9_]+),\s*([^\s,][^\n]*)$")  # embedded rows only; a reference row (type, ,name) is not a base copy
+ANSI = re.compile(r"\x1b\[[0-9;]*m")  # an unlinker listing captured from a colour terminal carries these
+# The two asset types a donor zone can shadow by name. A T6 fastfile carries an image's header and
+# never its pixels, so a donor's copy of a name the base owns puts a foreign header in front of the
+# base's pixels; a material is the thing that names images, so it shadows the same way one level up.
+SHADOWABLE_TYPES = ("image", "material")
 
 
-def _base_owned(listings: list[Path]) -> set[str]:
+def _base_owned(listings: list[Path]) -> tuple[set[str], dict[str, set[str]]]:
     """Asset names the base zones already carry, read from plain listings (one ``type,name``
     row per line, the shape an unlinker ``--list`` prints). A reference row (``type, ,name``)
     means the zone only points at the asset, so it is skipped: the base has no copy to win
     with. A seed that carries an embedded name got it by linking against the base; the base
     wins and no decision is needed. Listings are read line by line and capped at 200000 rows
-    and 64 MiB."""
+    and 64 MiB.
+
+    Returns ``(names, shadowable)``: every ``type,name`` casefolded, which is what collision
+    adjudication compares, and the exact-case names per ``SHADOWABLE_TYPES``, which is what the
+    zone's exclusion list is written from. The linker matches an ignored name byte for byte, so
+    the second set keeps the listing's own casing."""
     names: set[str] = set()
+    shadowable: dict[str, set[str]] = {kind: set() for kind in SHADOWABLE_TYPES}
     for path in listings:
         if path.stat().st_size > 64 * 1024 * 1024:
             raise Failure(INPUT_LIMIT, f"Base listing is larger than 64 MiB: {path.name}")
         rows = 0
         with path.open(encoding="utf-8", errors="replace") as handle:
             for line in handle:
-                m = LISTING_ROW.match(line.strip())
+                m = LISTING_ROW.match(ANSI.sub("", line).strip())
                 if not m:
                     continue
                 rows += 1
                 if rows > 200_000:
                     raise Failure(INPUT_LIMIT, f"Base listing has more than 200000 rows: {path.name}")
-                names.add(f"{m.group(1)},{m.group(2).strip()}".casefold())
-    return names
+                kind, name = m.group(1), m.group(2).strip()
+                names.add(f"{kind},{name}".casefold())
+                if kind in shadowable:
+                    shadowable[kind].add(name)
+    return names, shadowable
+
+
+def zone_name_of(load: Path) -> str:
+    """The zone name the linker logs for a loaded fastfile: its file name without ``.ff``."""
+    return load.name[:-3] if load.name.lower().endswith(".ff") else load.stem
+
+
+def listing_for_load(load: Path, directories: list[Path]) -> Path | None:
+    """The asset listing a base-listings directory holds for one loaded zone, or None.
+
+    A composition's ``loads`` mix the target's own foundation zones with donor zones from another
+    game. The foundation is the half whose listings the workspace staged when it built the base, so
+    "a load with a listing here" is exactly "a load that is part of the base" -- the composer does
+    not have to be told twice. Both shapes the staging writes are accepted."""
+    stem = zone_name_of(load)
+    for directory in directories:
+        for candidate in (f"{stem}-list.txt", f"{stem}.txt", f"{stem}-list.csv", f"{stem}.csv"):
+            path = directory / candidate
+            if path.is_file():
+                return path
+    return None
 
 
 def _decisions(value, comp_name: str) -> list[dict]:
@@ -945,8 +984,10 @@ def load_composition(path: Path, job: Job, depth: int = 0, seen: tuple = ()) -> 
             raise Failure(INPUT_MISSING, f"Member directory has neither module.json nor composition.json: {row['path']}")
         members.append(member)
     loads = [_relative_file(text, src.parent, job, "Load") for text in comp["loads"]]
-    base_owned = _base_owned([_relative_file(text, src.parent, job, "Base listing") for text in comp["base_owned"]])
-    return comp | {"members": members, "loads": loads, "base_owned": base_owned, "source": src}
+    listings = [_relative_file(text, src.parent, job, "Base listing") for text in comp["base_owned"]]
+    base_owned, base_shadowable = _base_owned(listings)
+    return comp | {"members": members, "loads": loads, "base_owned": base_owned, "base_shadowable": base_shadowable,
+                   "base_listings": listings, "source": src}
 
 
 def flatten(comp: dict, job: Job, target: tuple[str | None, str | None] | None = None) -> tuple[list[dict], list[Path], list[dict], list[str]]:
@@ -959,6 +1000,8 @@ def flatten(comp: dict, job: Job, target: tuple[str | None, str | None] | None =
     loads: list[Path] = list(comp["loads"])
     decisions: list[dict] = list(comp["decisions"])
     comp.setdefault("base_owned", set())
+    comp.setdefault("base_shadowable", {kind: set() for kind in SHADOWABLE_TYPES})
+    comp.setdefault("base_listings", [])
     header: list[str] = list(comp["zone_header"])
     for member in comp["members"]:
         if member["kind"] == "module":
@@ -978,6 +1021,9 @@ def flatten(comp: dict, job: Job, target: tuple[str | None, str | None] | None =
             loads += [p for p in inner_loads if p not in loads]
             decisions += inner_decisions
             comp["base_owned"] |= member["composition"].get("base_owned", set())
+            for kind, inner_names in (member["composition"].get("base_shadowable") or {}).items():
+                comp["base_shadowable"].setdefault(kind, set()).update(inner_names)
+            comp["base_listings"] += [p for p in member["composition"].get("base_listings", []) if p not in comp["base_listings"]]
     return modules, loads, decisions, header
 
 
@@ -1416,6 +1462,57 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
     return rows
 
 
+def _derive_base_listings(comp: dict, loads: list[Path], args, job: Job) -> None:
+    """Fill ``base_owned`` from the composition's own loads instead of making a cart hand-list them.
+
+    Every load that has an asset listing in a base-listings directory is one of the target's own
+    zones; every load that does not is a donor. That is the whole classification, and it comes from
+    the composition itself, so a recipe that names a foundation zone under ``loads`` never has to
+    repeat its listing under ``base_owned``. An explicit ``base_owned`` entry is read as well and
+    keeps working; the two are merged."""
+    directories = [Path(d).expanduser() for d in getattr(args, "base_listings", []) or []]
+    for directory in directories:
+        if not directory.is_dir():
+            raise Failure(INPUT_MISSING, f"Base listings directory is missing: {directory}",
+                          "Point --base-listings at the directory holding <zone>-list.txt for the base's zones.")
+    declared_base: list[str] = []
+    if getattr(args, "workspace", None):
+        from . import checks as offline_checks, targets
+        try:
+            root = Path(args.workspace).expanduser()
+            foundation = offline_checks.foundation_of(comp["base"], args.workspace)
+            # A foundation names the zones a module links against on a map. Those are the base even
+            # when no listing for them is staged here, so a build against the foundation's own zones
+            # and nothing else has no donor at all and needs no listing.
+            declared_base = targets.base_zone_names(root, foundation, comp["map"])
+            if not directories:
+                directories = targets.base_listing_dirs(root, foundation)
+        except Failure:
+            declared_base = []
+    known = list(comp.get("base_listings") or [])
+    search = directories + [p.parent for p in known]
+    derived, base_loads = [], []
+    for load in loads:
+        found = listing_for_load(load, search)
+        if found is None:
+            if zone_name_of(load) in declared_base:
+                base_loads.append(load)
+            continue
+        base_loads.append(load)
+        if found not in known and found not in derived:
+            derived.append(found)
+    if derived:
+        if len(known) + len(derived) > MAX_BASE_LISTINGS:
+            raise Failure(INPUT_LIMIT, f"A composition reads at most {MAX_BASE_LISTINGS} base listings; "
+                                       f"{len(known)} declared and {len(derived)} derived from the loads is more")
+        names, shadowable = _base_owned([job.input(path) for path in derived])
+        comp["base_owned"] = (comp.get("base_owned") or set()) | names
+        for kind, found_names in shadowable.items():
+            comp.setdefault("base_shadowable", {}).setdefault(kind, set()).update(found_names)
+        comp["base_listings"] = known + derived
+    comp["base_loads"] = base_loads
+
+
 def execute(args, job: Job) -> dict:
     if args.action == "qualify":
         from . import qualify
@@ -1492,6 +1589,7 @@ def execute(args, job: Job) -> dict:
         compiled.append(generated_entry["script"])
     if len(compiled) > projects.MAX_SCRIPTS or len(loose) > projects.MAX_ASSETS or len(loads) > projects.MAX_LOADS or len(seed_modules) > MAX_MODULES:
         raise Failure(INPUT_LIMIT, f"A composition holds at most {projects.MAX_SCRIPTS} scripts, {projects.MAX_ASSETS} assets, {projects.MAX_LOADS} loads and {MAX_MODULES} seeds")
+    _derive_base_listings(comp, loads, args, job)
     decided, undecided, refused = collisions(modules, loaded, decisions, comp.get("base_owned"))
     late_refusals: list[dict] = []
     if refused:
@@ -1534,6 +1632,9 @@ def execute(args, job: Job) -> dict:
         "unqualified": resolved["unqualified"], "adapt": adapt_rows(comp, modules, resolved["unqualified"], pack_foundation),
         "resource_totals": resolved["resource_totals"], "budget": comp["budget"],
         "decisions": decided, "undecided": undecided, "base_owned_names": len(comp.get("base_owned") or ()),
+        "base_listings": [str(path) for path in comp.get("base_listings") or []],
+        "base_loads": [zone_name_of(path) for path in comp.get("base_loads") or []],
+        "base_owned_assets": {kind: len(names) for kind, names in sorted((comp.get("base_shadowable") or {}).items())},
         "backends": checks, "backends_available": all(c["available"] for c in checks),
         "input_files": len(job.inputs),
         "verification": "composition resolved (dependency order, conflicts, budget); base/map mismatches listed in unqualified; collisions listed as decisions; "
@@ -1545,6 +1646,9 @@ def execute(args, job: Job) -> dict:
     # check says what it can prove and stays not_counted for the rest unless a readback decides it.
     image_report = getattr(args, "image_report", None)
     plan["checks"] += offline_checks.image_sources(plan, offline_checks.read_image_report(job.input(Path(image_report))) if image_report else None)
+    # A donor zone loaded beside the base answers the base's own image and material names, and the
+    # linker takes whichever copy a loaded zone offers. That is a composer defect, not a member's.
+    plan["checks"] += offline_checks.donor_shadowing(plan, comp.get("base_shadowable"))
     provided_weapons = {w for m in modules for w in (m.get("provides", {}).get("weapons") or [])}
     pack_scripts = {t.as_posix() for _, t, _ in compiled} | {t.as_posix() for _, t, _, _ in loose}
     for m in modules:
@@ -1779,7 +1883,51 @@ def _generate_entry(comp, modules, by_id, order, loaded, compiled, loose, seed_m
                     "include_root":str(root),"include_files":len(staged)}}
 
 
+EXCLUSION_SUFFIX = "_base_owned"
+
+
+def _csv_cell(value: str) -> str:
+    return '"' + value.replace('"', '""') + '"' if any(c in value for c in ',"\n\r') else value
+
+
+def _write_base_exclusions(comp: dict, lines: list[str], zone_dir: Path, zone_name: str) -> dict[str, int]:
+    """Write the asset list the zone's ``ignore`` row names, and return how many names it excludes.
+
+    OpenAssetTools' Linker has exactly one lever for this (``src/Linking/Linker.cpp``,
+    ``ProcessZoneDefinitionIgnores``): an ``ignore,<project>`` row reads
+    ``zone_source/assetlist/<project>.csv`` off the source search path and puts every ``type,name``
+    row in it into the ignored set. ``AssetCreationContext::LoadDependencyGeneric`` then answers an
+    ignored name with a reference asset (``,<name>``) instead of copying it out of a loaded zone, so
+    the name resolves at runtime from whichever zone the client already has open -- the base. There
+    is no per-row exclusion keyword and no ordering knob: load order does not decide which zone wins,
+    the first creator that answers does, so this is the mechanism rather than a preference.
+
+    A name the pack itself roots is left out of the list: an explicit ``image,`` or ``material,`` row
+    is a member's declared asset and the composition's collision decisions already own that case.
+    Only the closure's implicit pickups are excluded."""
+    shadowable = {kind: set(names) for kind, names in (comp.get("base_shadowable") or {}).items() if names}
+    if not shadowable:
+        return {}
+    rooted: dict[str, set[str]] = {kind: set() for kind in shadowable}
+    for line in lines:
+        kind, _, name = line.partition(",")
+        if kind in rooted and name and not name.startswith(","):
+            rooted[kind].add(name.strip())
+    rows = [(kind, name) for kind in sorted(shadowable) for name in sorted(shadowable[kind] - rooted[kind])
+            if name and not name.startswith(",")]
+    if not rows:
+        return {}
+    (zone_dir / "assetlist").mkdir(parents=True, exist_ok=True)
+    (zone_dir / "assetlist" / f"{zone_name}{EXCLUSION_SUFFIX}.csv").write_text(
+        "".join(f"{kind},{_csv_cell(name)}\n" for kind, name in rows), encoding="utf-8")
+    counts: dict[str, int] = {}
+    for kind, _ in rows:
+        counts[kind] = counts.get(kind, 0) + 1
+    return counts
+
+
 def _build_composition(comp: dict, plan: dict, compiled, loose, seed_modules, loads, decided, header, args, job: Job) -> dict:
+    from . import checks as offline_checks
     base_owned_names = len(comp.get("base_owned") or ())
     missing = [c["id"] for c in plan["backends"] if not c["available"]]
     if missing:
@@ -1870,10 +2018,23 @@ def _build_composition(comp: dict, plan: dict, compiled, loose, seed_modules, lo
         (raw / zone["language"] / "localizedstrings").mkdir(parents=True, exist_ok=True)
         (raw / zone["language"] / "localizedstrings" / f"{zone_name}.str").write_text(seeds.write_strings(strings), encoding="utf-8")
         lines.insert(2 + len(header), f"localize,{zone_name}")
+    excluded = _write_base_exclusions(comp, lines, zone_dir, zone_name)
+    if excluded:
+        lines.insert(2 + len(header), f"ignore,{zone_name}{EXCLUSION_SUFFIX}")
     (zone_dir / f"{zone_name}.zone").write_text("\n".join(lines) + "\n", encoding="utf-8")
     link = fastfiles.execute(SimpleNamespace(action="link", project=str(base), zone=zone_name,
                                              load=[str(p) for p in seed_loads] + [str(p) for p in loads],
                                              assets=[], timeout=args.timeout), job)
+    # The exclusion is a claim until the link log is read back: every asset the linker rooted names
+    # the zone its copy came from, so a base-owned name sourced from a donor is measurable, not argued.
+    shadowing = offline_checks.donor_shadowing(
+        plan, comp.get("base_shadowable"),
+        offline_checks.link_sources((job.root / link["link_log"]).read_text(encoding="utf-8", errors="replace")))
+    if shadowing[0]["outcome"] == "failed":
+        raise Failure(BACKEND_FAILED, shadowing[0]["detail"],
+                      "Every image and material name the base carries must be excluded from the pack's zone; "
+                      "pass --base-listings for the base's zones or list them under base_owned.",
+                      **{k: v for k, v in shadowing[0].items() if k in ("count", "names")})
     if len(link["packages"]) != 1:
         raise Failure(BACKEND_FAILED, "A composition must produce exactly one fastfile")
     package = job.root / link["packages"][0]["path"]
@@ -1924,6 +2085,7 @@ def _build_composition(comp: dict, plan: dict, compiled, loose, seed_modules, lo
         raise Failure(BACKEND_FAILED, f"{len(missing_roots)} seed root(s) are not in the composed package: {missing_roots[:5]}",
                       "The linker did not copy them from the seed; check the loads and the seed manifest.", missing=missing_roots[:64])
     return {**link, "unqualified": plan["unqualified"], "plan": "plan.json", "rawfiles_verified": len(rawfiles),
+            "base_owned_excluded": excluded, "donor_shadowing": shadowing[0],
             "images_beside_package": staged_images, "mod_ff": link["packages"][0]["path"],
             "withheld_staged": len(staged_withheld),
             "seed_roots_verified": sum(len(m["seed"]["roots"]) for m in seed_modules),

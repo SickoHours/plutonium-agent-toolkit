@@ -144,9 +144,12 @@ def image_sources(plan,report=None):
     that references such an image with no bank carrying it renders it without pixels, loads
     without an error and looks like a success.
 
-    What a plan can prove on its own: an `image` asset row whose file is on this machine is a
-    complete delivery, because the build stages that file beside the package; a row whose file is
-    missing or empty delivers nothing. Bank contents are not
+    What a plan can prove on its own: an `image` asset row whose file is missing or empty here
+    delivers nothing at all. A row whose file *is* here is still only a header in the zone: the
+    build stages the file under `packages/images/` as an artifact, but the engine does not read a
+    mod folder's `images/`, so that staging delivers no pixels. The two routes that do are an image
+    bank the zone header reads and Plutonium's global loose path `storage/t6/images`; neither is
+    readable from a plan, so such a row is `not_counted`, never `passed`. Bank contents are not
     readable without the banks, so an image a member's zone listing only references is
     ``not_counted`` with that reason, never ``passed``, unless ``report`` — a readback taken with
     the client's banks beside the package — decides it. Every image that readback found no pixels
@@ -172,7 +175,10 @@ def image_sources(plan,report=None):
         who=', '.join(sorted({m for m,_ in owners if m})) or 'a member'
         absent=[source for _,source in owners if not source or not Path(source).is_file() or Path(source).stat().st_size==0]
         if absent:row_for(name,'failed',f'{who} declares image {name} but its file is missing or empty here, so the zone carries a header with no pixels')
-        else:row_for(name,'passed',f'{who} ships {name} as its own image asset; the linker reads the file from disk and the build stages it beside the package, where the client reads its pixels')
+        else:row_for(name,'not_counted',f'{who} roots {name} from a disk .iwi, so the zone carries its header; the header alone has no pixels. '
+                                        'The build stages the file under packages/images/ as an artifact, and the engine never reads a mod folder\'s '
+                                        'images/: the pixels load only from an image bank the header reads, or from Plutonium\'s global loose path '
+                                        'storage/t6/images. Nothing offline can decide which, so this row is not a pass')
     decided=set(embedded)
     for name,owners in sorted(referenced.items()):
         if name in decided:continue
@@ -194,12 +200,78 @@ def image_sources(plan,report=None):
         decided.add(name)
     failed=sum(1 for r in rows if r['outcome']=='failed');unknown=sum(1 for r in rows if r['outcome']=='not_counted')
     if failed:summary='failed',f'{failed} of {len(rows)} image(s) the pack references have pixels nowhere it can load them'
-    elif unknown:summary='not_counted',(f'{len(embedded)} image(s) embedded with their pixels; {unknown} referenced image(s) undecided offline, and the '
+    elif unknown:summary='not_counted',(f'{len(embedded)} image(s) rooted from a disk .iwi (a header each; their pixels still need a bank or '
+                                        f'storage/t6/images); {unknown-len(embedded)} referenced image(s) undecided offline, and the '
                                         'images a loaded zone resolves are not in the plan at all. Only a readback beside the banks decides them')
     elif rows:summary='passed',f'Every one of the {len(rows)} image(s) this plan can name has pixels the pack can load'
     else:summary='not_counted',('No member embeds or references an image by name. Images a loaded zone resolves for a member\'s models and '
                                 'effects are not in the plan; a readback beside the banks is the only thing that counts them')
     return [{'id':'image-sources','outcome':summary[0],'detail':summary[1]}]+rows
+
+SHADOW_SOURCE=re.compile(r'^Loaded (image|material) "(.*)" \(src: (.+)\)$')
+
+def link_sources(text):
+    """Every image and material the linker rooted, with the zone it took the copy from, read from a
+    link log's `Loaded <type> "<name>" (src: <zone>)` rows. `src: disk` is the pack's own file."""
+    rows=[]
+    for line in text.splitlines():
+        m=SHADOW_SOURCE.match(re.sub(r'\x1b\[[0-9;]*m','',line).strip())
+        if m:rows.append((m.group(1),m.group(2),m.group(3)))
+    return rows
+
+def donor_shadowing(plan,shadowable=None,sources=None):
+    """Whether the pack roots an image or material name its own base already carries.
+
+    A composition loads donor zones from another game beside the target's own base zones, and the
+    linker resolves every name a weapon's material closure reaches from whichever loaded zone offers
+    it. A T6 fastfile carries an image's header and never its pixels, so a donor copy of a base-owned
+    name puts a foreign header in front of the base's pixels and the shared camo and Pack-a-Punch
+    textures render wrong on every weapon, the stock ones included, while the pack is selected.
+
+    The composer's lever is the base's asset listings (``base_owned``, or derived from the loads with
+    ``--base-listings``): every image and material name they carry is excluded from the pack's zone,
+    so the closure reaches a reference to the base's copy instead of a donor's. Without listings the
+    composer has nothing to exclude and this check refuses, naming how many donor zones are loaded.
+    With them, the plan says how many names are excluded and ``sources`` -- the build's own link log,
+    which names the zone every rooted asset's copy came from -- decides whether one got through. A
+    name a member's own package roots is not judged here: that is the member's declared asset and
+    the composition's collision decisions (``base-owned``) already own it."""
+    loads=[Path(p).name[:-3] if Path(p).name.lower().endswith('.ff') else Path(p).stem for p in plan.get('loads',[])]
+    base=set(plan.get('base_loads') or [])
+    donors=[z for z in loads if z not in base]
+    names={kind:set(v) for kind,v in (shadowable or {}).items()}
+    total=sum(len(v) for v in names.values())
+    def summary(outcome,detail,**extra):return [{'id':'donor-shadowing','outcome':outcome,'detail':detail,**extra}]
+    if not donors:
+        return summary('passed','Every zone this composition loads is part of its base'+(f' ({", ".join(sorted(base))})' if base else '')+
+                                '; no donor zone can answer a base-owned name')
+    if not plan.get('base_listings'):
+        return summary('failed',
+                       f'{len(donors)} zone(s) outside the base are loaded and no base listing says which image and material names the base owns, '
+                       f'so the linker will root a donor copy of every base-owned name the members\' material closure reaches: '
+                       +', '.join(donors[:10])+(', ...' if len(donors)>10 else ''),
+                       count=len(donors),names=donors[:10],
+                       hint='Pass --base-listings <dir> with the base zones\' <zone>-list.txt listings, or list them under base_owned in the composition.')
+    if not total:
+        return summary('not_counted',
+                       f'The {len(plan["base_listings"])} base listing(s) carry no image or material row, so nothing is excluded and nothing here '
+                       f'decides whether the {len(donors)} zone(s) outside the base answer a base-owned name',
+                       count=0,names=[])
+    if sources is not None:
+        bad=[(kind,name,zone) for kind,name,zone in sources if zone in donors and name in names.get(kind,())]
+        if bad:
+            return summary('failed',
+                           f'{len(bad)} asset(s) the base already carries were rooted from a donor zone: '
+                           +', '.join(f'{k} {n} (src: {z})' for k,n,z in bad[:10])+(', ...' if len(bad)>10 else ''),
+                           count=len(bad),names=[n for _,n,_ in bad[:10]])
+        return summary('passed',
+                       f'The link log roots no base-owned image or material from a donor zone; {total} base-owned name(s) '
+                       f'({", ".join(f"{k} {len(v)}" for k,v in sorted(names.items()) if v)}) were excluded from the zone',
+                       count=0,names=[])
+    return summary('passed',
+                   f'{total} base-owned name(s) ({", ".join(f"{k} {len(v)}" for k,v in sorted(names.items()) if v)}) are excluded from the pack\'s zone, '
+                   f'so none of the {len(donors)} donor zone(s) can answer one; the build\'s link log is the proof',
+                   count=0,names=[])
 
 def script_result(name,text,passed):
     errors=re.findall(r'(?im)^.*(?:unresolved external|\berror\b|\bfatal\b).*$',text)

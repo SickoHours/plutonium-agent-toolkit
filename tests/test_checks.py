@@ -236,6 +236,42 @@ class MapScriptExternals(unittest.TestCase):
         self.assertEqual(checks.map_script_externals('scripts/zm/a.gsc',src,'zm_nowhere','dlc5-beta2')[0]['outcome'],'not_counted')
         self.assertEqual(checks.map_script_externals('scripts/zm/a.gsc','main(){}\n','zm_factory','dlc5-beta2')[0]['outcome'],'not_counted')
 
+class DonorShadowing(unittest.TestCase):
+    """The link log is the fact: it names the zone every rooted asset's copy came from."""
+    def plan(self,**extra):
+        row={'name':'b2_pack_test','seeds':[],'adapters':[],
+             'loads':['/x/common_zm.ff','/x/moon-client60-blood.ff'],'base_loads':['common_zm'],
+             'base_listings':['/x/common_zm-list.txt']}
+        row.update(extra);return row
+    def owned(self):return {'image':{'camo_gold_nml','weapon_camo_neutral'},'material':{'mc/mtl_stock'}}
+    def test_link_sources_reads_the_zone_each_copy_came_from(self):
+        text=('Loaded zone "moon-client60-blood" (T6)\n'
+              'Loaded rawfile "scripts/zm/x.gsc" (src: disk)\n'
+              'Loaded image "camo_gold_nml" (src: moon-client60-blood)\n'
+              '\x1b[37mLoaded material "mc/mtl_stock" (src: common_zm)\x1b[0m\n')
+        self.assertEqual(checks.link_sources(text),
+                         [('image','camo_gold_nml','moon-client60-blood'),('material','mc/mtl_stock','common_zm')])
+    def test_a_base_owned_name_rooted_from_a_donor_fails_with_the_count_and_the_names(self):
+        sources=[('image','camo_gold_nml','moon-client60-blood'),
+                 ('image','weapon_camo_neutral','moon-client60-blood'),
+                 ('material','mc/mtl_stock','common_zm'),
+                 ('image','t5_weapon_thundergun_n','disk')]
+        out=checks.donor_shadowing(self.plan(),self.owned(),sources)
+        self.assertEqual(out[0]['outcome'],'failed')
+        self.assertEqual(out[0]['count'],2,'the base zone\'s own copy and a disk root are not shadowing')
+        self.assertEqual(sorted(out[0]['names']),['camo_gold_nml','weapon_camo_neutral'])
+        self.assertIn('moon-client60-blood',out[0]['detail'])
+    def test_a_clean_link_log_passes_and_says_how_many_names_were_excluded(self):
+        out=checks.donor_shadowing(self.plan(),self.owned(),[('image','t5_weapon_thundergun_n','disk')])
+        self.assertEqual(out[0]['outcome'],'passed');self.assertEqual(out[0]['count'],0)
+        self.assertIn('image 2',out[0]['detail']);self.assertIn('material 1',out[0]['detail'])
+    def test_a_composition_that_loads_only_its_base_needs_no_listing(self):
+        out=checks.donor_shadowing(self.plan(loads=['/x/common_zm.ff'],base_listings=[]),None)
+        self.assertEqual(out[0]['outcome'],'passed');self.assertIn('no donor zone',out[0]['detail'])
+    def test_listings_that_carry_no_image_or_material_decide_nothing(self):
+        out=checks.donor_shadowing(self.plan(),{'image':set(),'material':set()})
+        self.assertEqual(out[0]['outcome'],'not_counted');self.assertIn('no image or material row',out[0]['detail'])
+
 class ImageSources(unittest.TestCase):
     """A pack whose images have no pixels loads, renders blank and reports nothing; the plan has to say so."""
     def plan(self,**extra):
@@ -243,13 +279,17 @@ class ImageSources(unittest.TestCase):
         row.update(extra);return row
     def image_row(self,path,module='wavegun'):
         return {'source':str(path),'target':'images/tex.iwi','type':'image','name':'tex','module':module}
-    def test_an_embedded_image_with_bytes_carries_its_own_pixels(self):
+    def test_an_embedded_image_with_bytes_is_a_header_not_a_delivery(self):
         temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup)
         iwi=Path(temp.name)/'tex.iwi';iwi.write_bytes(b'IWi\x0d'+b'\0'*32)
         out=checks.image_sources(self.plan(assets=[self.image_row(iwi)]))
-        self.assertEqual(out[0]['outcome'],'passed')
-        self.assertEqual(out[1],{'id':'image-sources:tex','outcome':'passed',
-                                 'detail':'wavegun ships tex as its own image asset; the linker reads the file from disk and the build stages it beside the package, where the client reads its pixels'})
+        # A header in the zone is not pixels: packages/images/ is an artifact the engine never
+        # reads, so a rooted .iwi is not_counted, never passed, and the row says where pixels live.
+        self.assertEqual(out[0]['outcome'],'not_counted')
+        self.assertEqual(out[1]['id'],'image-sources:tex')
+        self.assertEqual(out[1]['outcome'],'not_counted')
+        self.assertIn('storage/t6/images',out[1]['detail'])
+        self.assertIn('never reads a mod folder',out[1]['detail'])
     def test_a_declared_image_whose_file_is_absent_or_empty_fails(self):
         temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup)
         empty=Path(temp.name)/'tex.iwi';empty.write_bytes(b'')
