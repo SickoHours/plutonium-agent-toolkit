@@ -527,7 +527,9 @@ given); a token with no known foundation leaves every pool `not_counted`.
 Counted pools: `pool:rawfile-assets` (bound 1,024; every recipe script, every delivered
 `rawfile` asset row and every seed `rawfile,` root, on top of the map's rawfiles),
 `pool:image-bank-slots` (bound 16; every distinct `>level.ipak_read` header line beyond the
-client's startup set, on top of the twelve it holds open), `pool:sound-assets` (bound 32; the
+client's startup set, on top of the twelve it holds open, except that when the map's occupancy row
+carries the optional `banks_present` inventory, a read naming a bank that folder lacks is skipped
+by the engine, costs no slot, and becomes its own `not_counted` row instead of counting), `pool:sound-assets` (bound 32; the
 listing shows one row per `.all` bank and the engine opens a localized companion beside each,
 so every base bank and every member bank counts twice; a failed row lists the `banks`) and the
 actor client field bits. A failed pool row carries

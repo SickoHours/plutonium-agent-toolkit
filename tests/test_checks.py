@@ -170,6 +170,45 @@ class PoolAccounting(unittest.TestCase):
         plan['zone_header']+=['>level.ipak_read,zm_temple']
         out=checks.pool_checks(plan,rows,{'ipak_slots':12})
         self.assertEqual(out[0]['outcome'],'failed');self.assertEqual([c['id'] for c in out[0]['contributors']],['zm_factory','dlc0','dlc2','dlc3','zm_temple'])
+    def test_a_header_read_naming_a_bank_the_zone_folder_lacks_costs_no_slot(self):
+        # 2026-09-15: a composition read lowmip, code_post_gfx_zm, common_zm and zm_factory and only
+        # zm_factory.ipak was in zone/all, so three of the four counted reads opened nothing.
+        plan={'modules':[],'scripts':[],'assets':[],'seeds':[],
+              'zone_header':['>level.ipak_read,base','>level.ipak_read,lowmip','>level.ipak_read,code_post_gfx_zm',
+                             '>level.ipak_read,common_zm','>level.ipak_read,zm_factory']}
+        rows=[{'id':'image-bank-slots','count_source':'ipak_slots','bound':16}]
+        out=checks.pool_checks(plan,rows,{'ipak_slots':12,'banks_present':['zm_factory','zm_transit']})
+        pool=next(r for r in out if r['id']=='pool:image-bank-slots')
+        self.assertEqual(pool['contribution'],1);self.assertEqual(pool['count'],13);self.assertEqual(pool['outcome'],'passed')
+        self.assertEqual([c['id'] for c in pool['contributors']],['zm_factory'])
+        self.assertEqual(pool['not_counted_reads'],['lowmip','code_post_gfx_zm','common_zm'])
+        skipped={r['id']:r for r in out if r['id'].startswith('pool:image-bank-slots:')}
+        self.assertEqual(sorted(skipped),['pool:image-bank-slots:code_post_gfx_zm','pool:image-bank-slots:common_zm','pool:image-bank-slots:lowmip'])
+        for row in skipped.values():
+            self.assertEqual(row['outcome'],'not_counted');self.assertIn('costs no slot',row['detail'])
+    def test_without_the_bank_inventory_every_read_still_counts(self):
+        plan={'modules':[],'scripts':[],'assets':[],'seeds':[],
+              'zone_header':['>level.ipak_read,base','>level.ipak_read,lowmip','>level.ipak_read,code_post_gfx_zm',
+                             '>level.ipak_read,common_zm','>level.ipak_read,zm_factory']}
+        rows=[{'id':'image-bank-slots','count_source':'ipak_slots','bound':16}]
+        out=checks.pool_checks(plan,rows,{'ipak_slots':12})
+        self.assertEqual(len(out),1)
+        self.assertEqual(out[0]['contribution'],4);self.assertEqual(out[0]['count'],16);self.assertEqual(out[0]['outcome'],'passed')
+        self.assertNotIn('not_counted_reads',out[0])
+        # An inventory that carries every read counts them all, the same as no inventory at all.
+        out=checks.pool_checks(plan,rows,{'ipak_slots':12,'banks_present':['lowmip','code_post_gfx_zm','common_zm','zm_factory']})
+        self.assertEqual(len(out),1);self.assertEqual(out[0]['contribution'],4)
+    def test_the_bank_inventory_can_take_a_pack_under_the_bound(self):
+        plan={'modules':[],'scripts':[],'assets':[],'seeds':[],
+              'zone_header':['>level.ipak_read,'+n for n in ('a','b','c','d','e')]}
+        rows=[{'id':'image-bank-slots','count_source':'ipak_slots','bound':16}]
+        self.assertEqual(checks.pool_checks(plan,rows,{'ipak_slots':12})[0]['outcome'],'failed')
+        out=checks.pool_checks(plan,rows,{'ipak_slots':12,'banks_present':['a','b','c','d']})
+        self.assertEqual(out[0]['outcome'],'passed');self.assertEqual(out[0]['count'],16)
+    def test_the_shipped_occupancy_records_no_bank_inventory_yet(self):
+        # banks_present is optional and a measured install fills it; nothing shipped claims one.
+        maps=checks.knowledge.load('occupancy.json')['maps']
+        self.assertTrue(maps and all('banks_present' not in row for row in maps.values()))
     def test_base_token_maps_to_the_occupancy_foundation(self):
         self.assertEqual(checks.foundation_of('b2'),'dlc5-beta2');self.assertEqual(checks.foundation_of('stock'),'stock')
         rows=checks.evaluate({'base':'b2','map':'zm_factory','modules':[],'scripts':[],'assets':[],'seeds':[],'zone_header':[]})
