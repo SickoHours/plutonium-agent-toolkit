@@ -19,6 +19,9 @@ if data.get("module") == "broken":
     sys.exit(0)
 stage = out / "stage"
 stage.mkdir()
+# A real builder owns its output directory and may write its own readback there.
+(out / "readback").mkdir()
+(out / "readback" / "builder-listing.txt").write_text("builder-owned\n")
 weapons = data.get("weapons") or ([data["weapon"]] if data.get("weapon") else [])
 assets = [f"weapon,{w}" for w in weapons]
 bank = (data.get("soundbank") or {}).get("name")
