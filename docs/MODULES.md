@@ -114,7 +114,8 @@ adapter recipe is named under `recipe` and told apart by its own shape.
 | `category` | no | The shelf a person browses. For `t6`: `weapons`, `perks`, `gobblegums`, `powerups`, `equipment`, `bosses`, `companions`, `maps`, `ui`, `core`, `scripts`, `audio`, `tooling`, `pack`. For `iw5`: `weapons`, `attachments`, `killstreaks`, `gametypes`, `perks`, `maps`, `ui`, `core`, `scripts`, `tooling`, `pack` (no `audio`: the toolkit cannot build IW5 sounds). Defaults to `module`. Used for browsing, never for resolution |
 | `kind` | no | Narrows the category from a fixed list per category and per game (t6 `weapons`: `wonder`, `firearm`, `melee`, `launcher`, `special`; iw5 `weapons`: `primary`, `secondary`, `launcher`, `melee`, `special`; and so on, defined in `dev/titles.py`). A kind outside its game's list is refused so packs and catalogs group the same way |
 | `tags` | no | Up to 16 lowercase words: a source game (`saints-row`, `bo3`), a series, a theme. Free, never validated against a list |
-| `recipe` | one of | Forward-slash relative path to the module's `project.json`, inside the module directory; no Windows drive prefix or rooted path, on any host |
+| `recipe` | one of | Forward-slash relative path to the module's `project.json`, inside the module directory; no Windows drive prefix or rooted path, on any host. For an adapter payload it is the default cut, the one used when `recipes` names none for the composition's target |
+| `recipes` | no | Adapter payloads only: up to 32 `"<foundation>/<map>"` targets, each to the relative path of the adapter recipe cut for that target (`{"dlc5-beta2/zm_factory": "recipe-b2.json"}`). The foundation is the id `foundations/<id>.json` carries, never the base token. Every named file must exist, parse as an adapter recipe and declare that same `foundation` and `map`; a key on a `project.json` recipe or a `seed` is refused. Plan and build use the entry for the composition's target and fall back to `recipe` |
 | `seed` | one of | Forward-slash relative path to the module's `seed.json`, inside the module directory, with `mod.ff` and its soundbanks beside it; no Windows drive prefix or rooted path, on any host. Path checks also apply to private declarations whose manifest is absent |
 | `bases` | yes | The base tokens the module has been built and tested on: `stock` for the unmodified game, or a base release's own short token (`b2` for Zombies Declassified Beta 2). A composition on a base not listed here is refused |
 | `maps` | yes | Map ids the module is built for, or `["*"]` for any map. A composition on a map not listed is refused. Grow this list by testing on the map, never by editing |
@@ -194,6 +195,40 @@ strings, the loose scripts (`loose_script`, `loose_scripts` or `scripts`), roote
 `native_scripts`, `extra_effects` and the `assets` lists. Those roots count against the pools,
 collide like a seed's, and fill `provides` the way a manifest does: a declaration may narrow
 them, never add a name the recipe does not deliver. The member's `payload` is `adapter`.
+
+### One cut per target: `recipes`
+
+An adapter recipe is a cut, not a source tree: it names one `foundation` and one `map`, and the
+builder cuts exactly that. Composing the module on another target therefore means building it
+there, and a module that has already been cut for a second target should say so rather than have
+the pack retarget the first cut every time. `recipes` maps `"<foundation>/<map>"` to the recipe
+for that target; `recipe` stays the default.
+
+```json
+{
+  "schema": 1, "id": "gum_kill_joy", "version": "0.2.0",
+  "recipe": "recipe.json",
+  "recipes": {"dlc5-beta2/zm_factory": "recipe-b2.json"},
+  "bases": ["stock", "b2"], "maps": ["zm_transit", "zm_factory"]
+}
+```
+
+The foundation is the id `foundations/<id>.json` carries (`dlc5-beta2`), never the base token a
+composition names (`b2`); the toolkit resolves the pack's base to a foundation the same way the
+occupancy checks do. `plan` and `build` look up `<foundation>/<map>` for the composition's target
+and fall back to `recipe`, so the plan row, the footprint and the link all read the cut the pack
+will get; the row's `adapter.recipe_key` says which entry was chosen and `recipes` lists the keys
+the declaration carries. Because the chosen recipe already names the pack's target, no
+`--foundation`/`--map` override is passed to the builder: the retargeting above applies when the
+declaration has only the default cut.
+
+Every entry is validated wherever the pack is aimed, not only the one chosen: the file must exist,
+parse as an adapter recipe, and declare the `foundation` and `map` of its own key. A `recipes`
+entry on a `project.json` recipe or on a `seed` payload is refused — the toolkit compiles a
+project recipe against whatever the composition targets, and a seed is one package.
+
+`recipes` widens nothing on its own. `bases` and `maps` still grow only by a receipt on that
+target: the per-target recipe is what makes the receipt possible, not a substitute for it.
 
 `build` runs the workspace's builder as a backend: `PAT_BACKEND_ADAPTER_BUILDER` names it, or
 `--workspace <dir>` names a workspace whose `toolchain/pat-adapter-build` (or `.py`) is it. The

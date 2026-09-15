@@ -35,6 +35,27 @@ class AdapterFixture(CompositionFixture):
         (d / "module.json").write_text(json.dumps(decl, indent=2))
         return d
 
+    def recut(self, directory, name="recipe-b2.json", foundation="dlc5-beta2", map_id="zm_factory", **overrides):
+        """A second cut of the same donor conversion beside the first: the workspace builder's
+        own output for another target, which differs only in revision, foundation, map and profile."""
+        recipe = json.loads((directory / "recipe.json").read_text())
+        mid = recipe["module"]
+        recipe.update(revision="b2-v1", foundation=foundation, map=map_id, profile=f"b2_{mid}_test", **overrides)
+        (directory / name).write_text(json.dumps(recipe, indent=2))
+        return directory / name
+
+    def _workspace(self):
+        (self.root / "foundations").mkdir(exist_ok=True)
+        (self.root / "foundations" / "bo2-stock.json").write_text(json.dumps({"schema": 1, "id": "bo2-stock", "profile_prefix": "stock", "maps": {"zm_transit": {}}}))
+        (self.root / "foundations" / "dlc5-beta2.json").write_text(json.dumps({"schema": 1, "id": "dlc5-beta2", "profile_prefix": "b2", "maps": {"zm_factory": {}}}))
+        (self.root / "toolchain").mkdir(exist_ok=True)
+        (self.root / "toolchain" / "pat-adapter-build.py").write_bytes((FAKES / "fake_adapter_builder.py").read_bytes())
+        os.environ.pop("PAT_BACKEND_ADAPTER_BUILDER", None)
+
+    def _builder_argv(self, result):
+        receipt = json.loads((Path(result["output"]) / "receipt.json").read_text())
+        return next(step["argv"] for step in receipt["steps"] if "--output" in step["argv"] and str(Path(result["output"]) / "adapters") in " ".join(step["argv"]))
+
 
 class AdapterPayloadTests(AdapterFixture):
     def test_plan_reads_an_adapter_recipe_as_a_third_payload(self):
@@ -247,18 +268,6 @@ class AdapterTargetTests(AdapterFixture):
     """A recipe names the foundation and map it was first cut for; a pack on another target
     tells the builder that target so the member is cut alone there (Phase B of the stitching plan)."""
 
-    def _workspace(self):
-        (self.root / "foundations").mkdir(exist_ok=True)
-        (self.root / "foundations" / "bo2-stock.json").write_text(json.dumps({"schema": 1, "id": "bo2-stock", "profile_prefix": "stock", "maps": {"zm_transit": {}}}))
-        (self.root / "foundations" / "dlc5-beta2.json").write_text(json.dumps({"schema": 1, "id": "dlc5-beta2", "profile_prefix": "b2", "maps": {"zm_factory": {}}}))
-        (self.root / "toolchain").mkdir(exist_ok=True)
-        (self.root / "toolchain" / "pat-adapter-build.py").write_bytes((FAKES / "fake_adapter_builder.py").read_bytes())
-        os.environ.pop("PAT_BACKEND_ADAPTER_BUILDER", None)
-
-    def _builder_argv(self, result):
-        receipt = json.loads((Path(result["output"]) / "receipt.json").read_text())
-        return next(step["argv"] for step in receipt["steps"] if "--output" in step["argv"] and str(Path(result["output"]) / "adapters") in " ".join(step["argv"]))
-
     def test_same_target_passes_no_flags(self):
         self._workspace()
         self.adapter("gum_a")
@@ -293,6 +302,95 @@ class AdapterTargetTests(AdapterFixture):
         self.assertEqual(code, 0, row)
         argv = self._builder_argv(row["result"])
         self.assertNotIn("--foundation", argv); self.assertEqual(argv[argv.index("--map") + 1], "zm_buried")
+
+
+class AdapterPerTargetRecipeTests(AdapterFixture):
+    """A declaration may name one cut per target. `recipes` maps `<foundation>/<map>` to the
+    recipe cut for it and `recipe` stays the default, so a pack gets the cut it is for instead
+    of the first one retargeted."""
+
+    B2 = {"dlc5-beta2/zm_factory": "recipe-b2.json"}
+
+    def test_a_pack_on_the_second_target_plans_from_that_target_s_recipe(self):
+        self._workspace()
+        d = self.adapter("gum_a", bases=["stock", "b2"], maps=["zm_transit", "zm_factory"], recipes=self.B2)
+        self.recut(d)
+        comp = self.composition(["gum_a"], name="b2_adapter_test", base="b2", map_id="zm_factory")
+        code, row = invoke(["module", "plan", str(comp), "--workspace", str(self.root), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        plan = json.loads((Path(row["result"]["output"]) / "plan.json").read_text())
+        adapter = plan["adapters"][0]
+        self.assertEqual(Path(adapter["recipe"]).name, "recipe-b2.json")
+        self.assertEqual(adapter["recipe_key"], "dlc5-beta2/zm_factory")
+        self.assertEqual((adapter["foundation"], adapter["map"]), ("dlc5-beta2", "zm_factory"))
+        member = plan["modules"][0]
+        self.assertEqual(member["recipes"], ["dlc5-beta2/zm_factory"])
+        self.assertEqual(member["adapter"]["profile"], "b2_gum_a_test")
+        self.assertEqual(member["recipe_sha256"], __import__("hashlib").sha256((d / "recipe-b2.json").read_bytes()).hexdigest(),
+                         "the plan hashes the recipe it read the footprint from")
+
+    def test_the_chosen_recipe_is_already_on_target_so_the_builder_hears_no_overrides(self):
+        self._workspace()
+        d = self.adapter("gum_a", bases=["stock", "b2"], maps=["zm_transit", "zm_factory"], recipes=self.B2)
+        self.recut(d)
+        comp = self.composition(["gum_a"], name="b2_adapter_test", base="b2", map_id="zm_factory")
+        code, row = invoke(["module", "build", str(comp), "--workspace", str(self.root), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        argv = self._builder_argv(row["result"])
+        self.assertEqual(Path(argv[argv.index("--output") - 1]).name, "recipe-b2.json")
+        self.assertNotIn("--foundation", argv); self.assertNotIn("--map", argv)
+        report = row["result"]["adapters"][0]
+        self.assertFalse(report["retargeted"])
+        self.assertEqual(report["recipe_target"], {"foundation": "dlc5-beta2", "map": "zm_factory"})
+        self.assertEqual(report["built_target"], {"foundation": "dlc5-beta2", "map": "zm_factory"})
+
+    def test_a_pack_on_the_default_target_still_uses_the_default_recipe(self):
+        self._workspace()
+        d = self.adapter("gum_a", bases=["stock", "b2"], maps=["zm_transit", "zm_factory"], recipes=self.B2)
+        self.recut(d)
+        comp = self.composition(["gum_a"], name="stock_adapter_test")
+        code, row = invoke(["module", "build", str(comp), "--workspace", str(self.root), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        argv = self._builder_argv(row["result"])
+        self.assertEqual(Path(argv[argv.index("--output") - 1]).name, "recipe.json")
+        self.assertNotIn("--foundation", argv); self.assertNotIn("--map", argv)
+        report = row["result"]["adapters"][0]
+        self.assertEqual(report["recipe_target"], {"foundation": "bo2-stock", "map": "zm_transit"})
+        plan = json.loads((Path(row["result"]["output"]) / "plan.json").read_text())
+        self.assertIsNone(plan["adapters"][0]["recipe_key"], "the default cut is not one of the recipes keys")
+
+    def test_an_unnamed_target_keeps_the_override_behaviour(self):
+        # Only the default cut exists for zm_buried: the pack retargets it, as before `recipes`.
+        self._workspace()
+        d = self.adapter("gum_a", bases=["stock", "b2"], maps=["zm_transit", "zm_factory", "zm_buried"], recipes=self.B2)
+        self.recut(d)
+        comp = self.composition(["gum_a"], name="stock_adapter_test", map_id="zm_buried")
+        code, row = invoke(["module", "build", str(comp), "--workspace", str(self.root), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        argv = self._builder_argv(row["result"])
+        self.assertEqual(Path(argv[argv.index("--output") - 1]).name, "recipe.json")
+        self.assertEqual(argv[argv.index("--map") + 1], "zm_buried")
+        self.assertTrue(row["result"]["adapters"][0]["retargeted"])
+
+    def test_a_key_whose_recipe_was_cut_for_another_target_is_refused(self):
+        self._workspace()
+        d = self.adapter("gum_a", bases=["stock", "b2"], maps=["zm_transit", "zm_factory"], recipes=self.B2)
+        self.recut(d, foundation="dlc5-beta1")
+        for name, base, map_id in (("b2_adapter_test", "b2", "zm_factory"), ("stock_adapter_test", "stock", "zm_transit")):
+            comp = self.composition(["gum_a"], name=name, base=base, map_id=map_id)
+            code, row = invoke(["module", "plan", str(comp), "--workspace", str(self.root), "--output", self.out()])
+            self.assertEqual(code, 1, row)
+            self.assertIn("was cut for dlc5-beta1/zm_factory", row["message"])
+
+    def test_a_recipes_entry_must_name_an_adapter_recipe_that_exists(self):
+        self._workspace()
+        d = self.adapter("gum_a", bases=["stock", "b2"], maps=["zm_transit", "zm_factory"], recipes=self.B2)
+        comp = self.composition(["gum_a"], name="b2_adapter_test", base="b2", map_id="zm_factory")
+        code, row = invoke(["module", "plan", str(comp), "--workspace", str(self.root), "--output", self.out()])
+        self.assertEqual(code, 1, row); self.assertIn("recipes[dlc5-beta2/zm_factory] is missing", row["message"])
+        (d / "recipe-b2.json").write_text(json.dumps({"schema": 1, "game": "t6", "name": "gum_a", "scripts": [], "assets": [], "loads": []}))
+        code, row = invoke(["module", "plan", str(comp), "--workspace", str(self.root), "--output", self.out()])
+        self.assertEqual(code, 1, row); self.assertIn("is not an adapter recipe", row["message"])
 
 
 class NativeWeaponTableTests(CompositionFixture):

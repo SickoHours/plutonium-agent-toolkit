@@ -342,6 +342,54 @@ class CompositionTests(CompositionFixture):
             self.assertEqual(by_id[rid]["effect"], "writes-output")
 
 
+class PerTargetRecipeDeclarationTests(CompositionFixture):
+    """`recipes` is the adapter payload's per-target cut map; the declaration checks that need no
+    filesystem, and the two payloads that cannot carry one."""
+
+    def test_keys_are_a_foundation_and_a_map_and_values_stay_inside_the_module(self):
+        from plutonium_agent_toolkit.dev.compositions import validate_declaration_metadata
+        good = {"dlc5-beta2/zm_factory": "recipe-b2.json", "bo2-stock/zm_transit": "cuts/recipe.json"}
+        self.assertEqual(validate_declaration_metadata(declaration("alpha", recipes=good))["recipes"], good)
+        self.assertEqual(validate_declaration_metadata(declaration("alpha"))["recipes"], {})
+        # A base token is not refused lexically (`b2` is a possible foundation id); a key that
+        # disagrees with its own recipe's foundation is refused when the payload is resolved.
+        for bad in ({"dlc5-beta2": "r.json"}, {"dlc5-beta2/factory": "r.json"},
+                    {"DLC5/zm_factory": "r.json"}, {"dlc5-beta2/zm_factory": "../r.json"},
+                    {"dlc5-beta2/zm_factory": "/r.json"}, {"dlc5-beta2/zm_factory": "cuts\\r.json"},
+                    {"dlc5-beta2/zm_factory": 1}, ["dlc5-beta2/zm_factory"]):
+            with self.subTest(recipes=bad), self.assertRaises(Exception):
+                validate_declaration_metadata(declaration("alpha", recipes=bad))
+
+    def test_a_seed_payload_cannot_name_per_target_recipes(self):
+        from plutonium_agent_toolkit.dev.compositions import validate_declaration_metadata
+        row = declaration("alpha", recipes={"dlc5-beta2/zm_factory": "recipe-b2.json"})
+        row.pop("recipe"); row["seed"] = "seed.json"
+        with self.assertRaises(Exception) as caught:
+            validate_declaration_metadata(row)
+        self.assertIn("a seed is one package", caught.exception.message)
+
+    def test_a_project_recipe_module_is_refused_a_recipes_entry(self):
+        directory = self.module("alpha", recipes={"dlc5-beta2/zm_factory": "recipe-b2.json"})
+        (directory / "recipe-b2.json").write_text(json.dumps(
+            {"schema": 1, "module": "alpha", "foundation": "dlc5-beta2", "map": "zm_factory"}))
+        comp = self.composition(["alpha"], name="b2_pack_test", base="b2", map_id="zm_factory")
+        for action in ("plan", "build"):
+            code, row = invoke(["module", action, str(comp), "--allow-unqualified", "--output", self.out()])
+            self.assertEqual(code, 1, row)
+            self.assertEqual(row["error_code"], "input_invalid", row)
+            self.assertIn("project.json is a project recipe the toolkit compiles itself", row["message"])
+            self.assertEqual(row["details"]["field"], "/recipes")
+
+    def test_inspect_reports_the_targets_and_never_the_paths(self):
+        directory = self.module("alpha", recipes={"dlc5-beta2/zm_factory": "recipe-b2.json"})
+        code, row = invoke(["module", "inspect", str(directory / "module.json")])
+        self.assertEqual(code, 0, row)
+        self.assertEqual(row["result"]["metadata"]["recipes"], ["dlc5-beta2/zm_factory"])
+        code, row = invoke(["module", "inspect", str(self.module("beta") / "module.json")])
+        self.assertEqual(code, 0, row)
+        self.assertNotIn("recipes", row["result"]["metadata"], "a declaration without the field reports none")
+
+
 class DecisionTests(CompositionFixture):
     def test_recorded_decision_stages_the_owner_and_identical_bytes_dedupe(self):
         self.module("alpha")

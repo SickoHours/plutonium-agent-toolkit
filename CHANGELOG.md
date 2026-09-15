@@ -46,6 +46,21 @@ Every entry states what shipped, on which platform it was verified, and what rem
   on Linux by the test suite and by a readback of a real three-weapon pack; the rendering itself is
   not claimed here.
 
+- An adapter module declares one cut per target. An adapter `recipe.json` names a single
+  `foundation` and `map` and the workspace builder cuts exactly that, so a declaration with one
+  recipe could only ever be built from that cut: a module whose declaration listed a second base
+  and map would link its first cut into the second pack. `module.json` gains an optional
+  `recipes` map from `"<foundation>/<map>"` (the foundation id as `foundations/<id>.json` names
+  it, never the base token) to the recipe for that target, with `recipe` kept as the default.
+  `plan` and `build` resolve the composition's base to a foundation, look up
+  `<foundation>/<map>`, and read the plan row, the footprint and the link from that recipe; the
+  row carries the `recipes` keys and `adapter.recipe_key`, and `module inspect` reports the keys
+  under metadata. A chosen per-target recipe already names the pack's target, so the
+  `--foundation`/`--map` overrides are not passed to the builder; a declaration with only the
+  default cut keeps the retargeting behaviour. Every entry is validated wherever the pack is
+  aimed: the file must exist, parse as an adapter recipe and declare its own key's foundation and
+  map, and a `recipes` entry on a `project.json` recipe or a `seed` payload is refused.
+  `recipes` widens nothing by itself; `bases` and `maps` still grow only by a receipt.
 - The `externals:` check resolves stock exports per script VM. `knowledge/stock-exports.json` now
   carries a `vm` on every row; the seven existing rows are `server`, and two `client` rows
   (`clientscripts/mp/_utility` for `add_to_array`, `clientscripts/mp/zombies/_zm_utility` for
