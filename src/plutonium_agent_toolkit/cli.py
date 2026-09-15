@@ -20,6 +20,8 @@
     pat target list|validate <workspace> [--targets-file PATH] --json          maps and survival locations as targets; location tables checked
     pat target inspect <workspace> <foundation>/<map>/<mode>[/<location>][@<route>] [--route R] --json
     pat module plan|build <composition.json> --output <new dir>
+    pat module qualify <module dir> --target <foundation>/<map> --workspace <ws> --output <new dir>   build it alone there and write its records
+    pat module qualify --set <file> --target <foundation>/<map> --workspace <ws> --output <new dir>   the same, in dependency order
     pat module declare <mod.ff> --output <new dir>
     pat module fetch <owner/id@commit | https://github.com/o/r@commit> --output <new dir>
     pat registry add <file|url> | list | search [words] [--category ...] | show <owner/id>

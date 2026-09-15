@@ -380,6 +380,84 @@ the recipe and require every local input; `private` does not bypass path or payl
 authorize publication, or make a foreign recipe format buildable. Private seed behavior is
 unchanged: a missing package is reported when planning/building requires it.
 
+## Qualifying a module for a target: `module qualify`
+
+Extending `bases` or `maps` by hand is four commands and four edited files per module, and the
+edits are only honest if they quote the build that earned them. `pat module qualify` is that loop
+as one job:
+
+```
+pat module qualify <module dir> --target <foundation>/<map> --workspace <root> --output <new dir> --json
+pat module qualify --set <file of module dirs> --target <foundation>/<map> --workspace <root> --output <new dir> --json
+```
+
+`--target` is `<foundation>/<map>`: the foundation id as the workspace's `foundations/<id>.json`
+names it, never the base token. The base token is derived from that foundation's
+`profile_prefix`, and a target whose foundation the workspace does not stage, or a map that
+foundation does not stage, is refused before anything is staged or built.
+
+Per module, in one job directory, each step leaving its own receipt:
+
+| Step | Directory | What it is |
+| --- | --- | --- |
+| a | `<id>/shelf/`, `<id>/pack/` | the module and its declared dependency closure staged from the member roots, and a one-member composition `<base>_<id>_test` for the target with the foundation's `link_loads` and `mod_zone_header` |
+| b | `<id>/plan-unqualified/` | `module plan --allow-unqualified` |
+| c | `<id>/build-unqualified/` | `module build --allow-unqualified` |
+| d | `<id>/verify-unqualified/` | `project verify --inputs` |
+| e | `<id>/plan-qualified/`, `<id>/build-qualified/`, `<id>/verify-qualified/` | the same three after the **staged** declaration is widened |
+| f | the module directory | the records, written together or not at all |
+
+The declaration is widened in the staged copy, so both builds read the same paths and the two
+packages are comparable. For a project recipe they must be the same bytes: a declaration is
+metadata the package does not contain, and a difference means an input moved between the builds,
+which is `package-mismatch` and writes nothing. An adapter recipe is a cut for one target
+(above), so widening alone cannot qualify one: the route writes the target's cut as
+`recipe-<base>.json` from the declared recipe with only `foundation`, `map`, `profile` and
+`revision` changed, builds *that*, and records it under `recipes`. Its two packages carry
+different profile names and are not compared. An existing cut already named under `recipes` is
+reused; a `recipe-<base>.json` on disk that `recipes` does not name is refused, never
+overwritten.
+
+Only after the second verify are four records written, each citing the qualified receipts by
+path (relative to the workspace when the job directory is inside it) and sha256:
+
+1. `module.json` with `bases` and `maps` grown by exactly this target, plus the `recipes` entry
+   for an adapter. Nothing else in the declaration moves, and the file keeps its own JSON
+   serialisation so the diff is an addition and not a reformat.
+2. a `docs/TEST.md` section quoting every receipt of this job and keeping the six facts apart.
+3. an `evidence.json` `built-alone` row, written through the same validator `module state
+   --ledger` reads (`docs/evidence-ledger.md`); the ledger is created when the module has none.
+4. a build row on the module's entry in the workspace's `registry/module-recipes.json`, when the
+   workspace keeps one and it has an entry for this module.
+
+If any step fails, the job directory holds the refusal and **the module is untouched**: the
+declaration, the test record, the ledger and the registry are byte for byte what they were.
+Refusals are data under `details.refusals`, each with a `kind`: `dependency-unqualified`,
+`adapter-recipe-single-target-without-recipes`, `missing-dependency`, `probe`, `map-scripts` (a
+function this module replaces lives in a script the target map does not carry), `missing-fx` (the
+linker could not resolve an effect root from the target's zones), `plan-refused`, `build-failed`,
+`verify-failed`, `package-mismatch`, `records-refused`.
+
+`--set` takes a file of module directories, one per line, `#` comments allowed. They run in
+dependency order, one job directory each, continuing past failures, and `results.json` holds the
+table: id, outcome, receipts, records, refusal. A module qualified earlier in the run is a
+declared dependency for the ones after it. There is no parallelism inside the route; run several
+jobs if you want it, each with its own `--output`.
+
+A qualified module is **offline verified** on that target and nothing else. Installed, launched,
+loaded, playable and accepted stay unknown, and the route never touches a game.
+
+### The work orders a plan already knows: `adapt`
+
+`module plan` reports `result.adapt`, one row per member that is not declared for the
+composition's target: `{module, directory, target, pattern, detail, declared_bases,
+declared_maps, work_order}`, where `work_order` is the `pat module qualify` command that would
+earn the widening. The same list travels under `details.adapt` when the plan refuses for
+`unqualified_base`/`unqualified_map`, so a caller reads work orders either way. `pattern` is what
+the plan itself can decide — `map-scripts`, `dependency-unqualified`,
+`adapter-recipe-single-target-without-recipes` — and `unknown` for everything only a build can
+find. Nothing is widened, built or written by `adapt`.
+
 ## Publishing a module
 
 A repository is a module when its root, or a directory in it, holds `module.json` beside its

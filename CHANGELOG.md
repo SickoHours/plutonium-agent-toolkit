@@ -7,6 +7,43 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- `pat module qualify <module dir> --target <foundation>/<map> --workspace <root>` builds one
+  module alone on one target and writes its records from the receipts. A declaration's `bases`
+  and `maps` grow only by a build on that target, and doing that by hand is four commands plus
+  four files edited from their output; the widening is now earned inside one job. The route
+  synthesizes the one-member composition with the module's declared dependency closure, the
+  foundation's `link_loads` and its `mod_zone_header` for the map, then plans and builds it with
+  `--allow-unqualified`, verifies, widens the declaration **in the staged copy**, plans and
+  builds it qualified and verifies again. Each step is a sub-receipt under the job directory. For
+  a project recipe the two packages must be the same bytes — a declaration is metadata the
+  package does not carry — and a difference refuses as `package-mismatch`. An adapter recipe is a
+  cut for one target, so widening alone cannot qualify one: the target's cut is written as
+  `recipe-<base>.json` from the declared recipe with only `foundation`, `map`, `profile` and
+  `revision` changed, built through the workspace's adapter builder and recorded under `recipes`;
+  an existing cut is reused and a recipe on disk is never overwritten.
+
+  Only after the second verify are the records written, together or not at all: `module.json`
+  widened by exactly that base and map, a `docs/TEST.md` section citing every receipt by relative
+  path and sha256, an `evidence.json` `built-alone` row through the ledger's own validator
+  (created when the module has none), and a build row on the module's entry in the workspace's
+  `registry/module-recipes.json`. Each file keeps its own JSON serialisation so a record is an
+  addition and not a reformat. A failure anywhere leaves the module byte for byte as it was and
+  the job directory holding the refusal, typed under `details.refusals`: `dependency-unqualified`,
+  `adapter-recipe-single-target-without-recipes`, `missing-dependency`, `probe`, `map-scripts`,
+  `missing-fx`, `plan-refused`, `build-failed`, `verify-failed`, `package-mismatch`,
+  `records-refused`. `--set <file>` runs a list of module directories in dependency order, one job
+  directory each, continues past failures and writes `results.json`; a module qualified earlier in
+  the run is a declared dependency for the ones after it. No parallelism inside the route, and no
+  game, network or install: a qualified module is offline verified on that target and nothing more.
+
+- `module plan` reports `result.adapt`, and carries the same list under `details.adapt` when it
+  refuses for an undeclared base or map: one row per member not declared for the composition's
+  target, with the `pat module qualify` command that would earn the widening and the pattern the
+  plan could decide (`map-scripts`, `dependency-unqualified`,
+  `adapter-recipe-single-target-without-recipes`, else `unknown`). `result.unqualified` is now
+  filled whether or not `--allow-unqualified` was passed, so a refusal names what is undeclared
+  instead of only saying that something is. Read-only: nothing is widened, built or written.
+
 - The shipped T6 knowledge is re-exported from the maintainer's generator after its source corpus
   was restored, so every file under `knowledge/` is generator output again. `engine-limits.json`
   picks up the `observed_in` and `how_to_count` wording its own page
