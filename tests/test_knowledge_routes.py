@@ -75,6 +75,18 @@ class DataTests(unittest.TestCase):
             self.assertTrue(all(p.endswith((".gsc", ".csc")) for p in row["scripts"]), map_id)
             self.assertIn("common_scripts/utility.gsc", row["scripts"], map_id)
 
+    def test_native_weapons_table_covers_every_occupancy_map_with_names_only(self):
+        table = json.loads((DATA / "native-weapons.json").read_text(encoding="utf-8"))
+        occupancy = json.loads((DATA / "occupancy.json").read_text(encoding="utf-8"))
+        self.assertEqual(set(table["maps"]), set(occupancy["maps"]))
+        for map_id, row in table["maps"].items():
+            self.assertEqual(row["foundation"], occupancy["maps"][map_id]["foundation"], map_id)
+            self.assertEqual(len(row["weapons"]), occupancy["maps"][map_id]["weapons"], f"{map_id}: one name per carried WeaponDef")
+            self.assertEqual(row["weapons"], sorted(set(row["weapons"])), map_id)
+            self.assertTrue(all(re.fullmatch(r"[a-z0-9_]+", w) for w in row["weapons"]), map_id)
+        self.assertIn("tesla_gun_zm", table["maps"]["zm_factory"]["weapons"], "the Wunderwaffe precache crash's weapon")
+        self.assertIn("ray_gun_zm", table["maps"]["zm_transit"]["weapons"])
+
     def test_limits_and_occupancy_agree(self):
         limits = json.loads((DATA / "engine-limits.json").read_text(encoding="utf-8"))["rows"]
         occupancy = json.loads((DATA / "occupancy.json").read_text(encoding="utf-8"))

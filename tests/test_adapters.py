@@ -241,3 +241,124 @@ class RefusalsAsDataTests(CompositionFixture):
         refusal = row["details"]["refusals"][0]
         self.assertEqual(refusal["kind"], "checks"); self.assertEqual(refusal["modules"], ["wavegun"]); self.assertEqual(refusal["failed"], ["pool:rawfile-assets"])
         self.assertTrue(row["message"].startswith("Offline checks failed"))
+
+
+class AdapterTargetTests(AdapterFixture):
+    """A recipe names the foundation and map it was first cut for; a pack on another target
+    tells the builder that target so the member is cut alone there (Phase B of the stitching plan)."""
+
+    def _workspace(self):
+        (self.root / "foundations").mkdir(exist_ok=True)
+        (self.root / "foundations" / "bo2-stock.json").write_text(json.dumps({"schema": 1, "id": "bo2-stock", "profile_prefix": "stock", "maps": {"zm_transit": {}}}))
+        (self.root / "foundations" / "dlc5-beta2.json").write_text(json.dumps({"schema": 1, "id": "dlc5-beta2", "profile_prefix": "b2", "maps": {"zm_factory": {}}}))
+        (self.root / "toolchain").mkdir(exist_ok=True)
+        (self.root / "toolchain" / "pat-adapter-build.py").write_bytes((FAKES / "fake_adapter_builder.py").read_bytes())
+        os.environ.pop("PAT_BACKEND_ADAPTER_BUILDER", None)
+
+    def _builder_argv(self, result):
+        receipt = json.loads((Path(result["output"]) / "receipt.json").read_text())
+        return next(step["argv"] for step in receipt["steps"] if "--output" in step["argv"] and str(Path(result["output"]) / "adapters") in " ".join(step["argv"]))
+
+    def test_same_target_passes_no_flags(self):
+        self._workspace()
+        self.adapter("gum_a")
+        comp = self.composition(["gum_a"], name="stock_adapter_test")
+        code, row = invoke(["module", "build", str(comp), "--workspace", str(self.root), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        argv = self._builder_argv(row["result"])
+        self.assertNotIn("--foundation", argv); self.assertNotIn("--map", argv)
+        report = row["result"]["adapters"][0]
+        self.assertFalse(report["retargeted"]); self.assertEqual(report["built_target"], {"foundation": "bo2-stock", "map": "zm_transit"})
+
+    def test_another_target_is_passed_to_the_builder_in_workspace_foundation_ids(self):
+        self._workspace()
+        self.adapter("gum_a", bases=["stock", "b2"], maps=["zm_transit", "zm_factory"])
+        comp = self.composition(["gum_a"], name="b2_adapter_test", base="b2", map_id="zm_factory")
+        code, row = invoke(["module", "build", str(comp), "--workspace", str(self.root), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        argv = self._builder_argv(row["result"])
+        self.assertEqual(argv[argv.index("--foundation") + 1], "dlc5-beta2", "the workspace's foundation id, never the base token")
+        self.assertEqual(argv[argv.index("--map") + 1], "zm_factory")
+        report = row["result"]["adapters"][0]
+        self.assertTrue(report["retargeted"])
+        self.assertEqual(report["recipe_target"], {"foundation": "bo2-stock", "map": "zm_transit"})
+        self.assertEqual(report["built_target"], {"foundation": "dlc5-beta2", "map": "zm_factory"})
+
+    def test_without_a_workspace_only_the_map_is_retargeted(self):
+        # An environment builder with no workspace has no foundation ids to translate a base token
+        # into, so the builder hears the map only and keeps the recipe's own foundation.
+        self.adapter("gum_a", bases=["stock"], maps=["zm_transit", "zm_buried"])
+        comp = self.composition(["gum_a"], name="stock_adapter_test", map_id="zm_buried")
+        code, row = invoke(["module", "build", str(comp), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        argv = self._builder_argv(row["result"])
+        self.assertNotIn("--foundation", argv); self.assertEqual(argv[argv.index("--map") + 1], "zm_buried")
+
+
+class NativeWeaponTableTests(CompositionFixture):
+    """The native-WeaponDef rule as a declaration check: the shipped per-map table names what the
+    map already registers, so no base listing is needed to refuse the precache crash."""
+
+    def test_a_native_weapondef_on_a_tabled_map_is_refused_without_a_base_listing(self):
+        self.module("tesla", provides={"weapons": ["tesla_gun_zm", "halo_new_zm"]}, bases=["b2"], maps=["zm_factory"])
+        comp = self.composition(["tesla"], name="b2_native_test", base="b2", map_id="zm_factory")
+        code, row = invoke(["module", "plan", str(comp), "--output", self.out()])
+        self.assertEqual(code, 1, row)
+        refusal = row["details"]["refusals"][0]
+        self.assertEqual(refusal["kind"], "service"); self.assertEqual(refusal["what"], "native WeaponDef")
+        self.assertEqual(refusal["weapons"], ["tesla_gun_zm"]); self.assertEqual(refusal["modules"], ["tesla"])
+
+    def test_a_new_name_on_a_tabled_map_passes_and_a_stock_map_uses_its_own_table(self):
+        self.module("newgun", provides={"weapons": ["halo_new_zm"]}, bases=["b2"], maps=["zm_factory"])
+        comp = self.composition(["newgun"], name="b2_native_test", base="b2", map_id="zm_factory")
+        code, row = invoke(["module", "plan", str(comp), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        self.module("ray", provides={"weapons": ["ray_gun_zm"]})
+        code, row = invoke(["module", "plan", str(self.composition(["ray"], name="stock_native_test")), "--output", self.out()])
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["details"]["refusals"][0]["weapons"], ["ray_gun_zm"], "TranZit's own table applies on stock")
+
+    def test_an_untabled_map_keeps_the_rule_to_base_listings(self):
+        self.module("ray", provides={"weapons": ["ray_gun_zm"]}, maps=["zm_unknown"])
+        comp = self.composition(["ray"], name="stock_native_test", map_id="zm_unknown")
+        code, row = invoke(["module", "plan", str(comp), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+
+
+class WithheldStagingTests(CompositionFixture):
+    """``deliver: false`` rows are staged for the linker (a model's export, a bank's WAV, a
+    WeaponDef's accuracy graph is read by the path the compiled asset names) without a zone line,
+    and two members withholding the same path are a file collision like any other."""
+
+    def test_withheld_inputs_are_staged_under_raw_without_a_zone_line(self):
+        rows = [{"source": "accuracy/pistol.accu", "target": "accuracy/aivsplayer/pistol.accu", "type": "rawfile", "deliver": False},
+                {"source": "x.accu", "target": "accuracy/x.accu", "type": "rawfile"}]
+        self.module_with_assets("gun", rows)
+        comp = self.composition(["gun"], name="stock_withheld_test")
+        code, row = invoke(["module", "build", str(comp), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        out = Path(row["result"]["output"])
+        self.assertTrue((out / "project" / "raw" / "accuracy" / "aivsplayer" / "pistol.accu").is_file(), "staged for the linker's search path")
+        zone = (out / "project" / "zone_source" / "mod.zone").read_text()
+        self.assertNotIn("pistol.accu", zone); self.assertIn("rawfile,accuracy/x.accu", zone)
+        self.assertEqual(row["result"]["withheld_staged"], 1)
+        package = json.loads((out / "packages" / "mod.ff").read_text())
+        self.assertNotIn("accuracy/aivsplayer/pistol.accu", package["rawfiles"])
+
+    def test_two_members_withholding_different_bytes_at_one_path_is_a_decision(self):
+        row = {"source": "pistol.accu", "target": "accuracy/aivsplayer/pistol.accu", "type": "rawfile", "deliver": False}
+        self.module_with_assets("gun_a", [dict(row)])
+        d = self.module_with_assets("gun_b", [dict(row)])
+        (d / "pistol.accu").write_bytes(b"a different graph")
+        comp = self.composition(["gun_a", "gun_b"], name="stock_withheld_test")
+        code, plan = invoke(["module", "plan", str(comp), "--output", self.out()])
+        self.assertEqual(code, 0, plan)
+        self.assertEqual([u["collision"] for u in plan["result"]["undecided"]], ["accuracy/aivsplayer/pistol.accu"])
+        (d / "pistol.accu").write_bytes((self.root / "modules" / "gun_a" / "pistol.accu").read_bytes())
+        code, plan = invoke(["module", "plan", str(comp), "--output", self.out()])
+        self.assertEqual(code, 0, plan)
+        self.assertEqual(plan["result"]["undecided"], [], "identical bytes dedupe with no decision")
+        comp = self.composition(["gun_a", "gun_b"], name="stock_withheld_test",
+                                decisions=[{"collision": "accuracy/aivsplayer/pistol.accu", "owner": "gun_a", "reason": "same graph"}])
+        code, row = invoke(["module", "build", str(comp), "--output", self.out()])
+        self.assertEqual(code, 0, row); self.assertEqual(row["result"]["withheld_staged"], 1)

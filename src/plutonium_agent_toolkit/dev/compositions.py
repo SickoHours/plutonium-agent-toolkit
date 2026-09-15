@@ -1008,13 +1008,22 @@ def collisions(modules: list[dict], loaded: dict[str, tuple], decisions: list[di
     else needs an owner recorded in the recipe. Returns (decided, undecided, refused); declared replacements cannot be decided away."""
     base_owned = base_owned or set()
     file_owners: dict[str, list[tuple[str, str]]] = {}
+    # A withheld row stages the file under raw/ but emits no zone entry, so a withheld owner
+    # would drop a delivered member's ``rawfile,`` line: remember which owners are withheld.
+    withheld_owners: set[tuple[str, str]] = set()
     for m in modules:
         if m["recipe"] is not None:
-            _, compiled, loose, _ = loaded[m["id"]]
+            data, compiled, loose, _ = loaded[m["id"]]
             for source, target, _ in compiled:
                 file_owners.setdefault(target.as_posix().casefold(), []).append((m["id"], sha256_file(source)))
             for source, target, _, _ in loose:
                 file_owners.setdefault(target.as_posix().casefold(), []).append((m["id"], sha256_file(source)))
+            # A withheld authoring input is still one file under raw/ that every member's compiled
+            # asset reads by name: two members withholding the same path with different bytes
+            # would compile from whichever copy was staged last, so it is a file decision like any.
+            for row in data.get("_withheld", []):
+                file_owners.setdefault(row["target"].casefold(), []).append((m["id"], sha256_file(Path(row["path"]))))
+                withheld_owners.add((row["target"].casefold(), m["id"]))
         elif m["seed"] and not m["seed"].get("private"):
             for row in m["seed"]["embedded"]:
                 kind, name = row.split(",", 1)
@@ -1049,7 +1058,11 @@ def collisions(modules: list[dict], loaded: dict[str, tuple], decisions: list[di
         ids = [o for o, _ in owners]
         digests = {d for _, d in owners}
         if len(digests) == 1 and not any(d.startswith(("seed:", "adapter:")) for d in digests):
-            decided.append({"collision": target, "kind": "file", "modules": ids, "resolution": "identical bytes; one copy is packed", "owner": ids[0]})
+            # Identical bytes dedupe with no decision, but the owner must be a delivered member
+            # where there is one: a withheld owner stages the file and emits no zone entry, so
+            # picking it would silently drop the delivered member's rawfile row.
+            owner = next((i for i in ids if (target, i) not in withheld_owners), ids[0])
+            decided.append({"collision": target, "kind": "file", "modules": ids, "resolution": "identical bytes; one copy is packed", "owner": owner})
             continue
         decision = recorded.get(target)
         row = {"collision": target, "kind": "file", "modules": ids}
@@ -1145,6 +1158,20 @@ def _service_for(services: list[dict], kind: str, name: str) -> dict | None:
     candidates = [row for row in services if any(n.casefold() == key for n in row["provides"].get(kind, [])) and not row["provides"].get("weapons")]
     candidates.sort(key=lambda row: (0 if "shared-service" in row["tags"] else 1, row["id"]))
     return candidates[0] if candidates else None
+
+
+def native_weapons(map_id: str, foundation: str) -> set[str]:
+    """WeaponDef names the target map's zones carry on this foundation, from the shipped table
+    (``knowledge/native-weapons.json``); empty when the map or foundation is not tabled, so the
+    check stays a base listing's job there."""
+    from . import knowledge
+    try:
+        row = knowledge.load("native-weapons.json")["maps"].get(map_id)
+    except Failure:
+        return set()
+    if not row or row.get("foundation") != foundation:
+        return set()
+    return {f"weapon,{w}".casefold() for w in row.get("weapons", [])}
 
 
 def service_refusals(modules: list[dict], loaded: dict[str, tuple], undecided: list[dict], base_owned: set[str], services: list[dict]) -> list[dict]:
@@ -1263,6 +1290,7 @@ def execute(args, job: Job) -> dict:
     if mixed:
         raise Failure(INPUT_INVALID, f"Composition targets game {comp['game']} but these members target another game: {mixed}",
                       "Every module in a composition targets the same game; split the pack or fix the members' module.json game.")
+    from . import checks as offline_checks
     resolved = resolve(comp, modules, getattr(args, "allow_unqualified", False))
     if resolved["refusals"]:
         raise refuse(resolved["refusals"], "; ".join(sorted({r["kind"] for r in resolved["refusals"]})),
@@ -1314,7 +1342,11 @@ def execute(args, job: Job) -> dict:
         late_refusals.append(_refusal("replacement", "Overlapping declared replacements cannot be resolved by an owner decision",
                                       "Two members declare the same replacement target; one of them must stop replacing it.",
                                       modules=[mid for row in refused for mid in row["modules"]], collisions=refused))
-    services = service_refusals(modules, loaded, undecided, comp.get("base_owned") or set(), shelf_services(getattr(args, "workspace", None)))
+    foundation = offline_checks.foundation_of(comp["base"], getattr(args, "workspace", None))
+    # The native-WeaponDef rule is a declaration check: the shipped per-map table names what the
+    # map already registers, and a composition's own base listings add to it.
+    owned_weapons = (comp.get("base_owned") or set()) | native_weapons(comp["map"], foundation)
+    services = service_refusals(modules, loaded, undecided, owned_weapons, shelf_services(getattr(args, "workspace", None)))
     if services:
         served = {row["collision"] for row in services}
         undecided = [row for row in undecided if row["collision"] not in served]
@@ -1350,10 +1382,8 @@ def execute(args, job: Job) -> dict:
         "verification": "composition resolved (dependency order, conflicts, budget); base/map mismatches listed in unqualified; collisions listed as decisions; "
                         "declarations, recipes, seeds and declared inputs hashed; backend presence checked; nothing compiled",
     }
-    from . import checks as offline_checks
     plan["footprint"] = offline_checks.footprint(plan)
     plan["checks"] = offline_checks.evaluate(plan, getattr(args, "workspace", None))
-    foundation = offline_checks.foundation_of(comp["base"], getattr(args, "workspace", None))
     pack_scripts = {t.as_posix() for _, t, _ in compiled} | {t.as_posix() for _, t, _, _ in loose}
     for m in modules:
         pack_scripts |= set(m.get("provides", {}).get("scripts", []))
@@ -1413,8 +1443,13 @@ def execute(args, job: Job) -> dict:
         if missing:
             raise Failure("backend_unavailable", f"Required backends are not installed: {missing}", "Run: pat dev setup; an adapter builder comes from --workspace or PAT_BACKEND_ADAPTER_BUILDER")
         plan["adapter_builds"] = []
+        # The builder is told the pack's target only in the workspace's own foundation ids: a
+        # token the toolkit maps for occupancy ("stock") is not a foundation the builder knows.
+        workspace = getattr(args, "workspace", None)
+        from . import targets
+        pack_foundation = targets.foundation_for_base(Path(workspace).expanduser(), comp["base"]) if workspace else None
         for m in adapter_modules:
-            m["seed"] = adapters.build(m, args, job, getattr(args, "workspace", None))
+            m["seed"] = adapters.build(m, args, job, workspace, pack_foundation, comp["map"])
             plan["adapter_builds"].append(m["seed"]["report"])
         seed_modules = [by_id[mid] for mid in resolved["order"] if by_id[mid]["seed"]]
         plan["seeds"] = [{"id": m["id"], "package": str(m["seed"]["package"]), "roots": m["seed"]["roots"],
@@ -1640,6 +1675,13 @@ def _build_composition(comp: dict, plan: dict, compiled, loose, seed_modules, lo
         if asset_type == "rawfile":
             rawfiles.append(target)
         staged_targets.add(key)
+    withheld_rows = []
+    for row in plan.get("withheld", []):
+        key = row["target"].casefold()
+        if key in owner_of and owner_of[key] != row["module"]:
+            continue
+        withheld_rows.append((Path(row["path"]), Path(row["target"])))
+    staged_withheld = projects.stage_withheld(raw, withheld_rows)
     seed_loads = []
     banks = job.root / "packages"
     strings: dict[str, str] = {}
@@ -1710,6 +1752,7 @@ def _build_composition(comp: dict, plan: dict, compiled, loose, seed_modules, lo
         raise Failure(BACKEND_FAILED, f"{len(missing_roots)} seed root(s) are not in the composed package: {missing_roots[:5]}",
                       "The linker did not copy them from the seed; check the loads and the seed manifest.", missing=missing_roots[:64])
     return {**link, "unqualified": plan["unqualified"], "plan": "plan.json", "rawfiles_verified": len(rawfiles), "mod_ff": link["packages"][0]["path"],
+            "withheld_staged": len(staged_withheld),
             "seed_roots_verified": sum(len(m["seed"]["roots"]) for m in seed_modules),
             "embedded_assets": len(embedded), "referenced_assets": len(referenced), "localized_strings": len(strings),
             "soundbanks": sorted(p.name for p in banks.iterdir() if p.is_file() and p.name != "mod.ff"),

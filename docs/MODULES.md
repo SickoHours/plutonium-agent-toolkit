@@ -197,9 +197,13 @@ them, never add a name the recipe does not deliver. The member's `payload` is `a
 
 `build` runs the workspace's builder as a backend: `PAT_BACKEND_ADAPTER_BUILDER` names it, or
 `--workspace <dir>` names a workspace whose `toolchain/pat-adapter-build` (or `.py`) is it. The
-contract is `<builder> <recipe.json> --output <new dir>`, exit 0, `<dir>/build.json` with
-`status: succeeded`, `<dir>/stage/mod.ff` beside its soundbanks and loose scripts under
-`<dir>/stage/scripts/`. The produced package is read back with the unlinker, its listing is the
+contract is `<builder> <recipe.json> --output <new dir> [--foundation <id>] [--map <map>]`,
+exit 0, `<dir>/build.json` with `status: succeeded`, `<dir>/stage/mod.ff` beside its soundbanks
+and loose scripts under `<dir>/stage/scripts/`. The two target flags are passed only when the
+composition's foundation (the workspace's id for its base token) or map differs from the
+recipe's own: the member is cut alone on the pack's target, and the receipt under
+`adapters[]` says so (`recipe_target`, `built_target`, `retargeted`). A builder that predates
+the flags keeps working for a pack on the recipe's own target. The produced package is read back with the unlinker, its listing is the
 manifest, and the pack links against it exactly as against a seed; the builder's own record is
 kept in the receipt (`adapters[]`) and never trusted for what the package carries. Without a
 builder the plan lists `adapter_builder` as unavailable and the build refuses before linking.
@@ -275,8 +279,9 @@ per message.
 
 **Some collisions are a missing service, not a decision.** Two members that each ship their own
 copy of a map-owned table (`animstatedefs/`, `animtrees/`, `aitype/`), two banks that carry the
-same sound alias, or a member that registers a WeaponDef the base zones already carry
-(`base_owned`) are refused with kind `service`: the row names the members, the thing
+same sound alias, or a member that registers a WeaponDef the map already carries (the shipped
+`knowledge/native-weapons.json` table for the target map and foundation, plus any `base_owned`
+listing) are refused with kind `service`: the row names the members, the thing
 (`collision`, `what`) and, with `--workspace`, the shelf module whose `provides` owns it
 (`service`), read from `modules/*/module.json` (`rawfiles` or `scripts` for a table, `aliases`
 for an alias). The fix is a dependency edit, never an owner decision: the members depend on the
@@ -532,7 +537,7 @@ a meter before the engine does.
 
 A recipe asset row may carry `"deliver": false` (rawfile rows only): the file is hashed as a
 build input but never staged or rooted, for authoring inputs such as model exports and source
-WAVs that another row already compiles. Withheld rows are listed under `withheld` in the plan.
+WAVs that another row already compiles. Withheld rows are listed under `withheld` in the plan. The build still stages a withheld file under `raw/` at its target path with no zone line, so the linker finds the export, WAV or accuracy graph the compiled asset names; two members withholding different bytes at one path are a file collision like any other (`decisions`), and the build reports `withheld_staged`.
 
 `map-scripts:<script>` rows check every `#include` and qualified `path::call` into a stock
 script namespace (`maps/`, `clientscripts/`, `common_scripts/`, `codescripts/`) against the

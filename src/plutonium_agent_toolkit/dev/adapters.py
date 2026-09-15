@@ -14,9 +14,11 @@ carries: the readback is the manifest.
 The builder is supplied by the workspace, never pinned by the toolkit: ``PAT_BACKEND_ADAPTER_BUILDER``
 names an executable (a ``.py`` runs under the toolkit's interpreter), or ``--workspace`` names a
 directory whose ``toolchain/pat-adapter-build`` (or ``.py``) is it. Its contract: argv
-``<builder> <recipe.json> --output <new dir>``, exit 0, ``<dir>/build.json`` with ``status``
-``succeeded`` and ``<dir>/stage/mod.ff`` beside its soundbanks, with loose scripts under
-``<dir>/stage/scripts/``.
+``<builder> <recipe.json> --output <new dir> [--foundation <id>] [--map <map>]``, exit 0,
+``<dir>/build.json`` with ``status`` ``succeeded`` and ``<dir>/stage/mod.ff`` beside its
+soundbanks, with loose scripts under ``<dir>/stage/scripts/``. The two target flags are passed
+only when the composition's foundation or map differs from the recipe's own, so the member is
+cut alone on the pack's target and its receipt is a build on that target.
 """
 from __future__ import annotations
 
@@ -227,7 +229,9 @@ def builder_argv(workspace: str | None) -> list[str]:
     if override is not None:
         return [sys.executable, str(override)] if override.suffix.lower() == ".py" else [str(override)]
     if workspace:
-        root = Path(workspace).expanduser()
+        # Absolute: the builder runs as a child of a job whose working directory is not the
+        # caller's, so a relative --workspace must not become a relative executable path.
+        root = Path(workspace).expanduser().resolve()
         for name in ("pat-adapter-build", "pat-adapter-build.py"):
             candidate = root / "toolchain" / name
             if candidate.is_file() and not candidate.is_symlink():
@@ -239,10 +243,25 @@ def builder_argv(workspace: str | None) -> list[str]:
                   "An adapter recipe is built by the workspace that owns its donor inputs; the toolkit runs that builder as a backend and reads the package back.")
 
 
-def build(module: dict, args, job: Job, workspace: str | None) -> dict:
+def target_argv(adapter: dict, foundation: str | None, map_id: str | None) -> list[str]:
+    """The pack's target when it differs from the one the recipe was cut for. A donor-converted
+    recipe names its first foundation and map; composing it on another target builds it alone
+    there first, so the builder is told ``--foundation`` and ``--map`` and its receipt is a
+    build on that target (the receipt a declaration widening needs). Same target: no arguments,
+    so a builder that predates the flags keeps working."""
+    out: list[str] = []
+    if foundation and foundation != adapter["foundation"]:
+        out += ["--foundation", foundation]
+    if map_id and map_id != adapter["map"]:
+        out += ["--map", map_id]
+    return out
+
+
+def build(module: dict, args, job: Job, workspace: str | None, foundation: str | None = None, map_id: str | None = None) -> dict:
     """Run the workspace builder for one adapter member into ``<job>/adapters/<id>`` and turn the
     package it produced into a seed the pack links against. The manifest comes from an unlinker
-    readback of the produced ``mod.ff``; the builder's own ``build.json`` is recorded, not trusted."""
+    readback of the produced ``mod.ff``; the builder's own ``build.json`` is recorded, not trusted.
+    ``foundation`` and ``map_id`` are the composition's target (``target_argv``)."""
     from types import SimpleNamespace
 
     from . import fastfiles, seeds
@@ -255,7 +274,8 @@ def build(module: dict, args, job: Job, workspace: str | None) -> dict:
         raise Failure(INPUT_INVALID, f"Adapter output already exists for {mid}")
     out.parent.mkdir(parents=True, exist_ok=True)
     timeout = max(1, int(job.deadline - __import__("time").monotonic()))
-    log = job.run([*argv, str(adapter["recipe"]), "--output", str(out)], timeout=min(args.timeout, timeout))
+    target = target_argv(adapter, foundation, map_id)
+    log = job.run([*argv, str(adapter["recipe"]), "--output", str(out), *target], timeout=min(args.timeout, timeout))
     record_path = out / "build.json"
     if record_path.is_symlink() or not record_path.is_file() or record_path.stat().st_size > MAX_RECIPE_BYTES:
         raise Failure(INPUT_INVALID, f"Adapter builder for {mid} wrote no build.json", f"See {log.name}")
@@ -302,6 +322,9 @@ def build(module: dict, args, job: Job, workspace: str | None) -> dict:
             "provides": seeds.provides_of(embedded), "strings": strings, "private": False, "missing": [],
             "manifest": record_path, "directory": stage, "loose_scripts": loose,
             "report": {"id": mid, "output": str(out), "builder": argv[-1] if argv else None, "log": log.name,
+                       "recipe_target": {"foundation": adapter["foundation"], "map": adapter["map"]},
+                       "built_target": {"foundation": foundation or adapter["foundation"], "map": map_id or adapter["map"]},
+                       "retargeted": bool(target),
                        "mod_ff_sha256": sha256_file(package), "builder_mod_ff_sha256": record.get("mod_ff_sha256"),
                        "embedded": len(embedded), "referenced": len(referenced), "roots": len(roots),
                        "soundbanks": [b.name for b in banks], "loose_scripts": [t.as_posix() for _, t in loose]}}
