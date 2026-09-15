@@ -47,6 +47,9 @@ class QualifyFixture(AdapterFixture):
         path.write_text(json.dumps({"schema": 1, "recipes": [{"id": i, "recipe": f"modules/{i}/project.json"} for i in ids]}, indent=2) + "\n")
         return path
 
+    def entry(self, result, index=0):
+        return result["modules"][index]
+
     def qualify(self, *arguments):
         return invoke(["module", "qualify", *arguments, "--target", TARGET, "--workspace", str(self.root), "--output", self.out()])
 
@@ -110,6 +113,28 @@ class QualifyProjectTests(QualifyFixture):
         self.assertEqual(binding["map"], "zm_factory")
         self.assertEqual([binding["offline_verified"], binding["installed"], binding["runtime_verified"], binding["player_accepted"]],
                          [True, False, False, False])
+        # A workspace may key its entries by directory name; its own validator wants the entry's id
+        # in the row, not the declaration's.
+        self.assertEqual(binding["modules"], ["alpha"])
+        self.assertEqual(sorted(binding), ["foundation", "id", "installed", "map", "modules", "offline_verified",
+                                           "player_accepted", "receipt", "runtime_verified", "sha256"])
+
+    def test_the_binding_row_names_the_entry_id_when_the_registry_keys_by_directory(self):
+        # A declaration id is underscored; a workspace often names the directory with hyphens and
+        # keys its registry by that. The catalog's own rule is that the entry id is in the row.
+        self.foundation()
+        made = self.module("acid_kit", bases=["stock"], maps=["zm_transit"])
+        directory = made.parent / "acid-kit"
+        made.rename(directory)
+        path = self.root / "registry" / "module-recipes.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"schema": 1, "recipes": [{"id": "acid-kit", "recipe": "modules/acid-kit/project.json"}]}, indent=2) + "\n")
+        code, row = self.qualify(str(directory))
+        self.assertEqual(code, 0, row)
+        binding = json.loads(path.read_text())["recipes"][0]["builds"][0]
+        self.assertEqual(binding["modules"], ["acid-kit"])
+        self.assertEqual(row["result"]["modules"][0]["id"], "acid_kit")
+        self.assertEqual(row["result"]["modules"][0]["records"]["binding"], "acid-kit")
 
     def test_a_target_the_workspace_does_not_stage_is_refused_before_anything_is_built(self):
         self.foundation(maps=("zm_prototype",))
@@ -200,7 +225,15 @@ class QualifyAdapterTests(QualifyFixture):
         plan = json.loads((self.root / entry["receipts"]["plan-qualified"]).parent.joinpath("plan.json").read_text())
         self.assertEqual(plan["adapters"][0]["recipe_key"], TARGET)
         self.assertTrue(str(plan["adapters"][0]["recipe"]).endswith("recipe-b2.json"))
-        self.assertIn("recipe-b2.json", (directory / "docs" / "TEST.md").read_text())
+        # The cut the workspace builder produced is its own artifact, recorded beside the pack's.
+        cut = entry["adapter_cuts"][0]
+        self.assertEqual(cut["id"], "gum_a")
+        self.assertEqual(cut["recipe_key"], TARGET)
+        self.assertFalse(cut["retargeted"], "a per-target recipe already names the target; the builder hears no override")
+        record = (directory / "docs" / "TEST.md").read_text()
+        self.assertIn("recipe-b2.json", record)
+        self.assertIn(cut["mod_ff_sha256"], record)
+        self.assertIn(cut["mod_ff_sha256"], json.loads((directory / "evidence.json").read_text())["rows"][-1]["note"])
 
     def test_an_existing_cut_recorded_under_recipes_is_reused_and_never_overwritten(self):
         self.foundation()
@@ -254,6 +287,20 @@ class QualifySetTests(QualifyFixture):
                                  else self.root / result["modules"][0]["job"]).parent / "results.json").read_text())
         self.assertEqual([m["id"] for m in table["modules"]], ["core", "alpha", "broken"])
         self.assertEqual(table["target"], TARGET)
+
+    def test_a_job_directory_outside_the_workspace_is_refused_before_any_build(self):
+        # A ledger receipt pointer is relative to the workspace root and never climbs out of it,
+        # so records could not cite receipts written elsewhere.
+        self.foundation()
+        directory = self.module("alpha", bases=["stock"], maps=["zm_transit"])
+        before = self.read(directory / "module.json")
+        outside = Path(self.temp.name).parent / f"outside-{id(self)}"
+        code, row = invoke(["module", "qualify", str(directory), "--target", TARGET, "--workspace", str(self.root),
+                            "--output", str(outside)])
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "input_invalid")
+        self.assertIn("must be inside the workspace", row["message"])
+        self.assertEqual(self.read(directory / "module.json"), before)
 
     def test_naming_both_a_module_and_a_set_is_a_usage_refusal(self):
         self.foundation()

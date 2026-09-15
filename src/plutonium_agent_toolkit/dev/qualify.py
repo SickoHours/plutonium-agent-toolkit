@@ -385,12 +385,13 @@ def test_section(row: dict, number: int) -> str:
         "",
     ]
     if row["payload"] == "adapter":
+        cut = next((a for a in steps["build-qualified"].get("adapters") or [] if a.get("id") == row["id"]), {})
         lines.append(f"- Adapter cut for this target: `{row['records']['recipe']}` (sha256 `{row['records']['recipe_sha256']}`),"
                      f" written from the declared recipe with only `foundation`, `map`, `profile` and `revision` changed,"
                      f" and recorded as `recipes[\"{row['foundation']}/{row['map']}\"]`."
-                     f" `mod.ff` sha256 `{steps['build-qualified']['package_sha256']}`;"
-                     f" the declaration-blind build of the default cut on this target produced"
-                     f" `{steps['build-unqualified']['package_sha256']}` (a per-target cut names its own profile, so the two are not the same bytes).")
+                     f" The workspace builder cut it to `mod.ff` sha256 `{cut.get('mod_ff_sha256')}`;"
+                     f" the pack that links this module alone against it is `{steps['build-qualified']['package_sha256']}`"
+                     f" (the declaration-blind pass produced `{steps['build-unqualified']['package_sha256']}`).")
     else:
         lines.append(f"- `mod.ff` sha256 `{steps['build-qualified']['package_sha256']}`; the declaration-blind build produced the same bytes"
                      f" (`{steps['build-unqualified']['package_sha256']}`).")
@@ -414,6 +415,7 @@ def test_section(row: dict, number: int) -> str:
 
 def ledger_row(row: dict) -> dict:
     build = row["steps"]["build-qualified"]
+    cut = next((a for a in build.get("adapters") or [] if a.get("id") == row["id"]), None)
     return {"type": "built-alone",
             "scope": {"base": row["base"], "foundation": row["foundation"], "maps": [row["map"]]},
             "at": row["at"],
@@ -423,13 +425,19 @@ def ledger_row(row: dict) -> dict:
             "note": f"pat module qualify ({PROTOCOL}): the module alone with its declared dependency closure, built on "
                     f"{row['base']}/{row['map']}, status succeeded; {build.get('rawfiles_verified')} rawfile(s) read back, "
                     f"{build.get('embedded_assets')} embedded and {build.get('referenced_assets')} referenced assets; "
-                    f"pat project verify --inputs unchanged. The declaration was widened to this base and map by this receipt. "
-                    f"Offline only: not installed, not launched, not played."}
+                    f"pat project verify --inputs unchanged. "
+                    + (f"The workspace builder cut this module's adapter recipe for the target to mod.ff {cut['mod_ff_sha256']} and the "
+                       f"package above is the pack that links alone against it. " if cut else "")
+                    + f"The declaration was widened to this base and map by this receipt. "
+                      f"Offline only: not installed, not launched, not played."}
 
 
-def binding_row(row: dict) -> dict:
+def binding_row(row: dict, entry_id: str) -> dict:
+    """The workspace catalog's build row. ``modules`` names the entry's own id, which a workspace
+    may key by directory name rather than by declaration id; its validator requires the entry's id
+    to be in the row."""
     build = row["steps"]["build-qualified"]
-    return {"id": f"{row['base']}-{row['map']}-qualify-01", "modules": [row["id"]], "sha256": build["package_sha256"],
+    return {"id": f"{row['base']}-{row['map']}-qualify-01", "modules": [entry_id], "sha256": build["package_sha256"],
             "foundation": row["foundation"], "map": row["map"], "offline_verified": True, "installed": False,
             "runtime_verified": False, "player_accepted": False, "receipt": build["receipt"]}
 
@@ -482,7 +490,7 @@ def write_records(row: dict, directory: Path, workspace: Path, staged: Path) -> 
             if entry is None:
                 notes.append(f"{BINDINGS} has no entry for {row['id']}; the build row was not written")
             else:
-                entry.setdefault("builds", []).append(binding_row(row))
+                entry.setdefault("builds", []).append(binding_row(row, entry["id"]))
                 put(bindings, serialise(data, raw_bindings))
                 row["records"]["binding"] = entry["id"]
         else:
@@ -581,8 +589,8 @@ def qualify_one(directory: Path, index: dict[str, tuple[Path, dict]], info: dict
             return finish(refuse(row, **build_refusal(exc, child)), home)
         if phase == "qualified" and built["unqualified"]:
             return finish(refuse(row, "plan-refused",
-                                            f"The qualified build still reports {built['unqualified']} unqualified",
-                                            "The widening did not cover this target; nothing was written."))
+                                 f"The qualified build still reports {built['unqualified']} unqualified",
+                                 "The widening did not cover this target; nothing was written."), home)
         verified, exc, child = run_step(job, home / f"verify-{phase}", "project verify",
                                         ["pat", "project", "verify", str(child.root / "receipt.json"), "--inputs"],
                                         lambda c, r=child.root: projects.execute(
@@ -597,8 +605,8 @@ def qualify_one(directory: Path, index: dict[str, tuple[Path, dict]], info: dict
     row["package_identical"] = blind == earned
     if row["payload"] != "adapter" and not row["package_identical"]:
         return finish(refuse(row, "package-mismatch",
-                                        f"The declaration-blind build produced {blind} and the qualified build {earned}",
-                                        "A declaration is metadata the package does not contain; two different packages mean an input moved between the builds."))
+                             f"The declaration-blind build produced {blind} and the qualified build {earned}",
+                             "A declaration is metadata the package does not contain; two different packages mean an input moved between the builds."), home)
 
     # (f) the records, together or not at all.
     try:
@@ -606,7 +614,7 @@ def qualify_one(directory: Path, index: dict[str, tuple[Path, dict]], info: dict
     except (Failure, OSError, ValueError, KeyError) as exc:
         message = exc.message if isinstance(exc, Failure) else f"{type(exc).__name__}: {exc}"
         return finish(refuse(row, "records-refused", str(message)[:1200],
-                                        "Every record was put back; the module is as it was."))
+                             "Every record was put back; the module is as it was."), home)
     row["outcome"] = "qualified"
     return finish(row, home)
 
@@ -704,6 +712,10 @@ def record_step(row: dict, name: str, child: Job, result: dict | None, exc: Fail
         for key in ("rawfiles_verified", "embedded_assets", "referenced_assets", "soundbanks"):
             step[key] = result.get(key)
         step["unqualified"] = [u["id"] for u in result.get("unqualified") or []]
+        # An adapter member is cut by the workspace builder before the pack links against it; that
+        # cut's own package is the artifact a per-target recipe earns, and it is not the pack's.
+        step["adapters"] = [{k: report.get(k) for k in ("id", "mod_ff_sha256", "recipe_key", "recipe_target", "built_target", "retargeted")}
+                            for report in result.get("adapters") or []]
     if result and name.startswith("plan"):
         step["unqualified"] = [u["id"] for u in result.get("unqualified") or []]
         step["adapt"] = result.get("adapt") or []
@@ -740,6 +752,12 @@ def execute(args, job: Job) -> dict:
     workspace = Path(args.workspace).expanduser().resolve()
     if not workspace.is_dir():
         raise Failure(INPUT_MISSING, f"Workspace is missing: {workspace}")
+    if not job.root.is_relative_to(workspace):
+        # The ledger's receipt pointers stay inside the workspace and never climb out
+        # (docs/evidence-ledger.md), so a job whose receipts live elsewhere could not be cited by
+        # the records it is here to write. Better said now than after the builds.
+        raise Failure(INPUT_INVALID, f"--output must be inside the workspace so the records can cite its receipts: {job.root} is not under {workspace}",
+                      "A ledger row's receipt path is relative to the workspace root; keep job directories under it, for example <workspace>/.local/<task>/.")
     info = target_inputs(workspace, foundation, map_id, job)
     roots = [Path(r).expanduser().resolve() for r in args.member_root] or [workspace / "modules"]
     index = shelf(roots, job)
@@ -786,6 +804,7 @@ def table(rows: list[dict]) -> list[dict]:
              "already_declared": r.get("already_declared"),
              "package_sha256": (r["steps"].get("build-qualified") or {}).get("package_sha256"),
              "package_identical": r.get("package_identical"),
+             "adapter_cuts": (r["steps"].get("build-qualified") or {}).get("adapters") or [],
              "receipts": {name: step["receipt"] for name, step in r["steps"].items()},
              "records": r.get("records") or {},
              "refusal": (r["refusals"][0] if r.get("refusals") else None)} for r in rows]

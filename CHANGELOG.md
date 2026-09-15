@@ -35,6 +35,12 @@ Every entry states what shipped, on which platform it was verified, and what rem
   directory each, continues past failures and writes `results.json`; a module qualified earlier in
   the run is a declared dependency for the ones after it. No parallelism inside the route, and no
   game, network or install: a qualified module is offline verified on that target and nothing more.
+  `--output` must be inside the workspace, because a ledger receipt pointer is relative to the
+  workspace root and never climbs out of it; that is refused before anything is built rather than
+  after. The binding row names the id of the entry it was appended to, which a workspace may key
+  by directory rather than by declaration id. An adapter member's build report now carries the
+  recipe it was cut from and the `recipes` key it came from, so the test record and the ledger note
+  quote the workspace builder's own package beside the pack's.
 
 - `module plan` reports `result.adapt`, and carries the same list under `details.adapt` when it
   refuses for an undeclared base or map: one row per member not declared for the composition's
