@@ -7,6 +7,18 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- Two rules the donor-shadowing work paid for, in `docs/MODULES.md` and
+  `docs/playbooks/compose-a-pack.md`. **A rendering fault is not evidence about a pack until the bare
+  foundation has been loaded as a control on the same map**: a wrong texture writes nothing to the
+  console, so no log slice and no readback can clear the base, and a readback difference only shows
+  that the zone changed. **Measure every asset type a donor answers instead of reasoning about which
+  ones shadow**: the rebuild that took base-named `image` copies from 166 to 0 and `material` copies
+  from 67 to 0 left 8 `techniqueset`, 4 `xmodel` and 7 `fx` copies of base-owned names in the zone,
+  because the type list had been chosen rather than read, and one of those xmodels differed from the
+  base's copy. The link log's `Loaded <type> "<name>" (src: <zone>)` rows are per type; group them and
+  exclude or justify each. `donor-shadowing` still judges only the two types it can exclude, and the
+  docs now say so. `docs/knowledge/plutonium-t6.md` gains the `storage/t6/images` row, and
+  `docs/playbooks/diagnose-a-crash.md` says a rendering fault cannot be diagnosed from its evidence.
 - The shipped knowledge JSON is re-exported from the workspace generator at `2026-09-15T11:54:18Z`.
   One data row is new: the `box-weapon-not-found` crash signature (`AddZombieBoxWeapon: Failed to
   find weapon <name>`), the fault a client box registration raises for a weapon no loaded zone

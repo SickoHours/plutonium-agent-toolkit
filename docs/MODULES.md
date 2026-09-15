@@ -736,6 +736,29 @@ already embeds a base-owned name; and at build time it re-reads the link log's
 donor, with the count and the first ten names. The build reports `base_owned_excluded` and
 `donor_shadowing`.
 
+**Measure every asset type a donor answers; never assume which ones shadow.** The exclusion covers
+`image` and `material` because those are the two types whose donor copy was measured to repaint the
+base, and a linker's `ignore` list is per `type,name`: nothing about the mechanism stops at two
+types. On the pack above, the rebuild that took base-named image copies from 166 to 0 and material
+copies from 67 to 0 left 8 `techniqueset`, 4 `xmodel` and 7 `fx` copies of base-owned names in the
+zone, because the type list had been chosen by reasoning about which types carry pixels rather than
+by reading what the linker had actually rooted. Seven of those techniquesets turned out to be
+byte-identical to the base's copy and harmless; one of the xmodels was not. **Every one of them was
+a guess either way until it was read.** So after a build, read the link log yourself: group its
+`Loaded <type> "<name>" (src: <zone>)` rows by type, keep the rows whose `src` is a donor zone and
+whose name the base's listing also carries, and for each such type either exclude it or write down
+why its donor copy is harmless. `donor-shadowing` only judges the two types it can exclude; the
+other types are still in the log, and a type nobody looked at is not a type nobody shipped.
+
+**A rendering fault is not evidence about a pack until the bare foundation has been loaded as a
+control.** A wrong texture writes nothing to the console — no `Could not load image`, no unmatched
+signature, no fatal line — so there is no log slice that clears the base and no readback that can.
+A diagnosis proven by readback alone has only shown that the zone changed, not that the rendering
+did. Load the base with no mod selected, on the same map, and look at the same weapon first. If it
+renders wrong there, the pack is not the suspect and no composer change can be the fix; the cause is
+in the base or on the machine (below). Only once the bare foundation renders correctly is a pack the
+thing to change, and only then is a readback difference worth writing a composer change against.
+
 A recipe asset row may carry `"deliver": false` (rawfile rows only): the file is hashed as a
 build input but never staged or rooted, for authoring inputs such as model exports and source
 WAVs that another row already compiles. Withheld rows are listed under `withheld` in the plan. The build still stages a withheld file under `raw/` at its target path with no zone line, so the linker finds the export, WAV or accuracy graph the compiled asset names; two members withholding different bytes at one path are a file collision like any other (`decisions`), and the build reports `withheld_staged`.
