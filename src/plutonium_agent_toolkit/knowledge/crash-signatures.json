@@ -1,5 +1,5 @@
 {
- "exported_at": "2026-09-15T09:05:02Z",
+ "exported_at": "2026-09-15T11:54:18Z",
  "exported_by": "t6-knowledge-export",
  "note": "Console log lines and Plutonium crash-text lines seen after clean compiles and readbacks, as regexes without the [HH:MM:SS] prefix. `python scripts/t6_knowledge.py lookup log <slice>` matches a slice. The cause beside each is the one found and fixed, not the only possible one. A repair that names a new line adds a row in the same task.",
  "rows": [
@@ -28,6 +28,15 @@
    "id": "bad-animtree-token",
    "log_text": "bad animtree token: '{'",
    "regex": "bad\\ animtree\\ token:\\ '\\{'",
+   "source": "docs/knowledge/crashes.md"
+  },
+  {
+   "cause": "A client script called addzombieboxweapon for a weapon name the loaded zones do not carry; the engine faults at the first box use (last gsc error message, then an access violation)",
+   "class": "script-error",
+   "fix": "Register in the box only the weapons the module's own zone or the map provides; a client script copied from another weapon's module must have its weapon list replaced, and the planner refuses a client box registration for a name no member provides",
+   "id": "box-weapon-not-found",
+   "log_text": null,
+   "regex": "AddZombieBoxWeapon: Failed to find weapon (\\S+)",
    "source": "docs/knowledge/crashes.md"
   },
   {

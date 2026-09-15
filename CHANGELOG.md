@@ -7,6 +7,11 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- The shipped knowledge JSON is re-exported from the workspace generator at `2026-09-15T11:54:18Z`.
+  One data row is new: the `box-weapon-not-found` crash signature (`AddZombieBoxWeapon: Failed to
+  find weapon <name>`), the fault a client box registration raises for a weapon no loaded zone
+  carries. The other five files change only their export marker; every data row re-exports
+  byte-for-byte, which is what the generator-output test added in #84 asserts.
 - A module declaration can state the parameters a composition may set on it, and a composition
   sets them per member. `module.json` takes an optional `parameters` list of up to 32 objects
   `{name, type, default, meaning, values?, range?}`: `type` is `bool`, `int` or `string`,
