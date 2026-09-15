@@ -30,7 +30,7 @@ def footprint(plan):
     for row in plan.get('assets',[]):
         owner=row.get('module')
         if row.get('type')=='rawfile' and row.get('deliver',True) is not False and owner in rows:rows[owner]['rawfiles']+=1
-    for seed in plan.get('seeds',[]):
+    for seed in plan.get('seeds',[])+plan.get('adapters',[]):
         mid=seed['id']
         if mid in rows:rows[mid]['rawfiles']+=sum(1 for r in seed.get('roots',[]) if r.startswith('rawfile,'))
     return rows
@@ -41,9 +41,15 @@ def pool_checks(plan,limits,occupancy):
         source=limit.get('count_source');bound=limit.get('bound');base=get(occupancy,source) if source else None
         contribution=None;names=set();top=[]
         if source=='assets.soundbank':
+            # The listing counts one row per `.all` bank; the engine also opens that bank's
+            # localized companion (`<name>.<lang>`), which no listing shows. Every base bank is a
+            # `.all`, so the measured count and each member's bank are counted twice: the floor
+            # plus one companion per bank is the bound the pack is held to (docs/knowledge/engine-limits.md).
             for m in plan['modules']:names.update(m.get('provides',{}).get('soundbanks',[]))
-            contribution=len(names)
-            top=sorted(((len(f['soundbanks']),mid) for mid,f in foot.items() if f['soundbanks']),reverse=True)
+            companions=sum(1 for n in names if n.endswith('.all'))
+            contribution=len(names)+companions
+            if type(base) in (int,float):base=base*2
+            top=sorted(((len(f['soundbanks'])+sum(1 for n in f['soundbanks'] if n.endswith('.all')),mid) for mid,f in foot.items() if f['soundbanks']),reverse=True)
         elif source=='assets.rawfile':
             contribution=sum(f['rawfiles'] for f in foot.values())
             top=sorted(((f['rawfiles'],mid) for mid,f in foot.items() if f['rawfiles']),reverse=True)
@@ -61,12 +67,16 @@ def pool_checks(plan,limits,occupancy):
         if total is not None and type(bound) in (int,float):
             outcome='failed' if total>bound else 'passed'
             detail=f'Measured map count {base} + declared contribution {contribution} = {total}; observed bound {bound}'
-            if outcome=='passed' and (occupancy.get('incomplete') or source=='assets.soundbank'):
-                outcome='not_counted';detail+='; occupancy/bank listing is a floor, not a complete runtime count'
+            if source=='assets.soundbank':
+                detail=f'Measured map banks {base//2 if type(base) is int else base} plus their localized companions = {base}; declared banks {len(names)} plus companions {companions} = {contribution}; total {total}; observed bound {bound}'
+                if outcome=='failed':detail+='; banks: '+', '.join(sorted(names))[:600]
+            if outcome=='passed' and occupancy.get('incomplete'):
+                outcome='not_counted';detail+='; occupancy is a floor, not a complete runtime count'
             if outcome=='failed' and top:
                 detail+='; largest contributors: '+', '.join(f'{mid} ({n})' for n,mid in top[:5])
         row={'id':'pool:'+limit['id'],'outcome':outcome,'detail':detail,'count':total,'bound':bound}
         if contribution is not None:row['contribution']=contribution;row['base']=base
+        if source=='assets.soundbank' and names:row['banks']=sorted(names)
         if top:row['contributors']=[{'id':mid,'count':n} for n,mid in top[:16]]
         rows.append(row)
     return rows
@@ -165,19 +175,20 @@ def foundation_of(base,root=None):
 INCLUDE_PATH=re.compile(r'^\s*#include\s+([^;]+);',re.M|re.I)
 QUALIFIED=re.compile(r'([A-Za-z_][A-Za-z0-9_\\/]*[\\/][A-Za-z0-9_\\/]+)::[A-Za-z_]')
 
-def map_script_externals(name,text,map_id,foundation,game='t6'):
+def map_script_externals(name,text,map_id,foundation,game='t6',provided=()):
     """Every script this source includes or calls with a qualified path must be carried by the zones
     the target map loads on this foundation. A path the map lacks is an unresolved external at load
     (`COM_ERROR ... Unresolved external`), which the compiler cannot see. not_counted when the map is
-    not in the table or the title is not T6; the module's own targets in the same pack are not
-    visible here, so only stock-looking paths (maps/, clientscripts/, common_scripts/, codescripts/)
-    are judged."""
+    not in the table or the title is not T6. Only stock-looking paths (maps/, clientscripts/,
+    common_scripts/, codescripts/) are judged, and a path another member of the same pack
+    provides (``provided``: every script target the pack stages or a seed roots) is carried by
+    the pack itself, not missing."""
     if game!='t6':
         return [{'id':'map-scripts:'+name,'outcome':'not_counted','detail':'Per-map script tables are T6-only'}]
     table=knowledge.load('map-scripts.json')['maps'].get(map_id)
     if not table or table.get('foundation')!=foundation:
         return [{'id':'map-scripts:'+name,'outcome':'not_counted','detail':f'No script table for {map_id} on {foundation}'}]
-    carried=set(table['scripts'])
+    carried=set(table['scripts'])|{p.lower() for p in provided}
     vm=_script_vm(name);suffix='.csc' if vm=='client' else '.gsc'
     masked=mask_noncode(text)
     wanted=set()

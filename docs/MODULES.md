@@ -73,11 +73,12 @@ failures rather than inspection results.
 
 ## Module declaration: `module.json`
 
-Lives in the module's directory beside its payload. The payload is one of two things: a
-`project.json` **recipe** the toolkit compiles and links (scripts and loose assets), or a
+Lives in the module's directory beside its payload. The payload is one of three things: a
+`project.json` **recipe** the toolkit compiles and links (scripts and loose assets); a
 **seed**, an already-linked `mod.ff` with its soundbanks and a `seed.json` manifest that
-`pat module declare` writes from the package. A declaration names exactly one of `recipe` or
-`seed`.
+`pat module declare` writes from the package; or an **adapter recipe**, a donor conversion a
+workspace builder cuts (below). A declaration names exactly one of `recipe` or `seed`; an
+adapter recipe is named under `recipe` and told apart by its own shape.
 
 ```json
 {
@@ -119,7 +120,7 @@ Lives in the module's directory beside its payload. The payload is one of two th
 | `maps` | yes | Map ids the module is built for, or `["*"]` for any map. A composition on a map not listed is refused. Grow this list by testing on the map, never by editing |
 | `dependencies` | no | Ids of modules that must be in the same composition and are built first. A cycle or a missing dependency is refused |
 | `conflicts` | no | Ids of modules this one must never be composed with. Both present is refused |
-| `provides` | no | What the module registers, by kind: `weapons`, `perks`, `gobblegums`, `powerups`, `equipment`, `localize`, `soundbanks`, `scripts`, `models`, `effects`, `rawfiles`, each a list of up to 4096 names. Two modules providing the same name is a decision (below); a `rawfiles` name is a file target and is listed once, as the file collision. A seed's manifest fills this in; for the kinds the manifest derives (`weapons`, `localize`, `soundbanks`, `rawfiles`, `models`, `effects`) a declaration may narrow the manifest's list and never add to it, even when the manifest lists none of that kind; the other kinds are the declaration's |
+| `provides` | no | What the module registers, by kind: `weapons`, `perks`, `gobblegums`, `powerups`, `equipment`, `localize`, `soundbanks`, `scripts`, `models`, `effects`, `rawfiles`, `aliases` (the sound alias names a bank module owns), each a list of up to 4096 names. Two modules providing the same name is a decision (below); a `rawfiles` name is a file target and is listed once, as the file collision. A seed's manifest fills this in; for the kinds the manifest derives (`weapons`, `localize`, `soundbanks`, `rawfiles`, `models`, `effects`) a declaration may narrow the manifest's list and never add to it, even when the manifest lists none of that kind; the other kinds are the declaration's |
 | `resource_contract` | no | Whole numbers the module adds to the engine's budgets: `threads`, `entities`, `hud`, `network_fields`. Missing fields count as 0. Summed across the composition and checked against the composition's `budget` |
 | `menu_route` | no | How a person reaches the feature in game, at most 200 characters; carried into the plan for the handoff |
 | `distribution` | no | `source` (buildable from the repository; the default for a recipe), `seed` (the package is committed beside the manifest; the default for a seed), or `private` (recipe source/assets or a seed package are not published; the payload type remains recipe or seed, and plan/build still require the local inputs) |
@@ -165,6 +166,43 @@ T6 compiled script assets (`script,<path>`) are roots: a seed that embeds native
 would otherwise lose them silently while every root check still passed.
 Localized strings cannot be copied out of a loaded fastfile, so `declare` extracts them to
 `mod.str` and `module build` merges every seed's strings into the pack's own string table.
+
+## Adapter recipe: the third payload
+
+A donor-converted module (a Black Ops III GobbleGum, a World at War wonder weapon) is not
+compiled by the toolkit: a workspace builder converts pinned donor inputs and links the package.
+Its `recipe.json` names the foundation and map it was cut for and what the build delivers, and
+the declaration points `recipe` at it. The planner tells an adapter recipe from a project recipe
+by shape: `schema: 1` with `foundation`, `map` and `module` (or `adapter`), and no
+`game`/`name` pair.
+
+```json
+{
+  "schema": 1, "module": "gum_kill_joy", "foundation": "bo2-stock", "map": "zm_transit",
+  "weapons": ["halo_gum_kill_joy_eat_zm", "halo_gum_kill_joy_activate_zm"],
+  "loose_script": {"source": "src/gum_kill_joy.gsc", "target": "scripts/zm/halo_gum_kill_joy.gsc", "instance": "server"},
+  "soundbank": {"name": "halo_gum_kill_joy.all", "aliases": "soundbank/new.aliases.csv"},
+  "localize": {"HALO_GUM_KILL_JOY": "Kill Joy"},
+  "rawfiles": [], "assets": {"xmodel": ["..."], "materials": ["..."], "images": ["..."]},
+  "prepared": "<a private directory of converted inputs>"
+}
+```
+
+`plan` reads the declared outputs as seed-like roots: the weapons, the one bank (and, when the
+prepared inputs are on this machine, its alias table and the weapons' clips), the localized
+strings, the loose scripts (`loose_script`, `loose_scripts` or `scripts`), rooted `rawfiles`,
+`native_scripts`, `extra_effects` and the `assets` lists. Those roots count against the pools,
+collide like a seed's, and fill `provides` the way a manifest does: a declaration may narrow
+them, never add a name the recipe does not deliver. The member's `payload` is `adapter`.
+
+`build` runs the workspace's builder as a backend: `PAT_BACKEND_ADAPTER_BUILDER` names it, or
+`--workspace <dir>` names a workspace whose `toolchain/pat-adapter-build` (or `.py`) is it. The
+contract is `<builder> <recipe.json> --output <new dir>`, exit 0, `<dir>/build.json` with
+`status: succeeded`, `<dir>/stage/mod.ff` beside its soundbanks and loose scripts under
+`<dir>/stage/scripts/`. The produced package is read back with the unlinker, its listing is the
+manifest, and the pack links against it exactly as against a seed; the builder's own record is
+kept in the receipt (`adapters[]`) and never trusted for what the package carries. Without a
+builder the plan lists `adapter_builder` as unavailable and the build refuses before linking.
 
 ## Composition recipe: `composition.json`
 
@@ -219,9 +257,31 @@ backend runs, when:
 - a module does not declare the composition's base or map;
 - two members declare the same id, two members name the base role, or a nested composition is
   for another base or map;
-- a seed file does not match its manifest hash, or a `private` module's package is absent;
+- a seed file does not match its manifest hash, or a `private` module's package or recipe inputs
+  are absent;
 - the summed resource contracts exceed the budget;
 - a declaration, manifest or recipe is malformed, or a member directory is missing, absolute or a link.
+
+**Refusals are data.** Every refusal the composition has is collected in one run and reported
+under `details.refusals[]`, each with `kind`, `modules`, `message`, `hint` and, when it names a
+declaration field, `field`; the envelope's own `error_code`, `message` and `hint` are the first
+row's, and a message with more rows says how many follow. Kinds: `probe`, `test_only`,
+`duplicate_id`, `missing_dependency` (with `dependency` and `by`), `conflict`,
+`unqualified_base` and `unqualified_map` (with `declared` and `wanted`), `private_payload`,
+`cycle`, `budget` (with `resource`, `total`, `bound`), `replacement` (with `collisions`),
+`service` (below) and `checks` (with `failed`, the ids of the failed check rows). A caller that
+brings dependencies along reads every `missing_dependency` row at once instead of re-planning
+per message.
+
+**Some collisions are a missing service, not a decision.** Two members that each ship their own
+copy of a map-owned table (`animstatedefs/`, `animtrees/`, `aitype/`), two banks that carry the
+same sound alias, or a member that registers a WeaponDef the base zones already carry
+(`base_owned`) are refused with kind `service`: the row names the members, the thing
+(`collision`, `what`) and, with `--workspace`, the shelf module whose `provides` owns it
+(`service`), read from `modules/*/module.json` (`rawfiles` or `scripts` for a table, `aliases`
+for an alias). The fix is a dependency edit, never an owner decision: the members depend on the
+service and ship no copy. A file two members would both replace is owned by a service module,
+never by either member.
 
 Collisions are not refusals. Every place two modules would own the same thing is listed under
 `decisions` (resolved) or `undecided`: the same file target (`kind: file`, resolved with no
@@ -462,8 +522,10 @@ given); a token with no known foundation leaves every pool `not_counted`.
 Counted pools: `pool:rawfile-assets` (bound 1,024; every recipe script, every delivered
 `rawfile` asset row and every seed `rawfile,` root, on top of the map's rawfiles),
 `pool:image-bank-slots` (bound 16; every distinct `>level.ipak_read` header line beyond the
-client's startup set, on top of the twelve it holds open), `pool:sound-assets` (a floor,
-reported but never passed) and the actor client field bits. A failed pool row carries
+client's startup set, on top of the twelve it holds open), `pool:sound-assets` (bound 32; the
+listing shows one row per `.all` bank and the engine opens a localized companion beside each,
+so every base bank and every member bank counts twice; a failed row lists the `banks`) and the
+actor client field bits. A failed pool row carries
 `contribution`, `base` and `contributors` (the members or bank names that add most), and the
 plan's `footprint` lists every member's rawfiles, scripts and soundbanks so a caller can show
 a meter before the engine does.
@@ -475,7 +537,9 @@ WAVs that another row already compiles. Withheld rows are listed under `withheld
 `map-scripts:<script>` rows check every `#include` and qualified `path::call` into a stock
 script namespace (`maps/`, `clientscripts/`, `common_scripts/`, `codescripts/`) against the
 compiled scripts the target map's zones carry on that foundation (`knowledge/map-scripts.json`);
-a path the map lacks fails, since it is an unresolved external at load that no compiler sees. Projectile FX union requires
+a path the map lacks fails, since it is an unresolved external at load that no compiler sees;
+a path another member of the same pack provides (a staged script target, a seed or adapter
+script root, a `provides.scripts` name) is carried by the pack and passes. Projectile FX union requires
 weapon blobs and is not inferred from weapon count. Soundbank listing is only a floor.
 Builds run a receipted `gsc check` dry run per script before linking. Compiler-reported unresolved
 externals fail; successful compilation alone cannot prove runtime external resolution and that
