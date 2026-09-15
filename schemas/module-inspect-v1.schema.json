@@ -674,6 +674,76 @@
               }
             }
           }
+        },
+        "parameters": {
+          "description": "Present only when the declaration names parameters: what a composition may set on this module, with each parameter's type, constraint, default and meaning. Format: docs/MODULES.md.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "type",
+              "default",
+              "meaning",
+              "values",
+              "range"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9_]{1,32}$"
+              },
+              "type": {
+                "enum": [
+                  "bool",
+                  "int",
+                  "string"
+                ]
+              },
+              "default": {
+                "type": [
+                  "boolean",
+                  "integer",
+                  "string"
+                ]
+              },
+              "meaning": {
+                "type": "string",
+                "maxLength": 400
+              },
+              "values": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "minItems": 1,
+                "maxItems": 32,
+                "items": {
+                  "type": [
+                    "boolean",
+                    "integer",
+                    "string"
+                  ]
+                }
+              },
+              "range": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "minItems": 2,
+                "maxItems": 2,
+                "items": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -734,7 +804,8 @@
               "path",
               "role",
               "name",
-              "commit"
+              "commit",
+              "parameters"
             ],
             "properties": {
               "path": {
@@ -762,6 +833,18 @@
                     "type": "null"
                   }
                 ]
+              },
+              "parameters": {
+                "description": "What this member sets on its module's declared parameters; empty when it sets none.",
+                "type": "object",
+                "maxProperties": 32,
+                "additionalProperties": {
+                  "type": [
+                    "boolean",
+                    "integer",
+                    "string"
+                  ]
+                }
               }
             }
           }

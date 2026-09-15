@@ -100,7 +100,11 @@ adapter recipe is named under `recipe` and told apart by its own shape.
   "distribution": "seed",
   "source": {"repository": "https://github.com/<owner>/<repo>", "commit": "<40 hex>"},
   "origin": "saints-row",
-  "donor": "Saints Row: The Third assets, converted for T6 by <who>, 2026"
+  "donor": "Saints Row: The Third assets, converted for T6 by <who>, 2026",
+  "parameters": [
+    {"name": "box", "type": "bool", "default": true,
+     "meaning": "Whether the weapon registers in the mystery box pool."}
+  ]
 }
 ```
 
@@ -129,6 +133,7 @@ adapter recipe is named under `recipe` and told apart by its own shape.
 | `origin` | no | One lowercase word for the game or series the thing's identity comes from (`bo3`, `waw`, `saints-row`), or `unverified` when nobody has established it. It drives the title: an ICR-1 converted from a community pack is still "ICR-1 (Black Ops III)". Never defaulted to the donor. A browse word, never a resolution rule |
 | `donor` | no | One line of credit, at most 400 characters, for where the bytes came from: a conversion pack and its author, a capture, a person. It drives the credit line, never the title. Preserved on every re-cut |
 | `placements` | no | What the module needs placed on each target, never where: a list of `{needs, occupant?, count, fallback}` rows (`needs` a location-table row kind such as `perk-machine` or `wall-buy`; `count` `1`, an integer or `"any"`; `fallback` `refuse`, `rotation-slot`, `wunderfizz`, `spawn-room-default` or `omit`). `module plan --workspace W --target KEY` checks each need against the target's location table. Format: [target-sets.md](target-sets.md) |
+| `parameters` | no | What a composition may configure on this module, so the choice is declared data rather than a literal in GSC: up to 32 objects `{name, type, default, meaning, values?, range?}`. `name` is lowercase letters, digits and underscore, at most 32, and unique in the module; `type` is `bool`, `int` or `string`; `values` (1 to 32 allowed values of that type) or `range` (`[min, max]`, integers, `int` only) narrows it, and a declaration names at most one of the two; `default` satisfies whatever it declares; `meaning` says what the parameter does in at most 400 characters. A string value is at most 120 characters. A seed payload may declare them too. A composition sets them per member, and the plan and build receipt record the effective map (below) |
 
 Origin and donor are two facts, and a card shows both: "ICR-1 (Black Ops III)" with "from Chronicles
 Reawakened v3.5 (Kosmoes), converted for T6" under it. A module whose origin is in doubt says
@@ -276,7 +281,7 @@ builder the plan lists `adapter_builder` as unavailable and the build refuses be
 | `origin`, `donor` | no | The same two facts as on a module, for a pack that is one thing ("Ghosts weapons on TranZit" has origin `ghosts`); a pack of mixed origins leaves them out and the plan carries each member's own |
 | `base` | yes | The base token every module must declare |
 | `map` | yes | One concrete map id. A composition is planned for one map; plan another composition for another map |
-| `modules` | yes | 1 to 128 members. A member is a relative path (forward slashes, from the composition's directory) to a directory holding `module.json`, **or** a directory holding another `composition.json` (its modules are flattened in; it must declare the same base and map; nesting is bounded), **or** an object: `{"path": …, "role": "base"}` marks the one member the others attach to; `{"name": "<github-owner>/<id>", "commit": "<40 hex>", "path": …}` records a published module pinned at a commit, with the local directory it was fetched into. Listing order does not matter; the plan orders by dependencies, base members first |
+| `modules` | yes | 1 to 128 members. A member is a relative path (forward slashes, from the composition's directory) to a directory holding `module.json`, **or** a directory holding another `composition.json` (its modules are flattened in; it must declare the same base and map; nesting is bounded), **or** an object: `{"path": …, "role": "base"}` marks the one member the others attach to; `{"name": "<github-owner>/<id>", "commit": "<40 hex>", "path": …}` records a published module pinned at a commit, with the local directory it was fetched into; `{"path": …, "parameters": {"cadence": "timer"}}` sets that member's declared parameters (below), and a member that is a nested composition takes none. Listing order does not matter; the plan orders by dependencies, base members first |
 | `loads` | no | Relative paths to fastfiles the linker loads for asset lookup: the base's zones. They may live beside the pack |
 | `zone_header` | no | Linker metadata lines the base needs at the top of the zone (Zombies Declassified Beta 2 needs its `>level.ipak_read` rows); at most 32 |
 | `budget` | no | Whole-number ceilings for the summed resource contracts. Absent means the totals are reported and not enforced. A number here is a decision you made after measuring, not a guess |
@@ -308,9 +313,9 @@ row's, and a message with more rows says how many follow. Kinds: `probe`, `test_
 `duplicate_id`, `missing_dependency` (with `dependency` and `by`), `conflict`,
 `unqualified_base` and `unqualified_map` (with `declared` and `wanted`), `private_payload`,
 `cycle`, `budget` (with `resource`, `total`, `bound`), `replacement` (with `collisions`),
-`service` (below) and `checks` (with `failed`, the ids of the failed check rows). A caller that
-brings dependencies along reads every `missing_dependency` row at once instead of re-planning
-per message.
+`parameters` (below, with `parameter`), `service` (below) and `checks` (with `failed`, the ids
+of the failed check rows). A caller that brings dependencies along reads every
+`missing_dependency` row at once instead of re-planning per message.
 
 **Some collisions are a missing service, not a decision.** Two members that each ship their own
 copy of a map-owned table (`animstatedefs/`, `animtrees/`, `aitype/`), two banks that carry the
@@ -336,6 +341,49 @@ plan also reads each target's location table as a hashed input and reports under
 per target, which members' declared `placements` needs the table satisfies, which fall back and
 which are refused; a refused need fails the plan as a `placements:<target>` check. No provider
 module is generated. Format and rules: [target-sets.md](target-sets.md).
+
+### Declared parameters: what a composition configures, and the `parameters` refusal
+
+A module declares the parameters a composition may set; a composition sets them per member; the
+plan resolves the two into one effective map. Nothing else: the declaration is the whole
+contract, and a parameter is a fact about the composition, never evidence about the game.
+
+In `module.json`, what may be set:
+
+```json
+"parameters": [
+  {"name": "cadence", "type": "string", "values": ["round", "timer"], "default": "round",
+   "meaning": "round: reassign when a round ends. timer: wait between cycles."},
+  {"name": "min_wait", "type": "int", "range": [5, 600], "default": 90,
+   "meaning": "Timer cadence lower bound in seconds; ignored under the round cadence."}
+]
+```
+
+In `composition.json`, what one member sets:
+
+```json
+"modules": [{"path": "../rotation", "parameters": {"cadence": "timer", "min_wait": 30}}]
+```
+
+Every plan row in `plan.json`, every `result.modules[]` row and every build receipt's
+`modules[]` row carries `parameters`: the **effective map**, every declared default with what
+the member set over it. A member that sets nothing is planned with the defaults; a module that
+declares none carries an empty map. A build therefore records which configuration it is, and two
+builds of one composition that differ only in a parameter are told apart by their receipts.
+
+A name the member's module does not declare, or a value that does not satisfy that name's
+declared type, `values` or `range`, is a refusal of kind `parameters`. The row names the member,
+the parameter and the rule (`modules`, `parameter`, `field`, `message`), and every broken
+setting in the composition is reported in one run, like every other refusal. The map's own shape
+(names, at most 32 entries, scalar values) is checked in the composition before any module is
+read. A malformed declaration — a default outside its own `range`, `values` on a `bool`, two
+rows for one name, a 33rd parameter — is a declaration error, refused by `pat module inspect`
+and by plan and build through the same path as any other declaration defect.
+
+The package bytes do not change. No consumer reads a parameter yet: this is the contract and its
+checks, so that a module whose behaviour a pack chooses has somewhere to declare the choice and
+a plan can refuse a wrong one. A module that acts on a parameter still reads it from its own
+source; the route that hands the effective map to a generated script is not in this version.
 
 Proof of a successful plan: `ok: true`, `result.modules[]` in dependency order with each
 member's `payload` (`recipe` or `seed`) and `role`, `result.base_member`, `result.decisions`,
@@ -483,6 +531,8 @@ anyone's bytes.
   record the crash signature per `docs/playbooks/diagnose-a-crash.md`.
 - No map patches, client-script injection or shared core services beyond what a recipe or a
   seed already carries.
+- No consumer for declared `parameters`: the effective map is checked and recorded in the plan
+  and the build receipt, and no packaged byte depends on it.
 
 ### Unqualified targets
 
