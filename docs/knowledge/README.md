@@ -44,3 +44,17 @@ calls against the rows of that script's own VM to raise its `externals:` rows. S
 `clientscripts/...`, never against a `maps/...` path. The server rows are the complete exports of
 the seven scripts named there; the client rows carry only the names proven so far, so a client call
 the table does not hold stays `not_counted` rather than refused.
+
+## The shipped JSON is generator output, not a source file
+
+`builtins.json`, `engine-limits.json`, `crash-signatures.json`, `occupancy.json`,
+`map-scripts.json` and `native-weapons.json` under `src/plutonium_agent_toolkit/knowledge/` are
+written by the maintainer's T6 knowledge generator from the shipped Zombies zones and copied into
+this package whole. Do not edit a row in them, however small and however right the fix: the next
+export overwrites it, silently, and then ships the reverted row as fresh output — which has already
+happened four times. Fix the generator's own sources and re-export; if you are not the maintainer,
+open an issue naming the file, the row and what it should say, and the change lands with the next
+export. Each of the six carries a top-level `exported_by` and `exported_at`, and
+`tests/test_knowledge_export_contract.py` fails when one of them changes without its marker moving.
+`stock-exports.json` ships beside them, is not an export product and carries no marker.
+

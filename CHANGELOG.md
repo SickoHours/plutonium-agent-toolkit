@@ -7,6 +7,20 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- The shipped T6 knowledge states that it is generated and a test enforces it. Four separate pull
+  requests had edited rows straight into `src/plutonium_agent_toolkit/knowledge/`: each edit was
+  right on its own terms and every one of them would have been reverted by the next export, which
+  would then have shipped the reverted rows as fresh output. The six files the maintainer's
+  generator writes (`builtins.json`, `engine-limits.json`, `crash-signatures.json`,
+  `occupancy.json`, `map-scripts.json`, `native-weapons.json`) now carry a top-level `exported_by`
+  and `exported_at`, and `tests/test_knowledge_export_contract.py` checks the marker is present and
+  well-formed on each, that one generator name covers all six, and — where git history is available
+  — that any change to one of them comes with a new marker, which a hand edit does not. The marker
+  on the shipped copies records the 2026-09-15 export they came from. `stock-exports.json` is not an
+  export product, carries no marker and is excluded by name. `docs/knowledge/README.md` says the
+  rule and where a correction goes instead. The release workflow checks out full history so the test
+  can compare against the commit before a change. Offline unit tests on Linux; no data row changed.
+
 - `module plan` and `module build` refuse a client script that registers a mystery-box weapon no
   member of the pack provides (`box-registration:<script>`). A `.csc` that calls
   `addzombieboxweapon` on a `_zm` name absent from every member's `provides.weapons` faults the

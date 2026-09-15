@@ -17,7 +17,11 @@ jobs:
     name: Verify tag on Windows
     runs-on: windows-latest
     steps:
+      # Full history: the knowledge export contract test compares a changed knowledge file with the
+      # commit before it, which a shallow checkout does not carry.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
