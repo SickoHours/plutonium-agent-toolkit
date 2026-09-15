@@ -110,12 +110,12 @@
    "source": "docs/knowledge/crashes.md"
   },
   {
-   "cause": "The same missing per-player state, read as a container instead of a boolean; the two lines are the same defect reported by two different reads",
+   "cause": "The VM read an undefined value as a container. Where it was found this was the same missing per-player state as the cast above, but the line does not name its site, so any script can raise it",
    "class": "script-error",
-   "fix": "Same fix as the cast above; treat the two lines as one class when reading a crash",
+   "fix": "Read the `last gsc pos` line beside it to name the script and function first; where the site is a per-player state read, backfill it as for the cast above",
    "id": "gsc-undefined-not-array",
-   "log_text": "undefined is not an array, string, or vector in _visionset_mgr::monitor, then an access violation",
-   "regex": "undefined is not an array, string, or vector",
+   "log_text": "last gsc error message 'undefined is not an array, string, or vector' in the Plutonium crash text; seen in _visionset_mgr::monitor, then an access violation",
+   "regex": "last gsc error message\\s+'undefined is not an array, string, or vector'",
    "source": "docs/knowledge/crashes.md"
   },
   {
@@ -151,7 +151,7 @@
    "fix": "`map-scripts:<script>` rows in the plan refuse an include or qualified call into a path the target map lacks; port the dependency or leave the member out",
    "id": "map-script-not-carried",
    "log_text": "COM_ERROR ... Unresolved external naming a stock script the target map does not carry (_zm_perk_divetonuke on Beta 2 Der Riese)",
-   "regex": "Unresolved external\\s*:.*",
+   "regex": "Unresolved external\\s*:\\s*\"?(?:maps[\\\\/]mp[\\\\/][A-Za-z0-9_\\\\/]+|_zm_[A-Za-z0-9_]+)",
    "source": "docs/knowledge/crashes.md"
   },
   {

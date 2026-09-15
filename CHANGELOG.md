@@ -18,7 +18,13 @@ Every entry states what shipped, on which platform it was verified, and what rem
   `_zm_powerups::powerup_hud_monitor` and `_audio::monitor_player_sprint`, which were seen
   reading the same state. `crash-signatures.json` is regenerated from the page, which also
   refreshes the cause and fix text of eight rows the page had moved ahead of and adds
-  `map-script-not-carried`.
+  `map-script-not-carried`. Both are anchored on the engine's own wording rather than a bare
+  substring, because `signature()` evaluates each row against a line on its own: the
+  `undefined is not an array` row requires the crash text's `last gsc error message '...'` prefix,
+  so the generic VM error from any script is not handed its cause and fix, and
+  `map-script-not-carried` requires the unresolved name to be a stock script path rather than a
+  bare function with a parameter count, so it no longer shadows `link-unresolved-external` on
+  that row's own log text.
 
 - The plan is the truth for the whole shelf. Adapter recipes are the third module payload: a
   `recipe.json` cut by a workspace builder (`foundation`, `map`, `module`, declared weapons,
