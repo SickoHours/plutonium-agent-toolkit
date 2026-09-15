@@ -46,6 +46,7 @@ def load(args,job):
         if m['game']!=composition['game']:
             raise Failure(INPUT_INVALID,'Member targets a different game',field=f"/modules/{index}/game")
     resolved=comp.resolve(composition,modules)
+    if resolved['refusals']:raise comp.refuse(resolved['refusals'],'; '.join(sorted({r['kind'] for r in resolved['refusals']})),'Read details.refusals.')
     members=[];contracts={}
     by_id={m['id']:m for m in modules}
     declaration_index={m['id']:index for index,m in enumerate(modules)}

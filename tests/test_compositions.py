@@ -658,12 +658,16 @@ class BaseOwnedTests(SeedFixture):
         undecided = {u["collision"] for u in row["result"]["undecided"]}
         self.assertIn("asset:soundbank,shared.all", undecided)
         self.assertIn("weapons:halo_penetrator_zm", undecided)
-        # A provides registration is never base-owned, even when the base carries the name.
+        # A provides registration is never base-owned: a WeaponDef the base already carries is
+        # the native-WeaponDef rule (an imported definition overriding the map's own crashes
+        # precache), refused as a service row for each member that registers it.
         listing.write_text("weapon, halo_penetrator_zm\nimage, *shared_specular\n")
         comp = self.composition(["pen_a", "pen_b"], name="stock_owned5_test", base_owned=["../base/common_zm-list.txt"])
         code, row = invoke(["module", "plan", str(comp), "--output", self.out()])
-        self.assertEqual(code, 0, row)
-        self.assertIn("weapons:halo_penetrator_zm", {u["collision"] for u in row["result"]["undecided"]})
+        self.assertEqual(code, 1, row)
+        self.assertEqual([(r["kind"], r["what"], r["modules"]) for r in row["details"]["refusals"]],
+                         [("service", "native WeaponDef", ["pen_a"]), ("service", "native WeaponDef", ["pen_b"])])
+        self.assertNotIn("weapons:halo_penetrator_zm", {u["collision"] for u in row["details"]["undecided"]})
         listing.write_text("Loaded zone \"common_zm\" (T6)\nimage, *shared_specular\ntechniqueset, ,mc_lit_sm_r0c0n0s0_zqq1fze7\nimage, ,*ref_only\n")
         self.assertNotIn("asset:image,*shared_specular", undecided)
         # A recorded decision for a base-owned name still wins, verbatim.

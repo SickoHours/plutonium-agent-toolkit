@@ -152,6 +152,12 @@ class PoolAccounting(unittest.TestCase):
 
 class MapScriptExternals(unittest.TestCase):
     """Beta 2 dropped _zm_perk_divetonuke from Der Riese; a module including it links, then COM_ERRORs at load."""
+    def test_a_script_another_pack_member_provides_is_carried(self):
+        src='#include maps\\mp\\halo\\cr35_buildables;\nmain(){ maps\\mp\\halo\\cr35_buildables::register(); }\n'
+        out=checks.map_script_externals('scripts/zm/acid.gsc',src,'zm_factory','dlc5-beta2')
+        self.assertEqual(out[0]['outcome'],'failed')
+        out=checks.map_script_externals('scripts/zm/acid.gsc',src,'zm_factory','dlc5-beta2',provided={'maps/mp/halo/cr35_buildables.gsc'})
+        self.assertEqual(out[0]['outcome'],'passed')
     def test_include_of_a_script_the_map_lacks_fails(self):
         src='#include maps\\mp\\zombies\\_zm_perk_divetonuke;\nmain(){ maps\\mp\\zombies\\_zm_perk_divetonuke::enable_divetonuke_perk_for_level(); }\n'
         out=checks.map_script_externals('scripts/zm/phd.gsc',src,'zm_factory','dlc5-beta2')

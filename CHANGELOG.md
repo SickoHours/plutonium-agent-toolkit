@@ -7,6 +7,27 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- The plan is the truth for the whole shelf. Adapter recipes are the third module payload: a
+  `recipe.json` cut by a workspace builder (`foundation`, `map`, `module`, declared weapons,
+  bank, strings, loose scripts, rooted rawfiles) is read by `module plan` as seed-like roots for
+  pools, footprint, collisions and `provides`, and `module build` runs the workspace builder
+  (`PAT_BACKEND_ADAPTER_BUILDER` or `--workspace`'s `toolchain/pat-adapter-build`) as a backend,
+  reads the produced package back and links against it as a seed. `pool:sound-assets` is a
+  counted bound: the listing's `.all` banks plus one localized companion each, on both sides,
+  failed above 32 with the banks named. Replace-type collisions refuse as kind `service` instead
+  of asking for an owner: two copies of a map-owned table (`animstatedefs/`, `animtrees/`,
+  `aitype/`), one sound alias in two banks, or a WeaponDef the base already carries; with
+  `--workspace` the row names the shelf module that owns the thing, and `provides.aliases` is
+  the new declaration kind a bank module uses to say so. Every refusal is reported in one run
+  under `details.refusals[]` with `kind`, `modules` and `field`; the first row keeps the
+  envelope's code, message and hint. The `map-scripts` check counts scripts another pack member
+  provides as carried. Verified by offline unit tests on Linux against the fake backends (a fake
+  adapter builder included) and read-only against a private 343-module workspace: every module
+  plans to an accepted plan or a typed refusal, a 62-member Der Riese cart keeps its pool
+  numbers, a 20-gum cart is refused naming the shared alias and its bank module, and Wave Gun
+  plus Winter's Howl is refused naming the animation service. Nothing was built, installed or
+  played; native Windows remains unverified.
+
 - Count the pools that refused two real packs at mod selection before the engine does. Two
   engine-limit rows join the shipped table: `rawfile-assets` (1,024; the map's rawfiles plus
   every recipe script, delivered `rawfile` row and seed `rawfile,` root) and `image-bank-slots`

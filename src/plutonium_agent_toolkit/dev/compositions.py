@@ -86,7 +86,12 @@ DISTRIBUTIONS = ("source", "seed", "private")
 ORIGIN_UNVERIFIED = "unverified"
 MAX_DONOR = 400
 PROVIDES_KINDS = ("weapons", "perks", "gobblegums", "powerups", "equipment", "localize", "soundbanks", "scripts", "models", "effects",
-                  "rawfiles")
+                  "rawfiles", "aliases")
+# Zone paths that belong to the map, never to one member: a per-map animation state table, its
+# animation tree and the AI type scripts that read them. Two members that each ship their own
+# copy are not asking for an owner; the game needs one merged copy, a service module.
+MAP_OWNED_PREFIXES = ("animstatedefs/", "animtrees/", "aitype/")
+MAX_SHELF_ENTRIES = 4096
 # A whole pack declared as one seed lists every asset it embeds; a Beta-era pack carries several
 # hundred models and weapons, so a declaration that narrows provides by copying the manifest block
 # needs room above the per-kind count a hand-written declaration would ever reach.
@@ -639,11 +644,22 @@ def load_declaration(directory: Path, job: Job) -> dict:
     declaration = validate_declaration_metadata(data, where=f"module.json in {directory.name}")
     mid = declaration["id"]
     distribution = declaration["distribution"]
-    recipe = seed = None
+    recipe = seed = adapter = None
     if declaration["payload"] == "recipe":
         recipe = projects._rel(declaration["payload_path"], directory)
         if recipe.is_symlink() or not recipe.is_file():
             raise Failure(INPUT_MISSING, f"{mid}: recipe is missing: {data['recipe']}")
+        # The third payload: a donor-converted module whose recipe a workspace builder cuts.
+        # Decided by the recipe's own shape so a declaration needs no new field (adapters.py).
+        from . import adapters
+        if recipe.stat().st_size <= adapters.MAX_RECIPE_BYTES:
+            try:
+                shape = json.loads(recipe.read_text(encoding="utf-8"))
+            except (ValueError, OSError):
+                shape = None
+            if adapters.is_adapter_recipe(shape):
+                adapter = adapters.load_recipe(recipe, directory, job, mid)
+                recipe = None
     else:
         seed_rel = declaration["payload_path"]
         if distribution == "private" and not (directory / seed_rel).is_file():
@@ -651,6 +667,18 @@ def load_declaration(directory: Path, job: Job) -> dict:
         else:
             seed = seeds.load_manifest(directory, seed_rel, job, mid, allow_missing_files=distribution == "private")
     provides = declaration["provides"]
+    if adapter is not None:
+        # The recipe's declared outputs are the fact for an adapter, like a seed's manifest: a
+        # declaration may narrow them and never add a name the recipe does not deliver.
+        for pkind, names in provides.items():
+            if pkind not in MANIFEST_KINDS or pkind == "rawfiles" and not adapter["rawfiles"]:
+                continue
+            listed = set(adapter["provides"].get(pkind, []))
+            if not set(names) <= listed:
+                raise Failure(INPUT_INVALID, f"{mid}: provides.{pkind} names {sorted(set(names) - listed)} which the adapter recipe does not deliver",
+                              "An adapter recipe's weapons, soundbank, localize and rawfiles are what its build delivers; narrow the declaration, never widen it.")
+        for pkind, names in adapter["provides"].items():
+            provides.setdefault(pkind, list(names))
     if seed and not seed.get("private"):
         # The manifest is the fact; a declaration may narrow it, never contradict it.
         for pkind, names in provides.items():
@@ -664,7 +692,7 @@ def load_declaration(directory: Path, job: Job) -> dict:
             provides.setdefault(pkind, list(names))
     declaration.pop("payload")
     declaration.pop("payload_path")
-    return declaration | {"directory": directory, "recipe": recipe, "seed": seed, "declaration": src}
+    return declaration | {"directory": directory, "recipe": recipe, "seed": seed, "adapter": adapter, "declaration": src}
 
 
 # ----- compositions ----------------------------------------------------------------------
@@ -684,14 +712,15 @@ def _base_owned(listings: list[Path]) -> set[str]:
         if path.stat().st_size > 64 * 1024 * 1024:
             raise Failure(INPUT_LIMIT, f"Base listing is larger than 64 MiB: {path.name}")
         rows = 0
-        for line in path.open(encoding="utf-8", errors="replace"):
-            m = LISTING_ROW.match(line.strip())
-            if not m:
-                continue
-            rows += 1
-            if rows > 200_000:
-                raise Failure(INPUT_LIMIT, f"Base listing has more than 200000 rows: {path.name}")
-            names.add(f"{m.group(1)},{m.group(2).strip()}".casefold())
+        with path.open(encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                m = LISTING_ROW.match(line.strip())
+                if not m:
+                    continue
+                rows += 1
+                if rows > 200_000:
+                    raise Failure(INPUT_LIMIT, f"Base listing has more than 200000 rows: {path.name}")
+                names.add(f"{m.group(1)},{m.group(2).strip()}".casefold())
     return names
 
 
@@ -882,46 +911,94 @@ def _order(modules: list[dict]) -> list[str]:
     return order
 
 
+REFUSAL_KINDS = ("probe", "test_only", "duplicate_id", "missing_dependency", "conflict", "unqualified_base", "unqualified_map",
+                 "private_payload", "cycle", "budget", "replacement", "service", "checks")
+
+
+def _refusal(kind: str, message: str, hint: str = "", modules=(), field: str | None = None, **extra) -> dict:
+    row = {"kind": kind, "modules": sorted(set(modules)), "message": message, "hint": hint, "field": field}
+    row.update(extra)
+    return row
+
+
+def refuse(refusals: list[dict], summary: str, hint: str, **details) -> Failure:
+    """One failure for every refusal a plan found. The first refusal's own code, message and
+    hint lead so a caller that reads only the top of the envelope sees what it always saw; the
+    whole list travels under ``details.refusals`` for callers that act on data."""
+    first = refusals[0]
+    code = INPUT_LIMIT if first["kind"] == "budget" else INPUT_MISSING if first["kind"] == "private_payload" else INPUT_INVALID
+    message = first["message"] if len(refusals) == 1 else f"{first['message']} (+{len(refusals) - 1} more refusal(s): {summary})"
+    extra = {"refusals": refusals, **details}
+    if first.get("field"):
+        extra["field"] = first["field"]
+    for key in ("collisions",):
+        if first.get(key) is not None:
+            extra.setdefault(key, first[key])
+    return Failure(code, message, first["hint"] or hint, **extra)
+
+
 def resolve(comp: dict, modules: list[dict], allow_unqualified: bool = False) -> dict:
+    """Dependency order, fit, private payloads and budget. Every refusal is collected and
+    returned under ``refusals`` (kinds in ``REFUSAL_KINDS``) so a caller reports all of them in
+    one run; nothing raises here."""
+    refusals: list[dict] = []
     for i,m in enumerate(modules):
         if "test-only" in m["tags"] and comp["name"].endswith(("_pack","_pub")):
-            raise Failure(INPUT_INVALID,"Test-only member cannot reach a release profile",field=f"/modules/{i}")
+            refusals.append(_refusal("test_only", "Test-only member cannot reach a release profile", modules=[m["id"]], field=f"/modules/{i}"))
     ids = [m["id"] for m in modules]
     if len(set(ids)) != len(ids):
         duplicates = sorted({i for i in ids if ids.count(i) > 1})
-        raise Failure(INPUT_INVALID, f"Two members declare the same id: {duplicates}",
-                      "A module appears once in a pack, including through nested compositions.")
+        refusals.append(_refusal("duplicate_id", f"Two members declare the same id: {duplicates}",
+                                 "A module appears once in a pack, including through nested compositions.", modules=duplicates))
     known = set(ids)
     unqualified = []
     for m in modules:
         for dep in m["dependencies"]:
             if dep not in known:
-                raise Failure(INPUT_INVALID, f"{m['id']} depends on {dep}, which is not in the composition",
-                              "Add the module directory that declares that id to the composition's modules list.")
+                refusals.append(_refusal("missing_dependency", f"{m['id']} depends on {dep}, which is not in the composition",
+                                         "Add the module directory that declares that id to the composition's modules list.",
+                                         modules=[m["id"], dep], dependency=dep, by=m["id"]))
         for other in m["conflicts"]:
             if other in known:
-                raise Failure(INPUT_INVALID, f"{m['id']} declares a conflict with {other}; both are in the composition")
+                refusals.append(_refusal("conflict", f"{m['id']} declares a conflict with {other}; both are in the composition", modules=[m["id"], other]))
         base_mismatch = comp["base"] not in m["bases"]
         map_mismatch = "*" not in m["maps"] and comp["map"] not in m["maps"]
         if allow_unqualified and (base_mismatch or map_mismatch):
             unqualified.append({"id": m["id"], "declared_bases": m["bases"], "declared_maps": m["maps"], "base": comp["base"], "map": comp["map"]})
         if base_mismatch and not allow_unqualified:
-            raise Failure(INPUT_INVALID, f"{m['id']} is declared for bases {m['bases']}, not for {comp['base']!r}",
-                          "Build the module on a base it declares, or extend its declaration after testing it there.")
+            refusals.append(_refusal("unqualified_base", f"{m['id']} is declared for bases {m['bases']}, not for {comp['base']!r}",
+                                     "Build the module on a base it declares, or extend its declaration after testing it there.",
+                                     modules=[m["id"]], declared=m["bases"], wanted=comp["base"]))
         if map_mismatch and not allow_unqualified:
-            raise Failure(INPUT_INVALID, f"{m['id']} is declared for maps {m['maps']}, not for {comp['map']!r}",
-                          "Qualify the module on that map first (build alone, load, play, record the verdict), then extend maps.")
+            refusals.append(_refusal("unqualified_map", f"{m['id']} is declared for maps {m['maps']}, not for {comp['map']!r}",
+                                     "Qualify the module on that map first (build alone, load, play, record the verdict), then extend maps.",
+                                     modules=[m["id"]], declared=m["maps"], wanted=comp["map"]))
         if m["seed"] and m["seed"].get("private"):
-            raise Failure(INPUT_MISSING, f"{m['id']} is distribution private and its seed package is not on this machine (missing: {m['seed'].get('missing')})",
-                          "Others can read what a private module provides from its manifest; building a pack with it needs the package beside the manifest.")
-    order = _order(modules)
+            refusals.append(_refusal("private_payload", f"{m['id']} is distribution private and its seed package is not on this machine (missing: {m['seed'].get('missing')})",
+                                     "Others can read what a private module provides from its manifest; building a pack with it needs the package beside the manifest.",
+                                     modules=[m["id"]], missing=m["seed"].get("missing")))
+    order: list[str] = []
+    try:
+        # Only the members whose dependencies are present can be ordered; a missing dependency
+        # is already a refusal above and must not also read as a cycle.
+        orderable = list(modules)
+        while True:
+            present = {m["id"] for m in orderable}
+            kept = [m for m in orderable if set(m["dependencies"]) <= present]
+            if len(kept) == len(orderable):
+                break
+            orderable = kept
+        order = _order(orderable)
+    except Failure as exc:
+        refusals.append(_refusal("cycle", exc.message, modules=[m["id"] for m in modules if m["id"] in exc.message]))
     totals = {field: sum(m["resource_contract"][field] for m in modules) for field in CONTRACT_FIELDS}
     if comp["budget"] is not None:
         for field in CONTRACT_FIELDS:
             if totals[field] > comp["budget"][field]:
-                raise Failure(INPUT_LIMIT, f"Resource budget exceeded: {field} {totals[field]} > {comp['budget'][field]}",
-                              "Raise the budget deliberately after measuring, or leave a module out; the sum counts every module.")
-    return {"order": order, "resource_totals": totals, "unqualified": unqualified}
+                refusals.append(_refusal("budget", f"Resource budget exceeded: {field} {totals[field]} > {comp['budget'][field]}",
+                                         "Raise the budget deliberately after measuring, or leave a module out; the sum counts every module.",
+                                         field=f"/budget/{field}", resource=field, total=totals[field], bound=comp["budget"][field]))
+    return {"order": order, "resource_totals": totals, "unqualified": unqualified, "refusals": refusals}
 
 
 def collisions(modules: list[dict], loaded: dict[str, tuple], decisions: list[dict], base_owned: set[str] | None = None) -> tuple[list[dict], list[dict], list[dict]]:
@@ -943,6 +1020,13 @@ def collisions(modules: list[dict], loaded: dict[str, tuple], decisions: list[di
                 kind, name = row.split(",", 1)
                 if kind == "rawfile":
                     file_owners.setdefault(name.casefold(), []).append((m["id"], "seed:" + m["seed"]["files"]["mod.ff"].name))
+        elif m.get("adapter"):
+            for script in m["adapter"]["scripts"]:
+                file_owners.setdefault(script["target"].casefold(), []).append((m["id"], sha256_file(script["source"])))
+            for row in m["adapter"]["embedded"]:
+                kind, name = row.split(",", 1)
+                if kind == "rawfile" and name.casefold() not in {s["target"].casefold() for s in m["adapter"]["scripts"]}:
+                    file_owners.setdefault(name.casefold(), []).append((m["id"], "adapter:" + m["id"]))
     name_owners: dict[str, list[str]] = {}
     for m in modules:
         for pkind, names in m["provides"].items():
@@ -952,11 +1036,11 @@ def collisions(modules: list[dict], loaded: dict[str, tuple], decisions: list[di
                 continue
             for name in names:
                 name_owners.setdefault(f"{pkind}:{name}", []).append(m["id"])
-        if m["seed"] and not m["seed"].get("private"):
-            for row in m["seed"]["embedded"]:
-                kind, name = row.split(",", 1)
-                if kind in ("weapon", "soundbank", "xmodel", "xanim", "material", "fx", "image"):
-                    name_owners.setdefault(f"asset:{row}", []).append(m["id"])
+        embedded_rows = m["seed"]["embedded"] if m["seed"] and not m["seed"].get("private") else m["adapter"]["embedded"] if m.get("adapter") else []
+        for row in embedded_rows:
+            kind, name = row.split(",", 1)
+            if kind in ("weapon", "soundbank", "xmodel", "xanim", "material", "fx", "image"):
+                name_owners.setdefault(f"asset:{row}", []).append(m["id"])
     recorded = {d["collision"].casefold(): d for d in decisions}
     decided, undecided = [], []
     for target, owners in sorted(file_owners.items()):
@@ -964,7 +1048,7 @@ def collisions(modules: list[dict], loaded: dict[str, tuple], decisions: list[di
             continue
         ids = [o for o, _ in owners]
         digests = {d for _, d in owners}
-        if len(digests) == 1 and not any(d.startswith("seed:") for d in digests):
+        if len(digests) == 1 and not any(d.startswith(("seed:", "adapter:")) for d in digests):
             decided.append({"collision": target, "kind": "file", "modules": ids, "resolution": "identical bytes; one copy is packed", "owner": ids[0]})
             continue
         decision = recorded.get(target)
@@ -1004,13 +1088,127 @@ def collisions(modules: list[dict], loaded: dict[str, tuple], decisions: list[di
     return decided, undecided, refused
 
 
-def _backends(compiled: list) -> list[dict]:
+def _aliases_of(m: dict, loaded: dict[str, tuple]) -> dict[str, list[str]]:
+    """Sound alias names a member's banks carry, by bank: an adapter's alias table when its
+    prepared inputs are on this machine, a recipe's soundbank row read from its alias CSV, or
+    the declaration's own ``provides.aliases``. A seed manifest carries none, so a seed's bank
+    is never judged here."""
+    out: dict[str, list[str]] = {}
+    declared = list(m.get("provides", {}).get("aliases", []))
+    if m.get("adapter") and m["adapter"]["soundbank"]:
+        out[m["adapter"]["soundbank"]] = list(m["adapter"]["aliases"])
+    elif m["recipe"] is not None and m["id"] in loaded:
+        from . import adapters
+        for source, _target, asset_type, name in loaded[m["id"]][2]:
+            if asset_type == "soundbank" and Path(source).suffix.lower() == ".csv":
+                out[name] = adapters.read_aliases(Path(source), m["id"])
+    if declared:
+        banks = list(m.get("provides", {}).get("soundbanks", [])) or ["(declared)"]
+        for bank in banks:
+            out.setdefault(bank, [])
+            out[bank] = sorted(set(out[bank]) | set(declared))
+    return out
+
+
+def shelf_services(workspace: str | None) -> list[dict]:
+    """Declarations under ``<workspace>/modules`` that can own a shared thing: what each provides
+    by kind, read from ``module.json`` only (no payload, no recipe). Bounded; unreadable
+    declarations are skipped."""
+    if not workspace:
+        return []
+    root = Path(workspace).expanduser() / "modules"
+    if not root.is_dir():
+        return []
+    rows = []
+    for index, child in enumerate(sorted(root.iterdir())):
+        if index >= MAX_SHELF_ENTRIES:
+            break
+        path = child / "module.json"
+        if child.is_symlink() or not path.is_file() or path.is_symlink():
+            continue
+        try:
+            if path.stat().st_size > MAX_DECLARATION_BYTES:
+                continue
+            data = json.loads(path.read_text(encoding="utf-8"))
+            meta = validate_declaration_metadata(data)
+        except (OSError, ValueError, Failure):
+            continue
+        rows.append({"id": meta["id"], "directory": child.name, "tags": meta["tags"], "provides": meta["provides"]})
+    return rows
+
+
+def _service_for(services: list[dict], kind: str, name: str) -> dict | None:
+    """The shelf module that owns ``name``: one that provides it and registers no weapon of its
+    own (a weapon module shipping its own copy of a shared table is the problem, not the
+    service). A ``shared-service`` tag wins among candidates."""
+    key = name.casefold()
+    candidates = [row for row in services if any(n.casefold() == key for n in row["provides"].get(kind, [])) and not row["provides"].get("weapons")]
+    candidates.sort(key=lambda row: (0 if "shared-service" in row["tags"] else 1, row["id"]))
+    return candidates[0] if candidates else None
+
+
+def service_refusals(modules: list[dict], loaded: dict[str, tuple], undecided: list[dict], base_owned: set[str], services: list[dict]) -> list[dict]:
+    """Collisions that are not an owner decision but a missing service (docs/MODULES.md):
+
+    - two members ship differing copies of a map-owned table (``animstatedefs/``, ``animtrees/``,
+      ``aitype/``): the map needs one merged copy;
+    - two members' banks carry the same sound alias: the alias needs one bank module;
+    - a member registers a WeaponDef the base zones already carry (``base_owned``): the native
+      definition stays and the module declares only its new names.
+
+    Each row names the members, the thing, and the shelf module that provides it when one
+    does (``service``), so the fix is a dependency edit, not a decision."""
+    rows = []
+    for row in undecided:
+        if row["kind"] != "file":
+            continue
+        target = row["collision"]
+        if target.startswith(MAP_OWNED_PREFIXES):
+            owner = _service_for(services, "rawfiles", target) or _service_for(services, "scripts", target)
+            owner = owner if owner and owner["id"] not in row["modules"] else None
+            rows.append({"kind": "service", "collision": target, "modules": row["modules"], "what": "map-owned table",
+                         "message": f"{target} is a map-owned table that {', '.join(row['modules'])} each replace with their own copy; it needs one merged owner"
+                                    + (f": depend on {owner['id']} and ship no copy" if owner else "; no module on the shelf provides it yet"),
+                         "service": owner["id"] if owner else None, "hint": "A file two members would both replace is owned by a service module, never by either member."})
+    alias_owners: dict[str, list[tuple[str, str]]] = {}
+    for m in modules:
+        for bank, aliases in _aliases_of(m, loaded).items():
+            for alias in aliases:
+                alias_owners.setdefault(alias, []).append((m["id"], bank))
+    for alias, owners in sorted(alias_owners.items()):
+        ids = sorted({mid for mid, _ in owners})
+        if len(ids) < 2:
+            continue
+        banks = sorted({bank for _, bank in owners})
+        owner = _service_for(services, "aliases", alias)
+        owner = owner if owner and owner["id"] not in ids else None
+        rows.append({"kind": "service", "collision": "alias:" + alias, "modules": ids, "what": "sound alias", "banks": banks,
+                     "message": f"sound alias {alias} is carried by {len(banks)} banks ({', '.join(banks)[:400]}) from {', '.join(ids)[:400]}; one bank module must own it"
+                                + (f": depend on {owner['id']} and ship no bank" if owner else "; no module on the shelf provides it yet"),
+                     "service": owner["id"] if owner else None, "hint": "One alias, one bank: the members depend on the bank module and ship none of their own."})
+    if base_owned:
+        for m in modules:
+            native = sorted(w for w in m.get("provides", {}).get("weapons", []) if f"weapon,{w}".casefold() in base_owned)
+            if native:
+                rows.append({"kind": "service", "collision": "weapons:" + ",".join(native), "modules": [m["id"]], "what": "native WeaponDef", "weapons": native,
+                             "message": f"{m['id']} registers WeaponDef(s) the base zones already carry: {', '.join(native)[:400]}; keep the native definition and declare only new names",
+                             "service": None, "hint": "An imported WeaponDef that overrides the map's own crashes precache; drop it from the recipe's weapons and provides."})
+    return rows
+
+
+def _backends(compiled: list, adapters_present: bool = False, workspace: str | None = None) -> list[dict]:
     checks = []
     for name in (["gsc"] if compiled else []) + ["linker", "unlinker"]:
         try:
             checks.append({"id": name, "argv": executable(name), "available": True})
         except Failure as exc:
             checks.append({"id": name, "available": False, "message": exc.message})
+    if adapters_present:
+        from . import adapters
+        try:
+            checks.append({"id": "adapter_builder", "argv": adapters.builder_argv(workspace), "available": True})
+        except Failure as exc:
+            checks.append({"id": "adapter_builder", "available": False, "message": exc.message})
     return checks
 
 
@@ -1021,13 +1219,20 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
         m = by_id[mid]
         row = {"id": mid, "version": m["version"], "title": m["title"], "category": m["category"], "kind": m["kind"],
                "tags": m["tags"], "role": m.get("role", "module"), "via": m.get("via"), "directory": str(m["directory"]),
-               "declaration_sha256": job.inputs[str(m["declaration"])], "payload": "seed" if m["seed"] else "recipe",
+               "declaration_sha256": job.inputs[str(m["declaration"])],
+               "payload": "seed" if m["seed"] else "adapter" if m.get("adapter") else "recipe",
                "distribution": m["distribution"], "dependencies": m["dependencies"], "conflicts": m["conflicts"],
                "bases": m["bases"], "maps": m["maps"], "provides": m["provides"], "resource_contract": m["resource_contract"],
                "menu_route": m["menu_route"], "source": m["source"], "reference": m.get("reference"),
                "origin": m["origin"], "donor": m["donor"], "replaces":m["replaces"], "entry":m["entry"], "placements": m.get("placements")}
         if m["recipe"] is not None:
             row["recipe_sha256"] = job.inputs[str(m["recipe"].resolve())]
+        elif m.get("adapter") is not None:
+            a = m["adapter"]
+            row["recipe_sha256"] = job.inputs[str(a["recipe"].resolve())]
+            row["adapter"] = {"foundation": a["foundation"], "map": a["map"], "profile": a["profile"],
+                              "prepared_present": a["prepared_present"], "declared_roots": len(a["embedded"]),
+                              "loose_scripts": [s["target"] for s in a["scripts"]], "soundbank": a["soundbank"], "aliases": a["aliases"]}
         else:
             row["seed_sha256"] = m["seed"]["files"]["mod.ff"] and job.inputs[str(m["seed"]["package"].resolve())]
             row["seed_manifest_sha256"] = job.inputs[str(m["seed"]["manifest"])]
@@ -1049,13 +1254,38 @@ def execute(args, job: Job) -> dict:
     comp = load_composition(Path(args.composition), job)
     modules, loads, decisions, header = flatten(comp, job)
     from ..testing.planner import prepare_probe
-    prepare_probe(comp,modules,job)
+    try:
+        prepare_probe(comp,modules,job)
+    except Failure as exc:
+        raise refuse([_refusal("probe", exc.message, exc.hint, field=exc.details.get("field"))], "probe",
+                     "Read details.refusals: the test probe this composition needs is missing or does not cover its target.")
     mixed = sorted({m["id"] for m in modules if m.get("game", titles.DEFAULT_TITLE) != comp["game"]})
     if mixed:
         raise Failure(INPUT_INVALID, f"Composition targets game {comp['game']} but these members target another game: {mixed}",
                       "Every module in a composition targets the same game; split the pack or fix the members' module.json game.")
     resolved = resolve(comp, modules, getattr(args, "allow_unqualified", False))
-    loaded = {m["id"]: projects.load_recipe(m["recipe"], job) for m in modules if m["recipe"] is not None}
+    if resolved["refusals"]:
+        raise refuse(resolved["refusals"], "; ".join(sorted({r["kind"] for r in resolved["refusals"]})),
+                     "Read details.refusals: every refusal the composition has, with its kind and modules.",
+                     unqualified=resolved["unqualified"])
+    loaded = {}
+    absent: list[dict] = []
+    for m in modules:
+        if m["recipe"] is None:
+            continue
+        try:
+            loaded[m["id"]] = projects.load_recipe(m["recipe"], job)
+        except Failure as exc:
+            if exc.code == INPUT_MISSING and m["distribution"] == "private":
+                # A private recipe whose sources are not on this machine is the recipe-side of
+                # a private seed without its package: plannable around, not buildable here.
+                absent.append(_refusal("private_payload", f"{m['id']} is distribution private and its recipe inputs are not on this machine: {exc.message}",
+                                       "The declaration says what the module provides; building with it needs its sources beside the recipe.",
+                                       modules=[m["id"]], missing=[exc.message]))
+                continue
+            raise
+    if absent:
+        raise refuse(absent, "private_payload", "Read details.refusals: every private member whose inputs are absent here.")
     warnings=replacement_warnings(modules,loaded)
     by_id = {m["id"]: m for m in modules}
     compiled, loose = [], []
@@ -1079,9 +1309,20 @@ def execute(args, job: Job) -> dict:
     if len(compiled) > projects.MAX_SCRIPTS or len(loose) > projects.MAX_ASSETS or len(loads) > projects.MAX_LOADS or len(seed_modules) > MAX_MODULES:
         raise Failure(INPUT_LIMIT, f"A composition holds at most {projects.MAX_SCRIPTS} scripts, {projects.MAX_ASSETS} assets, {projects.MAX_LOADS} loads and {MAX_MODULES} seeds")
     decided, undecided, refused = collisions(modules, loaded, decisions, comp.get("base_owned"))
+    late_refusals: list[dict] = []
     if refused:
-        raise Failure(INPUT_INVALID,"Overlapping declared replacements cannot be resolved by an owner decision",collisions=refused)
-    checks = _backends(compiled)
+        late_refusals.append(_refusal("replacement", "Overlapping declared replacements cannot be resolved by an owner decision",
+                                      "Two members declare the same replacement target; one of them must stop replacing it.",
+                                      modules=[mid for row in refused for mid in row["modules"]], collisions=refused))
+    services = service_refusals(modules, loaded, undecided, comp.get("base_owned") or set(), shelf_services(getattr(args, "workspace", None)))
+    if services:
+        served = {row["collision"] for row in services}
+        undecided = [row for row in undecided if row["collision"] not in served]
+        for row in services:
+            late_refusals.append(_refusal("service", row["message"], row["hint"], modules=row["modules"], collision=row["collision"],
+                                          what=row["what"], service=row["service"], **{k: v for k, v in row.items() if k in ("banks", "weapons")}))
+    adapter_modules = [by_id[mid] for mid in resolved["order"] if by_id[mid].get("adapter")]
+    checks = _backends(compiled, bool(adapter_modules), getattr(args, "workspace", None))
     rows = _plan_rows(modules, resolved["order"], job)
     base_ids = [r["id"] for r in rows if r["role"] == "base"]
     plan = {
@@ -1096,6 +1337,10 @@ def execute(args, job: Job) -> dict:
         "seeds": [{"id": m["id"], "package": str(m["seed"]["package"]), "roots": m["seed"]["roots"],
                    "soundbanks": [n for n in m["seed"]["files"] if n != "mod.ff"],
                    "strings": str(m["seed"]["strings"]) if m["seed"].get("strings") else None} for m in seed_modules],
+        "adapters": [{"id": m["id"], "recipe": str(m["adapter"]["recipe"]), "foundation": m["adapter"]["foundation"], "map": m["adapter"]["map"],
+                      "roots": m["adapter"]["embedded"], "soundbanks": [m["adapter"]["soundbank"]] if m["adapter"]["soundbank"] else [],
+                      "aliases": m["adapter"]["aliases"], "loose_scripts": [s["target"] for s in m["adapter"]["scripts"]],
+                      "prepared_present": m["adapter"]["prepared_present"]} for m in adapter_modules],
         "loads": [str(p) for p in loads], "zone_header": header,
         "unqualified": resolved["unqualified"],
         "resource_totals": resolved["resource_totals"], "budget": comp["budget"],
@@ -1109,11 +1354,18 @@ def execute(args, job: Job) -> dict:
     plan["footprint"] = offline_checks.footprint(plan)
     plan["checks"] = offline_checks.evaluate(plan, getattr(args, "workspace", None))
     foundation = offline_checks.foundation_of(comp["base"], getattr(args, "workspace", None))
+    pack_scripts = {t.as_posix() for _, t, _ in compiled} | {t.as_posix() for _, t, _, _ in loose}
+    for m in modules:
+        pack_scripts |= set(m.get("provides", {}).get("scripts", []))
+        for row in (m["seed"]["embedded"] if m["seed"] and not m["seed"].get("private") else m["adapter"]["embedded"] if m.get("adapter") else []):
+            kind, asset = row.split(",", 1)
+            if kind in ("script", "rawfile") and asset.lower().endswith((".gsc", ".csc")):
+                pack_scripts.add(asset)
     for source,target,_ in compiled:
         try: text=Path(source).read_text(encoding="utf-8",errors="replace")
         except OSError: continue
         plan["checks"] += offline_checks.external_symbols(target.as_posix(),text,comp["game"])
-        plan["checks"] += offline_checks.map_script_externals(target.as_posix(),text,comp["map"],foundation,comp["game"])
+        plan["checks"] += offline_checks.map_script_externals(target.as_posix(),text,comp["map"],foundation,comp["game"],pack_scripts)
     if args.action == "build":
         plan["checks"] += offline_checks.check_scripts(compiled,args,job,comp["game"])
     else:
@@ -1129,16 +1381,23 @@ def execute(args, job: Job) -> dict:
                            for i, r in enumerate(rows)],
                "unqualified": resolved["unqualified"],
         "resource_totals": resolved["resource_totals"], "budget": comp["budget"],
-               "scripts": len(compiled), "assets": len(loose), "seeds": len(seed_modules), "loads": len(loads),
+               "scripts": len(compiled), "assets": len(loose), "seeds": len(seed_modules), "adapters": len(adapter_modules), "loads": len(loads),
                "decisions": decided, "undecided": undecided, "base_owned_names": len(comp.get("base_owned") or ()),
                "footprint": plan["footprint"], "withheld": len(withheld)}
     summary["checks"] = plan["checks"]
     summary["placements"] = plan["placements"]
     failed=[c for c in plan["checks"] if c["outcome"]=="failed"]
     if failed:
-        raise Failure(INPUT_INVALID,"Offline checks failed: "+"; ".join(f'{c["id"]}: {c["detail"]}' for c in failed)[:1200],
-                      "Read checks for every row; a pool row names its largest contributors, a map-scripts row the paths the target map lacks.",
-                      checks=plan["checks"],failed=[c["id"] for c in failed])
+        contributors=sorted({c["id"] for row in failed for c in row.get("contributors",[]) if c["id"] in by_id})
+        late_refusals.append(_refusal("checks","Offline checks failed: "+"; ".join(f'{c["id"]}: {c["detail"]}' for c in failed)[:1200],
+                                      "Read checks for every row; a pool row names its largest contributors, a map-scripts row the paths the target map lacks.",
+                                      modules=contributors,failed=[c["id"] for c in failed]))
+    if late_refusals:
+        plan["refusals"]=late_refusals
+        (job.root / "plan.json").write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
+        raise refuse(late_refusals,"; ".join(sorted({r["kind"] for r in late_refusals})),
+                     "Read details.refusals: every refusal the composition has, with its kind and modules.",
+                     checks=plan["checks"],failed=[c["id"] for c in failed],undecided=undecided)
     if args.action == "plan":
         return {**summary, "backends": checks, "backends_available": plan["backends_available"],
                 "input_files": plan["input_files"], "verification": plan["verification"]}
@@ -1146,7 +1405,26 @@ def execute(args, job: Job) -> dict:
         raise Failure(INPUT_INVALID, f"{len(undecided)} collision(s) have no recorded decision; nothing was built",
                       "Read plan.json's undecided list, record an owner for each under decisions in the composition (or rename a target), then build.",
                       undecided=undecided)
-    return _build_composition(comp, plan, compiled, loose, seed_modules, loads, decided, header, args, job)
+    if adapter_modules:
+        # Adapter members are cut by the workspace builder first; each produced package is read
+        # back and joins the seeds the pack links against. The plan on disk records the reports.
+        from . import adapters
+        missing = [c["id"] for c in checks if not c["available"]]
+        if missing:
+            raise Failure("backend_unavailable", f"Required backends are not installed: {missing}", "Run: pat dev setup; an adapter builder comes from --workspace or PAT_BACKEND_ADAPTER_BUILDER")
+        plan["adapter_builds"] = []
+        for m in adapter_modules:
+            m["seed"] = adapters.build(m, args, job, getattr(args, "workspace", None))
+            plan["adapter_builds"].append(m["seed"]["report"])
+        seed_modules = [by_id[mid] for mid in resolved["order"] if by_id[mid]["seed"]]
+        plan["seeds"] = [{"id": m["id"], "package": str(m["seed"]["package"]), "roots": m["seed"]["roots"],
+                          "soundbanks": [n for n in m["seed"]["files"] if n != "mod.ff"],
+                          "strings": str(m["seed"]["strings"]) if m["seed"].get("strings") else None} for m in seed_modules]
+        (job.root / "plan.json").write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
+    built = _build_composition(comp, plan, compiled, loose, seed_modules, loads, decided, header, args, job)
+    if adapter_modules:
+        built["adapters"] = plan["adapter_builds"]
+    return built
 
 
 def _placement_checks(comp: dict, modules: list[dict], args, job: Job) -> list[dict]:
@@ -1406,6 +1684,15 @@ def _build_composition(comp: dict, plan: dict, compiled, loose, seed_modules, lo
             dest = banks / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(raw / rel, dest)
+            loose_scripts.append(rel.as_posix())
+    for m in seed_modules:
+        for source, rel in m["seed"].get("loose_scripts", []):
+            dest = banks / rel
+            if dest.exists() or rel.as_posix() in loose_scripts:
+                raise Failure(INPUT_INVALID, f"Two members ship the loose script {rel.as_posix()}; a pack carries one copy of each script",
+                              "Record a file decision or drop one member.")
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, dest)
             loose_scripts.append(rel.as_posix())
     readback_log = job.run([*executable("unlinker"), "--no-color", "--include-assets", "rawfile", "--output-folder",
                             str(job.root / "readback"), str(package)], timeout=args.timeout)

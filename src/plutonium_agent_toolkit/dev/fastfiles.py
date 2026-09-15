@@ -80,7 +80,10 @@ def _link(args, job: Job) -> dict:
         job.input_tree(p)
         argv += ["--add-asset-search-path", str(p)]
     for zone in args.load:
-        argv += ["-l", str(job.input(zone))]
+        # A package this job produced (an adapter member's stage, built under the job root) is
+        # an output the receipt inventories, not an input; everything else is hashed as an input.
+        produced = Path(zone).resolve()
+        argv += ["-l", str(produced) if produced.is_relative_to(job.root) else str(job.input(zone))]
     check_link_log(job.run([*argv, args.zone], cwd=base, timeout=args.timeout))
     packages = sorted(out.rglob("*.ff"))
     if not packages:
@@ -110,7 +113,10 @@ def execute(args, job: Job) -> dict:
                 raise Failure(INPUT_INVALID, "Asset types are comma-separated lowercase identifiers")
             argv += ["--include-assets", args.types]
     for zone in args.load:
-        argv += ["-l", str(job.input(zone))]
+        # A package this job produced (an adapter member's stage, built under the job root) is
+        # an output the receipt inventories, not an input; everything else is hashed as an input.
+        produced = Path(zone).resolve()
+        argv += ["-l", str(produced) if produced.is_relative_to(job.root) else str(job.input(zone))]
     try:
         log = job.run([*argv, str(src)], timeout=args.timeout)
     except Failure as exc:
