@@ -52,7 +52,9 @@ and the *engine* must have those scripts loaded too.
   evidence is in the rotated `console_zm.log.NNN`, not the live file. An unqualified call to a
   stock utility export needs the matching `#include` (`common_scripts\utility`, `maps\mp\_utility`,
   `maps\mp\zombies\_zm_utility`) or a fully qualified call; `module plan` now reports these as
-  `externals:` check rows from `knowledge/stock-exports.json`.
+  `externals:` check rows from `knowledge/stock-exports.json`. The include must be on the script's
+  own VM: a `.csc` resolves against `clientscripts\mp\_utility` and
+  `clientscripts\mp\zombies\_zm_utility`, and no stock client script includes a `maps\...` path.
 - **Unresolved external.** A helper that compiled because a name matched, but the engine could not
   find it in a loaded script. `setclientfield` with two parameters lives in `maps/mp/_utility`;
   include it. Resolve every unqualified call against the includes and exports the engine will

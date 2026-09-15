@@ -130,19 +130,31 @@ def _script_vm(name):
     if lowered.endswith('.gsc'):return 'server'
     return None
 
+def stock_exports(vm):
+    """The stock export rows that resolve on ``vm``. A call links only against a script the engine
+    loads on the same VM, so the server rows never judge a `.csc` and the client rows never judge a
+    `.gsc`; without a VM nothing is resolved."""
+    if vm is None:return {}
+    return {path:row['functions'] for path,row in knowledge.load('stock-exports.json')['exports'].items() if row.get('vm')==vm}
+
 def external_symbols(name,text,game='t6'):
-    """Unqualified calls resolved against the stock export table: failed when the call needs an
-    #include the script lacks; passed when every known call resolves on this script's VM;
-    not_counted when the title is not T6 (the tables are T6-only), when a call is neither a local
-    function, a builtin witnessed on this VM, nor a stock export, or when the target suffix does
-    not name a VM. A builtin witnessed only on the other VM stays not_counted, never passed: the
-    witness table is an absence of evidence, not proof the other VM lacks the call."""
+    """Unqualified calls resolved against the stock export rows of this script's own VM: failed when
+    the call needs an #include the script lacks; passed when every known call resolves on this
+    script's VM; not_counted when the title is not T6 (the tables are T6-only), when the export
+    table holds no row for this VM, when a call is neither a local function, a builtin witnessed on
+    this VM, nor a stock export of this VM, or when the target suffix does not name a VM. A builtin
+    witnessed only on the other VM stays not_counted, never passed: the witness table is an absence
+    of evidence, not proof the other VM lacks the call. Resolving across VMs would refuse a correct
+    client script for lacking a server include no stock `.csc` carries."""
     if game != 't6':
         return [{'id':'externals:'+name,'outcome':'not_counted',
                  'detail':f'External stock and builtin witness data is T6-only; {game} calls are not judged'}]
-    exports=knowledge.load('stock-exports.json')['exports']
     text=mask_noncode(text)
     vm=_script_vm(name)
+    exports=stock_exports(vm)
+    if vm is not None and not exports:
+        return [{'id':'externals:'+name,'outcome':'not_counted',
+                 'detail':f'The stock export table is empty for the {vm} VM, so unqualified calls here are judged against no exports rather than against another VM'}]
     includes={inc.strip().replace(chr(92),'/').lower() for inc in INCLUDE.findall(text)}
     defined={match.lower() for match in DEF.findall(text)}
     calls={match.lower() for match in CALL.findall(text)}
