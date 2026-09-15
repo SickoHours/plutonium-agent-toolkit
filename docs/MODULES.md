@@ -281,7 +281,7 @@ builder the plan lists `adapter_builder` as unavailable and the build refuses be
 | `zone_header` | no | Linker metadata lines the base needs at the top of the zone (Zombies Declassified Beta 2 needs its `>level.ipak_read` rows); at most 32 |
 | `budget` | no | Whole-number ceilings for the summed resource contracts. Absent means the totals are reported and not enforced. A number here is a decision you made after measuring, not a guess |
 | `decisions` | no | One recorded owner per collision the plan listed (below). A decision naming a module that is not party to the collision is refused |
-| `base_owned` | no | Up to 8 relative paths to plain asset listings of the base zones the composition loads (one `type, name` row per line, the shape an unlinker `--list` prints). A name collision whose asset the base already carries is classified `base-owned` and needs no decision: both seeds got their copy by linking against the base, and the base's copy is what loads. Names the listings do not carry stay decisions. A recorded decision for a base-owned name still wins |
+| `base_owned` | no | Up to 8 relative paths to plain asset listings of the base zones the composition loads (one `type, name` row per line, the shape an unlinker `--list` prints). A name collision whose asset the base already carries is classified `base-owned` and needs no decision: both seeds got their copy by linking against the base, and the base's copy is what loads. Names the listings do not carry stay decisions. A recorded decision for a base-owned name still wins. The same listings drive the exclusion below, so `--base-listings` usually replaces this field |
 
 Member, load and base-listing paths cannot begin with `/`, including on Windows where
 that spelling is rooted on the current drive rather than relative to the composition.
@@ -652,17 +652,26 @@ a meter before the engine does.
 
 ### Images have pixels somewhere, or the pack renders blank
 
-A material names its images. The fastfile carries each image's header, and its pixels only when
-the linker read the image from a disk `.iwi` the pack's own zone declares — an `image` asset row.
-An image the linker resolved from a zone the composition loads travels as a header alone, and the
-client streams the pixels from an image bank (`.ipak`) named by a `>level.ipak_read` header line.
-A pack that references such an image with no bank carrying it loads without an error and draws it
-without pixels, which is why this is a check and not a convention.
+A material names its images. **A fastfile carries an image's header and never its pixels** — a
+`mod.ff` with fifteen freshly rooted 1024x1024 textures is sixty-four bytes larger than the same
+zone without them. That is true whether the linker read the image from a disk `.iwi` the pack's own
+zone declares (an `image` asset row) or resolved it from a zone the composition loads. The client
+finds the pixels in exactly two places: an image bank (`.ipak`) named by a `>level.ipak_read`
+header line, or Plutonium's global loose texture path `storage/t6/images`.
+
+A mod folder's own `images/` is **not** one of them. Measured on Plutonium on 2026-09-15: a pack
+that staged 25 `.iwi` files beside its `mod.ff` produced zero console mentions of any of them, and
+the profiles that did render such images had the same files in `storage/t6/images` as well. The
+build still writes `packages/images/` — those are the exact bytes the headers describe, and the
+only thing that can be moved into either working route — but it is an artifact, not a delivery.
+Copying into `storage/t6/images` is global to every mod on the machine and is the user's decision;
+no route here writes it.
 
 `image-sources` is that check. One row per image the plan can name, plus a summary row:
 
-- an `image` asset row whose file is on this machine is `passed` — the linker reads the `.iwi`
-  from disk and the build stages it beside the package, with no bank and no header read spent;
+- an `image` asset row whose file is on this machine is `not_counted`: the zone gets a real header
+  and the file is staged under `packages/images/`, but whether a bank or `storage/t6/images`
+  carries the pixels is not readable from a plan, so this is never a `passed`;
 - a declared row whose file is missing or empty is `failed`: the zone gets a header and nothing else;
 - an image a member's zone listing only references (a seed's or an adapter's `image,<name>` root)
   is `not_counted` with that reason. Bank contents cannot be read without the banks, so the plan
@@ -686,6 +695,46 @@ readback did resolve is absent from the list by construction, so an unlisted ima
 the documented shape an image the report does not name at all stays `not_counted`. A report whose
 `pack` is a different composition decides nothing and says so. Only names and hints are read,
 never paths.
+
+### A donor zone never answers a name the base already carries
+
+A composition that ports content from another game loads that game's zones beside the target's own.
+The linker follows every member's material closure and, for each image and material name it
+reaches, copies whichever loaded zone answers first. It has no idea that some of those names belong
+to the base. Because a fastfile carries a header and not pixels, a donor's copy of a base-owned name
+puts a foreign header in front of the base's pixels, and the shared camo and Pack-a-Punch textures
+render wrong on **every** weapon — including stock ones the pack never touched — while it is
+selected. Measured on one three-weapon pack: 254 image headers, 135 with stock names, 91 of them
+copied out of a donor zone, plus 30 materials.
+
+`--base-listings <dir>` is how the composer is told which names are the base's. It takes a
+directory of asset listings (`<zone>-list.txt`, the shape an unlinker `--list` prints) and is
+repeatable. Every load with a listing there is one of the base's zones; every load without one is a
+donor. Nothing else has to be declared — the classification comes from the composition's own
+`loads`. A workspace can instead put the directory in `foundations/<id>.json` under `base_listings`
+and pass `--workspace`; the explicit `base_owned` field still works and merges with both.
+
+A load is also the base's when the foundation says so: with `--workspace`, a zone named in
+`foundations/<id>.json`'s `maps.<map>.link_loads` is a base zone even with no listing staged on this
+machine. A build against the foundation's own zones and nothing else therefore has no donor at all
+and needs no listing — which is how `module qualify` links one module alone.
+
+The build then excludes every base-owned `image` and `material` name from the pack's zone. The
+mechanism is OpenAssetTools' own: an `ignore,<project>` row in the zone reads
+`zone_source/assetlist/<project>.csv` off the source search path, and the asset creation context
+answers an ignored name with a reference (`,<name>`) rather than a copy, so the name resolves at
+runtime from the zone the client already has open. There is no per-name exclusion keyword and no
+load-order knob — the first creator that answers wins, regardless of `-l` order — so this is the
+only lever, not a preference among several. A name the pack itself roots with an explicit `image,`
+or `material,` row is left out of the exclusion: that is a member's declared asset, and the
+composition's collision decisions already own it.
+
+`donor-shadowing` is the check. It refuses a composition that loads a zone outside its base with no
+base listing at all, naming how many such zones are loaded; it refuses a member package that
+already embeds a base-owned name; and at build time it re-reads the link log's
+`Loaded <type> "<name>" (src: <zone>)` rows and refuses if any base-owned name was rooted from a
+donor, with the count and the first ten names. The build reports `base_owned_excluded` and
+`donor_shadowing`.
 
 A recipe asset row may carry `"deliver": false` (rawfile rows only): the file is hashed as a
 build input but never staged or rooted, for authoring inputs such as model exports and source

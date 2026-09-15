@@ -523,9 +523,47 @@ def foundations(root: Path) -> dict[str, dict]:
             continue
         maps = info.get("maps")
         names = sorted(m for m in maps if isinstance(m, str) and MAP.match(m)) if isinstance(maps, dict) else []
+        listings = info.get("base_listings")
         result[info["id"]] = {"id": info["id"], "base": info.get("profile_prefix") if isinstance(info.get("profile_prefix"), str) else None,
-                              "maps": names, "file": file.name}
+                              "maps": names, "file": file.name,
+                              "base_listings": [d for d in ([listings] if isinstance(listings, str) else listings if isinstance(listings, list) else [])
+                                                if isinstance(d, str) and d]}
     return result
+
+
+def base_zone_names(root: Path, foundation_id: str, map_id: str) -> list[str]:
+    """The zone names a foundation says a module links against on one map
+    (``foundations/<id>.json``, ``maps.<map>.link_loads``). Those zones are the base, so a load that
+    is one of them is never a donor even when no asset listing for it is on this machine."""
+    info = foundations(root).get(foundation_id)
+    if not info:
+        return []
+    # foundations() already picked the descriptor that carries the maps; a private companion file
+    # beside it may share the id and carry none.
+    try:
+        _, record = read_json(root / "foundations" / info["file"], MAX_TARGETS_BYTES)
+    except Failure:
+        return []
+    maps = record.get("maps") if isinstance(record, dict) else None
+    per_map = maps.get(map_id) if isinstance(maps, dict) else None
+    rows = per_map.get("link_loads") if isinstance(per_map, dict) else None
+    return [name for name in rows if isinstance(name, str) and name] if isinstance(rows, list) else []
+
+
+def base_listing_dirs(root: Path, foundation_id: str) -> list[Path]:
+    """Directories of base asset listings a workspace's ``foundations/<id>.json`` names under
+    ``base_listings``, resolved against the workspace root. A foundation that does not name any
+    returns nothing: the composer then needs ``--base-listings`` on the command line."""
+    info = foundations(root).get(foundation_id)
+    if not info:
+        return []
+    found = []
+    for entry in info["base_listings"]:
+        path = Path(entry).expanduser()
+        path = path if path.is_absolute() else (root / path)
+        if path.is_dir():
+            found.append(path)
+    return found
 
 
 def _catalog() -> dict[str, dict]:
