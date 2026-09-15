@@ -736,6 +736,29 @@ already embeds a base-owned name; and at build time it re-reads the link log's
 donor, with the count and the first ten names. The build reports `base_owned_excluded` and
 `donor_shadowing`.
 
+**Measure every asset type a donor answers; never assume which ones shadow.** The exclusion covers
+`image` and `material` because those are the two types whose donor copy was measured to repaint the
+base, and a linker's `ignore` list is per `type,name`: nothing about the mechanism stops at two
+types. On the pack above, the rebuild that took base-named image copies from 166 to 0 and material
+copies from 67 to 0 left 8 `techniqueset`, 4 `xmodel` and 7 `fx` copies of base-owned names in the
+zone, because the type list had been chosen by reasoning about which types carry pixels rather than
+by reading what the linker had actually rooted. Seven of those techniquesets turned out to be
+byte-identical to the base's copy and harmless; one of the xmodels was not. **Every one of them was
+a guess either way until it was read.** So after a build, read the link log yourself: group its
+`Loaded <type> "<name>" (src: <zone>)` rows by type, keep the rows whose `src` is a donor zone and
+whose name the base's listing also carries, and for each such type either exclude it or write down
+why its donor copy is harmless. `donor-shadowing` only judges the two types it can exclude; the
+other types are still in the log, and a type nobody looked at is not a type nobody shipped.
+
+**A rendering fault is not evidence about a pack until the bare foundation has been loaded as a
+control.** A wrong texture writes nothing to the console — no `Could not load image`, no unmatched
+signature, no fatal line — so there is no log slice that clears the base and no readback that can.
+A diagnosis proven by readback alone has only shown that the zone changed, not that the rendering
+did. Load the base with no mod selected, on the same map, and look at the same weapon first. If it
+renders wrong there, the pack is not the suspect and no composer change can be the fix; the cause is
+in the base or on the machine (below). Only once the bare foundation renders correctly is a pack the
+thing to change, and only then is a readback difference worth writing a composer change against.
+
 A recipe asset row may carry `"deliver": false` (rawfile rows only): the file is hashed as a
 build input but never staged or rooted, for authoring inputs such as model exports and source
 WAVs that another row already compiles. Withheld rows are listed under `withheld` in the plan. The build still stages a withheld file under `raw/` at its target path with no zone line, so the linker finds the export, WAV or accuracy graph the compiled asset names; two members withholding different bytes at one path are a file collision like any other (`decisions`), and the build reports `withheld_staged`.
@@ -758,6 +781,39 @@ ambiguous candidates, and emits a buildable composition with the probe explicitl
 The probe is first in dependency order. `_pack`/`_pub` compositions refuse every test-only member,
 including through nested compositions. Probe-scoped contracts permit signed `round_set +N`;
 this is a round-counter transition, not proof of N naturally completed gameplay rounds.
+
+### A loose global texture wins over every bank, and over the bare game
+
+The second place pixels come from is not in any fastfile. Plutonium reads loose textures from the
+global path `storage/t6/images`, and a file there wins: it applies to every mod folder on the
+machine and to the bare game with no mod selected. A loose `<name>.iwi` whose name one of the base's
+own zones carries therefore repaints that name everywhere — the Pack-a-Punch and camo textures a
+stock weapon binds render from the loose file, on a pack that never touched them and on the
+untouched base alike. It is machine state. No composition causes it, no composition can cure it, and
+a readback of a package cannot see it, which is exactly why it survives a donor-shadowing fix and
+still looks like the pack's fault.
+
+`loose-overrides` is the check. It reads the loose path derived from the T6 storage folder the user
+configured (`pat configure --plutonium-storage-t6 <path>`; the loose path is that folder's
+`images/`), lists every `.iwi` there whose name appears in the base's own image listing, and refuses:
+one `failed` row per file, `loose-overrides:<image name>`, plus a `loose-overrides` summary with
+`count`, the first ten `names`, `path` and `loose_images` (how many loose textures it read). It is
+refusal-grade for the same reason `donor-shadowing` is — the rendering is wrong and the pack is not
+the cause — and refusing at plan time is what stops a machine-state fault from being shipped and then
+diagnosed as a package.
+
+Three answers are possible and the summary always says which:
+
+- `passed` — the loose path was read and carries none of the base's image names (`counted: true`);
+- `failed` — it was read and some of them are there (`counted: true`), with a row naming each file;
+- `not_counted` — nothing was compared. Either no base listing says which names the base owns, or no
+  T6 storage folder is configured, or the configured folder has no `images/` on this machine
+  (`counted: false`, with a `hint` naming `pat configure` in the unconfigured case). An absent loose
+  path is the ordinary case and is not a failure — but it is not a pass either, and the check says
+  `not counted` rather than pretending it looked.
+
+Nothing here writes or deletes a loose file: the folder is global to every mod on the machine and is
+the user's to change. The fix is to move the file out and load the bare foundation again.
 
 ## Declared replacement
 
