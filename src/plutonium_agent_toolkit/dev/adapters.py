@@ -271,9 +271,12 @@ def build(module: dict, args, job: Job, workspace: str | None) -> dict:
     if package.is_symlink() or not package.is_file():
         raise Failure(INPUT_MISSING, f"Adapter builder for {mid} produced no stage/mod.ff")
     banks = sorted(p for p in stage.iterdir() if p.is_file() and not p.is_symlink() and seeds.BANK.match(p.name))
+    # The builder owns everything under ``out`` (the workspace foundation builder writes its own
+    # ``readback/`` there); the toolkit's readback job lives beside it, never inside it.
+    readback = out.parent / f"{mid}.readback"
     listing = fastfiles.execute(SimpleNamespace(action="inspect", input=str(package), load=[], timeout=args.timeout),
-                                Job(out / "readback", "ff inspect", ["pat", "ff", "inspect", str(package)], timeout=timeout))
-    text = (out / "readback" / listing["inventory_log"]).read_text(encoding="utf-8", errors="replace")
+                                Job(readback, "ff inspect", ["pat", "ff", "inspect", str(package)], timeout=timeout))
+    text = (readback / listing["inventory_log"]).read_text(encoding="utf-8", errors="replace")
     embedded, referenced = seeds.parse_listing(text)
     if not embedded:
         raise Failure(INPUT_INVALID, f"Adapter package for {mid} lists no embedded assets")

@@ -73,6 +73,9 @@ class AdapterPayloadTests(AdapterFixture):
         self.assertIn("scripts/zm/hud.gsc", result["loose_scripts"])
         receipt = json.loads((Path(result["output"]) / "receipt.json").read_text())
         self.assertTrue(any(step["argv"][-2:] == ["--output", str(Path(result["output"]) / "adapters" / "gum_a")] for step in receipt["steps"]), "builder step recorded")
+        adapter_out = Path(result["output"]) / "adapters" / "gum_a"
+        self.assertEqual((adapter_out / "readback" / "builder-listing.txt").read_text(), "builder-owned\n", "the builder's own readback directory is left alone")
+        self.assertTrue((adapter_out.parent / "gum_a.readback" / "receipt.json").is_file(), "the toolkit's readback job lives beside the builder's output, not inside it")
         package = json.loads((Path(result["output"]) / "packages" / "mod.ff").read_text())
         self.assertIn("weapon,halo_gum_x_eat_zm", package["assets"])
         self.assertIn("animtrees/halo_gum.atr", package["rawfiles"])

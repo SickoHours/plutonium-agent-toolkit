@@ -7,6 +7,11 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- `module build` reads an adapter package back from a job directory beside the builder's output
+  (`<job>/adapters/<id>.readback`) instead of inside it. The workspace foundation builder writes its
+  own `readback/` under its output directory, so the toolkit's readback job refused with
+  `output_exists` on every real adapter build; the fixture builder now writes a `readback/` of its
+  own and the test asserts it is left alone.
 - The plan is the truth for the whole shelf. Adapter recipes are the third module payload: a
   `recipe.json` cut by a workspace builder (`foundation`, `map`, `module`, declared weapons,
   bank, strings, loose scripts, rooted rawfiles) is read by `module plan` as seed-like roots for
