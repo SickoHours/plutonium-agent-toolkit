@@ -40,7 +40,7 @@ def pool_checks(plan,limits,occupancy):
     rows=[];foot=footprint(plan)
     for limit in limits:
         source=limit.get('count_source');bound=limit.get('bound');base=get(occupancy,source) if source else None
-        contribution=None;names=set();top=[]
+        contribution=None;names=set();top=[];skipped=[]
         if source=='assets.soundbank':
             # The listing counts one row per `.all` bank; the engine also opens that bank's
             # localized companion (`<name>.<lang>`), which no listing shows. Every base bank is a
@@ -60,6 +60,14 @@ def pool_checks(plan,limits,occupancy):
                 if line.startswith('>level.ipak_read,'):
                     name=line.split(',',1)[1].strip()
                     if name and name not in IPAK_STARTUP_NAMES and name not in reads:reads.append(name)
+            # Optional evidence: the bank names the client's `zone/all` folder actually carries for
+            # this map. The engine skips a read naming a bank the folder lacks (`ipak file not
+            # found`) and that read costs no slot, so counting it is pessimistic. Absent the
+            # evidence every read counts, which is the conservative answer and the old behaviour.
+            present=occupancy.get('banks_present')
+            if isinstance(present,list):
+                known={str(n) for n in present}
+                skipped=[n for n in reads if n not in known];reads=[n for n in reads if n in known]
             contribution=len(reads);top=[(1,name) for name in reads]
         elif source=='clientfield_bits.actor.server':contribution=sum(m.get('resource_contract',{}).get('network_fields',0) for m in plan['modules'])
         elif source=='projectile_fx_distinct' and not any(m.get('provides',{}).get('weapons') for m in plan['modules']):contribution=0
@@ -79,7 +87,14 @@ def pool_checks(plan,limits,occupancy):
         if contribution is not None:row['contribution']=contribution;row['base']=base
         if source=='assets.soundbank' and names:row['banks']=sorted(names)
         if top:row['contributors']=[{'id':mid,'count':n} for n,mid in top[:16]]
+        if skipped:
+            row['not_counted_reads']=skipped
+            row['detail']+=f'; {len(skipped)} header read(s) name no bank the recorded zone folder carries and cost no slot: '+', '.join(skipped)[:300]
         rows.append(row)
+        for name in skipped:
+            rows.append({'id':'pool:'+limit['id']+':'+name,'outcome':'not_counted',
+                         'detail':f'The zone header reads {name}, which the recorded client zone folder does not carry: '
+                                  'skipped by the engine, costs no slot'})
     return rows
 
 IMAGE_REPORT_KEYS=('images','images_without_pixels','rows')

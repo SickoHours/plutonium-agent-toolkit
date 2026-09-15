@@ -20,8 +20,9 @@ if data.get("zone") and ff.stem != data["zone"]:
 if data.get("readback_fail"):
     print("error loading fixture asset; continuing")
     sys.exit(0)
+game = data.get("game", "T6")
+print(f'Loaded zone "{data.get("zone", ff.stem)}" ({game})')
 if "--list" in args:
-    print(f'Loaded zone "{data.get("zone", ff.stem)}" (T6)')
     print("Content:")
     for rel in data["rawfiles"]:
         print("rawfile,", rel)
@@ -33,7 +34,14 @@ if "--list" in args:
         print(f"{kind}, ,{name}")
     sys.exit(0)
 out = Path(args[args.index("--output-folder") + 1])
-if "--include-assets" in args and args[args.index("--include-assets") + 1] == "localize":
+types = args[args.index("--include-assets") + 1].split(",") if "--include-assets" in args else None
+# Real Unlinker dumps only the types it has a dumper for: a requested type with none is written as
+# nothing, exit zero, no diagnostic. Model that, so a test cannot pass by extracting rawfiles for a
+# caller who asked for something else.
+if types is not None and "rawfile" not in types and "localize" not in types:
+    print("Extracted 0")
+    sys.exit(0)
+if types == ["localize"]:
     rows = data.get("strings", {})
     if rows:
         p = out / "english" / "localizedstrings" / "mod.str"

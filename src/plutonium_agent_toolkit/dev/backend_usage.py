@@ -22,7 +22,7 @@ USAGE = [
     {"routes": ["ff extract", "project build", "module build", "module declare"], "executable": "unlinker", "source": "dev/fastfiles.py, dev/projects.py",
      "argv": ["Unlinker", "--no-color", "--output-folder", "<out>/assets", "[--model-format <fmt>]", "[--image-format <fmt>]",
               "[--include-assets <types>]", "[-l <zone.ff>]...", "<fastfile>"],
-     "checks": "files were written; project build byte-compares every rawfile against its source"},
+     "checks": "files were written; project build byte-compares every rawfile against its source. A requested type the pinned build has no dumper for (asset_dumpers in dev/backends.json) is refused with backend_unavailable rather than dumped as nothing"},
     {"routes": ["image convert"], "executable": "image", "source": "dev/media.py",
      "argv": ["ImageConverter", "--no-color", "--<t6|t5|iw5>", "<image.dds|image.iwi>"],
      "checks": "a non-empty converted image exists beside the staged input"},
