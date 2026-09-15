@@ -74,6 +74,7 @@
    },
    "foundation": "dlc5-beta2",
    "incomplete": 0,
+   "ipak_slots": 12,
    "limits": {
     "actor-client-field-set": {
      "count": 10,
@@ -93,11 +94,23 @@
      "measured_by": null,
      "spare": null
     },
+    "image-bank-slots": {
+     "count": 12,
+     "limit": 16,
+     "measured_by": "console-log",
+     "spare": 4
+    },
     "projectile-fx-registrations": {
      "count": 14,
      "limit": 40,
      "measured_by": "weapon-blobs",
      "spare": 26
+    },
+    "rawfile-assets": {
+     "count": 482,
+     "limit": 1024,
+     "measured_by": "unlinker-listing",
+     "spare": 542
     },
     "sound-assets": {
      "count": 6,
@@ -206,6 +219,7 @@
    },
    "foundation": "stock",
    "incomplete": 0,
+   "ipak_slots": 12,
    "limits": {
     "actor-client-field-set": {
      "count": 34,
@@ -225,11 +239,23 @@
      "measured_by": null,
      "spare": null
     },
+    "image-bank-slots": {
+     "count": 12,
+     "limit": 16,
+     "measured_by": "console-log",
+     "spare": 4
+    },
     "projectile-fx-registrations": {
      "count": 15,
      "limit": 40,
      "measured_by": "weapon-blobs",
      "spare": 25
+    },
+    "rawfile-assets": {
+     "count": 492,
+     "limit": 1024,
+     "measured_by": "unlinker-listing",
+     "spare": 532
     },
     "sound-assets": {
      "count": 5,
@@ -338,6 +364,7 @@
    },
    "foundation": "dlc5-beta2",
    "incomplete": 2,
+   "ipak_slots": 12,
    "limits": {
     "actor-client-field-set": {
      "count": 8,
@@ -357,11 +384,23 @@
      "measured_by": null,
      "spare": null
     },
+    "image-bank-slots": {
+     "count": 12,
+     "limit": 16,
+     "measured_by": "console-log",
+     "spare": 4
+    },
     "projectile-fx-registrations": {
      "count": 16,
      "limit": 40,
      "measured_by": "weapon-blobs",
      "spare": 24
+    },
+    "rawfile-assets": {
+     "count": 495,
+     "limit": 1024,
+     "measured_by": "unlinker-listing",
+     "spare": 529
     },
     "sound-assets": {
      "count": 6,
@@ -470,6 +509,7 @@
    },
    "foundation": "dlc5-beta2",
    "incomplete": 0,
+   "ipak_slots": 12,
    "limits": {
     "actor-client-field-set": {
      "count": 7,
@@ -489,11 +529,23 @@
      "measured_by": null,
      "spare": null
     },
+    "image-bank-slots": {
+     "count": 12,
+     "limit": 16,
+     "measured_by": "console-log",
+     "spare": 4
+    },
     "projectile-fx-registrations": {
      "count": 17,
      "limit": 40,
      "measured_by": "weapon-blobs",
      "spare": 23
+    },
+    "rawfile-assets": {
+     "count": 481,
+     "limit": 1024,
+     "measured_by": "unlinker-listing",
+     "spare": 543
     },
     "sound-assets": {
      "count": 6,
@@ -602,6 +654,7 @@
    },
    "foundation": "stock",
    "incomplete": 0,
+   "ipak_slots": 12,
    "limits": {
     "actor-client-field-set": {
      "count": 8,
@@ -621,11 +674,23 @@
      "measured_by": null,
      "spare": null
     },
+    "image-bank-slots": {
+     "count": 12,
+     "limit": 16,
+     "measured_by": "console-log",
+     "spare": 4
+    },
     "projectile-fx-registrations": {
      "count": 15,
      "limit": 40,
      "measured_by": "weapon-blobs",
      "spare": 25
+    },
+    "rawfile-assets": {
+     "count": 487,
+     "limit": 1024,
+     "measured_by": "unlinker-listing",
+     "spare": 537
     },
     "sound-assets": {
      "count": 5,
@@ -734,6 +799,7 @@
    },
    "foundation": "dlc5-beta2",
    "incomplete": 1,
+   "ipak_slots": 12,
    "limits": {
     "actor-client-field-set": {
      "count": 12,
@@ -753,11 +819,23 @@
      "measured_by": null,
      "spare": null
     },
+    "image-bank-slots": {
+     "count": 12,
+     "limit": 16,
+     "measured_by": "console-log",
+     "spare": 4
+    },
     "projectile-fx-registrations": {
      "count": 21,
      "limit": 40,
      "measured_by": "weapon-blobs",
      "spare": 19
+    },
+    "rawfile-assets": {
+     "count": 505,
+     "limit": 1024,
+     "measured_by": "unlinker-listing",
+     "spare": 519
     },
     "sound-assets": {
      "count": 6,
@@ -866,6 +944,7 @@
    },
    "foundation": "stock",
    "incomplete": 0,
+   "ipak_slots": 12,
    "limits": {
     "actor-client-field-set": {
      "count": 7,
@@ -885,11 +964,23 @@
      "measured_by": null,
      "spare": null
     },
+    "image-bank-slots": {
+     "count": 12,
+     "limit": 16,
+     "measured_by": "console-log",
+     "spare": 4
+    },
     "projectile-fx-registrations": {
      "count": 14,
      "limit": 40,
      "measured_by": "weapon-blobs",
      "spare": 26
+    },
+    "rawfile-assets": {
+     "count": 479,
+     "limit": 1024,
+     "measured_by": "unlinker-listing",
+     "spare": 545
     },
     "sound-assets": {
      "count": 5,
@@ -998,6 +1089,7 @@
    },
    "foundation": "dlc5-beta2",
    "incomplete": 0,
+   "ipak_slots": 12,
    "limits": {
     "actor-client-field-set": {
      "count": 9,
@@ -1017,11 +1109,23 @@
      "measured_by": null,
      "spare": null
     },
+    "image-bank-slots": {
+     "count": 12,
+     "limit": 16,
+     "measured_by": "console-log",
+     "spare": 4
+    },
     "projectile-fx-registrations": {
      "count": 14,
      "limit": 40,
      "measured_by": "weapon-blobs",
      "spare": 26
+    },
+    "rawfile-assets": {
+     "count": 490,
+     "limit": 1024,
+     "measured_by": "unlinker-listing",
+     "spare": 534
     },
     "sound-assets": {
      "count": 6,
@@ -1130,6 +1234,7 @@
    },
    "foundation": "stock",
    "incomplete": 0,
+   "ipak_slots": 12,
    "limits": {
     "actor-client-field-set": {
      "count": 16,
@@ -1149,11 +1254,23 @@
      "measured_by": null,
      "spare": null
     },
+    "image-bank-slots": {
+     "count": 12,
+     "limit": 16,
+     "measured_by": "console-log",
+     "spare": 4
+    },
     "projectile-fx-registrations": {
      "count": 20,
      "limit": 40,
      "measured_by": "weapon-blobs",
      "spare": 20
+    },
+    "rawfile-assets": {
+     "count": 498,
+     "limit": 1024,
+     "measured_by": "unlinker-listing",
+     "spare": 526
     },
     "sound-assets": {
      "count": 5,
@@ -1262,6 +1379,7 @@
    },
    "foundation": "dlc5-beta2",
    "incomplete": 0,
+   "ipak_slots": 12,
    "limits": {
     "actor-client-field-set": {
      "count": 8,
@@ -1281,11 +1399,23 @@
      "measured_by": null,
      "spare": null
     },
+    "image-bank-slots": {
+     "count": 12,
+     "limit": 16,
+     "measured_by": "console-log",
+     "spare": 4
+    },
     "projectile-fx-registrations": {
      "count": 15,
      "limit": 40,
      "measured_by": "weapon-blobs",
      "spare": 25
+    },
+    "rawfile-assets": {
+     "count": 482,
+     "limit": 1024,
+     "measured_by": "unlinker-listing",
+     "spare": 542
     },
     "sound-assets": {
      "count": 6,
@@ -1394,6 +1524,7 @@
    },
    "foundation": "dlc5-beta2",
    "incomplete": 0,
+   "ipak_slots": 12,
    "limits": {
     "actor-client-field-set": {
      "count": 7,
@@ -1413,11 +1544,23 @@
      "measured_by": null,
      "spare": null
     },
+    "image-bank-slots": {
+     "count": 12,
+     "limit": 16,
+     "measured_by": "console-log",
+     "spare": 4
+    },
     "projectile-fx-registrations": {
      "count": 17,
      "limit": 40,
      "measured_by": "weapon-blobs",
      "spare": 23
+    },
+    "rawfile-assets": {
+     "count": 487,
+     "limit": 1024,
+     "measured_by": "unlinker-listing",
+     "spare": 537
     },
     "sound-assets": {
      "count": 6,
@@ -1526,6 +1669,7 @@
    },
    "foundation": "dlc5-beta2",
    "incomplete": 2,
+   "ipak_slots": 12,
    "limits": {
     "actor-client-field-set": {
      "count": 8,
@@ -1545,11 +1689,23 @@
      "measured_by": null,
      "spare": null
     },
+    "image-bank-slots": {
+     "count": 12,
+     "limit": 16,
+     "measured_by": "console-log",
+     "spare": 4
+    },
     "projectile-fx-registrations": {
      "count": 17,
      "limit": 40,
      "measured_by": "weapon-blobs",
      "spare": 23
+    },
+    "rawfile-assets": {
+     "count": 501,
+     "limit": 1024,
+     "measured_by": "unlinker-listing",
+     "spare": 523
     },
     "sound-assets": {
      "count": 6,
@@ -1658,6 +1814,7 @@
    },
    "foundation": "dlc5-beta2",
    "incomplete": 2,
+   "ipak_slots": 12,
    "limits": {
     "actor-client-field-set": {
      "count": 7,
@@ -1677,11 +1834,23 @@
      "measured_by": null,
      "spare": null
     },
+    "image-bank-slots": {
+     "count": 12,
+     "limit": 16,
+     "measured_by": "console-log",
+     "spare": 4
+    },
     "projectile-fx-registrations": {
      "count": 16,
      "limit": 40,
      "measured_by": "weapon-blobs",
      "spare": 24
+    },
+    "rawfile-assets": {
+     "count": 494,
+     "limit": 1024,
+     "measured_by": "unlinker-listing",
+     "spare": 530
     },
     "sound-assets": {
      "count": 6,
@@ -1790,6 +1959,7 @@
    },
    "foundation": "stock",
    "incomplete": 0,
+   "ipak_slots": 12,
    "limits": {
     "actor-client-field-set": {
      "count": 34,
@@ -1809,11 +1979,23 @@
      "measured_by": null,
      "spare": null
     },
+    "image-bank-slots": {
+     "count": 12,
+     "limit": 16,
+     "measured_by": "console-log",
+     "spare": 4
+    },
     "projectile-fx-registrations": {
      "count": 29,
      "limit": 40,
      "measured_by": "weapon-blobs",
      "spare": 11
+    },
+    "rawfile-assets": {
+     "count": 509,
+     "limit": 1024,
+     "measured_by": "unlinker-listing",
+     "spare": 515
     },
     "sound-assets": {
      "count": 5,
@@ -1922,6 +2104,7 @@
    },
    "foundation": "stock",
    "incomplete": 0,
+   "ipak_slots": 12,
    "limits": {
     "actor-client-field-set": {
      "count": 8,
@@ -1941,11 +2124,23 @@
      "measured_by": null,
      "spare": null
     },
+    "image-bank-slots": {
+     "count": 12,
+     "limit": 16,
+     "measured_by": "console-log",
+     "spare": 4
+    },
     "projectile-fx-registrations": {
      "count": 15,
      "limit": 40,
      "measured_by": "weapon-blobs",
      "spare": 25
+    },
+    "rawfile-assets": {
+     "count": 531,
+     "limit": 1024,
+     "measured_by": "unlinker-listing",
+     "spare": 493
     },
     "sound-assets": {
      "count": 4,
@@ -2054,6 +2249,7 @@
    },
    "foundation": "stock",
    "incomplete": 0,
+   "ipak_slots": 12,
    "limits": {
     "actor-client-field-set": {
      "count": 7,
@@ -2073,11 +2269,23 @@
      "measured_by": null,
      "spare": null
     },
+    "image-bank-slots": {
+     "count": 12,
+     "limit": 16,
+     "measured_by": "console-log",
+     "spare": 4
+    },
     "projectile-fx-registrations": {
      "count": 8,
      "limit": 40,
      "measured_by": "weapon-blobs",
      "spare": 32
+    },
+    "rawfile-assets": {
+     "count": 528,
+     "limit": 1024,
+     "measured_by": "unlinker-listing",
+     "spare": 496
     },
     "sound-assets": {
      "count": 5,
@@ -2113,7 +2321,7 @@
    "zones": 5
   }
  },
- "note": "Counts only, per map, from the zones the engine loads for it: assets per listed type (union), server-side clientfield bits per set, distinct loadfx paths, distinct projectile FX across every WeaponDef carried, and each count against the observed limit. incomplete is the number of scripts that refused to decompile although they register client fields; treat those maps' clientfield counts as floors.",
+ "note": "Counts only, per map, from the zones the engine loads for it: assets per listed type (union), server-side clientfield bits per set, distinct loadfx paths, distinct projectile FX across every WeaponDef carried, and each count against the observed limit. incomplete is the number of scripts that refused to decompile although they register client fields; treat those maps' clientfield counts as floors. ipak_slots is the number of image banks the retail client already holds open at startup before a mod zone header reads more.",
  "schema": 1,
  "zones_not_counted": [
   "localized (<lang>_<map>.ff) zones",

@@ -761,3 +761,93 @@ class NestingAndReferenceTests(SeedFixture):
             code, row = invoke(["module", "plan", str(comp), "--output", self.out()])
             self.assertEqual(code, 1, bad)
             self.assertIn(row["error_code"], ("input_invalid", "input_missing"), bad)
+
+
+class PoolAndDeliveryTests(CompositionFixture):
+    """The 2026-09-14 pack failures, reproduced offline: rawfile pool, image-bank slots, withheld authoring inputs, map scripts."""
+    def module_with_assets(self, mid, rows, script=None):
+        d = self.module(mid)
+        recipe = json.loads((d / "project.json").read_text())
+        for row in rows:
+            (d / row["source"]).parent.mkdir(parents=True, exist_ok=True)
+            (d / row["source"]).write_bytes(b"BYTES " + row["source"].encode())
+        recipe["assets"] = rows
+        if script is not None:
+            (d / "scripts" / f"{mid}.gsc").write_text(script)
+        (d / "project.json").write_text(json.dumps(recipe, indent=2))
+        return d
+
+    def test_plan_reports_footprint_and_refuses_a_rawfile_pool_overflow_naming_the_contributor(self):
+        rows = [{"source": f"model_export/m{i}.glb", "target": f"model_export/m{i}.glb", "type": "rawfile"} for i in range(600)]
+        self.module_with_assets("wavegun", rows)
+        self.module("hud")
+        comp = self.composition(["wavegun", "hud"], name="stock_pool_test")
+        code, row = invoke(["module", "plan", str(comp), "--output", self.out()])
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "input_invalid")
+        self.assertIn("pool:rawfile-assets", row["message"])
+        self.assertIn("wavegun (601)", row["message"])
+        pool = next(c for c in row["details"]["checks"] if c["id"] == "pool:rawfile-assets")
+        self.assertEqual(pool["outcome"], "failed")
+        self.assertEqual(pool["base"], 531, "TranZit's own rawfiles from shipped occupancy")
+        self.assertEqual(pool["contribution"], 602)
+        self.assertEqual(pool["contributors"][0], {"id": "wavegun", "count": 601})
+
+    def test_deliver_false_withholds_authoring_inputs_from_the_zone_and_the_pool(self):
+        rows = [{"source": f"model_export/m{i}.glb", "target": f"model_export/m{i}.glb", "type": "rawfile", "deliver": False} for i in range(600)]
+        rows.append({"source": "accuracy/x.accu", "target": "accuracy/x.accu", "type": "rawfile"})
+        self.module_with_assets("wavegun", rows)
+        comp = self.composition(["wavegun"], name="stock_deliver_test")
+        code, row = invoke(["module", "plan", str(comp), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        self.assertEqual(row["result"]["withheld"], 600)
+        self.assertEqual(row["result"]["footprint"]["wavegun"], {"rawfiles": 2, "soundbanks": [], "scripts": 1})
+        pool = next(c for c in row["result"]["checks"] if c["id"] == "pool:rawfile-assets")
+        self.assertEqual(pool["outcome"], "passed");self.assertEqual(pool["count"], 533)
+        receipt = json.loads((Path(row["result"]["output"]) / "receipt.json").read_text())
+        self.assertTrue(any(k.replace("\\", "/").endswith("model_export/m0.glb") for k in receipt["inputs"]), "withheld files are still hashed inputs")
+        code, row = invoke(["module", "build", str(comp), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        package = json.loads((Path(row["result"]["output"]) / "packages" / "mod.ff").read_text())
+        self.assertEqual(sorted(package["rawfiles"]), ["accuracy/x.accu", "scripts/zm/wavegun.gsc"])
+        self.assertEqual(row["result"]["rawfiles_verified"], 2)
+
+    def test_deliver_false_is_rawfile_only_and_boolean(self):
+        d = self.module_with_assets("alpha", [{"source": "x.json", "target": "xmodel/x.json", "type": "xmodel", "name": "x", "deliver": False}])
+        code, row = invoke(["module", "plan", str(self.composition(["alpha"])), "--output", self.out()])
+        self.assertEqual(code, 1);self.assertIn("rawfile rows only", row["message"])
+        recipe = json.loads((d / "project.json").read_text());recipe["assets"] = [{"source": "x.json", "target": "x.json", "type": "rawfile", "deliver": "no"}]
+        (d / "project.json").write_text(json.dumps(recipe))
+        code, row = invoke(["module", "plan", str(self.composition(["alpha"])), "--output", self.out()])
+        self.assertEqual(code, 1);self.assertIn("true or false", row["message"])
+
+    def test_image_bank_reads_in_the_zone_header_are_counted_against_slots(self):
+        self.module("alpha")
+        header = [f">level.ipak_read,{n}" for n in ("base", "zm_factory", "zm_temple", "dlc0", "dlc2", "dlc3")]
+        comp = self.composition(["alpha"], name="stock_ipak_test", zone_header=header)
+        code, row = invoke(["module", "plan", str(comp), "--output", self.out()])
+        self.assertEqual(code, 1, row)
+        self.assertIn("pool:image-bank-slots", row["message"])
+        pool = next(c for c in row["details"]["checks"] if c["id"] == "pool:image-bank-slots")
+        self.assertEqual(pool["count"], 17);self.assertEqual([c["id"] for c in pool["contributors"]], ["zm_factory", "zm_temple", "dlc0", "dlc2", "dlc3"])
+        comp = self.composition(["alpha"], name="stock_ipak_test", zone_header=header[:4])
+        code, row = invoke(["module", "plan", str(comp), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+
+    def test_b2_compositions_count_against_der_riese_occupancy(self):
+        self.module("alpha", bases=["b2"], maps=["zm_factory"])
+        code, row = invoke(["module", "plan", str(self.composition(["alpha"], name="b2_alpha_test", base="b2", map_id="zm_factory")), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        pool = next(c for c in row["result"]["checks"] if c["id"] == "pool:rawfile-assets")
+        self.assertEqual(pool["outcome"], "passed");self.assertEqual(pool["base"], 481)
+
+    def test_a_script_including_a_stock_script_the_target_map_lacks_is_refused(self):
+        src = "#include maps\\mp\\zombies\\_zm_perk_divetonuke;\nmain()\n{\n    maps\\mp\\zombies\\_zm_perk_divetonuke::enable_divetonuke_perk_for_level();\n}\n"
+        self.module_with_assets("phd", [], script=src)
+        (self.root / "modules" / "phd" / "module.json").write_text(json.dumps(declaration("phd", bases=["b2"], maps=["zm_factory"])))
+        code, row = invoke(["module", "plan", str(self.composition(["phd"], name="b2_phd_test", base="b2", map_id="zm_factory")), "--output", self.out()])
+        self.assertEqual(code, 1, row)
+        self.assertIn("map-scripts:scripts/zm/phd.gsc", row["message"]);self.assertIn("_zm_perk_divetonuke", row["message"])
+        code, row = invoke(["module", "plan", str(self.composition(["phd"], name="b2_phd_test", base="b2", map_id="zm_cosmodrome")), "--output", self.out()])
+        self.assertEqual(code, 1, row)
+        self.assertIn("declared for maps", row["message"], "Ascension carries the script, but the module is not declared for that map")

@@ -11,6 +11,15 @@
    "source": "docs/knowledge/crashes.md"
   },
   {
+   "cause": "Two members each replaced the map's animation state and tree files with their own additions, so the copy that loaded names a state the tree does not carry",
+   "class": "asset-parse",
+   "fix": "One shared service module owns the map's .asd/.atr pair and merges every member's state blocks onto the native base; members depend on it and ship no copy",
+   "id": "animstatedef-state-not-in-animtree",
+   "log_text": "BG_AnimStateDef_Parse: state '<state>' ... not found in its animtree",
+   "regex": "BG_AnimStateDef_Parse: state '(\\w+)'.*not found in its animtree",
+   "source": "docs/knowledge/crashes.md"
+  },
+  {
    "cause": "Animation-tree leaves wrapped in an anonymous brace block",
    "class": "asset-parse",
    "fix": "Emit a bare leaf list",
@@ -20,12 +29,30 @@
    "source": "docs/knowledge/crashes.md"
   },
   {
+   "cause": "A per-frame read of state that only a connect hook writes; seen in _visionset_mgr::monitor when a player never received on_player_connect on a DLC5 foundation, followed by an access violation",
+   "class": "script-error",
+   "fix": "Backfill the per-player state through the manager's own arrays from a guard script before the read runs; the crash report's last-error field names the read, not the cause",
+   "id": "cannot-cast-undefined-to-bool",
+   "log_text": "cannot cast undefined to bool",
+   "regex": "cannot cast undefined to bool",
+   "source": "docs/knowledge/crashes.md"
+  },
+  {
    "cause": "New actor field bits in an already full composition",
    "class": "pool-exhausted",
    "fix": "Remove the bits; reuse existing FX through owned entities",
    "id": "client-field-set-out-of-space",
    "log_text": "Trying to assign 1 bits for netfield <name> but Client Field Set actor is out of space.",
    "regex": "Trying to assign (\\d+) bits for netfield (\\S+) but Client Field Set (\\w+) is out of space",
+   "source": "docs/knowledge/crashes.md"
+  },
+  {
+   "cause": "A server-side registration ran before native init while the client half ran from a loose scripts/zm/*.csc, which the engine executes after the client's own perk fields are registered",
+   "class": "registration-order",
+   "fix": "Register on both VMs at the same point: redirect the map script's _zm::init import on server and client to an adapter that registers then chains to native init",
+   "id": "clientfield-registrations-mismatch",
+   "log_text": "Client and server clientfield registrations don't match",
+   "regex": "Client and server clientfield registrations don't match",
    "source": "docs/knowledge/crashes.md"
   },
   {
@@ -65,6 +92,15 @@
    "source": "docs/knowledge/crashes.md"
   },
   {
+   "cause": "The map's zones plus the mod embed more rawfiles than the engine's pool; packs that root model-export GLBs or source WAVs as rawfiles beside the compiled model and bank assets fill it fastest",
+   "class": "pool-exhausted",
+   "fix": "Mark authoring inputs deliver: false in the recipe (or drop them from the seed's roots), keep the compiled assets, and read pool:rawfile-assets in the plan before installing",
+   "id": "exceeded-rawfile-limit",
+   "log_text": "Exceeded limit of 1024 'rawfile' assets",
+   "regex": "Exceeded limit of (\\d+) 'rawfile' assets",
+   "source": "docs/knowledge/crashes.md"
+  },
+  {
    "cause": "The engine script VM panicked, usually on a corrupt or mismatched compiled script",
    "class": "script-panic",
    "fix": "Recompile from source with the pinned compiler; compare the compiled bytes with the readback",
@@ -92,12 +128,30 @@
    "source": "docs/knowledge/crashes.md"
   },
   {
+   "cause": "The mod's zone header reads more image banks than the client has slots for after its startup set",
+   "class": "pool-exhausted",
+   "fix": "Read only the banks the pack's images need; consolidate donor textures into one pack-owned bank and read that; pool:image-bank-slots in the plan counts the header lines",
+   "id": "no-free-ipak-slots",
+   "log_text": "no free ipak slots loading pak <path>.ipak with N index entries",
+   "regex": "no free ipak slots loading pak",
+   "source": "docs/knowledge/crashes.md"
+  },
+  {
    "cause": "Preloaded sound-bank reservation plus the fastfile's virtual block",
    "class": "allocation-failure",
    "fix": "Stream large samples losslessly; keep critical one-shots loaded",
    "id": "out-of-memory-dialog",
    "log_text": "\"Out of memory\" dialog at map load",
    "regex": "Out of memory",
+   "source": "docs/knowledge/crashes.md"
+  },
+  {
+   "cause": "An imported WeaponDef overrides a weapon the map's own registration list precaches, and the imported definition does not satisfy the native precache",
+   "class": "asset-parse",
+   "fix": "Keep the map's native definitions for weapons it already registers; the pack adds new weapon names instead of overriding native ones",
+   "id": "precacheitem-access-violation",
+   "log_text": "access violation in include_zombie_weapon / precacheitem during map weapon registration",
+   "regex": "include_zombie_weapon|precacheitem",
    "source": "docs/knowledge/crashes.md"
   },
   {

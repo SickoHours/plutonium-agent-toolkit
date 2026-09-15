@@ -117,3 +117,47 @@ class ExternalSymbols(unittest.TestCase):
         for directive in ('#include','#Include'):
             src='    '+directive+' common_scripts\\utility;\ninit()\n{\n    players = get_players();\n}\n'
             self.assertEqual(checks.external_symbols('scripts/zm/a.gsc',src)[0]['outcome'],'passed',directive)
+
+class PoolAccounting(unittest.TestCase):
+    """The two pools that refused real packs at mod selection on 2026-09-14 are counted offline."""
+    def test_rawfiles_count_recipe_scripts_delivered_assets_and_seed_roots_and_name_contributors(self):
+        plan={'modules':[{'id':'wavegun','provides':{}},{'id':'hud','provides':{}}],
+              'scripts':[{'target':'scripts/zm/hud.gsc','module':'hud'}],
+              'assets':[{'target':'model_export/a.glb','type':'rawfile','module':'wavegun'},
+                        {'target':'model_export/b.glb','type':'rawfile','module':'wavegun','deliver':False},
+                        {'target':'xmodel/a.json','type':'xmodel','module':'wavegun'}],
+              'seeds':[{'id':'wavegun','roots':['rawfile,animtrees/x.atr','weapon,gun']}],'zone_header':[]}
+        rows=[{'id':'rawfile-assets','count_source':'assets.rawfile','bound':1024}]
+        out=checks.pool_checks(plan,rows,{'assets':{'rawfile':1022}})
+        self.assertEqual(out[0]['outcome'],'failed');self.assertEqual(out[0]['count'],1025);self.assertEqual(out[0]['contribution'],3)
+        self.assertEqual(out[0]['contributors'][0],{'id':'wavegun','count':2});self.assertIn('wavegun (2)',out[0]['detail'])
+        self.assertEqual(checks.footprint(plan)['hud'],{'rawfiles':1,'soundbanks':[],'scripts':1})
+    def test_image_bank_reads_beyond_the_startup_set_count_against_slots(self):
+        plan={'modules':[],'scripts':[],'assets':[],'seeds':[],
+              'zone_header':['>level.ipak_read,base','>level.ipak_read,zm_factory','>level.ipak_read,dlc0','>level.ipak_read,dlc2','>level.ipak_read,dlc3','>level.ipak_read,dlc3']}
+        rows=[{'id':'image-bank-slots','count_source':'ipak_slots','bound':16}]
+        out=checks.pool_checks(plan,rows,{'ipak_slots':12})
+        self.assertEqual(out[0]['contribution'],4);self.assertEqual(out[0]['outcome'],'passed')
+        plan['zone_header']+=['>level.ipak_read,zm_temple']
+        out=checks.pool_checks(plan,rows,{'ipak_slots':12})
+        self.assertEqual(out[0]['outcome'],'failed');self.assertEqual([c['id'] for c in out[0]['contributors']],['zm_factory','dlc0','dlc2','dlc3','zm_temple'])
+    def test_base_token_maps_to_the_occupancy_foundation(self):
+        self.assertEqual(checks.foundation_of('b2'),'dlc5-beta2');self.assertEqual(checks.foundation_of('stock'),'stock')
+        rows=checks.evaluate({'base':'b2','map':'zm_factory','modules':[],'scripts':[],'assets':[],'seeds':[],'zone_header':[]})
+        rawfile=next(r for r in rows if r['id']=='pool:rawfile-assets')
+        self.assertEqual(rawfile['outcome'],'passed');self.assertEqual(rawfile['base'],481)
+    def test_shipped_limits_include_rawfiles_and_image_bank_slots(self):
+        rows=checks.evaluate({'base':'stock','map':'zm_transit','modules':[],'scripts':[],'assets':[],'seeds':[],'zone_header':[]})
+        ids={r['id'] for r in rows};self.assertIn('pool:rawfile-assets',ids);self.assertIn('pool:image-bank-slots',ids)
+
+class MapScriptExternals(unittest.TestCase):
+    """Beta 2 dropped _zm_perk_divetonuke from Der Riese; a module including it links, then COM_ERRORs at load."""
+    def test_include_of_a_script_the_map_lacks_fails(self):
+        src='#include maps\\mp\\zombies\\_zm_perk_divetonuke;\nmain(){ maps\\mp\\zombies\\_zm_perk_divetonuke::enable_divetonuke_perk_for_level(); }\n'
+        out=checks.map_script_externals('scripts/zm/phd.gsc',src,'zm_factory','dlc5-beta2')
+        self.assertEqual(out[0]['outcome'],'failed');self.assertIn('_zm_perk_divetonuke',out[0]['detail'])
+    def test_carried_script_passes_and_unknown_map_is_not_counted(self):
+        src='#include maps\\mp\\zombies\\_zm_utility;\nmain(){ x = maps\\mp\\zombies\\_zm_perks::vending_trigger_think(); }\n'
+        self.assertEqual(checks.map_script_externals('scripts/zm/a.gsc',src,'zm_factory','dlc5-beta2')[0]['outcome'],'passed')
+        self.assertEqual(checks.map_script_externals('scripts/zm/a.gsc',src,'zm_nowhere','dlc5-beta2')[0]['outcome'],'not_counted')
+        self.assertEqual(checks.map_script_externals('scripts/zm/a.gsc','main(){}\n','zm_factory','dlc5-beta2')[0]['outcome'],'not_counted')

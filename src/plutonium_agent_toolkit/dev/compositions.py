@@ -1059,11 +1059,18 @@ def execute(args, job: Job) -> dict:
     warnings=replacement_warnings(modules,loaded)
     by_id = {m["id"]: m for m in modules}
     compiled, loose = [], []
+    owner_of_script: dict[str, str] = {}
+    withheld: list[dict] = []
     for mid in resolved["order"]:
         if mid in loaded:
-            _, c, l, extra_loads = loaded[mid]
+            data, c, l, extra_loads = loaded[mid]
             compiled += c
             loose += l
+            for _, t, _ in c:
+                owner_of_script[t.as_posix()] = mid
+            for _, t, _, _ in l:
+                owner_of_script[t.as_posix()] = mid
+            withheld += [{"module": mid, **row} for row in data.get("_withheld", [])]
             loads += [p for p in extra_loads if p not in loads]
     seed_modules = [by_id[mid] for mid in resolved["order"] if by_id[mid]["seed"]]
     generated_entry = _generate_entry(comp, modules, by_id, resolved["order"], loaded, compiled, loose, seed_modules, job)
@@ -1083,8 +1090,9 @@ def execute(args, job: Job) -> dict:
         "game": comp["game"], "mode": titles.zone(comp["game"])["mode"], "warnings":warnings,
         "base_member": base_ids[0] if base_ids else None,
         "modules": rows, "order": resolved["order"],
-        "scripts": [{"source": str(p), "target": t.as_posix(), "instance": i} for p, t, i in compiled],
-        "assets": [{"source": str(p), "target": t.as_posix(), "type": k, "name": n} for p, t, k, n in loose],
+        "scripts": [{"source": str(p), "target": t.as_posix(), "instance": i, "module": owner_of_script.get(t.as_posix())} for p, t, i in compiled],
+        "assets": [{"source": str(p), "target": t.as_posix(), "type": k, "name": n, "module": owner_of_script.get(t.as_posix())} for p, t, k, n in loose],
+        "withheld": withheld,
         "seeds": [{"id": m["id"], "package": str(m["seed"]["package"]), "roots": m["seed"]["roots"],
                    "soundbanks": [n for n in m["seed"]["files"] if n != "mod.ff"],
                    "strings": str(m["seed"]["strings"]) if m["seed"].get("strings") else None} for m in seed_modules],
@@ -1098,11 +1106,14 @@ def execute(args, job: Job) -> dict:
                         "declarations, recipes, seeds and declared inputs hashed; backend presence checked; nothing compiled",
     }
     from . import checks as offline_checks
-    plan["checks"] = offline_checks.evaluate(plan)
+    plan["footprint"] = offline_checks.footprint(plan)
+    plan["checks"] = offline_checks.evaluate(plan, getattr(args, "workspace", None))
+    foundation = offline_checks.foundation_of(comp["base"], getattr(args, "workspace", None))
     for source,target,_ in compiled:
         try: text=Path(source).read_text(encoding="utf-8",errors="replace")
         except OSError: continue
         plan["checks"] += offline_checks.external_symbols(target.as_posix(),text,comp["game"])
+        plan["checks"] += offline_checks.map_script_externals(target.as_posix(),text,comp["map"],foundation,comp["game"])
     if args.action == "build":
         plan["checks"] += offline_checks.check_scripts(compiled,args,job,comp["game"])
     else:
@@ -1119,11 +1130,15 @@ def execute(args, job: Job) -> dict:
                "unqualified": resolved["unqualified"],
         "resource_totals": resolved["resource_totals"], "budget": comp["budget"],
                "scripts": len(compiled), "assets": len(loose), "seeds": len(seed_modules), "loads": len(loads),
-               "decisions": decided, "undecided": undecided, "base_owned_names": len(comp.get("base_owned") or ())}
+               "decisions": decided, "undecided": undecided, "base_owned_names": len(comp.get("base_owned") or ()),
+               "footprint": plan["footprint"], "withheld": len(withheld)}
     summary["checks"] = plan["checks"]
     summary["placements"] = plan["placements"]
-    if any(c["outcome"]=="failed" for c in plan["checks"]):
-        raise Failure(INPUT_INVALID,"Offline checks failed",checks=plan["checks"])
+    failed=[c for c in plan["checks"] if c["outcome"]=="failed"]
+    if failed:
+        raise Failure(INPUT_INVALID,"Offline checks failed: "+"; ".join(f'{c["id"]}: {c["detail"]}' for c in failed)[:1200],
+                      "Read checks for every row; a pool row names its largest contributors, a map-scripts row the paths the target map lacks.",
+                      checks=plan["checks"],failed=[c["id"] for c in failed])
     if args.action == "plan":
         return {**summary, "backends": checks, "backends_available": plan["backends_available"],
                 "input_files": plan["input_files"], "verification": plan["verification"]}

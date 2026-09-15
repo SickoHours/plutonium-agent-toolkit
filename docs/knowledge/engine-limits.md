@@ -10,6 +10,8 @@ compositions without measurement. Unknown occupancy stays unknown.
 | Actor client field set | Filled by existing composition | Three new bits for two weapons | Sum every actor field across map, mod and global scripts; other sets (world, player, scriptmover) are separate |
 | Projectile FX registrations | 40 | Composition sat at 39 with one spare | Union of projectile FX across the full loaded set |
 | Sound assets | 32 | Aggregate of map plus mod banks | Count banks and assets across the whole load |
+| Rawfile assets | 1,024 | Two packs rooted model-export GLBs and source WAVs as rawfiles beside the compiled models and banks; the client refused the mod at selection | Every rawfile in the map's zones plus every rawfile the pack embeds (compiled scripts, animation tables, accuracy graphs, text); authoring inputs count when they are rooted |
+| Image bank slots | 16 open image banks | A pack's zone header read six donor banks on top of the client's startup set; the seventeenth open failed with `no free ipak slots` | The client's startup set (twelve on a full retail install) plus every distinct `>level.ipak_read` line the header adds; a bank the zone folder lacks is skipped and costs nothing |
 | Streamed audio voices | 10 (`snd_max_stream_voice`) | Multi-layer gunshot fully streamed | Layers per shot times overlapping shots |
 | HUD font scale | Minimum 1.0 | Scales 0.75 to 0.95 rendered enormous | Every `fontscale` assignment |
 | Sound bank preload reservation | Tens to hundreds of MiB | Eleven preloaded banks at 134 MiB; "Out of memory" at map load | Bank sizes from OAT inspection plus fastfile virtual block |

@@ -161,6 +161,8 @@ OpenAssetTools and drafts a `module.json` beside it. Copy both next to the packa
 `roots` the subset the pack's zone names so the linker copies them out of the seed (weapons and
 soundbanks first, then models, animations, materials and effects; images, technique sets and
 strings are never roots because the linker resolves them through the assets that use them).
+T6 compiled script assets (`script,<path>`) are roots: a seed that embeds native helper scripts
+would otherwise lose them silently while every root check still passed.
 Localized strings cannot be copied out of a loaded fastfile, so `declare` extracts them to
 `mod.str` and `module build` merges every seed's strings into the pack's own string table.
 
@@ -452,7 +454,28 @@ reads a ledger. [evidence-ledger.md](evidence-ledger.md) specifies the rows and 
 
 Composition plans contain `checks` with `passed`, `failed` or `not_counted`. Pool checks
 use shipped map occupancy plus declared contributions; a floor above the observed bound
-fails before linking, while incomplete counts remain uncounted. Projectile FX union requires
+fails before linking, while incomplete counts remain uncounted. The composition's `base`
+token is mapped to the occupancy foundation (`stock`, `b1` to `dlc5-beta1`, `b2` to
+`dlc5-beta2`, or the workspace's `foundations/*.json` `profile_prefix` when `--workspace` is
+given); a token with no known foundation leaves every pool `not_counted`.
+
+Counted pools: `pool:rawfile-assets` (bound 1,024; every recipe script, every delivered
+`rawfile` asset row and every seed `rawfile,` root, on top of the map's rawfiles),
+`pool:image-bank-slots` (bound 16; every distinct `>level.ipak_read` header line beyond the
+client's startup set, on top of the twelve it holds open), `pool:sound-assets` (a floor,
+reported but never passed) and the actor client field bits. A failed pool row carries
+`contribution`, `base` and `contributors` (the members or bank names that add most), and the
+plan's `footprint` lists every member's rawfiles, scripts and soundbanks so a caller can show
+a meter before the engine does.
+
+A recipe asset row may carry `"deliver": false` (rawfile rows only): the file is hashed as a
+build input but never staged or rooted, for authoring inputs such as model exports and source
+WAVs that another row already compiles. Withheld rows are listed under `withheld` in the plan.
+
+`map-scripts:<script>` rows check every `#include` and qualified `path::call` into a stock
+script namespace (`maps/`, `clientscripts/`, `common_scripts/`, `codescripts/`) against the
+compiled scripts the target map's zones carry on that foundation (`knowledge/map-scripts.json`);
+a path the map lacks fails, since it is an unresolved external at load that no compiler sees. Projectile FX union requires
 weapon blobs and is not inferred from weapon count. Soundbank listing is only a floor.
 Builds run a receipted `gsc check` dry run per script before linking. Compiler-reported unresolved
 externals fail; successful compilation alone cannot prove runtime external resolution and that
