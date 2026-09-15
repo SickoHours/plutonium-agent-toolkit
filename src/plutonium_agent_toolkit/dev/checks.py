@@ -185,7 +185,8 @@ def image_sources(plan,report=None):
         decided.add(name)
     failed=sum(1 for r in rows if r['outcome']=='failed');unknown=sum(1 for r in rows if r['outcome']=='not_counted')
     if failed:summary='failed',f'{failed} of {len(rows)} image(s) the pack references have pixels nowhere it can load them'
-    elif unknown:summary='not_counted',(f'{len(embedded)} image(s) embedded with their pixels; {unknown} referenced image(s) undecided offline, and the '
+    elif unknown:summary='not_counted',(f'{len(embedded)} image(s) rooted from a disk .iwi (a header each; their pixels still need a bank or '
+                                        f'storage/t6/images); {unknown-len(embedded)} referenced image(s) undecided offline, and the '
                                         'images a loaded zone resolves are not in the plan at all. Only a readback beside the banks decides them')
     elif rows:summary='passed',f'Every one of the {len(rows)} image(s) this plan can name has pixels the pack can load'
     else:summary='not_counted',('No member embeds or references an image by name. Images a loaded zone resolves for a member\'s models and '
