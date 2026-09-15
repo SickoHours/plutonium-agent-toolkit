@@ -210,7 +210,7 @@ class ImageSources(unittest.TestCase):
         out=checks.image_sources(self.plan(assets=[self.image_row(iwi)]))
         self.assertEqual(out[0]['outcome'],'passed')
         self.assertEqual(out[1],{'id':'image-sources:tex','outcome':'passed',
-                                 'detail':'wavegun ships tex as its own image asset; the linker reads the file and the pixels ride in the fastfile'})
+                                 'detail':'wavegun ships tex as its own image asset; the linker reads the file from disk and the build stages it beside the package, where the client reads its pixels'})
     def test_a_declared_image_whose_file_is_absent_or_empty_fails(self):
         temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup)
         empty=Path(temp.name)/'tex.iwi';empty.write_bytes(b'')

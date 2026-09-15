@@ -546,8 +546,8 @@ without pixels, which is why this is a check and not a convention.
 
 `image-sources` is that check. One row per image the plan can name, plus a summary row:
 
-- an `image` asset row whose file is on this machine is `passed` — its pixels ride in `mod.ff`,
-  with no bank and no header read spent;
+- an `image` asset row whose file is on this machine is `passed` — the linker reads the `.iwi`
+  from disk and the build stages it beside the package, with no bank and no header read spent;
 - a declared row whose file is missing or empty is `failed`: the zone gets a header and nothing else;
 - an image a member's zone listing only references (a seed's or an adapter's `image,<name>` root)
   is `not_counted` with that reason. Bank contents cannot be read without the banks, so the plan

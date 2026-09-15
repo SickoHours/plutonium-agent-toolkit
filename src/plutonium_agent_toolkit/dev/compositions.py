@@ -1723,6 +1723,9 @@ def _build_composition(comp: dict, plan: dict, compiled, loose, seed_modules, lo
             if dest.exists():
                 raise Failure(INPUT_INVALID, f"Two seeds ship the soundbank {name}; a pack carries one copy of each bank")
             shutil.copyfile(path, dest)
+    # An image's pixels are never inside the fastfile; the client reads them from a bank the header
+    # names or from images/ in the mod's folder, so the pack's own images travel beside it too.
+    staged_images = projects.stage_images(raw, banks)
     # Compiled scripts also travel loose beside the package: on this base the engine executes
     # scripts/zm/*.gsc from the profile folder (`loaded successfully from raw`) and does not run
     # the rawfile copies inside mod.ff. Every accepted stock profile ships them this way.
@@ -1757,7 +1760,8 @@ def _build_composition(comp: dict, plan: dict, compiled, loose, seed_modules, lo
     if missing_roots:
         raise Failure(BACKEND_FAILED, f"{len(missing_roots)} seed root(s) are not in the composed package: {missing_roots[:5]}",
                       "The linker did not copy them from the seed; check the loads and the seed manifest.", missing=missing_roots[:64])
-    return {**link, "unqualified": plan["unqualified"], "plan": "plan.json", "rawfiles_verified": len(rawfiles), "mod_ff": link["packages"][0]["path"],
+    return {**link, "unqualified": plan["unqualified"], "plan": "plan.json", "rawfiles_verified": len(rawfiles),
+            "images_beside_package": staged_images, "mod_ff": link["packages"][0]["path"],
             "withheld_staged": len(staged_withheld),
             "seed_roots_verified": sum(len(m["seed"]["roots"]) for m in seed_modules),
             "embedded_assets": len(embedded), "referenced_assets": len(referenced), "localized_strings": len(strings),

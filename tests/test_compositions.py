@@ -894,7 +894,7 @@ class PoolAndDeliveryTests(CompositionFixture):
         self.assertEqual(code, 0, result)
         rows = {c["id"]: c for c in result["result"]["checks"] if c["id"].startswith("image-sources")}
         self.assertEqual(rows["image-sources:halo_tex"]["outcome"], "passed")
-        self.assertIn("pixels ride in the fastfile", rows["image-sources:halo_tex"]["detail"])
+        self.assertIn("stages it beside the package", rows["image-sources:halo_tex"]["detail"])
         self.assertEqual(rows["image-sources"]["outcome"], "passed")
         report = self.root / "shipped-check.json"
         report.write_text(json.dumps({"pack": "stock_image_test", "images": [{"name": "halo_tex", "pixels": "present"}]}))
@@ -903,6 +903,29 @@ class PoolAndDeliveryTests(CompositionFixture):
         self.assertEqual(code, 0, result)
         receipt = json.loads((Path(result["result"]["output"]) / "receipt.json").read_text())
         self.assertIn(str(report.resolve()), receipt["inputs"], "the readback the plan was decided against is a hashed input")
+
+    def test_a_generated_image_name_is_shipped_and_a_path_separator_is_still_refused(self):
+        """T6 names a derived texture `~$black-rgb&~-rt5_weapon_mesh~5d8c5c3e`; a module that ships it must name it exactly."""
+        name = "~$black-rgb&~-rt5_weapon_mesh~5d8c5c3e"
+        self.module_with_assets("thundergun", [{"source": f"assets/images/{name}.iwi", "target": f"images/{name}.iwi",
+                                                "type": "image", "name": name}])
+        code, result = invoke(["module", "plan", str(self.composition(["thundergun"], name="stock_generated_image_test")), "--output", self.out()])
+        self.assertEqual(code, 0, result)
+        self.assertEqual(next(c for c in result["result"]["checks"] if c["id"] == f"image-sources:{name}")["outcome"], "passed")
+        from plutonium_agent_toolkit.dev.projects import _zone_target
+        for bad in ("images/../escape.iwi", "/images/x.iwi", "images/a:b.iwi"):
+            with self.assertRaises(Exception):
+                _zone_target(bad)
+
+    def test_a_pack_s_images_travel_beside_the_package(self):
+        """The fastfile carries an image's header, never its pixels; the client reads images/ in the mod's folder."""
+        row = {"source": "assets/images/halo_tex.iwi", "target": "images/halo_tex.iwi", "type": "image", "name": "halo_tex"}
+        self.module_with_assets("skull", [row])
+        code, result = invoke(["module", "build", str(self.composition(["skull"], name="stock_image_delivery_test")), "--output", self.out()])
+        self.assertEqual(code, 0, result)
+        self.assertEqual(result["result"]["images_beside_package"], ["halo_tex.iwi"])
+        packages = Path(result["result"]["output"]) / "packages"
+        self.assertEqual((packages / "images" / "halo_tex.iwi").read_bytes(), b"BYTES assets/images/halo_tex.iwi")
 
     def test_a_readback_naming_an_image_with_no_pixels_refuses_the_pack(self):
         self.module("thundergun")

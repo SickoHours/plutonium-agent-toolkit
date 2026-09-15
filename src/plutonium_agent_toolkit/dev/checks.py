@@ -129,8 +129,9 @@ def image_sources(plan,report=None):
     that references such an image with no bank carrying it renders it without pixels, loads
     without an error and looks like a success.
 
-    What a plan can prove on its own: an `image` asset row whose file is on this machine embeds its
-    own pixels, and a row whose file is missing or empty embeds nothing. Bank contents are not
+    What a plan can prove on its own: an `image` asset row whose file is on this machine is a
+    complete delivery, because the build stages that file beside the package; a row whose file is
+    missing or empty delivers nothing. Bank contents are not
     readable without the banks, so an image a member's zone listing only references is
     ``not_counted`` with that reason, never ``passed``, unless ``report`` — a readback taken with
     the client's banks beside the package — decides it. Every image that readback found no pixels
@@ -156,7 +157,7 @@ def image_sources(plan,report=None):
         who=', '.join(sorted({m for m,_ in owners if m})) or 'a member'
         absent=[source for _,source in owners if not source or not Path(source).is_file() or Path(source).stat().st_size==0]
         if absent:row_for(name,'failed',f'{who} declares image {name} but its file is missing or empty here, so the zone carries a header with no pixels')
-        else:row_for(name,'passed',f'{who} ships {name} as its own image asset; the linker reads the file and the pixels ride in the fastfile')
+        else:row_for(name,'passed',f'{who} ships {name} as its own image asset; the linker reads the file from disk and the build stages it beside the package, where the client reads its pixels')
     decided=set(embedded)
     for name,owners in sorted(referenced.items()):
         if name in decided:continue
