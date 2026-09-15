@@ -805,7 +805,7 @@ class PoolAndDeliveryTests(CompositionFixture):
         pool = next(c for c in row["result"]["checks"] if c["id"] == "pool:rawfile-assets")
         self.assertEqual(pool["outcome"], "passed");self.assertEqual(pool["count"], 533)
         receipt = json.loads((Path(row["result"]["output"]) / "receipt.json").read_text())
-        self.assertTrue(any(k.endswith("model_export/m0.glb") for k in receipt["inputs"]), "withheld files are still hashed inputs")
+        self.assertTrue(any(k.replace("\\", "/").endswith("model_export/m0.glb") for k in receipt["inputs"]), "withheld files are still hashed inputs")
         code, row = invoke(["module", "build", str(comp), "--output", self.out()])
         self.assertEqual(code, 0, row)
         package = json.loads((Path(row["result"]["output"]) / "packages" / "mod.ff").read_text())
