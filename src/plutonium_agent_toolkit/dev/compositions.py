@@ -1008,6 +1008,9 @@ def collisions(modules: list[dict], loaded: dict[str, tuple], decisions: list[di
     else needs an owner recorded in the recipe. Returns (decided, undecided, refused); declared replacements cannot be decided away."""
     base_owned = base_owned or set()
     file_owners: dict[str, list[tuple[str, str]]] = {}
+    # A withheld row stages the file under raw/ but emits no zone entry, so a withheld owner
+    # would drop a delivered member's ``rawfile,`` line: remember which owners are withheld.
+    withheld_owners: set[tuple[str, str]] = set()
     for m in modules:
         if m["recipe"] is not None:
             data, compiled, loose, _ = loaded[m["id"]]
@@ -1020,6 +1023,7 @@ def collisions(modules: list[dict], loaded: dict[str, tuple], decisions: list[di
             # would compile from whichever copy was staged last, so it is a file decision like any.
             for row in data.get("_withheld", []):
                 file_owners.setdefault(row["target"].casefold(), []).append((m["id"], sha256_file(Path(row["path"]))))
+                withheld_owners.add((row["target"].casefold(), m["id"]))
         elif m["seed"] and not m["seed"].get("private"):
             for row in m["seed"]["embedded"]:
                 kind, name = row.split(",", 1)
@@ -1054,7 +1058,11 @@ def collisions(modules: list[dict], loaded: dict[str, tuple], decisions: list[di
         ids = [o for o, _ in owners]
         digests = {d for _, d in owners}
         if len(digests) == 1 and not any(d.startswith(("seed:", "adapter:")) for d in digests):
-            decided.append({"collision": target, "kind": "file", "modules": ids, "resolution": "identical bytes; one copy is packed", "owner": ids[0]})
+            # Identical bytes dedupe with no decision, but the owner must be a delivered member
+            # where there is one: a withheld owner stages the file and emits no zone entry, so
+            # picking it would silently drop the delivered member's rawfile row.
+            owner = next((i for i in ids if (target, i) not in withheld_owners), ids[0])
+            decided.append({"collision": target, "kind": "file", "modules": ids, "resolution": "identical bytes; one copy is packed", "owner": owner})
             continue
         decision = recorded.get(target)
         row = {"collision": target, "kind": "file", "modules": ids}

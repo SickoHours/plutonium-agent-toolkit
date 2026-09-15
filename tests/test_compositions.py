@@ -828,6 +828,24 @@ class PoolAndDeliveryTests(CompositionFixture):
         self.assertEqual(sorted(package["rawfiles"]), ["accuracy/x.accu", "scripts/zm/wavegun.gsc"])
         self.assertEqual(row["result"]["rawfiles_verified"], 2)
 
+    def test_identical_bytes_pick_a_delivered_owner_over_a_withheld_one(self):
+        """A withheld row stages the file but emits no zone entry: when a delivered member has the
+        same bytes at the same target, the dedupe must name the delivered one or the rawfile is lost."""
+        row = {"source": "accuracy/x.accu", "target": "accuracy/x.accu", "type": "rawfile"}
+        self.module_with_assets("withholder", [dict(row, deliver=False)])
+        self.module_with_assets("deliverer", [dict(row)])
+        comp = self.composition(["withholder", "deliverer"], name="stock_withheld_owner_test")
+        code, result = invoke(["module", "plan", str(comp), "--output", self.out()])
+        self.assertEqual(code, 0, result)
+        decided = next(d for d in result["result"]["decisions"] if d["collision"] == "accuracy/x.accu")
+        self.assertEqual(decided["resolution"], "identical bytes; one copy is packed")
+        self.assertEqual(decided["modules"], ["withholder", "deliverer"], "the withheld member is listed first")
+        self.assertEqual(decided["owner"], "deliverer", "a delivered owner keeps the zone entry")
+        code, result = invoke(["module", "build", str(comp), "--output", self.out()])
+        self.assertEqual(code, 0, result)
+        package = json.loads((Path(result["result"]["output"]) / "packages" / "mod.ff").read_text())
+        self.assertIn("accuracy/x.accu", package["rawfiles"], "the delivered copy is still in the zone")
+
     def test_deliver_false_is_rawfile_only_and_boolean(self):
         d = self.module_with_assets("alpha", [{"source": "x.json", "target": "xmodel/x.json", "type": "xmodel", "name": "x", "deliver": False}])
         code, row = invoke(["module", "plan", str(self.composition(["alpha"])), "--output", self.out()])

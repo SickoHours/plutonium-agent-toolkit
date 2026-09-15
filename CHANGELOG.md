@@ -19,7 +19,9 @@ Every entry states what shipped, on which platform it was verified, and what rem
   map. `deliver: false` rows are staged under `raw/` at the path the compiled asset names, with
   no zone line, so a model's export, a bank's WAV or a WeaponDef's accuracy graph is found by the
   linker instead of failing the asset; two members withholding different bytes at one path are a
-  file decision like any other, and the build reports `withheld_staged`. The workspace builder
+  file decision like any other, and the build reports `withheld_staged`; identical bytes at one
+  path dedupe to a delivered owner where there is one, so a withheld copy never takes the zone
+  row from a member that ships it. The workspace builder
   path from `--workspace` is resolved absolute before the job runs it. Verified by offline unit
   tests on Linux against the fake backends and, in a private workspace, by two Der Riese packs
   that plan and build: 21 GobbleGum effects on one shared bank, and Wave Gun, Winter's Howl and
