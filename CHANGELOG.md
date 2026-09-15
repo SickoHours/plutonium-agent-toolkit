@@ -49,6 +49,32 @@ Every entry states what shipped, on which platform it was verified, and what rem
   `adapter-recipe-single-target-without-recipes`, else `unknown`). `result.unqualified` is now
   filled whether or not `--allow-unqualified` was passed, so a refusal names what is undeclared
   instead of only saying that something is. Read-only: nothing is widened, built or written.
+- `ff extract` refuses an asset type the pinned OpenAssetTools build cannot dump instead of
+  reporting an empty success. `--types fx` on a T6 zone used to exit zero having written nothing,
+  because OAT registers no T6 FX dumper (and no FX loader), so a caller could not tell "this zone
+  has no effects" from "this backend cannot write effects out". `dev/backends.json` gains
+  `asset_dumpers`: per game, which of the title's asset type names have a registered dumper, read
+  from the upstream OAT source at the pinned commit, with T6 populated (28 dumpable, 32 not,
+  including `fx` and `fximpacttable`) and the `techset`/`gfxlightdef` aliases resolved. `ff extract`
+  takes `--game`, and with it a type the table refuses fails with `backend_unavailable` and a hint
+  naming the type, the backend and the `ff link` route that does carry such an asset — before any
+  backend runs. Without `--game` the title is only known once the readback names it, so the same
+  refusal lands after the run; a request mixing dumpable and undumpable types still extracts and
+  lists the rest under `types_not_dumpable`. A title with no table is never judged, and
+  `ff inspect` is unaffected, because listing an asset needs no dumper. Offline unit tests on Linux
+  against the fake Unlinker, which now models a type it cannot dump as an empty exit-zero dump;
+  nothing was built, installed or played.
+- `pool:image-bank-slots` stops counting image bank reads the engine never performs. A map's row in
+  `knowledge/occupancy.json` may now carry `banks_present`, the optional inventory of banks that
+  map's client `zone/all` folder holds; when it is there, a `>level.ipak_read` line naming a bank
+  outside it becomes its own `not_counted` row ("skipped by the engine, costs no slot") and is left
+  out of the count, because the engine skips such a read with `ipak file not found` and charges no
+  slot for it. Without the inventory nothing changes and every distinct read still counts, which is
+  the conservative answer for a machine whose `zone/all` nobody measured. Found on a composition
+  that read four banks beyond the startup set where only one existed, so the count was pessimistic
+  by three. The field is optional, no shipped map carries one, and only a generator that measured a
+  real install should fill it. Offline unit tests on Linux; nothing was built, installed or played.
+
 - `module plan` and `module build` refuse a client script that registers a mystery-box weapon no
   member of the pack provides (`box-registration:<script>`). A `.csc` that calls
   `addzombieboxweapon` on a `_zm` name absent from every member's `provides.weapons` faults the

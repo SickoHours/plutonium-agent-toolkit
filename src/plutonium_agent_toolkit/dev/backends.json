@@ -179,5 +179,83 @@
       ],
       "note": "Optional. Upstream publishes a binary without a license; the toolkit downloads it only on explicit request and never redistributes it. Hash pinned from a 2026-09-10 download."
     }
-  ]
+  ],
+  "asset_dumpers": {
+    "note": "Which asset types the pinned OpenAssetTools Unlinker can write out, per game. Read from the upstream OAT source at commit 2ca512abe7cb82d70a94d5ad7846043c3978862d: the type names are ASSET_TYPE_NAMES in src/Common/Game/<GAME>/Game<GAME>.cpp and the registered dumpers are the RegisterAssetDumper calls in src/ObjWriting/Game/<GAME>/ObjWriter<GAME>.cpp, where a type with no dumper is a commented-out REGISTER_DUMPER line. Loading a type and dumping it are different capabilities; this table is only about dumping, which is what ff extract does. A game absent from games has no table and nothing is judged for it.",
+    "backend": "oat",
+    "games": {
+      "t6": {
+        "source": "src/ObjWriting/Game/T6/ObjWriterT6.cpp",
+        "aliases": {
+          "techset": "techniqueset",
+          "gfxlightdef": "lightdef"
+        },
+        "dumpable": [
+          "addonmapents",
+          "attachment",
+          "attachmentunique",
+          "camo",
+          "font",
+          "fonticon",
+          "image",
+          "leaderboard",
+          "lightdef",
+          "localize",
+          "mapents",
+          "material",
+          "physconstraints",
+          "physpreset",
+          "qdb",
+          "rawfile",
+          "script",
+          "slug",
+          "snddriverglobals",
+          "soundbank",
+          "stringtable",
+          "techniqueset",
+          "tracer",
+          "vehicle",
+          "weapon",
+          "xanim",
+          "xmodel",
+          "zbarrier"
+        ],
+        "not_dumpable": [
+          "xmodelpieces",
+          "destructibledef",
+          "soundpatch",
+          "clipmap_unused",
+          "clipmap",
+          "comworld",
+          "gameworldsp",
+          "gameworldmp",
+          "gfxworld",
+          "uimap",
+          "menulist",
+          "menu",
+          "weapondef",
+          "weaponvariant",
+          "weaponfull",
+          "fx",
+          "fximpacttable",
+          "aitype",
+          "mptype",
+          "mpbody",
+          "mphead",
+          "character",
+          "xmodelalias",
+          "xglobals",
+          "ddl",
+          "glasses",
+          "emblemset",
+          "keyvaluepairs",
+          "memoryblock",
+          "skinnedverts",
+          "footsteptable",
+          "footstepfxtable"
+        ],
+        "note": "T6 has no FX dumper, and no FX loader either (AssetLoaderFx is commented out in ObjLoaderT6.cpp), so --types fx on a T6 zone writes nothing however many effects the zone carries. To get one effect and its closure out of a donor zone, root it in an OAT project and ff link against the donor."
+      }
+    }
+  }
 }
