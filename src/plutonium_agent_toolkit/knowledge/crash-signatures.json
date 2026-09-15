@@ -1,5 +1,5 @@
 {
- "note": "Console log lines seen after clean compiles and readbacks, as regexes without the [HH:MM:SS] prefix. `pat knowledge signature --text <slice>` (or `--log <file>`) matches a slice. The cause beside each is the one found and fixed, not the only possible one. A repair that names a new line adds a row in the same task.",
+ "note": "Console log lines and Plutonium crash-text lines seen after clean compiles and readbacks, as regexes without the [HH:MM:SS] prefix. `python scripts/t6_knowledge.py lookup log <slice>` matches a slice. The cause beside each is the one found and fixed, not the only possible one. A repair that names a new line adds a row in the same task.",
  "rows": [
   {
    "cause": "Animation-state entry without a compiled tree reference",
@@ -11,9 +11,9 @@
    "source": "docs/knowledge/crashes.md"
   },
   {
-   "cause": "Two members each replaced the map's animation state and tree files with their own additions, so the copy that loaded names a state the tree does not carry",
+   "cause": "Two members each replaced the map's animation state and tree files with their own additions; the copy that loaded named a state the tree did not carry",
    "class": "asset-parse",
-   "fix": "One shared service module owns the map's .asd/.atr pair and merges every member's state blocks onto the native base; members depend on it and ship no copy",
+   "fix": "One shared service module owns the map's `.asd`/`.atr` pair and merges every member's state blocks onto the native base; members depend on it and ship no copy",
    "id": "animstatedef-state-not-in-animtree",
    "log_text": "BG_AnimStateDef_Parse: state '<state>' ... not found in its animtree",
    "regex": "BG_AnimStateDef_Parse: state '(\\w+)'.*not found in its animtree",
@@ -29,11 +29,11 @@
    "source": "docs/knowledge/crashes.md"
   },
   {
-   "cause": "A per-frame read of state that only a connect hook writes; seen in _visionset_mgr::monitor when a player never received on_player_connect on a DLC5 foundation, followed by an access violation",
+   "cause": "A per-frame read of per-player state that only the connect hook writes, for a player that never received `on_player_connect` on a DLC5 foundation; the vision manager, the power-up HUD and the sprint audio monitor all read it",
    "class": "script-error",
    "fix": "Backfill the per-player state through the manager's own arrays from a guard script before the read runs; the crash report's last-error field names the read, not the cause",
    "id": "cannot-cast-undefined-to-bool",
-   "log_text": "cannot cast undefined to bool",
+   "log_text": "cannot cast undefined to bool in _visionset_mgr::monitor, _zm_powerups::powerup_hud_monitor or _audio::monitor_player_sprint, then an access violation",
    "regex": "cannot cast undefined to bool",
    "source": "docs/knowledge/crashes.md"
   },
@@ -47,9 +47,9 @@
    "source": "docs/knowledge/crashes.md"
   },
   {
-   "cause": "A server-side registration ran before native init while the client half ran from a loose scripts/zm/*.csc, which the engine executes after the client's own perk fields are registered",
+   "cause": "A server registration ran before native init while the client half ran from a loose `scripts/zm/*.csc`, which executes after the client's own fields are registered",
    "class": "registration-order",
-   "fix": "Register on both VMs at the same point: redirect the map script's _zm::init import on server and client to an adapter that registers then chains to native init",
+   "fix": "Register on both VMs at the same point: redirect the map script's `_zm::init` import on server and client to an adapter that registers, then chains to native init",
    "id": "clientfield-registrations-mismatch",
    "log_text": "Client and server clientfield registrations don't match",
    "regex": "Client and server clientfield registrations don't match",
@@ -92,12 +92,30 @@
    "source": "docs/knowledge/crashes.md"
   },
   {
-   "cause": "The map's zones plus the mod embed more rawfiles than the engine's pool; packs that root model-export GLBs or source WAVs as rawfiles beside the compiled model and bank assets fill it fastest",
+   "cause": "The map's zones plus the mod embedded more rawfiles than the pool; model-export GLBs and source WAVs rooted as rawfiles beside the compiled assets filled it",
    "class": "pool-exhausted",
-   "fix": "Mark authoring inputs deliver: false in the recipe (or drop them from the seed's roots), keep the compiled assets, and read pool:rawfile-assets in the plan before installing",
+   "fix": "Mark authoring inputs `deliver: false` in the recipe (or drop them from the seed's roots), keep the compiled assets; `pool:rawfile-assets` in the plan names the largest contributors",
    "id": "exceeded-rawfile-limit",
-   "log_text": "Exceeded limit of 1024 'rawfile' assets",
+   "log_text": "Exceeded limit of 1024 'rawfile' assets at mod selection",
    "regex": "Exceeded limit of (\\d+) 'rawfile' assets",
+   "source": "docs/knowledge/crashes.md"
+  },
+  {
+   "cause": "Not a defect of its own: it names the script and function the VM was in when it died. The fatal GSC line is written only to the crash text, never to the console log, so a matcher that reads the console tail alone sees nothing",
+   "class": "script-error",
+   "fix": "Read `plutonium-r*.txt` as a log source beside the console; pair this line with the `last gsc error message` line above it to name both the failure and its site",
+   "id": "gsc-error-position",
+   "log_text": "last gsc pos 0x<addr> <script>::<function> in the Plutonium crash text (plutonium-r*.txt)",
+   "regex": "last gsc pos 0x[0-9a-f]+ ([a-z0-9_/]+)::(\\w+)",
+   "source": "docs/knowledge/crashes.md"
+  },
+  {
+   "cause": "The same missing per-player state, read as a container instead of a boolean; the two lines are the same defect reported by two different reads",
+   "class": "script-error",
+   "fix": "Same fix as the cast above; treat the two lines as one class when reading a crash",
+   "id": "gsc-undefined-not-array",
+   "log_text": "undefined is not an array, string, or vector in _visionset_mgr::monitor, then an access violation",
+   "regex": "undefined is not an array, string, or vector",
    "source": "docs/knowledge/crashes.md"
   },
   {
@@ -110,11 +128,11 @@
    "source": "docs/knowledge/crashes.md"
   },
   {
-   "cause": "A module script calls a stock helper unqualified without the #include that exports it, or calls a helper its re-cut dropped; the script compiled but could not link at map load and the server shut down",
+   "cause": "Module script re-cut without its stock `#include` lines; the call compiled but could not link",
    "class": "script-error",
-   "fix": "Restore the stock #include lines or fully qualify the call; regenerate from the owning tool; module plan externals: rows report this offline",
+   "fix": "Restore the includes (or qualify the call); `module plan` `externals:` rows catch it offline",
    "id": "link-unresolved-external",
-   "log_text": "**** Unresolved external :  \"get_players\" with 0 parameters in \"\" at lines 1,1 ****",
+   "log_text": "COM_ERROR (6): **** Unresolved external : \"get_players\" with 0 parameters at map load, then SV_Shutdown",
    "regex": "^\\*{4}\\s*Unresolved external\\s*:\\s*\"([A-Za-z0-9_]+)\"\\s+with\\s+(\\d+)\\s+parameters",
    "source": "docs/knowledge/crashes.md"
   },
@@ -128,9 +146,18 @@
    "source": "docs/knowledge/crashes.md"
   },
   {
-   "cause": "The mod's zone header reads more image banks than the client has slots for after its startup set",
+   "cause": "The module was cut against a map that carried the script; the target's zones do not",
+   "class": "script-error",
+   "fix": "`map-scripts:<script>` rows in the plan refuse an include or qualified call into a path the target map lacks; port the dependency or leave the member out",
+   "id": "map-script-not-carried",
+   "log_text": "COM_ERROR ... Unresolved external naming a stock script the target map does not carry (_zm_perk_divetonuke on Beta 2 Der Riese)",
+   "regex": "Unresolved external\\s*:.*",
+   "source": "docs/knowledge/crashes.md"
+  },
+  {
+   "cause": "The mod's zone header read more image banks than the client had slots for after its startup set",
    "class": "pool-exhausted",
-   "fix": "Read only the banks the pack's images need; consolidate donor textures into one pack-owned bank and read that; pool:image-bank-slots in the plan counts the header lines",
+   "fix": "Read only the banks the pack's images need, or consolidate donor textures into one pack-owned bank; `pool:image-bank-slots` counts the header lines",
    "id": "no-free-ipak-slots",
    "log_text": "no free ipak slots loading pak <path>.ipak with N index entries",
    "regex": "no free ipak slots loading pak",
@@ -146,11 +173,11 @@
    "source": "docs/knowledge/crashes.md"
   },
   {
-   "cause": "An imported WeaponDef overrides a weapon the map's own registration list precaches, and the imported definition does not satisfy the native precache",
+   "cause": "An imported WeaponDef overrode a weapon the map's own registration list precaches",
    "class": "asset-parse",
    "fix": "Keep the map's native definitions for weapons it already registers; the pack adds new weapon names instead of overriding native ones",
    "id": "precacheitem-access-violation",
-   "log_text": "access violation in include_zombie_weapon / precacheitem during map weapon registration",
+   "log_text": "Access violation in include_zombie_weapon / precacheitem during map weapon registration",
    "regex": "include_zombie_weapon|precacheitem",
    "source": "docs/knowledge/crashes.md"
   },
@@ -164,9 +191,9 @@
    "source": "docs/knowledge/crashes.md"
   },
   {
-   "cause": "A converted donor animation kept a rmbnt# rumble event naming an asset T6 never registers; the engine aborts the match on first play",
+   "cause": "A converted donor clip kept its compiled event tail; a `rmbnt#` entry names a rumble the donor game had and T6 does not; the match ends (`SV_Shutdown`) on first play",
    "class": "asset-missing",
-   "fix": "Strip rmbnt# events and unresolved sndnt# events from the clip's event tail at conversion; poses and frames untouched",
+   "fix": "Rewrite the event tail at conversion: drop `rmbnt#` events, resolve `sndnt#` events through the weapon's notetrack sound map or drop them; poses and frames untouched",
    "id": "rumble-asset-not-registered",
    "log_text": "Could not play rumble asset '<name>' because it was not registered and loaded",
    "regex": "Could not play rumble asset '([^']+)' because it was not registered and loaded",
