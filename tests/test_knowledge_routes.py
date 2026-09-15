@@ -219,6 +219,52 @@ class DocsAndBenchmarkTests(unittest.TestCase):
             self.assertTrue((ROOT / "tools" / "benchmark" / task["prompt"]).is_file(), task["prompt"])
 
 
+class CrashTextSignatureTests(unittest.TestCase):
+    """The crash-text rows must not answer for an unrelated failure.
+
+    ``signature()`` evaluates every row against a line on its own, so a row whose
+    regex is a bare substring hands its cause and fix to any failure that happens
+    to contain that substring. These three rows are narrow on purpose: two of them
+    only ever appear in a Plutonium crash text, and the third is identified by the
+    unresolved name being a stock script path rather than a bare function.
+    """
+
+    def matched(self, line):
+        rows = knowledge.signature(text=line)["matches"]
+        return rows[0]["id"] if rows else None
+
+    def test_each_crash_text_row_matches_its_own_engine_wording(self):
+        for line, expected in (
+            ("last gsc error message 'undefined is not an array, string, or vector'", "gsc-undefined-not-array"),
+            ("last gsc pos 0x1b8f60b9 maps/mp/_visionset_mgr::monitor", "gsc-error-position"),
+            ("COM_ERROR (6): Unresolved external : maps/mp/zombies/_zm_perk_divetonuke::enable_divetonuke_perk_for_level",
+             "map-script-not-carried"),
+        ):
+            with self.subTest(expected=expected):
+                self.assertEqual(self.matched(line), expected)
+
+    def test_two_unrelated_failures_reach_neither_crash_text_row(self):
+        narrow = {"gsc-undefined-not-array", "gsc-error-position", "map-script-not-carried"}
+        # A missing include and a wrong-VM builtin: ordinary link failures whose own
+        # rows carry the right cause and fix. Before these regexes were narrowed,
+        # map-script-not-carried answered for the first of them.
+        for line, expected in (
+            ('**** Unresolved external :  "get_players" with 0 parameters in "" at lines 1,1 ****',
+             "link-unresolved-external"),
+            ("Unresolved external: setclientfield with 2 parameters", "unresolved-external-missing-include"),
+        ):
+            with self.subTest(line=line[:40]):
+                self.assertEqual(self.matched(line), expected)
+                self.assertNotIn(self.matched(line), narrow)
+
+    def test_the_generic_vm_error_is_not_claimed_by_the_crash_text_row(self):
+        # The same text without the crash text's prefix names no site and no cause.
+        self.assertIsNone(self.matched("undefined is not an array, string, or vector"))
+        # A console script error keeps the generic row, which is the honest answer.
+        self.assertEqual(self.matched("script runtime error: undefined is not an array, string, or vector"),
+                         "script-error")
+
+
 if __name__ == "__main__":
     unittest.main()
 
