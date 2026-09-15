@@ -25,6 +25,24 @@ reports what the zones the engine loads for that map already carry against each 
 listings, decompiled text and WeaponDefs, never runtime pools; `null` stays unknown). A mod's
 own contribution is added on top of the map's number, never instead of it.
 
+## Counting image bank slots
+
+A `>level.ipak_read,<name>` header line asks the client to open `zone/all/<name>.ipak`. A name the
+folder does not carry is skipped with `ipak file not found` and costs no slot, so counting every
+header line is a floor on what the pack spends and an over-count of what the engine charges it.
+The difference is real: a composition read four banks beyond the startup set on 2026-09-15
+(`lowmip`, `code_post_gfx_zm`, `common_zm`, `zm_factory`) and only `zm_factory.ipak` was on that
+machine, so three of the four counted reads opened nothing.
+
+`pool:image-bank-slots` therefore counts every distinct read beyond the startup set unless it is
+given evidence: an optional `banks_present` list on a map's row in `knowledge/occupancy.json`,
+naming the banks that map's client zone folder carries. With it, a read naming a bank outside the
+list becomes its own `not_counted` row — "skipped by the engine, costs no slot" — and is left out
+of the count; without it nothing changes, because which banks a stranger's install carries is not
+readable offline. The field is optional and absent from the shipped table; only a generator that
+measured a real `zone/all` should fill it, and the list is that machine's inventory, not a claim
+about anyone else's.
+
 ## Reading the table honestly
 
 - A bound observed on one map with one client build is evidence for that scope. Do not raise a
