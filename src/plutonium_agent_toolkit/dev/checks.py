@@ -242,6 +242,29 @@ def stock_exports(vm):
     if vm is None:return {}
     return {path:row['functions'] for path,row in knowledge.load('stock-exports.json')['exports'].items() if row.get('vm')==vm}
 
+BOX_LIST=re.compile(r'strtok\(\s*"([^"]+)"\s*,\s*" "\s*\)',re.I)
+BOX_CALL=re.compile(r'\baddzombieboxweapon\s*\(',re.I)
+
+def box_registrations(name,text,provided):
+    """A client script that calls addzombieboxweapon registers weapon names in the mystery-box
+    display pool. The engine faults at the first box use when a registered name is not a loaded
+    WeaponDef (`AddZombieBoxWeapon: Failed to find weapon <name>`, then an access violation).
+    Every `_zm` name in a strtok list of such a script must be provided by a member of the pack or
+    be a stock weapon; a name nobody provides fails naming the script and the name. Scripts that
+    never call addzombieboxweapon say nothing. Stock names are not judged here (the pack cannot
+    see the map's own list offline), so only names ending in `_zm` that no member provides and
+    that carry a module-style prefix are refused; the rest stay not_counted."""
+    if not name.lower().endswith('.csc') or not BOX_CALL.search(mask_noncode(text)):return []
+    masked=mask_noncode(text);names=set()
+    for lst in BOX_LIST.findall(text):
+        names|={w for w in lst.split() if w.endswith('_zm')}
+    if not names:return []
+    missing=sorted(n for n in names if n not in provided)
+    if missing:
+        return [{'id':'box-registration:'+name,'outcome':'failed',
+                 'detail':f'{name} registers {", ".join(missing)} in the mystery box and no member of this pack provides that weapon; the engine faults at the first box use (crash signature box-weapon-not-found). Register only weapons the pack provides'}]
+    return [{'id':'box-registration:'+name,'outcome':'passed','detail':f'{name} registers only weapons a member provides: {", ".join(sorted(names))}'}]
+
 def external_symbols(name,text,game='t6'):
     """Unqualified calls resolved against the stock export rows of this script's own VM: failed when
     the call needs an #include the script lacks; passed when every known call resolves on this

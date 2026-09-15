@@ -49,6 +49,12 @@ Every entry states what shipped, on which platform it was verified, and what rem
   `adapter-recipe-single-target-without-recipes`, else `unknown`). `result.unqualified` is now
   filled whether or not `--allow-unqualified` was passed, so a refusal names what is undeclared
   instead of only saying that something is. Read-only: nothing is widened, built or written.
+- `module plan` and `module build` refuse a client script that registers a mystery-box weapon no
+  member of the pack provides (`box-registration:<script>`). A `.csc` that calls
+  `addzombieboxweapon` on a `_zm` name absent from every member's `provides.weapons` faults the
+  engine at the first box use (`AddZombieBoxWeapon: Failed to find weapon <name>`, then an access
+  violation); the check names the script and the names. Found when a weapon module's client script,
+  copied from another weapon's, still registered the donor's names. Offline unit tests on Linux.
 
 - The shipped T6 knowledge is re-exported from the maintainer's generator after its source corpus
   was restored, so every file under `knowledge/` is generator output again. `engine-limits.json`
