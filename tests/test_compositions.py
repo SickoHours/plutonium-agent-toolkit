@@ -1120,3 +1120,24 @@ class DonorShadowingTests(CompositionFixture):
              "base_listings": "packs/listings"}))
         self.assertEqual(targets.base_listing_dirs(self.root, "stock-fnd"), [self.root / "packs" / "listings"])
         self.assertEqual(targets.base_listing_dirs(self.root, "absent-fnd"), [])
+
+    def test_a_foundation_link_load_is_the_base_even_with_no_listing_staged_here(self):
+        """A build against the foundation's own zones and nothing else has no donor, so it needs no
+        listing: `module qualify` links exactly that way."""
+        (self.root / "foundations").mkdir(parents=True, exist_ok=True)
+        (self.root / "foundations" / "stock-fnd.json").write_text(json.dumps(
+            {"schema": 1, "id": "stock-fnd", "profile_prefix": "stock",
+             "maps": {"zm_transit": {"link_loads": ["common_zm"]}}}))
+        self.module("skull")
+        comp = self.composition(["skull"], name="stock_shadow4_test", loads=["../zones/common_zm.ff"])
+        code, row = invoke(["module", "plan", str(comp), "--output", self.out(), "--workspace", str(self.root)])
+        self.assertEqual(code, 0, row)
+        check = next(c for c in row["result"]["checks"] if c["id"] == "donor-shadowing")
+        self.assertEqual(check["outcome"], "passed")
+        self.assertIn("no donor zone", check["detail"])
+        # Add the donor back and the same composition is refused again: only the declared zone is base.
+        comp = self.composition(["skull"], name="stock_shadow5_test", loads=["../zones/common_zm.ff", "../zones/moon.ff"])
+        code, row = invoke(["module", "plan", str(comp), "--output", self.out(), "--workspace", str(self.root)])
+        self.assertEqual(code, 1, row)
+        check = next(c for c in row["details"]["checks"] if c["id"] == "donor-shadowing")
+        self.assertEqual((check["outcome"], check["count"], check["names"]), ("failed", 1, ["moon"]))

@@ -27,8 +27,10 @@ Every entry states what shipped, on which platform it was verified, and what rem
   `<zone>-list.txt` there is one of the base's zones and every load without one is a donor, so the
   classification comes from the composition's own `loads` and a recipe no longer has to hand-list
   `base_owned`. With `--workspace` and no flag, the same directory is read from
-  `foundations/<id>.json`'s `base_listings`. The explicit `base_owned` field keeps working and
-  merges with both. An unlinker listing captured from a colour terminal is now parsed too; its ANSI
+  `foundations/<id>.json`'s `base_listings`. A zone named in that file's `maps.<map>.link_loads` is
+  the base's even with no listing staged, so a build against the foundation's own zones and nothing
+  else has no donor at all — which is how `module qualify` links one module alone. The explicit
+  `base_owned` field keeps working and merges with all of them. An unlinker listing captured from a colour terminal is now parsed too; its ANSI
   escapes had made it read as empty.
 
 - New check `donor-shadowing`. It refuses a composition that loads a zone outside its base with no

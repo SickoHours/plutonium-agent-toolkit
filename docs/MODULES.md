@@ -714,6 +714,11 @@ donor. Nothing else has to be declared — the classification comes from the com
 `loads`. A workspace can instead put the directory in `foundations/<id>.json` under `base_listings`
 and pass `--workspace`; the explicit `base_owned` field still works and merges with both.
 
+A load is also the base's when the foundation says so: with `--workspace`, a zone named in
+`foundations/<id>.json`'s `maps.<map>.link_loads` is a base zone even with no listing staged on this
+machine. A build against the foundation's own zones and nothing else therefore has no donor at all
+and needs no listing — which is how `module qualify` links one module alone.
+
 The build then excludes every base-owned `image` and `material` name from the pack's zone. The
 mechanism is OpenAssetTools' own: an `ignore,<project>` row in the zone reads
 `zone_source/assetlist/<project>.csv` off the source search path, and the asset creation context

@@ -1457,18 +1457,28 @@ def _derive_base_listings(comp: dict, loads: list[Path], args, job: Job) -> None
         if not directory.is_dir():
             raise Failure(INPUT_MISSING, f"Base listings directory is missing: {directory}",
                           "Point --base-listings at the directory holding <zone>-list.txt for the base's zones.")
-    if not directories and getattr(args, "workspace", None):
+    declared_base: list[str] = []
+    if getattr(args, "workspace", None):
         from . import checks as offline_checks, targets
         try:
-            directories = targets.base_listing_dirs(Path(args.workspace).expanduser(), offline_checks.foundation_of(comp["base"], args.workspace))
+            root = Path(args.workspace).expanduser()
+            foundation = offline_checks.foundation_of(comp["base"], args.workspace)
+            # A foundation names the zones a module links against on a map. Those are the base even
+            # when no listing for them is staged here, so a build against the foundation's own zones
+            # and nothing else has no donor at all and needs no listing.
+            declared_base = targets.base_zone_names(root, foundation, comp["map"])
+            if not directories:
+                directories = targets.base_listing_dirs(root, foundation)
         except Failure:
-            directories = []
+            declared_base = []
     known = list(comp.get("base_listings") or [])
     search = directories + [p.parent for p in known]
     derived, base_loads = [], []
     for load in loads:
         found = listing_for_load(load, search)
         if found is None:
+            if zone_name_of(load) in declared_base:
+                base_loads.append(load)
             continue
         base_loads.append(load)
         if found not in known and found not in derived:

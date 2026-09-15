@@ -531,6 +531,25 @@ def foundations(root: Path) -> dict[str, dict]:
     return result
 
 
+def base_zone_names(root: Path, foundation_id: str, map_id: str) -> list[str]:
+    """The zone names a foundation says a module links against on one map
+    (``foundations/<id>.json``, ``maps.<map>.link_loads``). Those zones are the base, so a load that
+    is one of them is never a donor even when no asset listing for it is on this machine."""
+    info = foundations(root).get(foundation_id)
+    if not info:
+        return []
+    # foundations() already picked the descriptor that carries the maps; a private companion file
+    # beside it may share the id and carry none.
+    try:
+        _, record = read_json(root / "foundations" / info["file"], MAX_TARGETS_BYTES)
+    except Failure:
+        return []
+    maps = record.get("maps") if isinstance(record, dict) else None
+    per_map = maps.get(map_id) if isinstance(maps, dict) else None
+    rows = per_map.get("link_loads") if isinstance(per_map, dict) else None
+    return [name for name in rows if isinstance(name, str) and name] if isinstance(rows, list) else []
+
+
 def base_listing_dirs(root: Path, foundation_id: str) -> list[Path]:
     """Directories of base asset listings a workspace's ``foundations/<id>.json`` names under
     ``base_listings``, resolved against the workspace root. A foundation that does not name any
