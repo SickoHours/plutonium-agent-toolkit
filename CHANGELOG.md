@@ -7,6 +7,21 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- The shipped T6 knowledge is re-exported from the maintainer's generator after its source corpus
+  was restored, so every file under `knowledge/` is generator output again. `engine-limits.json`
+  picks up the `observed_in` and `how_to_count` wording its own page
+  (`docs/knowledge/engine-limits.md`) moved forward to for `sound-assets`, `rawfile-assets` and
+  `image-bank-slots`; the shipped copy had been written before that page changed and never caught
+  up. `map-scripts.json` is unchanged as data and only reformats to the exporter's indentation.
+  `builtins.json`, `crash-signatures.json`, `native-weapons.json` and `occupancy.json` re-export
+  byte for byte, which is the point: several rows that had been edited into the shipped files by
+  hand are now produced by the generator, so a future regeneration cannot silently revert them.
+  Among those, `engine-limits.json`'s `actor-client-field-set` keeps `count_source`
+  `clientfield_bits.actor.server`, the path `dev/checks.py` reads against `occupancy.json` — the
+  generator had been deriving a deeper path that exists only in the maintainer's private file, so
+  an export would have made that pool check count nothing. No row was added or removed in any
+  file, and `stock-exports.json` is not an export product and is untouched. Verified by the full
+  offline suite on Linux; nothing was built, installed or played.
 - A pack whose images have no pixels is refused instead of built. `image-sources` is a plan-time
   check: an `image` asset row whose file is on this machine passes (the linker reads the `.iwi`
   from disk and the build stages it beside the package, with no bank and no header read spent), a
