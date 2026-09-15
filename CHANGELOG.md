@@ -7,6 +7,25 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- The crash catalog reads the Plutonium crash text, not only the console log. Five confirmed
+  T6 crashes were replayed against their saved `console_zm.log` tails and not one contains the
+  fatal GSC line: it is written only to `plutonium-r*.txt`, so matching a console tail alone
+  reports a clean slice for a crash. Two signature rows follow. `gsc-undefined-not-array` is the
+  sibling of `cannot-cast-undefined-to-bool`: the same missing per-player state, read as a
+  container instead of a boolean. `gsc-error-position` matches `last gsc pos 0x<addr>
+  <script>::<function>` and names the script and function the VM died in, to be paired with the
+  `last gsc error message` line above it. `cannot-cast-undefined-to-bool` now also names
+  `_zm_powerups::powerup_hud_monitor` and `_audio::monitor_player_sprint`, which were seen
+  reading the same state. `crash-signatures.json` is regenerated from the page, which also
+  refreshes the cause and fix text of eight rows the page had moved ahead of and adds
+  `map-script-not-carried`. Both are anchored on the engine's own wording rather than a bare
+  substring, because `signature()` evaluates each row against a line on its own: the
+  `undefined is not an array` row requires the crash text's `last gsc error message '...'` prefix,
+  so the generic VM error from any script is not handed its cause and fix, and
+  `map-script-not-carried` requires the unresolved name to be a stock script path rather than a
+  bare function with a parameter count, so it no longer shadows `link-unresolved-external` on
+  that row's own log text.
+
 - Shared files have one owner, and a member is cut on the pack's target. `module build` tells
   the workspace's adapter builder the composition's foundation and map (`--foundation`, `--map`,
   in the workspace's own foundation ids) whenever they differ from the recipe's, so a
