@@ -128,9 +128,10 @@ class InspectTests(unittest.TestCase):
         result = row["result"]["metadata"]
         self.assertEqual(result, {"name": "stock_alpha_probe", "title": "stock_alpha_probe", "game": "t6", "tags": [],
                                  "base": "stock", "map": "zm_transit", "origin": None, "donor": None,
-                                 "members": [{"path": "../z", "role": "base", "name": None, "commit": None},
-                                             {"path": "../a", "role": "module", "name": None, "commit": None},
-                                             {"path": "../missing", "role": "module", "name": "owner/beta", "commit": "a" * 40}]})
+                                 "members": [{"path": "../z", "role": "base", "name": None, "commit": None, "parameters": {}},
+                                             {"path": "../a", "role": "module", "name": None, "commit": None, "parameters": {}},
+                                             {"path": "../missing", "role": "module", "name": "owner/beta", "commit": "a" * 40,
+                                              "parameters": {}}]})
         self.assertEqual(c.validate_composition_metadata(data)["decisions"][0]["reason"], "")
         self.assertEqual(c.validate_composition_metadata(data | {"tags": ["tag", "tag"]})["tags"], ["tag", "tag"])
 

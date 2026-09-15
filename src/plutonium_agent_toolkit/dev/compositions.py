@@ -56,7 +56,7 @@ from types import SimpleNamespace
 from ..core.errors import BACKEND_FAILED, INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, INVALID_ARGUMENTS, Failure
 from ..core.jobs import Job
 from ..core.receipts import FILE_FLAGS, sha256_file
-from . import fastfiles, projects, scripts, seeds, titles
+from . import fastfiles, parameters, projects, scripts, seeds, titles
 from .backends import executable
 
 ID = re.compile(r"^[a-z0-9_]{1,64}\Z")
@@ -184,7 +184,7 @@ MAX_INSPECTION_TEXT = 2048
 MAX_INSPECTION_CODE = 200
 MODULE_METADATA_FIELDS = ("id", "version", "game", "title", "category", "kind", "tags", "bases", "maps",
                           "dependencies", "conflicts", "origin", "donor", "distribution", "menu_route", "payload", "recipes",
-                          "lineage", "replaces", "entry", "placements")
+                          "lineage", "replaces", "entry", "placements", "parameters")
 COMPOSITION_METADATA_FIELDS = ("name", "title", "game", "tags", "base", "map", "origin", "donor", "members")
 
 
@@ -278,7 +278,7 @@ def inspect(path: Path) -> dict:
             fields = COMPOSITION_METADATA_FIELDS
         else:
             raise Failure(INPUT_INVALID, "Expected a module or composition declaration", field="/")
-        result.update(validation="metadata-valid", metadata={key: metadata[key] for key in fields if key not in ("replaces","entry","placements","recipes") or key in data})
+        result.update(validation="metadata-valid", metadata={key: metadata[key] for key in fields if key not in ("replaces","entry","placements","parameters","recipes") or key in data})
         if kind == "module" and "recipes" in data:
             # The targets the module names a cut for, not the paths: inspection resolves no payload.
             result["metadata"]["recipes"] = sorted(metadata["recipes"])
@@ -590,7 +590,7 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
     """Authoritative declaration checks; no filesystem or payload resolution."""
     _fields(data, {"schema", "id", "version", "game", "title", "category", "kind", "tags", "recipe", "recipes", "seed", "bases", "maps",
                             "dependencies", "conflicts", "provides", "resource_contract", "menu_route", "distribution", "source",
-                            "origin", "donor", "lineage", "tests", "replaces", "entry", "placements"},
+                            "origin", "donor", "lineage", "tests", "replaces", "entry", "placements", "parameters"},
                      {"schema", "id", "version", "bases", "maps"}, where)
     if data["schema"] != 1:
         raise Failure(INPUT_INVALID, f"{where}: expected schema 1", field='/schema')
@@ -660,6 +660,7 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
             "payload": payload, "payload_path": payload_path, "recipes": recipes, "distribution": distribution, "tests": tests,
             "replaces":_at("/replaces",_replaces,data.get("replaces")), "entry":_at("/entry",_entry,data.get("entry")),
             "placements": _placements(data.get("placements"), mid),
+            "parameters": parameters.validate_declared(data.get("parameters"), mid),
             "bases": list(bases), "maps": list(maps),
             "dependencies": _at("/dependencies", _ids, data.get("dependencies", []), "dependencies", mid),
             "conflicts": _at("/conflicts", _ids, data.get("conflicts", []), "conflicts", mid),
@@ -897,7 +898,7 @@ def validate_composition_metadata(data) -> dict:
     base_members = 0
     for index, entry in enumerate(entries):
         row = {"path": entry} if isinstance(entry, str) else entry
-        _fields(row, {"path", "name", "commit", "role"}, set(), "composition member", f"/modules/{index}")
+        _fields(row, {"path", "name", "commit", "role", "parameters"}, set(), "composition member", f"/modules/{index}")
         role = row.get("role", "module")
         if role not in ("module", "base"):
             raise Failure(INPUT_INVALID, "A member's role is module or base", field=f"/modules/{index}/role")
@@ -918,7 +919,8 @@ def validate_composition_metadata(data) -> dict:
             _relative_path, row["path"], "Member")
         if role == "base":
             base_members += 1
-        members.append({"path": row["path"], "role": role, "name": row.get("name"), "commit": row.get("commit")})
+        members.append({"path": row["path"], "role": role, "name": row.get("name"), "commit": row.get("commit"),
+                        "parameters": parameters.validate_setting(row.get("parameters"), f"Member {row['path']}", f"/modules/{index}/parameters")})
     if base_members > 1:
         raise Failure(INPUT_INVALID, "A composition names at most one member with role base",
                       "The base is the pack everything else attaches to; put a second pack in as an ordinary member or nest it.", field='/modules')
@@ -954,7 +956,7 @@ def load_composition(path: Path, job: Job, depth: int = 0, seen: tuple = ()) -> 
     game, base, map_id = comp["game"], comp["base"], comp["map"]
     directories: list[Path] = []
     members = []
-    for row in comp["members"]:
+    for index, row in enumerate(comp["members"]):
         role = row["role"]
         directory = _relative_dir(row["path"], src.parent, job, "Member")
         if directory in directories:
@@ -962,9 +964,13 @@ def load_composition(path: Path, job: Job, depth: int = 0, seen: tuple = ()) -> 
         directories.append(directory)
         nested = directory / "composition.json"
         if (directory / "module.json").is_file():
-            member = {"kind": "module", "directory": directory, "role": role, "path": row["path"],
+            member = {"kind": "module", "directory": directory, "role": role, "path": row["path"], "parameters": row["parameters"],
                       "reference": {"name": row["name"], "commit": row["commit"]} if row["name"] is not None else None}
         elif nested.is_file() and not nested.is_symlink():
+            if row["parameters"]:
+                raise Failure(INPUT_INVALID, f"A nested composition takes no parameters: {row['path']}",
+                              "Parameters are declared by a module and set on the member that is that module; set them in that pack's own composition.json.",
+                              field=f"/modules/{index}/parameters")
             inner = load_composition(nested, job, depth + 1, seen + (key,))
             if inner["game"] != game:
                 raise Failure(INPUT_INVALID, f"Nested composition {inner['name']} is for game {inner['game']!r}, not {game!r}")
@@ -1001,6 +1007,7 @@ def flatten(comp: dict, job: Job, target: tuple[str | None, str | None] | None =
         if member["kind"] == "module":
             declaration = load_declaration(member["directory"], job, target)
             declaration["role"] = member["role"]
+            declaration["parameters_set"] = member["parameters"]
             declaration["reference"] = member["reference"]
             declaration["via"] = comp["name"]
             modules.append(declaration)
@@ -1037,7 +1044,7 @@ def _order(modules: list[dict]) -> list[str]:
 
 
 REFUSAL_KINDS = ("probe", "test_only", "duplicate_id", "missing_dependency", "conflict", "unqualified_base", "unqualified_map",
-                 "private_payload", "cycle", "budget", "replacement", "service", "checks")
+                 "private_payload", "cycle", "budget", "replacement", "service", "checks", "parameters")
 
 
 def _refusal(kind: str, message: str, hint: str = "", modules=(), field: str | None = None, **extra) -> dict:
@@ -1070,6 +1077,16 @@ def resolve(comp: dict, modules: list[dict], allow_unqualified: bool = False) ->
     for i,m in enumerate(modules):
         if "test-only" in m["tags"] and comp["name"].endswith(("_pack","_pub")):
             refusals.append(_refusal("test_only", "Test-only member cannot reach a release profile", modules=[m["id"]], field=f"/modules/{i}"))
+        # Defaults filled, then what the composition set over them: the configuration this member
+        # is planned and built with. A name the module does not declare, or a value outside its
+        # declared type or constraint, refuses the plan and configures nothing.
+        values, problems = parameters.effective(m.get("parameters"), m.get("parameters_set"))
+        m["parameters_effective"] = values
+        for name, message in problems:
+            refusals.append(_refusal("parameters", f"{m['id']}: parameter {name!r} {message}",
+                                     "A composition sets only the parameters the member's module declares, each within its declared type and "
+                                     "constraint; pat module inspect lists them with their defaults.",
+                                     modules=[m["id"]], field=f"/modules/{i}/parameters/{name}", parameter=name))
     ids = [m["id"] for m in modules]
     if len(set(ids)) != len(ids):
         duplicates = sorted({i for i in ids if ids.count(i) > 1})
@@ -1425,7 +1442,8 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
                "distribution": m["distribution"], "dependencies": m["dependencies"], "conflicts": m["conflicts"],
                "bases": m["bases"], "maps": m["maps"], "provides": m["provides"], "resource_contract": m["resource_contract"],
                "menu_route": m["menu_route"], "source": m["source"], "reference": m.get("reference"),
-               "origin": m["origin"], "donor": m["donor"], "replaces":m["replaces"], "entry":m["entry"], "placements": m.get("placements")}
+               "origin": m["origin"], "donor": m["donor"], "replaces":m["replaces"], "entry":m["entry"], "placements": m.get("placements"),
+               "parameters": m.get("parameters_effective", {})}
         if m["recipe"] is not None:
             row["recipe_sha256"] = job.inputs[str(m["recipe"].resolve())]
         elif m.get("adapter") is not None:
@@ -1658,7 +1676,8 @@ def execute(args, job: Job) -> dict:
     (job.root / "plan.json").write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
     summary = {"plan": "plan.json", "name": comp["name"], "title": comp["title"], "base": comp["base"], "map": comp["map"],
                "base_member": plan["base_member"],
-               "modules": [{"id": r["id"], "version": r["version"], "order": i + 1, "payload": r["payload"], "role": r["role"]}
+               "modules": [{"id": r["id"], "version": r["version"], "order": i + 1, "payload": r["payload"], "role": r["role"],
+                            "parameters": r.get("parameters", {})}
                            for i, r in enumerate(rows)],
                "unqualified": resolved["unqualified"], "adapt": plan["adapt"],
         "resource_totals": resolved["resource_totals"], "budget": comp["budget"],
@@ -2074,7 +2093,8 @@ def _build_composition(comp: dict, plan: dict, compiled, loose, seed_modules, lo
             "soundbanks": sorted(p.name for p in banks.iterdir() if p.is_file() and p.name != "mod.ff"),
             "loose_scripts": loose_scripts,
             "name": comp["name"], "title": comp["title"], "base": comp["base"], "map": comp["map"], "base_member": plan["base_member"],
-            "modules": [{"id": r["id"], "version": r["version"], "order": i + 1, "payload": r["payload"], "role": r["role"]}
+            "modules": [{"id": r["id"], "version": r["version"], "order": i + 1, "payload": r["payload"], "role": r["role"],
+                         "parameters": r.get("parameters", {})}
                         for i, r in enumerate(plan["modules"])],
             "resource_totals": plan["resource_totals"], "budget": plan["budget"], "decisions": decided, "base_owned_names": base_owned_names,
             "scripts": len(compiled), "assets": len(loose), "seeds": len(seed_modules), "loads": len(loads),
