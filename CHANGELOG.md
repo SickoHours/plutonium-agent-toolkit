@@ -7,6 +7,45 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- A composition never roots an image or material name its own base already carries. A pack that
+  ports content from another game loads that game's zones beside the target's, and OpenAssetTools'
+  Linker resolves every name a member's material closure reaches from whichever loaded zone answers
+  first. Because a fastfile carries an image's header and never its pixels, a donor copy of a
+  base-owned name puts a foreign header in front of the base's pixels: measured on one three-weapon
+  pack, 254 image headers of which 135 had stock names, 91 of those copied out of a donor zone plus
+  30 materials, and the shared camo and Pack-a-Punch textures rendered wrong on every weapon in the
+  game while the pack was selected, including stock ones it never touched. The build now writes the
+  base's image and material names into `zone_source/assetlist/<zone>_base_owned.csv` and an
+  `ignore,<zone>_base_owned` row in the zone, which is the Linker's own mechanism
+  (`ProcessZoneDefinitionIgnores`): an ignored name is answered with a reference (`,<name>`) instead
+  of a copy, so it resolves at runtime from the zone the client already has open. There is no
+  per-name exclusion keyword and no load-order knob in the Linker, so this is the only lever, not a
+  preference. A name the pack itself roots with an explicit `image,` or `material,` row is left
+  alone; the composition's collision decisions already own that case.
+
+- `module plan` and `module build` take `--base-listings <dir>` (repeatable): every load with a
+  `<zone>-list.txt` there is one of the base's zones and every load without one is a donor, so the
+  classification comes from the composition's own `loads` and a recipe no longer has to hand-list
+  `base_owned`. With `--workspace` and no flag, the same directory is read from
+  `foundations/<id>.json`'s `base_listings`. The explicit `base_owned` field keeps working and
+  merges with both. An unlinker listing captured from a colour terminal is now parsed too; its ANSI
+  escapes had made it read as empty.
+
+- New check `donor-shadowing`. It refuses a composition that loads a zone outside its base with no
+  base listing at all, naming how many such zones are loaded; and at build time it re-reads the link
+  log's `Loaded <type> "<name>" (src: <zone>)` rows and refuses if any base-owned name was rooted
+  from a donor, with the count and the first ten names. The build reports `base_owned_excluded` and
+  `donor_shadowing`. Offline unit tests on Linux, plus a rebuild of the affected pack.
+
+- `image-sources` no longer calls a rooted image `passed`. An `image` asset row whose `.iwi` is on
+  this machine gets a header in the fastfile, and the build stages the file under
+  `packages/images/` — but measured on Plutonium on 2026-09-15, the engine never opens a mod
+  folder's `images/` (25 files staged there drew zero console mentions). An image's pixels load only
+  from a bank a `>level.ipak_read` header line names or from Plutonium's global loose path
+  `storage/t6/images`, neither of which a plan can read, so such a row is `not_counted` with that
+  reason. The staging stays as an artifact; nothing here writes `storage/t6/images`, which is global
+  to every mod on the machine and the user's decision.
+
 - `module plan` and `module build` refuse a client script that registers a mystery-box weapon no
   member of the pack provides (`box-registration:<script>`). A `.csc` that calls
   `addzombieboxweapon` on a `_zm` name absent from every member's `provides.weapons` faults the

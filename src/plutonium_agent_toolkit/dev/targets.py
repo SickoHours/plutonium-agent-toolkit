@@ -523,9 +523,28 @@ def foundations(root: Path) -> dict[str, dict]:
             continue
         maps = info.get("maps")
         names = sorted(m for m in maps if isinstance(m, str) and MAP.match(m)) if isinstance(maps, dict) else []
+        listings = info.get("base_listings")
         result[info["id"]] = {"id": info["id"], "base": info.get("profile_prefix") if isinstance(info.get("profile_prefix"), str) else None,
-                              "maps": names, "file": file.name}
+                              "maps": names, "file": file.name,
+                              "base_listings": [d for d in ([listings] if isinstance(listings, str) else listings if isinstance(listings, list) else [])
+                                                if isinstance(d, str) and d]}
     return result
+
+
+def base_listing_dirs(root: Path, foundation_id: str) -> list[Path]:
+    """Directories of base asset listings a workspace's ``foundations/<id>.json`` names under
+    ``base_listings``, resolved against the workspace root. A foundation that does not name any
+    returns nothing: the composer then needs ``--base-listings`` on the command line."""
+    info = foundations(root).get(foundation_id)
+    if not info:
+        return []
+    found = []
+    for entry in info["base_listings"]:
+        path = Path(entry).expanduser()
+        path = path if path.is_absolute() else (root / path)
+        if path.is_dir():
+            found.append(path)
+    return found
 
 
 def _catalog() -> dict[str, dict]:
