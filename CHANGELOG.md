@@ -22,7 +22,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   per-name exclusion keyword and no load-order knob in the Linker, so this is the only lever, not a
   preference. A name the pack itself roots with an explicit `image,` or `material,` row is left
   alone; the composition's collision decisions already own that case.
-
 - `module plan` and `module build` take `--base-listings <dir>` (repeatable): every load with a
   `<zone>-list.txt` there is one of the base's zones and every load without one is a donor, so the
   classification comes from the composition's own `loads` and a recipe no longer has to hand-list
@@ -30,15 +29,13 @@ Every entry states what shipped, on which platform it was verified, and what rem
   `foundations/<id>.json`'s `base_listings`. A zone named in that file's `maps.<map>.link_loads` is
   the base's even with no listing staged, so a build against the foundation's own zones and nothing
   else has no donor at all — which is how `module qualify` links one module alone. The explicit
-  `base_owned` field keeps working and merges with all of them. An unlinker listing captured from a colour terminal is now parsed too; its ANSI
-  escapes had made it read as empty.
-
+  `base_owned` field keeps working and merges with all of them. An unlinker listing captured from a
+  colour terminal is now parsed too; its ANSI escapes had made it read as empty.
 - New check `donor-shadowing`. It refuses a composition that loads a zone outside its base with no
   base listing at all, naming how many such zones are loaded; and at build time it re-reads the link
   log's `Loaded <type> "<name>" (src: <zone>)` rows and refuses if any base-owned name was rooted
   from a donor, with the count and the first ten names. The build reports `base_owned_excluded` and
   `donor_shadowing`. Offline unit tests on Linux, plus a rebuild of the affected pack.
-
 - `image-sources` no longer calls a rooted image `passed`. An `image` asset row whose `.iwi` is on
   this machine gets a header in the fastfile, and the build stages the file under
   `packages/images/` — but measured on Plutonium on 2026-09-15, the engine never opens a mod
@@ -47,7 +44,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   `storage/t6/images`, neither of which a plan can read, so such a row is `not_counted` with that
   reason. The staging stays as an artifact; nothing here writes `storage/t6/images`, which is global
   to every mod on the machine and the user's decision.
-
 - The shipped T6 knowledge states that it is generated and a test enforces it. Four separate pull
   requests had edited rows straight into `src/plutonium_agent_toolkit/knowledge/`: each edit was
   right on its own terms and every one of them would have been reverted by the next export, which
@@ -61,7 +57,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   export product, carries no marker and is excluded by name. `docs/knowledge/README.md` says the
   rule and where a correction goes instead. The release workflow checks out full history so the test
   can compare against the commit before a change. Offline unit tests on Linux; no data row changed.
-
 - `pat module qualify <module dir> --target <foundation>/<map> --workspace <root>` builds one
   module alone on one target and writes its records from the receipts. A declaration's `bases`
   and `maps` grow only by a build on that target, and doing that by hand is four commands plus
@@ -104,7 +99,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   `adapter-recipe-single-target-without-recipes`, else `unknown`). `result.unqualified` is now
   filled whether or not `--allow-unqualified` was passed, so a refusal names what is undeclared
   instead of only saying that something is. Read-only: nothing is widened, built or written.
-
 - `ff extract` refuses an asset type the pinned OpenAssetTools build cannot dump instead of
   reporting an empty success. `--types fx` on a T6 zone used to exit zero having written nothing,
   because OAT registers no T6 FX dumper (and no FX loader), so a caller could not tell "this zone
@@ -120,7 +114,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   `ff inspect` is unaffected, because listing an asset needs no dumper. Offline unit tests on Linux
   against the fake Unlinker, which now models a type it cannot dump as an empty exit-zero dump;
   nothing was built, installed or played.
-
 - `pool:image-bank-slots` stops counting image bank reads the engine never performs. A map's row in
   `knowledge/occupancy.json` may now carry `banks_present`, the optional inventory of banks that
   map's client `zone/all` folder holds; when it is there, a `>level.ipak_read` line naming a bank
@@ -154,7 +147,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   an export would have made that pool check count nothing. No row was added or removed in any
   file, and `stock-exports.json` is not an export product and is untouched. Verified by the full
   offline suite on Linux; nothing was built, installed or played.
-
 - A pack whose images have no pixels is refused instead of built. `image-sources` is a plan-time
   check: an `image` asset row whose file is on this machine passes (the linker reads the `.iwi`
   from disk and the build stages it beside the package, with no bank and no header read spent), a
@@ -194,7 +186,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   aimed: the file must exist, parse as an adapter recipe and declare its own key's foundation and
   map, and a `recipes` entry on a `project.json` recipe or a `seed` payload is refused.
   `recipes` widens nothing by itself; `bases` and `maps` still grow only by a receipt.
-
 - The `externals:` check resolves stock exports per script VM. `knowledge/stock-exports.json` now
   carries a `vm` on every row; the seven existing rows are `server`, and two `client` rows
   (`clientscripts/mp/_utility` for `add_to_array`, `clientscripts/mp/zombies/_zm_utility` for
@@ -249,7 +240,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   own `readback/` under its output directory, so the toolkit's readback job refused with
   `output_exists` on every real adapter build; the fixture builder now writes a `readback/` of its
   own and the test asserts it is left alone.
-
 - The plan is the truth for the whole shelf. Adapter recipes are the third module payload: a
   `recipe.json` cut by a workspace builder (`foundation`, `map`, `module`, declared weapons,
   bank, strings, loose scripts, rooted rawfiles) is read by `module plan` as seed-like roots for
@@ -302,7 +292,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   from 512 to 2048. Callers passing no flags keep the same shape plus the new fields. Verified
   by offline unit tests on Linux with a synthetic 400-module workspace and against a 192-module
   private workspace read-only; native Windows remains unverified.
-
 - Add target sets (`docs/target-sets.md`): a target is `<foundation>/<map>/<mode>[/<location>]`,
   one of five kinds (`stock-map`, `stock-location`, `survival-location`, `dlc5-map`,
   `custom-map`); survival locations (Reimagined's and QoL's fenced areas of stock maps such as
@@ -348,7 +337,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   and cited archive records, printing them and writing nothing. Format: `docs/evidence-ledger.md`.
   Covered by offline unit tests on Linux with fixtures shaped like the workspace's real rows;
   native Windows and gameplay behavior remain unverified.
-
 - Document the replacement lifecycle and limits of offline detour evidence.
 
 - Generate and byte-verify one ordered replacement/registration entry script for entry-managed modules.
@@ -432,7 +420,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   scoped to its own members and cannot resolve an outer collision; and a flattened member targeting
   a different game than its composition is refused before resolution. Covered by offline unit tests
   on Linux; native Windows and gameplay behavior remain unverified.
-
 - Preserve explicit per-item wallbuy and menu-art roles in workspace catalog icon
   bindings, hashing the served image bytes as for HUD icons. Covered by offline
   tests on Linux; no native Windows or gameplay verification.
@@ -448,13 +435,11 @@ Every entry states what shipped, on which platform it was verified, and what rem
   nesting as `input_invalid`; documentation describes probe inspection without promising
   composition-time enforcement. Covered by offline unit tests on Linux; native Windows
   and gameplay behavior remain unverified.
-
 - Contract loading rejects oversized JSON integers as `input_invalid` instead of leaking
   `OverflowError`: bounded evidence and `wait_s` values compare against their limit before any
   float conversion, and unbounded harness `min`/`max` catch the conversion overflow. Finite
   bool/NaN/Inf rejection is unchanged. Covered by offline unit tests on Linux; native Windows
   and gameplay behavior remain unverified.
-
 - Stitch test contracts in dependency order, with explicit shared-check decisions and human/probe precondition refusals. Covered by offline unit tests on Linux; native Windows and gameplay behavior remain unverified.
 
 - Report test-plan member-contract failures (missing tests, invalid contract, map outside the
@@ -620,7 +605,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   recorded adaptation rather than donor data. `docs/knowledge/README.md` indexes the four pages
   and `docs/playbooks/port-a-bo3-weapon.md` names the step each one gates. Docs only; no route,
   receipt or evidence level changed.
-
 - **`pat workspace init <dir>`.** The missing half of the environment scaffold: a modding workspace of
   the person's own, outside the toolkit checkout, holding an `AGENTS.md` that tells any coding agent
   how to work there and names the checkout the skills refer to, `CLAUDE.md`, a README, an ignore file
@@ -681,14 +665,12 @@ Every entry states what shipped, on which platform it was verified, and what rem
   `stopped` whatever its exit code, since a child that handles the interrupt cleanly exits 0 and
   `finished` would read as if it had done the work. The MCP bridge uses it for a withdrawn
   request; the page's own shutdown path is unchanged.
-
 - **Control plane: `module fetch` confirms.** It reaches the network and writes a snapshot of
   someone else's repository into the library, which is exactly the kind of step the page and the
   bridge gate behind the person's confirmation, and `docs/MCP.md` already said it was gated -- but
   the action was not marked `confirm`, so a harness could fetch without one. It is marked now, and
   the rule the action table is tested against covers every network effect rather than only the
   game, the agent host and the configuration.
-
 - **Control plane: a stopped child's Job Object handle is closed once.** On Windows the thread
   running a child and the shutdown stopping it both terminated and closed the same Job Object
   handle. Windows recycles handle values, so the second close destroyed whatever kernel object had
@@ -697,7 +679,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   The handle now has one owner that terminates and closes it exactly once, and a handle that is
   created but never assigned to a child is closed instead of leaked. Found by the new MCP test that
   stops a child the moment it starts, which is the only path that reached for the handle twice.
-
 - **The control plane's status colours barely showed on a light background.** Every badge was a
   tint at 13% alpha over whatever the browser happened to paint, so on a light scheme the
   difference between a result, a warning and a failure came out as three near-identical pale
@@ -707,7 +688,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   paints its own surfaces, and nothing that carries meaning is drawn with opacity or an alpha
   channel. `tests/test_plane.py` computes the ratios from the stylesheet, so a regression fails
   without a browser.
-
 - **Control plane: the over-capacity 503 reaches the client on Windows.** Past the connection
   bound the server sent a 503 and closed the socket while the request bytes were still unread,
   which makes the kernel reset the connection; on Windows the client saw the connection aborted
@@ -715,7 +695,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   runners). The server now answers at once and hands the orderly close (stop sending, drain under a
   total deadline, close) to a short-lived thread, so neither the accept loop nor a worker waits on
   an over-capacity client.
-
 - **`provides.rawfiles` is a declared kind.** `module declare` writes a `rawfiles` list into a seed
   manifest for every rawfile the package embeds, and `module plan` merges it into the module's
   provides, but `docs/MODULES.md` and the declaration validator did not know the kind, so a
@@ -749,7 +728,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   on the client VM) and `bench-06` (classify a `Client Field Set actor is out of space` slice, then fix
   the script), both scored from the compile receipt and the compiled artifact through the new
   `artifact_contains`/`artifact_excludes` checks, because a compiler accepts both fixtures unchanged.
-
 - **Control plane.** `pat plane serve --library <dir> --jobs <dir>` serves a page on 127.0.0.1 with a
   per-start token whose every control is one registered route with typed parameters: Library (declarations
   and compositions read from their files, declare a seed), Pack (`module plan|build`, `project verify`),
@@ -762,7 +740,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   builds argv, names an output directory, picks a model or reads the bearer. `pat plane actions` prints the
   table. New effect `serves-local`. Twenty-nine tests drive the server against the fake backends.
   `docs/CONTROL-PLANE.md`; glossary term control plane.
-
 - **Skills installed where the harnesses look.** `pat dev install-skills [--plan] [--only …] [--home …]
   [--source …]` copies the seven skills under `skills/` into the user-level skills directory of every
   coding-agent harness whose home directory exists (Claude Code, Codex CLI, Gemini CLI, OpenCode,
@@ -773,7 +750,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   receipt per run; `doctor` reports per harness how many skills are current, stale, foreign or
   missing. `SETUP-PROMPT.md`, `docs/GETTING-STARTED.md` and `docs/FOR-AGENTS.md` carry the step; the
   Linux Tier 1 receipt exercises it against a scratch home (issue #22).
-
 - **Built-in modules and packs, and where every registry comes from.** The toolkit ships its own
   registry (`plutonium-agent-toolkit-builtin`; `examples/registry.json` lists the same entries under an addable name) and lists it
   without `registry add`; `registry list`, `search` and `show` carry each registry's `origin`
@@ -846,7 +822,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   named `.git` blocks like any link; the root is opened without following links after its
   by-name check. Verified by 70 unit tests on synthetic trees on Linux; CI runs them on
   Windows.
-
 - **Registries and fetch by name.** `docs/REGISTRY.md` specifies `registry.json`: a file anyone can
   host that lists module and composition repositories at exact commits and holds no bytes; entries
   are `<github-owner>/<id>` and ownership is the repository living under that owner. New routes
@@ -860,7 +835,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   seed manifest without the package; plans name the missing file. Glossary terms registry, entry,
   reference and catalog; playbook `publish-a-module.md`; a new `downloads-source` effect. No catalog,
   official registry repository, submission workflow or baseline scanner yet (issue #23).
-
 - **Agent hosts: T3 Code as a thread dispatcher.** New route group `agent` (`probe`, `hosts`,
   `models`, `dispatch`, `status`, `send`, `interrupt`) drives a running T3 Code server on
   orchestration protocol 1 (the nightly and stable releases) over its authenticated HTTP API:
@@ -876,7 +850,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   user's running T3 Code with their configured token and choices, creates one proof thread and
   writes `<platform>-tier4-agent.json` with every UUID, path and listing row redacted; the Linux
   receipt against a real `0.0.41-nightly` server makes the group `available` on Linux.
-
 - **Seeds, base packs and collisions as decisions.** A module's payload may now be a **seed**: an
   already-linked `mod.ff` with its soundbanks and a hashed `seed.json` manifest (embedded,
   referenced and root assets, provides, localized strings). New route `module declare <mod.ff>`
@@ -896,7 +869,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   is rewritten; `docs/playbooks/attach-to-a-pack.md` is new; glossary terms seed, base pack and
   decision. The Linux Tier 2 receipt now declares the hello-zm package as a seed and composes it
   as a base member with the second example, so `module declare` is `available` on Linux.
-
 - **Modules and compositions.** `docs/MODULES.md` specifies two files: a `module.json`
   declaration beside a mod's `project.json` (id, version, the bases and maps it was built for,
   dependencies, conflicts, resource contract, menu route, source repository and commit) and a
@@ -912,7 +884,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   inspects the result; the regenerated Arch Linux (Omarchy) receipt carries those steps, so both
   routes are `available` on Linux (no Windows receipt yet). Not in this version: a module registry
   or download, version constraints, and detection of conflicts only the engine shows.
-
 - **Prior art before building from nothing.** `docs/playbooks/find-prior-art.md`: when the user
   names a feature and no donor is on disk, search in tiers (the T6 community, ports to other
   engines, the origin title's own tools), acquire only public bytes with hashes, inspect before
@@ -921,7 +892,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   `CONTEXT.md` gains **Prior art** and **Lead**; `pat-help`, `pat-grill` and `pat-port` route to
   the playbook; `AGENTS.md`, `docs/FOR-AGENTS.md` and `docs/history/README.md` carry the
   behaviour and the case it came from. Docs only; no route, receipt or evidence level changed.
-
 - **Track record.** `docs/TRACK-RECORD.md`, generated by `tools/track_record_doc.py` from
   `docs/track-record.json`, an export of the authoring workspace's module registry and reviewed
   acceptance records: accepted modules by category, eight representative milestones with the scope
@@ -932,13 +902,11 @@ Every entry states what shipped, on which platform it was verified, and what rem
   practices that worked beside the failures. Two new glossary terms: packaged route, track record.
   `tests/test_track_record.py` keeps page, data and framing consistent. No route, evidence level
   or receipt changed.
-
 - **`docs/playbooks/qualify-on-this-host.md`** and a "Receipts are per host; the routes are not"
   section in `docs/SUPPORT.md`: a route with no receipt for the agent's OS is unmeasured, not
   unsupported. The playbook runs `tools/qualify.py`, keeps the redaction gate, and ends in a pull
   request that extends the matrix. `AGENTS.md`, `docs/FOR-AGENTS.md` and the skills route to it;
   every "not run natively" row in the matrix now names that next action, and a test keeps it so.
-
 - `tools/qualify.py` covers more routes: Tier 1 runs `project init` and plans the result; Tier 2
   decompiles the script it compiled; `--media` generates a two-bone rigged, skinned, animated
   `.blend` with the installed Blender and runs `model rename-bones`, `retime` (the 1..10 frame range
@@ -952,7 +920,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   releases as the Windows pins, under `downloads.linux` in `backends.json`. Hashes were computed
   from the downloaded archives on 2026-09-10; Blender's matches the `blender-5.2.1.sha256` file
   on three official mirrors. CoDLuaDecompiler, Greyhound, Husky and C2M stay Windows-only.
-
 - **Tar extraction with the zip safety checks.** `.tar.gz`, `.tgz` and `.tar.xz` archives go
   through the same plan as zips: entry and size bounds, no absolute paths, no `..`, no reserved
   Windows names, no case collisions, single root under `strip_root`, declared sizes enforced
@@ -961,13 +928,11 @@ Every entry states what shipped, on which platform it was verified, and what rem
   for Blender's `lib/` on Linux; about 490 MiB extra). Binaries that upstream ships as 0644
   (gsc-tool, OpenAssetTools) are marked executable by setup, recorded in the install receipt.
   Download-cache files keep their real suffix.
-
 - **`tools/qualify.py`** runs the offline and backend tiers on Windows or Linux and writes
   `<platform>-tier<N>-*.json`. The receipt names the OS (`os`, `platform_token`, `native_linux`,
   `compatibility_layer` detects Wine and WSL) and redacts `/home/<name>` for any account.
   `--media` extends Tier 2 with FFmpeg, Blender and Cast and runs `audio inspect|convert` and
   `model inspect|convert` on synthetic inputs. `tools/qualify_windows.py` is a shim over it.
-
 - `tests/test_docs_consistency.py` fails on any "any OS" or macOS claim that is not qualified as
   untested, and checks that `docs/SUPPORT.md` names both verified hosts and links only receipts
   that exist.
@@ -991,20 +956,17 @@ Every entry states what shipped, on which platform it was verified, and what rem
   the synonyms to avoid, covering both evidence ladders (route status and route evidence level),
   the build facts (offline verified, installed, launched, loaded, playable, captured, accepted),
   receipts, readback, foundations, preflight and red loop.
-
 - **`docs/knowledge/`**: eight short pages of T6 and Plutonium facts for agents (client storage
   and console, fastfiles and zones, GSC/CSC and their traps, the engine contracts a Zombies
   feature must meet, foundations, crash classes with the signature table of failures seen after
   clean readbacks, engine limits observed, other titles), each under 150 lines, facts only, no
   private material.
-
 - **`docs/playbooks/`**: nine finite recipes with the same five sections (preconditions, steps
   with the proving receipt field, do-not list, stop conditions, report): first build, add a
   script, port a feature, diagnose a crash, package and install, and four preflight gate lists
   (scripts, weapon rig, HUD text, audio memory), each gate a failure that reached a player after
   a clean conversion and a passing suite. Tests enforce the sections, that every `pat` route
   named is registered, and that the indexes match the files.
-
 - **Skills**: `skills/` grows from one skill to seven. `pat-help` is a user-invoked router;
   `pat-grill`, `pat-build`, `pat-port`, `pat-diagnose` and `pat-review` are model-invoked with
   trigger descriptions; the umbrella skill points at the layers. Three adapt Matt Pocock's
@@ -1012,7 +974,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   vendored under `vendor/matt-pocock/` at a pinned commit with a SHA-256 manifest and credited in
   `NOTICE`. `tests/test_agent_knowledge.py` checks the glossary shape, skill frontmatter and
   provenance, and that vendored bytes match their recorded hashes.
-
 - **"Work efficiently"** section in `AGENTS.md` and matching guidance in the skill and
   `docs/FOR-AGENTS.md`: manifest once per session, a succeeded receipt is the fact, rebuild only
   on a changed input hash, never replay `delivery_uncertain`, read the playbook first, state
@@ -1051,15 +1012,12 @@ Every entry states what shipped, on which platform it was verified, and what rem
   classifier is removed, and every user-facing document is reworded. 0.1.0b1's release notes and
   pull request #13 said "any OS" and "Windows, Linux and macOS"; that was never backed by a pin or
   a receipt.
-
 - `pat version`, `manifest` and `doctor` now report `platform.dev_tools_supported` (Windows and
   Linux, not under Wine) separately from `platform.game_control_supported` (native Windows);
   `supported` keeps meaning game control, which is what discovery's `available_here` used it for.
-
 - `tools/qualify.py` uses a fresh temporary toolkit home when `PAT_HOME` is unset, so the offline
   tier's `configure` step cannot write a fake storage path into the user's real `config.json`;
   and a Tier 3 receipt is not `passed` until the four required human observations are `true`.
-
 - `tools/private_scan.py` no longer matches the distribution name of the authoring machine, only
   its compositor: a native Linux receipt must name the OS it ran on, exactly as the Windows
   receipts name the Windows build. The scanner still blocks home and profile paths, private
@@ -1093,7 +1051,6 @@ has earned level `game`. Screen recording and the autonomous test runner are def
 
 - `pyproject.toml` development-status classifier moved from Pre-Alpha to Beta for the 0.1.0b1
   release, so package indexes label it correctly.
-
 - Documentation aligned around the agent-native, malleable-by-default premise: every doc is written
   for the agent that operates the toolkit, and states plainly that it is meant to be configured and
   edited to fit whatever machine and harness the user has. Rewrote `AGENTS.md`, made `CLAUDE.md` an
@@ -1101,10 +1058,8 @@ has earned level `game`. Screen recording and the autonomous test runner are def
   and extend on the user's machine, plus modding behaviours: foundation-first modular building and
   mod organization), and refreshed `README.md`, `docs/GETTING-STARTED.md`, `SETUP-PROMPT.md` and the
   installable skill.
-
 - `docs/SUPPORT.md` release bars split into a development-tools beta (met now) and a later
   game-control beta gated on issue #8; the first line tracks the current version.
-
 - Added `tests/test_docs_consistency.py`: the credentials prohibition, the route-status
   vocabulary matching the code, and SUPPORT.md staying canonical for evidence levels are now
   enforced by tests, not review alone.
@@ -1116,25 +1071,20 @@ has earned level `game`. Screen recording and the autonomous test runner are def
   `Unreleased` section), `tools/release_notes.py` (changelog section as release notes), and
   `.github/workflows/release.yml` (tag push verifies, tests on Windows, builds, publishes a
   GitHub Release with checksums; pre-release tags flagged automatically).
-
 - Pilot acceptance journeys: `docs/PILOT-USER.md` and `docs/PILOT-CONTRIBUTOR.md`.
 - Maintainer checklist for the Windows qualification pull request:
   `docs/contributors/REVIEWING-QUALIFICATION.md`.
-
 - Windows qualification procedure: `WINDOWS-QUALIFY-PROMPT.md` for the agent on the Windows PC,
   `docs/WINDOWS-QUALIFICATION.md` (three tiers, human-authorized game tier),
   `tools/qualify_windows.py` producing redacted receipts under `docs/receipts/<version>/`.
-
 - Windows-gated development routes implemented: `gsc compile|decompile`,
   `ff inspect|link|extract`, `project init|plan|build|verify`, `model
   inspect|convert|transform|rename-bones|retime|preview` (background Blender with the bundled
   worker and pinned Cast add-on), `audio inspect|convert`, `image convert`, `lua decompile`.
   Jobs run backends inside a Windows Job Object (process group elsewhere for tests), bound log
   and output size, and write `receipt.json` on every exit path.
-
 - `weapon catalog|plan` implemented (any platform): sealed BO3 donor verification and recipe
   planning; `docs/WEAPONS.md`.
-
 - `game` group implemented behind the Windows gate: `status`, `mods`, `info`, `launch`,
   `select-mod`, `reload-mod`, `load-map`, `fast-restart`, `map-restart`, `disconnect`,
   `check-load`, `quit`. Native Win32 console transport (attach, screen read, one bounded input
@@ -1143,27 +1093,21 @@ has earned level `game`. Screen recording and the autonomous test runner are def
   without force-kill. Launch goes through the fixed `plutonium://play/t6zm` URI and reports
   request, detection and focus preservation as separate facts. One bounded worker per command
   under a named mutex; uncertain outcomes are never replayed. `docs/GAME-CONTROL.md`.
-
 - `game install-mod <mod.ff> <folder>`: file-only install into storage with hash verification;
   refuses to overwrite without `--replace`, which moves the old folder aside.
-
 - `core/jobs.py` job runner, `PAT_BACKEND_<NAME>` override for tests and pre-installed tools,
   `implemented` and `deferred` route statuses alongside `planned` and `available`.
-
 - Fake gsc-tool, Linker, Unlinker, ffmpeg/ffprobe, ImageConverter, CoDLuaDecompiler and Blender
   under `tests/fakes/` so every adapter is unit-tested offline, including compiler errors reported
   with exit zero, backend crashes, tampered outputs and recipe path escapes.
-
 - C2Mv3 3.0.5 hash pinned (optional, never redistributed).
 
 ### Changed
 
 - `capture` and `test` routes are `deferred` (product decision 2026-09-10): registered, refuse
   with `not_implemented`, and excluded from the beta and 1.0 bars in `docs/SUPPORT.md`.
-
 - Repository made public on 2026-09-10 at 0.1.0a1 so the program can use branch rulesets,
   secret scanning and private vulnerability reporting. Readiness is unchanged: see docs/SUPPORT.md.
-
 - CI uses actions/checkout v7, setup-python v7 and upload-artifact v7 (Node 24 runtime).
 
 ### Fixed
@@ -1199,17 +1143,14 @@ has earned level `game`. Screen recording and the autonomous test runner are def
   reapplies the current rules to a committed receipt in place, is idempotent, notes the rewrite and runs on any platform. The affected receipt
   was re-redacted with it, not hand-edited. `redactor()` is unit-tested directly with the
   reviewer's five inputs plus the JSON-escaped form.
-
 - Windows job runner: when the step log is still held after the bounded wait, the step records
   `log_release_wait_seconds` next to `log_still_open`.
-
 - `tools/qualify_windows.py --tier game --begin`, exactly as `docs/WINDOWS-QUALIFICATION.md` writes it
   (no `--output`), was refused by argparse because `--output` was unconditionally required, so the
   Tier 3 marker could never be written as documented. `--output` is now required only when a
   receipt is written, and only for `--tier game`: `--tier offline --begin` or `--tier backends --begin`
   without `--output` is refused up front instead of running the whole tier and crashing at the end.
   Found on the first native Tier 3 attempt; regression tests added.
-
 - `game check-load` capped the new console output it would inspect at 128 KiB and reported the log
   gate `checked: false` above that. A single native Town load emits far more (about 4000 lines:
   fastfile, ipak and per-weapon lines), so `check-load` could never verify a real `load-map`. The
@@ -1270,7 +1211,6 @@ has earned level `game`. Screen recording and the autonomous test runner are def
   which the menu's party-lobby path does not. Root cause remains open in issue #8; no command
   allowlist change was made. `reload-mod`, restarts, `disconnect` and `install-mod` in game were not
   exercised. Issue #9 tracks the opt-in focus restore after launch.
-
 - `gsc decompile`, `project init` and the standalone `ff link` route did not run natively and stay
   `implemented`. The seven other pinned backends were not downloaded.
 
@@ -1282,34 +1222,26 @@ First private foundation commit. Nothing in this version has run on a native Win
 
 - `pat` command with `version`, `manifest`, `describe`, `doctor`, `configure`, `dev backends` and
   `dev setup`. One JSON document per invocation; exit statuses 0/1/2/130; stable `error_code` values.
-
 - Core contracts: `Failure` with stable codes, result envelope with `schema_version` and
   `request_id`, per-user configuration under `PAT_HOME` or `%LOCALAPPDATA%\PlutoniumAgentToolkit`,
   receipts with input/output hashes, platform gate that refuses backend and game operations off
   Windows and detects Wine.
-
 - Pinned backend catalogue with licenses: OpenAssetTools 0.33.0, gsc-tool 1.4.10, CoDLuaDecompiler
   2.4.2, FFmpeg 9.0 (BtbN build), Blender 5.2.1, Cast 2.00, Greyhound 1.46.3.2, Husky 0.8.0.0.
   C2Mv3 listed as optional and unpinned. Setup verifies SHA-256, extracts with path-safety checks,
   refuses to overwrite a changed tree and runs no vendor installer.
-
 - Route contracts for every planned capability across `gsc`, `ff`, `project`, `model`, `audio`,
   `image`, `lua`, `weapon`, `game`, `capture` and `test`. Planned routes answer `not_implemented`
   and execute nothing.
-
 - Contributor foundation: `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`, `SECURITY.md`,
   `CODE_OF_CONDUCT.md`, `NOTICE`, `PROVENANCE.md`, issue and pull request templates, CODEOWNERS.
-
 - `tools/private_scan.py` blocks personal paths, private identifiers, tokens and old internal
   command names. `tools/release_check.py` verifies that the package version, `pyproject.toml`,
   the top changelog entry, `docs/SUPPORT.md` and the tag agree.
-
 - GitHub Actions workflow running the unit tests, both tools and a packaging build on
   `windows-latest`.
-
 - `docs/SUPPORT.md` qualification matrix, `docs/GETTING-STARTED.md`, contributor guides and the
   first engineering-history note.
-
 - `examples/hello-zm`: the first-run mod used by the qualification loop.
 - Installable agent skill and `SETUP-PROMPT.md`.
 
