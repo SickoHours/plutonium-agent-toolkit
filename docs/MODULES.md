@@ -114,7 +114,8 @@ adapter recipe is named under `recipe` and told apart by its own shape.
 | `category` | no | The shelf a person browses. For `t6`: `weapons`, `perks`, `gobblegums`, `powerups`, `equipment`, `bosses`, `companions`, `maps`, `ui`, `core`, `scripts`, `audio`, `tooling`, `pack`. For `iw5`: `weapons`, `attachments`, `killstreaks`, `gametypes`, `perks`, `maps`, `ui`, `core`, `scripts`, `tooling`, `pack` (no `audio`: the toolkit cannot build IW5 sounds). Defaults to `module`. Used for browsing, never for resolution |
 | `kind` | no | Narrows the category from a fixed list per category and per game (t6 `weapons`: `wonder`, `firearm`, `melee`, `launcher`, `special`; iw5 `weapons`: `primary`, `secondary`, `launcher`, `melee`, `special`; and so on, defined in `dev/titles.py`). A kind outside its game's list is refused so packs and catalogs group the same way |
 | `tags` | no | Up to 16 lowercase words: a source game (`saints-row`, `bo3`), a series, a theme. Free, never validated against a list |
-| `recipe` | one of | Forward-slash relative path to the module's `project.json`, inside the module directory; no Windows drive prefix or rooted path, on any host |
+| `recipe` | one of | Forward-slash relative path to the module's `project.json`, inside the module directory; no Windows drive prefix or rooted path, on any host. For an adapter payload it is the default cut, the one used when `recipes` names none for the composition's target |
+| `recipes` | no | Adapter payloads only: up to 32 `"<foundation>/<map>"` targets, each to the relative path of the adapter recipe cut for that target (`{"dlc5-beta2/zm_factory": "recipe-b2.json"}`). The foundation is the id `foundations/<id>.json` carries, never the base token. Every named file must exist, parse as an adapter recipe and declare that same `foundation` and `map`; a key on a `project.json` recipe or a `seed` is refused. Plan and build use the entry for the composition's target and fall back to `recipe` |
 | `seed` | one of | Forward-slash relative path to the module's `seed.json`, inside the module directory, with `mod.ff` and its soundbanks beside it; no Windows drive prefix or rooted path, on any host. Path checks also apply to private declarations whose manifest is absent |
 | `bases` | yes | The base tokens the module has been built and tested on: `stock` for the unmodified game, or a base release's own short token (`b2` for Zombies Declassified Beta 2). A composition on a base not listed here is refused |
 | `maps` | yes | Map ids the module is built for, or `["*"]` for any map. A composition on a map not listed is refused. Grow this list by testing on the map, never by editing |
@@ -194,6 +195,40 @@ strings, the loose scripts (`loose_script`, `loose_scripts` or `scripts`), roote
 `native_scripts`, `extra_effects` and the `assets` lists. Those roots count against the pools,
 collide like a seed's, and fill `provides` the way a manifest does: a declaration may narrow
 them, never add a name the recipe does not deliver. The member's `payload` is `adapter`.
+
+### One cut per target: `recipes`
+
+An adapter recipe is a cut, not a source tree: it names one `foundation` and one `map`, and the
+builder cuts exactly that. Composing the module on another target therefore means building it
+there, and a module that has already been cut for a second target should say so rather than have
+the pack retarget the first cut every time. `recipes` maps `"<foundation>/<map>"` to the recipe
+for that target; `recipe` stays the default.
+
+```json
+{
+  "schema": 1, "id": "gum_kill_joy", "version": "0.2.0",
+  "recipe": "recipe.json",
+  "recipes": {"dlc5-beta2/zm_factory": "recipe-b2.json"},
+  "bases": ["stock", "b2"], "maps": ["zm_transit", "zm_factory"]
+}
+```
+
+The foundation is the id `foundations/<id>.json` carries (`dlc5-beta2`), never the base token a
+composition names (`b2`); the toolkit resolves the pack's base to a foundation the same way the
+occupancy checks do. `plan` and `build` look up `<foundation>/<map>` for the composition's target
+and fall back to `recipe`, so the plan row, the footprint and the link all read the cut the pack
+will get; the row's `adapter.recipe_key` says which entry was chosen and `recipes` lists the keys
+the declaration carries. Because the chosen recipe already names the pack's target, no
+`--foundation`/`--map` override is passed to the builder: the retargeting above applies when the
+declaration has only the default cut.
+
+Every entry is validated wherever the pack is aimed, not only the one chosen: the file must exist,
+parse as an adapter recipe, and declare the `foundation` and `map` of its own key. A `recipes`
+entry on a `project.json` recipe or on a `seed` payload is refused — the toolkit compiles a
+project recipe against whatever the composition targets, and a seed is one package.
+
+`recipes` widens nothing on its own. `bases` and `maps` still grow only by a receipt on that
+target: the per-target recipe is what makes the receipt possible, not a substitute for it.
 
 `build` runs the workspace's builder as a backend: `PAT_BACKEND_ADAPTER_BUILDER` names it, or
 `--workspace <dir>` names a workspace whose `toolchain/pat-adapter-build` (or `.py`) is it. The
@@ -344,6 +379,84 @@ like a source recipe declaration. Inspection proves metadata only. Plan/build st
 the recipe and require every local input; `private` does not bypass path or payload checks,
 authorize publication, or make a foreign recipe format buildable. Private seed behavior is
 unchanged: a missing package is reported when planning/building requires it.
+
+## Qualifying a module for a target: `module qualify`
+
+Extending `bases` or `maps` by hand is four commands and four edited files per module, and the
+edits are only honest if they quote the build that earned them. `pat module qualify` is that loop
+as one job:
+
+```
+pat module qualify <module dir> --target <foundation>/<map> --workspace <root> --output <new dir> --json
+pat module qualify --set <file of module dirs> --target <foundation>/<map> --workspace <root> --output <new dir> --json
+```
+
+`--target` is `<foundation>/<map>`: the foundation id as the workspace's `foundations/<id>.json`
+names it, never the base token. The base token is derived from that foundation's
+`profile_prefix`, and a target whose foundation the workspace does not stage, or a map that
+foundation does not stage, is refused before anything is staged or built.
+
+Per module, in one job directory, each step leaving its own receipt:
+
+| Step | Directory | What it is |
+| --- | --- | --- |
+| a | `<id>/shelf/`, `<id>/pack/` | the module and its declared dependency closure staged from the member roots, and a one-member composition `<base>_<id>_test` for the target with the foundation's `link_loads` and `mod_zone_header` |
+| b | `<id>/plan-unqualified/` | `module plan --allow-unqualified` |
+| c | `<id>/build-unqualified/` | `module build --allow-unqualified` |
+| d | `<id>/verify-unqualified/` | `project verify --inputs` |
+| e | `<id>/plan-qualified/`, `<id>/build-qualified/`, `<id>/verify-qualified/` | the same three after the **staged** declaration is widened |
+| f | the module directory | the records, written together or not at all |
+
+The declaration is widened in the staged copy, so both builds read the same paths and the two
+packages are comparable. For a project recipe they must be the same bytes: a declaration is
+metadata the package does not contain, and a difference means an input moved between the builds,
+which is `package-mismatch` and writes nothing. An adapter recipe is a cut for one target
+(above), so widening alone cannot qualify one: the route writes the target's cut as
+`recipe-<base>.json` from the declared recipe with only `foundation`, `map`, `profile` and
+`revision` changed, builds *that*, and records it under `recipes`. Its two packages carry
+different profile names and are not compared. An existing cut already named under `recipes` is
+reused; a `recipe-<base>.json` on disk that `recipes` does not name is refused, never
+overwritten.
+
+Only after the second verify are four records written, each citing the qualified receipts by
+path (relative to the workspace when the job directory is inside it) and sha256:
+
+1. `module.json` with `bases` and `maps` grown by exactly this target, plus the `recipes` entry
+   for an adapter. Nothing else in the declaration moves, and the file keeps its own JSON
+   serialisation so the diff is an addition and not a reformat.
+2. a `docs/TEST.md` section quoting every receipt of this job and keeping the six facts apart.
+3. an `evidence.json` `built-alone` row, written through the same validator `module state
+   --ledger` reads (`docs/evidence-ledger.md`); the ledger is created when the module has none.
+4. a build row on the module's entry in the workspace's `registry/module-recipes.json`, when the
+   workspace keeps one and it has an entry for this module.
+
+If any step fails, the job directory holds the refusal and **the module is untouched**: the
+declaration, the test record, the ledger and the registry are byte for byte what they were.
+Refusals are data under `details.refusals`, each with a `kind`: `dependency-unqualified`,
+`adapter-recipe-single-target-without-recipes`, `missing-dependency`, `probe`, `map-scripts` (a
+function this module replaces lives in a script the target map does not carry), `missing-fx` (the
+linker could not resolve an effect root from the target's zones), `plan-refused`, `build-failed`,
+`verify-failed`, `package-mismatch`, `records-refused`.
+
+`--set` takes a file of module directories, one per line, `#` comments allowed. They run in
+dependency order, one job directory each, continuing past failures, and `results.json` holds the
+table: id, outcome, receipts, records, refusal. A module qualified earlier in the run is a
+declared dependency for the ones after it. There is no parallelism inside the route; run several
+jobs if you want it, each with its own `--output`.
+
+A qualified module is **offline verified** on that target and nothing else. Installed, launched,
+loaded, playable and accepted stay unknown, and the route never touches a game.
+
+### The work orders a plan already knows: `adapt`
+
+`module plan` reports `result.adapt`, one row per member that is not declared for the
+composition's target: `{module, directory, target, pattern, detail, declared_bases,
+declared_maps, work_order}`, where `work_order` is the `pat module qualify` command that would
+earn the widening. The same list travels under `details.adapt` when the plan refuses for
+`unqualified_base`/`unqualified_map`, so a caller reads work orders either way. `pattern` is what
+the plan itself can decide — `map-scripts`, `dependency-unqualified`,
+`adapter-recipe-single-target-without-recipes` — and `unknown` for everything only a build can
+find. Nothing is widened, built or written by `adapt`.
 
 ## Publishing a module
 
