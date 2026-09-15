@@ -20,6 +20,63 @@ Every entry states what shipped, on which platform it was verified, and what rem
   export product, carries no marker and is excluded by name. `docs/knowledge/README.md` says the
   rule and where a correction goes instead. The release workflow checks out full history so the test
   can compare against the commit before a change. Offline unit tests on Linux; no data row changed.
+- `pat module qualify <module dir> --target <foundation>/<map> --workspace <root>` builds one
+  module alone on one target and writes its records from the receipts. A declaration's `bases`
+  and `maps` grow only by a build on that target, and doing that by hand is four commands plus
+  four files edited from their output; the widening is now earned inside one job. The route
+  synthesizes the one-member composition with the module's declared dependency closure, the
+  foundation's `link_loads` and its `mod_zone_header` for the map, then plans and builds it with
+  `--allow-unqualified`, verifies, widens the declaration **in the staged copy**, plans and
+  builds it qualified and verifies again. Each step is a sub-receipt under the job directory. For
+  a project recipe the two packages must be the same bytes — a declaration is metadata the
+  package does not carry — and a difference refuses as `package-mismatch`. An adapter recipe is a
+  cut for one target, so widening alone cannot qualify one: the target's cut is written as
+  `recipe-<base>.json` from the declared recipe with only `foundation`, `map`, `profile` and
+  `revision` changed, built through the workspace's adapter builder and recorded under `recipes`;
+  an existing cut is reused and a recipe on disk is never overwritten.
+
+  Only after the second verify are the records written, together or not at all: `module.json`
+  widened by exactly that base and map, a `docs/TEST.md` section citing every receipt by relative
+  path and sha256, an `evidence.json` `built-alone` row through the ledger's own validator
+  (created when the module has none), and a build row on the module's entry in the workspace's
+  `registry/module-recipes.json`. Each file keeps its own JSON serialisation so a record is an
+  addition and not a reformat. A failure anywhere leaves the module byte for byte as it was and
+  the job directory holding the refusal, typed under `details.refusals`: `dependency-unqualified`,
+  `adapter-recipe-single-target-without-recipes`, `missing-dependency`, `probe`, `map-scripts`,
+  `missing-fx`, `plan-refused`, `build-failed`, `verify-failed`, `package-mismatch`,
+  `records-refused`. `--set <file>` runs a list of module directories in dependency order, one job
+  directory each, continues past failures and writes `results.json`; a module qualified earlier in
+  the run is a declared dependency for the ones after it. No parallelism inside the route, and no
+  game, network or install: a qualified module is offline verified on that target and nothing more.
+  `--output` must be inside the workspace, because a ledger receipt pointer is relative to the
+  workspace root and never climbs out of it; that is refused before anything is built rather than
+  after. The binding row names the id of the entry it was appended to, which a workspace may key
+  by directory rather than by declaration id. An adapter member's build report now carries the
+  recipe it was cut from and the `recipes` key it came from, so the test record and the ledger note
+  quote the workspace builder's own package beside the pack's.
+
+- `module plan` reports `result.adapt`, and carries the same list under `details.adapt` when it
+  refuses for an undeclared base or map: one row per member not declared for the composition's
+  target, with the `pat module qualify` command that would earn the widening and the pattern the
+  plan could decide (`map-scripts`, `dependency-unqualified`,
+  `adapter-recipe-single-target-without-recipes`, else `unknown`). `result.unqualified` is now
+  filled whether or not `--allow-unqualified` was passed, so a refusal names what is undeclared
+  instead of only saying that something is. Read-only: nothing is widened, built or written.
+- `ff extract` refuses an asset type the pinned OpenAssetTools build cannot dump instead of
+  reporting an empty success. `--types fx` on a T6 zone used to exit zero having written nothing,
+  because OAT registers no T6 FX dumper (and no FX loader), so a caller could not tell "this zone
+  has no effects" from "this backend cannot write effects out". `dev/backends.json` gains
+  `asset_dumpers`: per game, which of the title's asset type names have a registered dumper, read
+  from the upstream OAT source at the pinned commit, with T6 populated (28 dumpable, 32 not,
+  including `fx` and `fximpacttable`) and the `techset`/`gfxlightdef` aliases resolved. `ff extract`
+  takes `--game`, and with it a type the table refuses fails with `backend_unavailable` and a hint
+  naming the type, the backend and the `ff link` route that does carry such an asset — before any
+  backend runs. Without `--game` the title is only known once the readback names it, so the same
+  refusal lands after the run; a request mixing dumpable and undumpable types still extracts and
+  lists the rest under `types_not_dumpable`. A title with no table is never judged, and
+  `ff inspect` is unaffected, because listing an asset needs no dumper. Offline unit tests on Linux
+  against the fake Unlinker, which now models a type it cannot dump as an empty exit-zero dump;
+  nothing was built, installed or played.
 - `pool:image-bank-slots` stops counting image bank reads the engine never performs. A map's row in
   `knowledge/occupancy.json` may now carry `banks_present`, the optional inventory of banks that
   map's client `zone/all` folder holds; when it is there, a `>level.ipak_read` line naming a bank
@@ -77,6 +134,21 @@ Every entry states what shipped, on which platform it was verified, and what rem
   on Linux by the test suite and by a readback of a real three-weapon pack; the rendering itself is
   not claimed here.
 
+- An adapter module declares one cut per target. An adapter `recipe.json` names a single
+  `foundation` and `map` and the workspace builder cuts exactly that, so a declaration with one
+  recipe could only ever be built from that cut: a module whose declaration listed a second base
+  and map would link its first cut into the second pack. `module.json` gains an optional
+  `recipes` map from `"<foundation>/<map>"` (the foundation id as `foundations/<id>.json` names
+  it, never the base token) to the recipe for that target, with `recipe` kept as the default.
+  `plan` and `build` resolve the composition's base to a foundation, look up
+  `<foundation>/<map>`, and read the plan row, the footprint and the link from that recipe; the
+  row carries the `recipes` keys and `adapter.recipe_key`, and `module inspect` reports the keys
+  under metadata. A chosen per-target recipe already names the pack's target, so the
+  `--foundation`/`--map` overrides are not passed to the builder; a declaration with only the
+  default cut keeps the retargeting behaviour. Every entry is validated wherever the pack is
+  aimed: the file must exist, parse as an adapter recipe and declare its own key's foundation and
+  map, and a `recipes` entry on a `project.json` recipe or a `seed` payload is refused.
+  `recipes` widens nothing by itself; `bases` and `maps` still grow only by a receipt.
 - The `externals:` check resolves stock exports per script VM. `knowledge/stock-exports.json` now
   carries a `vm` on every row; the seven existing rows are `server`, and two `client` rows
   (`clientscripts/mp/_utility` for `add_to_array`, `clientscripts/mp/zombies/_zm_utility` for

@@ -44,6 +44,25 @@ writes selected asset types out (`--types rawfile,image`, model and image format
 `pat project build` extracts every rawfile it packed and byte-compares it with the source, so a
 green build means the script bytes in the package equal the compiled bytes on disk.
 
+### Listing an asset and dumping it are different capabilities
+
+OpenAssetTools registers a dumper per asset type per game, and a type with none is written out as
+nothing: `Unlinker --include-assets fx` on a T6 zone exits zero, produces no file and prints no
+diagnostic, which reads exactly like a zone that carries no effects. T6 in particular has no FX
+dumper and no FX loader either, so no amount of retrying gets an effect out that way.
+
+`pat ff extract` carries the table (`dev/backends.json`, `asset_dumpers`, read from the OAT source
+at the pinned commit) and refuses instead of reporting an empty success: give it `--game t6` and a
+type the backend cannot dump is refused with `backend_unavailable` before anything runs; without
+`--game` the title is only known once the readback names it, so the refusal comes after the run
+instead, and a request that mixes dumpable and undumpable types succeeds with the undumpable ones
+listed in `types_not_dumpable`. `ff inspect` is unaffected: listing an asset needs no dumper, which
+is why a zone's `--list` shows effects that `--types fx` will never write.
+
+To get one effect and its closure out of a donor zone anyway, root the asset in a throwaway OAT
+project and `pat ff link` it against the donor. The result is a small fastfile carrying exactly
+that asset and what it needs, usable as a module-owned prepared `loads` input.
+
 What readback proves: the asset is in the package under that name with those bytes. What it does
 not prove: that the engine will accept it. Registration limits, pool sizes, animation-tree
 references and field budgets are engine facts checked only at load (`zombies-contracts.md`).

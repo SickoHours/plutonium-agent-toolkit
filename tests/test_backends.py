@@ -383,5 +383,26 @@ class CrossPlatformTests(unittest.TestCase):
         self.assertEqual(res["installed_for"], other)
 
 
+class AssetDumperTable(unittest.TestCase):
+    """What the pinned Unlinker can write out, per game, read from the OAT source at the pin."""
+
+    def test_t6_has_no_fx_dumper_and_the_two_lists_partition_the_type_names(self):
+        t6 = backends.dumper_games()["t6"]
+        self.assertIn("fx", t6["not_dumpable"])
+        self.assertIn("fximpacttable", t6["not_dumpable"])
+        for name in ("rawfile", "image", "weapon", "xmodel", "soundbank", "script"):
+            self.assertIn(name, t6["dumpable"])
+        self.assertEqual(set(t6["dumpable"]) & set(t6["not_dumpable"]), set())
+        self.assertEqual(len(t6["dumpable"]) + len(t6["not_dumpable"]), 60)
+
+    def test_undumpable_types_resolves_aliases_and_judges_nothing_for_an_unknown_game(self):
+        self.assertEqual(backends.undumpable_types("t6", ["rawfile", "fx", "image"]), ["fx"])
+        self.assertEqual(backends.undumpable_types("t6", ["techset", "gfxlightdef"]), [])
+        # A name in neither list belongs to the backend to reject, not to this table.
+        self.assertEqual(backends.undumpable_types("t6", ["notatype"]), [])
+        for game in ("iw5", "", None, "T5"):
+            self.assertEqual(backends.undumpable_types(game, ["fx"]), [])
+
+
 if __name__ == "__main__":
     unittest.main()

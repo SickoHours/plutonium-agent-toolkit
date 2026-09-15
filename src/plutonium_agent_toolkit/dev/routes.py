@@ -110,6 +110,16 @@ PLANNED = [
                 "download-and-execute and path-escape block; everything else is reported for review. Outcomes passed, "
                 "review-required, needs-fixes, incomplete (unreadable files fail closed). Writes baseline.json. Not a security "
                 "audit, certification, warranty or endorsement. Rules: docs/REGISTRY.md."),
+    Route("module", "qualify", "Build one module alone on one target (declaration-blind, then qualified), verify both, and write its "
+          "declaration widening, docs/TEST.md section, evidence.json built-alone row and workspace binding row from those receipts",
+          "writes-output", status="implemented", owner=OWNER,
+          notes="Arguments: <module dir> | --set <file>, --target <foundation>/<map>, --workspace <root>, [--member-root <dir>]..., --output <new dir>. "
+                "One job directory; every step is a sub-receipt under it (composition, plan --allow-unqualified, build, project verify --inputs, "
+                "then the qualified plan, build and verify). The declaration is widened in a staged copy of the module and its dependency closure, "
+                "so a project-recipe module's two packages must be the same bytes; an adapter module gets the target's cut as recipe-<base>.json and a "
+                "recipes entry instead. Nothing is written to the module until every step succeeded; on failure the job directory holds the refusal "
+                "(details.refusals, kinds in dev/qualify.py REFUSAL_KINDS) and the module is untouched. A set runs in dependency order, continues past "
+                "failures and writes results.json. No parallelism inside the route; no game, network or install. Format: docs/MODULES.md."),
     Route("module", "build", "Compile every module's scripts, stage every asset, link one mod.ff, read it back and compare every rawfile",
           "writes-output", status="available", owner=OWNER,
           notes="Use --allow-unqualified to report base/map mismatches without refusing. Same backends and readback as project build; the composition's fit and budget come from declarations, not from the game."),
