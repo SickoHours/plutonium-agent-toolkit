@@ -29,7 +29,11 @@ from . import fastfiles, scripts, titles
 from .backends import executable
 
 NAME = re.compile(r"^[a-z0-9_]{1,64}\Z")
-ZONE_PART = re.compile(r"^[A-Za-z0-9_.-]{1,255}\Z")
+# T6's asset pipeline generates image names for derived textures that are not identifiers:
+# `~-gt5_weapon_thundergun_c`, `~$black-rgb&~-rt5_weapon_mesh~5d8c5c3e`. A module that ships
+# such an image as its own asset must name it exactly, so `~`, `$` and `&` are part names too.
+# Every separator, `..` and absolute path stays refused by the caller.
+ZONE_PART = re.compile(r"^[A-Za-z0-9_.~$&-]{1,255}\Z")
 MAX_SCRIPTS, MAX_ASSETS, MAX_LOADS = 128, 4096, 32
 
 INIT_SCRIPT = '''// Created by pat project init. Prints to each player once they spawn.
@@ -93,7 +97,7 @@ def _zone_target(text: str) -> Path:
         raise Failure(INPUT_INVALID, "Zone targets use forward slashes")
     p = Path(text)
     if p.is_absolute() or ".." in p.parts or not p.parts or any(not ZONE_PART.match(part) for part in p.parts):
-        raise Failure(INPUT_INVALID, f"Zone target parts use letters, digits, dot, underscore or dash: {text}")
+        raise Failure(INPUT_INVALID, f"Zone target parts use letters, digits, dot, underscore, dash, and the ~ $ & of a generated image name: {text}")
     return p
 
 
@@ -201,6 +205,28 @@ def _plan(data, compiled, loose, loads, job: Job) -> dict:
     return plan
 
 
+def stage_images(raw: Path, packages: Path) -> list[str]:
+    """Copy the zone's images beside the package, the way the seeds' soundbanks travel beside it.
+
+    A T6 fastfile carries an image's header and never its pixels: a `mod.ff` with fifteen freshly
+    rooted 1024x1024 textures in it is sixty-four bytes larger than the same zone without them.
+    The client reads the pixels from an image bank the zone header names, or from `images/<name>.iwi`
+    in the mod's own folder. So an `image` asset row is only half a delivery: without the file
+    beside the package the image draws blank, which is the failure `image-sources` reports.
+    Returns the staged names; the caller records them on the receipt."""
+    source = raw / "images"
+    if not source.is_dir():
+        return []
+    staged = []
+    for path in sorted(source.iterdir()):
+        if not path.is_file():
+            continue
+        (packages / "images").mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(path, packages / "images" / path.name)
+        staged.append(path.name)
+    return staged
+
+
 def stage_withheld(raw: Path, rows) -> list[str]:
     """Copy withheld authoring inputs (``deliver: false``) under ``raw/`` at the target path the
     compiled asset names, without a zone line: the linker reads a model's lod export, a bank's
@@ -275,8 +301,9 @@ def _build(data, compiled, loose, loads, plan, args, job: Job) -> dict:
         restored = job.root / "readback" / rel
         if not restored.is_file() or sha256_file(raw / rel) != sha256_file(restored):
             raise Failure(BACKEND_FAILED, f"Rawfile did not round-trip through the fastfile: {rel.as_posix()}")
+    images = stage_images(raw, package.parent)
     return {**link, "plan": "plan.json", "game": game, "script_form": titles.script_form(game),
-            "rawfiles_verified": len(rawfiles), "mod_ff": link["packages"][0]["path"],
+            "rawfiles_verified": len(rawfiles), "images_beside_package": images, "mod_ff": link["packages"][0]["path"],
             "install_hint": f"pat game install-mod <output>/{link['packages'][0]['path']} {data['name']}  (keeps the name mod.ff; a renamed fastfile cannot be read; the folder goes under the storage of game {game}). Loading it in game is a separate, authorized step"}
 
 

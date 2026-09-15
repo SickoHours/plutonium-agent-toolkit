@@ -47,6 +47,14 @@ for line in lines:
                     assets.append("localize," + text_line.split(" ", 1)[1].strip())
         else:
             print("ERROR: Could not find asset localize mod")
+    elif line.startswith("image,"):
+        # The real Linker reads an image from raw/images/<name>.iwi when it is there
+        # ("Loaded image ... (src: disk)") and falls back to a loaded zone's copy otherwise.
+        local = base / "raw" / "images" / (line.split(",", 1)[1].strip() + ".iwi")
+        if local.is_file() or line.strip() in loaded:
+            assets.append(line.strip())
+        else:
+            print("ERROR: Could not find asset", line.strip())
     elif "," in line and not line.startswith((">", "//")) and line.strip():
         # a non-rawfile root: must come from a loaded package, like the real linker copying assets out of -l zones
         if line.strip() in loaded:
