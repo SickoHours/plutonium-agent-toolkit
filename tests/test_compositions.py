@@ -43,6 +43,18 @@ class CompositionFixture(DevRouteFixture):
         path.write_text(json.dumps(row, indent=2))
         return path
 
+    def module_with_assets(self, mid, rows, script=None):
+        d = self.module(mid)
+        recipe = json.loads((d / "project.json").read_text())
+        for row in rows:
+            (d / row["source"]).parent.mkdir(parents=True, exist_ok=True)
+            (d / row["source"]).write_bytes(b"BYTES " + row["source"].encode())
+        recipe["assets"] = rows
+        if script is not None:
+            (d / "scripts" / f"{mid}.gsc").write_text(script)
+        (d / "project.json").write_text(json.dumps(recipe, indent=2))
+        return d
+
 
 class CompositionTests(CompositionFixture):
     def test_lineage_is_metadata_only_and_preserves_multiple_source_maps(self):
@@ -371,13 +383,13 @@ class DecisionTests(CompositionFixture):
         self.assertEqual(row["result"]["decisions"][0]["resolution"], "identical bytes; one copy is packed")
 
     def test_provides_name_collisions_are_decisions(self):
-        self.module("gun_a", provides={"weapons": ["ray_gun_zm"]})
-        self.module("gun_b", provides={"weapons": ["ray_gun_zm"]})
+        self.module("gun_a", provides={"weapons": ["halo_ray_zm"]})
+        self.module("gun_b", provides={"weapons": ["halo_ray_zm"]})
         code, row = invoke(["module", "plan", str(self.composition(["gun_a", "gun_b"])), "--output", self.out()])
         self.assertEqual(code, 0, row)
-        self.assertEqual(row["result"]["undecided"][0]["collision"], "weapons:ray_gun_zm")
+        self.assertEqual(row["result"]["undecided"][0]["collision"], "weapons:halo_ray_zm")
         self.assertEqual(row["result"]["undecided"][0]["kind"], "name")
-        comp = self.composition(["gun_a", "gun_b"], decisions=[{"collision": "weapons:ray_gun_zm", "owner": "gun_a", "reason": "a is the tested one"}])
+        comp = self.composition(["gun_a", "gun_b"], decisions=[{"collision": "weapons:halo_ray_zm", "owner": "gun_a", "reason": "a is the tested one"}])
         code, row = invoke(["module", "plan", str(comp), "--output", self.out()])
         self.assertEqual(code, 0, row)
         self.assertEqual(row["result"]["undecided"], [])

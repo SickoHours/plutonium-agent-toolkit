@@ -165,9 +165,10 @@ def load_recipe(path: Path, job: Job) -> tuple[dict, list, list, list]:
         if not deliver:
             # The file is an input the build must hash (a model or bank row reads it) but never a
             # zone asset: rooting it would spend an engine rawfile slot on bytes the compiled
-            # asset already carries. It is registered as an input and left out of `loose`.
-            job.input(_rel(row["source"], base))
-            withheld.append({"source": row["source"], "target": target.as_posix()})
+            # asset already carries. It is registered as an input and left out of `loose`; the
+            # build still stages it under raw/ so the linker finds it by the path the compiled
+            # asset names (a model's lod file, a bank's WAV, a WeaponDef's accuracy graph).
+            withheld.append({"source": row["source"], "target": target.as_posix(), "path": str(job.input(_rel(row["source"], base)))})
             continue
         loose.append((job.input(_rel(row["source"], base)), target, asset_type, _zone_target(name).as_posix()))
     for text in load_rows:
@@ -198,6 +199,22 @@ def _plan(data, compiled, loose, loads, job: Job) -> dict:
     }
     (job.root / "plan.json").write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
     return plan
+
+
+def stage_withheld(raw: Path, rows) -> list[str]:
+    """Copy withheld authoring inputs (``deliver: false``) under ``raw/`` at the target path the
+    compiled asset names, without a zone line: the linker reads a model's lod export, a bank's
+    WAV or a WeaponDef's accuracy graph from the search path, and a file that is not there fails
+    the asset that names it. A target another row already staged is left as staged."""
+    staged = []
+    for source, target in rows:
+        dest = raw / target
+        if dest.exists():
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, dest)
+        staged.append(target.as_posix())
+    return staged
 
 
 def _build(data, compiled, loose, loads, plan, args, job: Job) -> dict:
@@ -244,6 +261,7 @@ def _build(data, compiled, loose, loads, plan, args, job: Job) -> dict:
         lines.append(f"{asset_type},{name}")
         if asset_type == "rawfile":
             rawfiles.append(target)
+    stage_withheld(raw, [(Path(w["path"]), Path(w["target"])) for w in data.get("_withheld", [])])
     (zone_dir / f"{zone_name}.zone").write_text("\n".join(lines) + "\n", encoding="utf-8")
     link = fastfiles.execute(SimpleNamespace(action="link", project=str(base), zone=zone_name, load=[str(p) for p in loads],
                                              assets=[], timeout=args.timeout), job)
