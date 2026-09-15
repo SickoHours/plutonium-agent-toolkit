@@ -885,3 +885,46 @@ class PoolAndDeliveryTests(CompositionFixture):
         code, row = invoke(["module", "plan", str(self.composition(["phd"], name="b2_phd_test", base="b2", map_id="zm_cosmodrome")), "--output", self.out()])
         self.assertEqual(code, 1, row)
         self.assertIn("declared for maps", row["message"], "Ascension carries the script, but the module is not declared for that map")
+
+    def test_an_image_a_member_ships_passes_and_the_plan_says_the_rest_is_undecided(self):
+        """A pack's images are the one pool the plan cannot read alone: the client's banks are not here."""
+        row = {"source": "assets/images/halo_tex.iwi", "target": "images/halo_tex.iwi", "type": "image", "name": "halo_tex"}
+        self.module_with_assets("skull", [row])
+        code, result = invoke(["module", "plan", str(self.composition(["skull"], name="stock_image_test")), "--output", self.out()])
+        self.assertEqual(code, 0, result)
+        rows = {c["id"]: c for c in result["result"]["checks"] if c["id"].startswith("image-sources")}
+        self.assertEqual(rows["image-sources:halo_tex"]["outcome"], "passed")
+        self.assertIn("pixels ride in the fastfile", rows["image-sources:halo_tex"]["detail"])
+        self.assertEqual(rows["image-sources"]["outcome"], "passed")
+        report = self.root / "shipped-check.json"
+        report.write_text(json.dumps({"pack": "stock_image_test", "images": [{"name": "halo_tex", "pixels": "present"}]}))
+        code, result = invoke(["module", "plan", str(self.composition(["skull"], name="stock_image_test")), "--output", self.out(),
+                               "--image-report", str(report)])
+        self.assertEqual(code, 0, result)
+        receipt = json.loads((Path(result["result"]["output"]) / "receipt.json").read_text())
+        self.assertIn(str(report.resolve()), receipt["inputs"], "the readback the plan was decided against is a hashed input")
+
+    def test_a_readback_naming_an_image_with_no_pixels_refuses_the_pack(self):
+        self.module("thundergun")
+        report = self.root / "image-check.json"
+        report.write_text(json.dumps({"pack": "stock_image_gap_test", "images_dumped": 252,
+                                      "rows": [{"image": "t5_weapon_thundergun_n", "located": "the module's prepared images/"}]}))
+        comp = self.composition(["thundergun"], name="stock_image_gap_test")
+        code, row = invoke(["module", "plan", str(comp), "--output", self.out(), "--image-report", str(report)])
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "input_invalid")
+        self.assertIn("image-sources:t5_weapon_thundergun_n", row["message"])
+        self.assertIn("renders without them", row["message"])
+        self.assertIn("located: the module's prepared images/", row["message"])
+        failed = next(c for c in row["details"]["checks"] if c["id"] == "image-sources:t5_weapon_thundergun_n")
+        self.assertEqual(failed["outcome"], "failed")
+        self.assertIn("No member declares", failed["detail"])
+
+    def test_the_same_pack_without_the_readback_is_undecided_rather_than_accepted(self):
+        self.module("thundergun")
+        comp = self.composition(["thundergun"], name="stock_image_unmeasured_test")
+        code, result = invoke(["module", "plan", str(comp), "--output", self.out()])
+        self.assertEqual(code, 0, result)
+        summary = next(c for c in result["result"]["checks"] if c["id"] == "image-sources")
+        self.assertEqual(summary["outcome"], "not_counted")
+        self.assertIn("readback beside the banks", summary["detail"])

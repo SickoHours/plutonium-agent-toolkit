@@ -535,6 +535,43 @@ actor client field bits. A failed pool row carries
 plan's `footprint` lists every member's rawfiles, scripts and soundbanks so a caller can show
 a meter before the engine does.
 
+### Images have pixels somewhere, or the pack renders blank
+
+A material names its images. The fastfile carries each image's header, and its pixels only when
+the linker read the image from a disk `.iwi` the pack's own zone declares — an `image` asset row.
+An image the linker resolved from a zone the composition loads travels as a header alone, and the
+client streams the pixels from an image bank (`.ipak`) named by a `>level.ipak_read` header line.
+A pack that references such an image with no bank carrying it loads without an error and draws it
+without pixels, which is why this is a check and not a convention.
+
+`image-sources` is that check. One row per image the plan can name, plus a summary row:
+
+- an `image` asset row whose file is on this machine is `passed` — its pixels ride in `mod.ff`,
+  with no bank and no header read spent;
+- a declared row whose file is missing or empty is `failed`: the zone gets a header and nothing else;
+- an image a member's zone listing only references (a seed's or an adapter's `image,<name>` root)
+  is `not_counted` with that reason. Bank contents cannot be read without the banks, so the plan
+  never calls such an image `passed` on its own.
+
+`--image-report PATH` supplies the missing evidence: a readback of the built package taken with
+the client's banks beside it. Every image it reports without pixels becomes a `failed` row naming
+the image, the member that brought it in when one declares it, and the report's `located` hint;
+a failed row refuses the plan like any other check. The report is one JSON object, hashed as a
+build input:
+
+```json
+{"pack": "<composition name>",
+ "images": [{"name": "t5_weapon_thundergun_n", "pixels": "missing", "located": "the module's prepared images/"},
+            {"name": "camo_code_nml", "pixels": "present"}]}
+```
+
+A tool that lists only what it could not resolve is read too (`images_without_pixels` or `rows`,
+as names or as objects with `image` and an optional `located`); in that shape every image the same
+readback did resolve is absent from the list by construction, so an unlisted image is `passed`. In
+the documented shape an image the report does not name at all stays `not_counted`. A report whose
+`pack` is a different composition decides nothing and says so. Only names and hints are read,
+never paths.
+
 A recipe asset row may carry `"deliver": false` (rawfile rows only): the file is hashed as a
 build input but never staged or rooted, for authoring inputs such as model exports and source
 WAVs that another row already compiles. Withheld rows are listed under `withheld` in the plan. The build still stages a withheld file under `raw/` at its target path with no zone line, so the linker finds the export, WAV or accuracy graph the compiled asset names; two members withholding different bytes at one path are a file collision like any other (`decisions`), and the build reports `withheld_staged`.

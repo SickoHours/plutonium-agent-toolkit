@@ -140,6 +140,8 @@ def add_parser(sub, common):
         q.add_argument("--workspace", help="Workspace root whose registry/locations tables answer the members' placements needs (docs/target-sets.md)")
         q.add_argument("--target", action="append", default=[], metavar="KEY",
                        help="A target <foundation>/<map>/<mode>[/<location>][@<route>] to check placements against; repeatable. Its map must be the composition's, and a location two routes provide names one")
+        q.add_argument("--image-report", metavar="PATH",
+                       help="A readback measurement of which of this pack's images have no pixels in any bank the client opens (docs/MODULES.md); without it the image-sources check cannot decide a referenced image and says so")
         common(q)
     q = actions.add_parser("compose", help="Compose declared IDs against a foundation, or publish a successfully built recipe")
     q.add_argument("--name"); q.add_argument("--base"); q.add_argument("--map")
@@ -1384,6 +1386,10 @@ def execute(args, job: Job) -> dict:
     }
     plan["footprint"] = offline_checks.footprint(plan)
     plan["checks"] = offline_checks.evaluate(plan, getattr(args, "workspace", None))
+    # Image pixels are the one pool a plan cannot read on its own: the banks are not here. The
+    # check says what it can prove and stays not_counted for the rest unless a readback decides it.
+    image_report = getattr(args, "image_report", None)
+    plan["checks"] += offline_checks.image_sources(plan, offline_checks.read_image_report(job.input(Path(image_report))) if image_report else None)
     pack_scripts = {t.as_posix() for _, t, _ in compiled} | {t.as_posix() for _, t, _, _ in loose}
     for m in modules:
         pack_scripts |= set(m.get("provides", {}).get("scripts", []))

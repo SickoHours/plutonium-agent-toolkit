@@ -1,9 +1,10 @@
 """Measured pool floors and compiler diagnostics; unknown coverage stays explicit."""
+import json
 import re
 from types import SimpleNamespace
 from pathlib import Path
 from ..core.jobs import Job
-from ..core.errors import Failure
+from ..core.errors import Failure, INPUT_INVALID
 from . import knowledge, scripts
 
 def get(data,key):
@@ -80,6 +81,109 @@ def pool_checks(plan,limits,occupancy):
         if top:row['contributors']=[{'id':mid,'count':n} for n,mid in top[:16]]
         rows.append(row)
     return rows
+
+IMAGE_REPORT_KEYS=('images','images_without_pixels','rows')
+
+def read_image_report(path):
+    """A readback measurement of which of a package's images have pixels no bank the client opens
+    carries. Two shapes are read. The documented one names every image it checked:
+    ``{"pack": "<name>", "images": [{"name": "x", "pixels": "missing"|"present", "located": "hint"}]}``.
+    A tool that reports only what it could not resolve is read too: ``images_without_pixels`` or
+    ``rows`` as a list of names, or of objects with ``image``/``name`` and an optional ``located``
+    hint; every image the same readback did resolve is absent from that list by construction.
+    Only names and hints are taken, never paths: a measurement is made on someone's machine and
+    its file paths are theirs."""
+    data=json.loads(Path(path).read_text(encoding='utf-8'))
+    if not isinstance(data,dict) or not any(k in data for k in IMAGE_REPORT_KEYS):
+        raise Failure(INPUT_INVALID,f'{path} is not an image readback report',
+                      'A report is one JSON object with "images" (every image checked) or '
+                      '"images_without_pixels"/"rows" (the ones with no pixels).')
+    missing,present,enumerated={},set(),False
+    rows=data.get('images')
+    if isinstance(rows,list):
+        enumerated=True
+        for row in rows:
+            if not isinstance(row,dict):continue
+            name=row.get('name') or row.get('image')
+            if not name:continue
+            if str(row.get('pixels','missing')).lower()=='present':present.add(name)
+            else:missing[name]=str(row.get('located') or '') or None
+    for key in ('images_without_pixels','rows'):
+        rows=data.get(key)
+        if not isinstance(rows,list):continue
+        for row in rows:
+            if isinstance(row,str):missing.setdefault(row,None)
+            elif isinstance(row,dict):
+                name=row.get('image') or row.get('name')
+                if name:missing.setdefault(name,str(row.get('located') or '') or None)
+    return {'pack':data.get('pack'),'missing':missing,'present':sorted(present),'enumerated':enumerated,
+            'banks':sorted(data['banks_opened']) if isinstance(data.get('banks_opened'),dict) else data.get('banks') or []}
+
+def image_sources(plan,report=None):
+    """Whether every image the pack references will have pixels the client can load.
+
+    A T6 material names its images. The fastfile carries each image's header, and its pixels only
+    when the linker read the image from a disk `.iwi` the pack's own zone declares. An image the
+    linker resolved from a zone the composition loads travels as a header alone, and the client
+    streams its pixels from an image bank (`.ipak`) a `>level.ipak_read` header line names. A pack
+    that references such an image with no bank carrying it renders it without pixels, loads
+    without an error and looks like a success.
+
+    What a plan can prove on its own: an `image` asset row whose file is on this machine embeds its
+    own pixels, and a row whose file is missing or empty embeds nothing. Bank contents are not
+    readable without the banks, so an image a member's zone listing only references is
+    ``not_counted`` with that reason, never ``passed``, unless ``report`` — a readback taken with
+    the client's banks beside the package — decides it. Every image that readback found no pixels
+    for is a ``failed`` row naming the image, the member that brought it in when a member declares
+    it, and the measurement's hint for where its pixels are."""
+    embedded,referenced={},{}
+    for row in plan.get('assets',[]):
+        if row.get('type')!='image':continue
+        name=row.get('name') or Path(row.get('target','')).stem
+        embedded.setdefault(name,[]).append((row.get('module'),row.get('source')))
+    for member in plan.get('seeds',[])+plan.get('adapters',[]):
+        for root in member.get('roots',[]):
+            kind,_,name=root.partition(',')
+            if kind=='image' and name:referenced.setdefault(name,[]).append(member['id'])
+    header=[line.split(',',1)[1].strip() for line in plan.get('zone_header',[]) if line.startswith('>level.ipak_read,')]
+    banks='the startup set'+(' and the header reads '+', '.join(header) if header else ' and no header read')
+    rows=[]
+    if report is not None and report.get('pack') and plan.get('name') and report['pack']!=plan['name']:
+        return [{'id':'image-sources','outcome':'not_counted',
+                 'detail':f'The readback report was measured on {report["pack"]!r}, not on this composition; it decides nothing here'}]
+    def row_for(name,outcome,detail):rows.append({'id':'image-sources:'+name,'outcome':outcome,'detail':detail})
+    for name,owners in sorted(embedded.items()):
+        who=', '.join(sorted({m for m,_ in owners if m})) or 'a member'
+        absent=[source for _,source in owners if not source or not Path(source).is_file() or Path(source).stat().st_size==0]
+        if absent:row_for(name,'failed',f'{who} declares image {name} but its file is missing or empty here, so the zone carries a header with no pixels')
+        else:row_for(name,'passed',f'{who} ships {name} as its own image asset; the linker reads the file and the pixels ride in the fastfile')
+    decided=set(embedded)
+    for name,owners in sorted(referenced.items()):
+        if name in decided:continue
+        who=', '.join(sorted(owners))
+        if report is None:
+            row_for(name,'not_counted',f"{who} references {name} without embedding it; whether {banks} carries its pixels cannot be read offline. "
+                                       'Measure it with a readback taken beside the client\'s banks and pass --image-report')
+        elif name in report['missing']:
+            hint=report['missing'][name]
+            row_for(name,'failed',f'{who} references {name} and no bank the pack opens carries its pixels ({banks}), so it renders without them'+(f'; located: {hint}' if hint else ''))
+        elif report['enumerated'] and name not in report['present']:
+            row_for(name,'not_counted',f'{who} references {name} and the readback report does not name it at all, so nothing here decides whether {banks} carries its pixels')
+        else:
+            row_for(name,'passed',f'{who} references {name} and the readback resolved its pixels from {banks}')
+        decided.add(name)
+    for name,hint in sorted((report or {'missing':{}})['missing'].items()):
+        if name in decided:continue
+        row_for(name,'failed',f'No member declares {name}; it is resolved from a zone the composition loads and no bank the pack opens carries its pixels ({banks}), so it renders without them'+(f'; located: {hint}' if hint else ''))
+        decided.add(name)
+    failed=sum(1 for r in rows if r['outcome']=='failed');unknown=sum(1 for r in rows if r['outcome']=='not_counted')
+    if failed:summary='failed',f'{failed} of {len(rows)} image(s) the pack references have pixels nowhere it can load them'
+    elif unknown:summary='not_counted',(f'{len(embedded)} image(s) embedded with their pixels; {unknown} referenced image(s) undecided offline, and the '
+                                        'images a loaded zone resolves are not in the plan at all. Only a readback beside the banks decides them')
+    elif rows:summary='passed',f'Every one of the {len(rows)} image(s) this plan can name has pixels the pack can load'
+    else:summary='not_counted',('No member embeds or references an image by name. Images a loaded zone resolves for a member\'s models and '
+                                'effects are not in the plan; a readback beside the banks is the only thing that counts them')
+    return [{'id':'image-sources','outcome':summary[0],'detail':summary[1]}]+rows
 
 def script_result(name,text,passed):
     errors=re.findall(r'(?im)^.*(?:unresolved external|\berror\b|\bfatal\b).*$',text)

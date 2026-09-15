@@ -1,3 +1,4 @@
+import json
 import tempfile
 import time
 import unittest
@@ -195,3 +196,73 @@ class MapScriptExternals(unittest.TestCase):
         self.assertEqual(checks.map_script_externals('scripts/zm/a.gsc',src,'zm_factory','dlc5-beta2')[0]['outcome'],'passed')
         self.assertEqual(checks.map_script_externals('scripts/zm/a.gsc',src,'zm_nowhere','dlc5-beta2')[0]['outcome'],'not_counted')
         self.assertEqual(checks.map_script_externals('scripts/zm/a.gsc','main(){}\n','zm_factory','dlc5-beta2')[0]['outcome'],'not_counted')
+
+class ImageSources(unittest.TestCase):
+    """A pack whose images have no pixels loads, renders blank and reports nothing; the plan has to say so."""
+    def plan(self,**extra):
+        row={'name':'b2_pack_test','assets':[],'seeds':[],'adapters':[],'zone_header':['>level.ipak_read,zm_factory']}
+        row.update(extra);return row
+    def image_row(self,path,module='wavegun'):
+        return {'source':str(path),'target':'images/tex.iwi','type':'image','name':'tex','module':module}
+    def test_an_embedded_image_with_bytes_carries_its_own_pixels(self):
+        temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup)
+        iwi=Path(temp.name)/'tex.iwi';iwi.write_bytes(b'IWi\x0d'+b'\0'*32)
+        out=checks.image_sources(self.plan(assets=[self.image_row(iwi)]))
+        self.assertEqual(out[0]['outcome'],'passed')
+        self.assertEqual(out[1],{'id':'image-sources:tex','outcome':'passed',
+                                 'detail':'wavegun ships tex as its own image asset; the linker reads the file and the pixels ride in the fastfile'})
+    def test_a_declared_image_whose_file_is_absent_or_empty_fails(self):
+        temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup)
+        empty=Path(temp.name)/'tex.iwi';empty.write_bytes(b'')
+        for source in (Path(temp.name)/'gone.iwi',empty):
+            out=checks.image_sources(self.plan(assets=[self.image_row(source)]))
+            self.assertEqual(out[1]['outcome'],'failed');self.assertIn('missing or empty',out[1]['detail'])
+    def test_a_referenced_image_is_never_passed_without_a_readback(self):
+        out=checks.image_sources(self.plan(seeds=[{'id':'thundergun','roots':['image,t5_weapon_thundergun_n','rawfile,x.gsc']}]))
+        self.assertEqual([r['outcome'] for r in out],['not_counted','not_counted'])
+        self.assertIn('cannot be read offline',out[1]['detail'])
+        self.assertIn('the header reads zm_factory',out[1]['detail'])
+    def test_a_readback_turns_a_referenced_image_into_a_refusal_naming_the_member_and_the_hint(self):
+        measured={'pack':'b2_pack_test','missing':{'t5_weapon_thundergun_n':'arsenal-thundergun prepared images/'},'present':[],'enumerated':False,'banks':[]}
+        out=checks.image_sources(self.plan(seeds=[{'id':'thundergun','roots':['image,t5_weapon_thundergun_n','image,camo_code_nml']}]),measured)
+        self.assertEqual(out[0]['outcome'],'failed');self.assertIn('1 of 2',out[0]['detail'])
+        failed=next(r for r in out[1:] if r['outcome']=='failed')
+        self.assertEqual(failed['id'],'image-sources:t5_weapon_thundergun_n')
+        self.assertIn('thundergun references',failed['detail']);self.assertIn('located: arsenal-thundergun prepared images/',failed['detail'])
+        self.assertEqual(next(r for r in out[1:] if r['id'].endswith('camo_code_nml'))['outcome'],'passed')
+    def test_an_image_no_member_declares_is_still_named(self):
+        out=checks.image_sources(self.plan(),{'pack':None,'missing':{'thermal_gradient2':None},'present':[],'enumerated':False,'banks':[]})
+        self.assertEqual(out[1]['id'],'image-sources:thermal_gradient2')
+        self.assertIn('No member declares thermal_gradient2',out[1]['detail'])
+        self.assertIn('resolved from a zone the composition loads',out[1]['detail'])
+    def test_a_readback_of_another_pack_decides_nothing(self):
+        out=checks.image_sources(self.plan(),{'pack':'other_pack','missing':{'x':None},'present':[],'enumerated':False,'banks':[]})
+        self.assertEqual(len(out),1);self.assertEqual(out[0]['outcome'],'not_counted');self.assertIn("'other_pack'",out[0]['detail'])
+    def test_an_enumerated_readback_that_omits_a_referenced_image_decides_nothing_for_it(self):
+        measured={'pack':None,'missing':{},'present':['other'],'enumerated':True,'banks':[]}
+        out=checks.image_sources(self.plan(seeds=[{'id':'thundergun','roots':['image,t5_weapon_thundergun_n']}]),measured)
+        self.assertEqual(out[1]['outcome'],'not_counted');self.assertIn('does not name it at all',out[1]['detail'])
+
+    def test_a_plan_that_names_no_image_says_the_plan_is_not_the_counting_source(self):
+        out=checks.image_sources(self.plan())
+        self.assertEqual(len(out),1);self.assertEqual(out[0]['outcome'],'not_counted')
+        self.assertIn('a readback beside the banks',out[0]['detail'])
+
+class ImageReports(unittest.TestCase):
+    def report(self,data):
+        temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup)
+        path=Path(temp.name)/'image-check.json';path.write_text(json.dumps(data));return path
+    def test_the_documented_shape_names_present_and_missing_images(self):
+        out=checks.read_image_report(self.report({'pack':'p','images':[{'name':'a','pixels':'present'},{'name':'b','pixels':'missing','located':'zm_moon'}]}))
+        self.assertEqual(out['pack'],'p');self.assertEqual(out['present'],['a']);self.assertEqual(out['missing'],{'b':'zm_moon'})
+        self.assertTrue(out['enumerated'],'the documented shape names every image it checked')
+    def test_a_tool_that_lists_only_what_it_could_not_resolve_is_read_and_its_paths_are_not(self):
+        out=checks.read_image_report(self.report({'pack':'p','images_dumped':252,'banks_opened':{'base':'/elsewhere/zone/base.ipak'},
+                                                  'rows':[{'image':'b','sources':[{'path':'/elsewhere/x.iwi'}]},{'image':'c'}]}))
+        self.assertEqual(sorted(out['missing']),['b','c']);self.assertEqual(out['banks'],['base'])
+        self.assertFalse(out['enumerated'],'a missing-only list says nothing about the images it omits')
+        self.assertNotIn('/elsewhere',json.dumps(out))
+    def test_a_file_that_is_not_a_report_is_refused_with_a_hint(self):
+        with self.assertRaises(Failure) as caught:
+            checks.read_image_report(self.report({'hello':'world'}))
+        self.assertEqual(caught.exception.code,'input_invalid');self.assertIn('images_without_pixels',caught.exception.hint)

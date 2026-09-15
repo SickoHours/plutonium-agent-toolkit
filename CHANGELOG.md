@@ -7,6 +7,17 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- A pack whose images have no pixels is refused instead of built. `image-sources` is a plan-time
+  check: an `image` asset row whose file is on this machine passes (its pixels ride in `mod.ff`,
+  no bank and no header read spent), a declared row whose file is missing or empty fails, and an
+  image a member's zone listing only references is `not_counted` — bank contents cannot be read
+  without the banks, so the plan never calls such an image loadable on its own. `module plan` and
+  `module build` take `--image-report PATH`, a readback of the package measured with the client's
+  banks beside it (`docs/MODULES.md`); every image it reports without pixels becomes a failed row
+  naming the image, the member that brought it in and where the measurement found the pixels, and
+  refuses the plan. The report is hashed as a build input, and only names and hints are read from
+  it, never paths. Verified on Linux by the test suite; the rendering itself is not claimed here.
+
 - The `externals:` check resolves stock exports per script VM. `knowledge/stock-exports.json` now
   carries a `vm` on every row; the seven existing rows are `server`, and two `client` rows
   (`clientscripts/mp/_utility` for `add_to_array`, `clientscripts/mp/zombies/_zm_utility` for
