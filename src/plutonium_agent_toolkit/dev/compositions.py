@@ -1390,6 +1390,7 @@ def execute(args, job: Job) -> dict:
     # check says what it can prove and stays not_counted for the rest unless a readback decides it.
     image_report = getattr(args, "image_report", None)
     plan["checks"] += offline_checks.image_sources(plan, offline_checks.read_image_report(job.input(Path(image_report))) if image_report else None)
+    provided_weapons = {w for m in modules for w in (m.get("provides", {}).get("weapons") or [])}
     pack_scripts = {t.as_posix() for _, t, _ in compiled} | {t.as_posix() for _, t, _, _ in loose}
     for m in modules:
         pack_scripts |= set(m.get("provides", {}).get("scripts", []))
@@ -1402,6 +1403,7 @@ def execute(args, job: Job) -> dict:
         except OSError: continue
         plan["checks"] += offline_checks.external_symbols(target.as_posix(),text,comp["game"])
         plan["checks"] += offline_checks.map_script_externals(target.as_posix(),text,comp["map"],foundation,comp["game"],pack_scripts)
+        plan["checks"] += offline_checks.box_registrations(target.as_posix(),text,provided_weapons)
     if args.action == "build":
         plan["checks"] += offline_checks.check_scripts(compiled,args,job,comp["game"])
     else:

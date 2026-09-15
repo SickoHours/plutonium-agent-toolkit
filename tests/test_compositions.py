@@ -846,6 +846,38 @@ class PoolAndDeliveryTests(CompositionFixture):
         package = json.loads((Path(result["result"]["output"]) / "packages" / "mod.ff").read_text())
         self.assertIn("accuracy/x.accu", package["rawfiles"], "the delivered copy is still in the zone")
 
+    def _client_module(self, mid, box_list, provides_weapons):
+        d = self.module(mid, provides={"weapons": provides_weapons})
+        (d / "scripts" / f"{mid}.csc").write_text(
+            'init()\n{\n    foreach (weapon in strtok("' + box_list + '", " "))\n        addzombieboxweapon(weapon, getweaponmodel(weapon), 0);\n}\n')
+        recipe = json.loads((d / "project.json").read_text())
+        recipe["scripts"].append({"source": f"scripts/{mid}.csc", "target": f"scripts/zm/{mid}.csc", "instance": "client"})
+        (d / "project.json").write_text(json.dumps(recipe, indent=2))
+        return d
+
+    def test_a_client_box_registration_for_a_weapon_nobody_provides_is_refused(self):
+        """wavegun_client.csc registered the VR-11's humangun_zm; the engine faulted at the first box use."""
+        self._client_module("wave", "humangun_zm humangun_upgraded_zm", ["microwavegundw_zm"])
+        code, result = invoke(["module", "plan", str(self.composition(["wave"])), "--allow-unqualified", "--output", self.out()])
+        self.assertFalse(result["ok"])
+        self.assertIn("Offline checks failed", result["message"])
+        self.assertIn("box-registration:scripts/zm/wave.csc", result["details"]["failed"])
+        self.assertIn("humangun_zm", result["message"])
+        self.assertIn("box-weapon-not-found", result["message"])
+
+    def test_a_client_box_registration_for_a_provided_weapon_passes(self):
+        self._client_module("wave", "microwavegundw_zm", ["microwavegundw_zm", "microwavegundw_upgraded_zm"])
+        code, result = invoke(["module", "plan", str(self.composition(["wave"])), "--allow-unqualified", "--output", self.out()])
+        rows = [c for c in result["result"]["checks"] if c["id"].startswith("box-registration:")]
+        self.assertEqual([c["outcome"] for c in rows], ["passed"])
+
+    def test_a_client_box_registration_may_name_a_weapon_another_member_provides(self):
+        self._client_module("wave", "thundergun_zm", [])
+        self.module("thunder", provides={"weapons": ["thundergun_zm"]})
+        code, result = invoke(["module", "plan", str(self.composition(["wave", "thunder"])), "--allow-unqualified", "--output", self.out()])
+        rows = [c for c in result["result"]["checks"] if c["id"].startswith("box-registration:")]
+        self.assertEqual([c["outcome"] for c in rows], ["passed"])
+
     def test_deliver_false_is_rawfile_only_and_boolean(self):
         d = self.module_with_assets("alpha", [{"source": "x.json", "target": "xmodel/x.json", "type": "xmodel", "name": "x", "deliver": False}])
         code, row = invoke(["module", "plan", str(self.composition(["alpha"])), "--output", self.out()])

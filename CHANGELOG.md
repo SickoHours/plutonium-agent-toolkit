@@ -7,6 +7,13 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- `module plan` and `module build` refuse a client script that registers a mystery-box weapon no
+  member of the pack provides (`box-registration:<script>`). A `.csc` that calls
+  `addzombieboxweapon` on a `_zm` name absent from every member's `provides.weapons` faults the
+  engine at the first box use (`AddZombieBoxWeapon: Failed to find weapon <name>`, then an access
+  violation); the check names the script and the names. Found when a weapon module's client script,
+  copied from another weapon's, still registered the donor's names. Offline unit tests on Linux.
+
 - The shipped T6 knowledge is re-exported from the maintainer's generator after its source corpus
   was restored, so every file under `knowledge/` is generator output again. `engine-limits.json`
   picks up the `observed_in` and `how_to_count` wording its own page
