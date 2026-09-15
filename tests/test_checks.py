@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 import time
 import unittest
@@ -271,6 +272,87 @@ class DonorShadowing(unittest.TestCase):
     def test_listings_that_carry_no_image_or_material_decide_nothing(self):
         out=checks.donor_shadowing(self.plan(),{'image':set(),'material':set()})
         self.assertEqual(out[0]['outcome'],'not_counted');self.assertIn('no image or material row',out[0]['detail'])
+
+class LooseOverrides(unittest.TestCase):
+    """storage/t6/images is machine state: a loose file there wins over every bank, for every mod
+    folder and for the bare game. A loose copy of a base-owned name is refusal-grade and no
+    composition change can cause or cure it."""
+    def plan(self,**extra):
+        row={'name':'b2_pack_test','loads':['/x/common_zm.ff','/x/moon.ff'],'base_loads':['common_zm']}
+        row.update(extra);return row
+    def owned(self):return {'image':{'camo_zombies_nml','zom_icon_bullets'},'material':{'mc/mtl_stock'}}
+    def loose(self,*names):
+        temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup)
+        directory=Path(temp.name)/'images';directory.mkdir()
+        for name in names:(directory/name).write_bytes(b'IWi\x0d'+b'\0'*32)
+        return directory
+    def test_a_loose_file_carrying_a_base_owned_name_is_refusal_grade_and_named(self):
+        out=checks.loose_overrides(self.plan(),self.owned(),
+                                   self.loose('camo_zombies_nml.iwi','t5_weapon_thundergun_n.iwi','zom_icon_bullets.iwi'))
+        self.assertEqual(out[0]['outcome'],'failed')
+        self.assertEqual(out[0]['count'],2,'the loose file the base does not carry is not shadowing')
+        self.assertEqual(sorted(out[0]['names']),['camo_zombies_nml','zom_icon_bullets'])
+        self.assertTrue(out[0]['counted'])
+        self.assertEqual(out[0]['loose_images'],3)
+        self.assertEqual(sorted(r['id'] for r in out[1:]),
+                         ['loose-overrides:camo_zombies_nml','loose-overrides:zom_icon_bullets'])
+        self.assertTrue(all(r['outcome']=='failed' for r in out[1:]))
+        self.assertIn('for the bare game',out[1]['detail'])
+        self.assertIn('load the bare foundation as a control',out[1]['detail'])
+    def test_a_loose_path_with_nothing_the_base_owns_passes_and_says_how_many_it_read(self):
+        out=checks.loose_overrides(self.plan(),self.owned(),self.loose('t5_weapon_thundergun_n.iwi','notes.txt'))
+        self.assertEqual(len(out),1);self.assertEqual(out[0]['outcome'],'passed')
+        self.assertEqual(out[0]['loose_images'],1,'only .iwi files are loose textures')
+        self.assertTrue(out[0]['counted'])
+    def test_an_unconfigured_loose_path_is_not_counted_rather_than_passed(self):
+        out=checks.loose_overrides(self.plan(),self.owned(),None)
+        self.assertEqual(len(out),1);self.assertEqual(out[0]['outcome'],'not_counted')
+        self.assertFalse(out[0]['counted'],'not counted and counted-clean are different facts')
+        self.assertIn('no T6 storage folder is configured',out[0]['detail'])
+        self.assertIn('pat configure --plutonium-storage-t6',out[0]['hint'])
+    def test_a_configured_loose_path_that_is_absent_here_is_not_counted_either(self):
+        out=checks.loose_overrides(self.plan(),self.owned(),self.loose()/'gone')
+        self.assertEqual(out[0]['outcome'],'not_counted');self.assertFalse(out[0]['counted'])
+        self.assertIn('is not a directory',out[0]['detail'])
+        self.assertIn('not a pass either',out[0]['detail'])
+    def test_without_a_base_listing_nothing_is_compared(self):
+        out=checks.loose_overrides(self.plan(),{'image':set()},self.loose('camo_zombies_nml.iwi'))
+        self.assertEqual(out[0]['outcome'],'not_counted');self.assertIn('No base listing',out[0]['detail'])
+        self.assertNotIn('counted',out[0],'the loose path was never read, so it is neither counted nor uncounted')
+    def test_a_reference_row_name_is_not_a_base_copy(self):
+        out=checks.loose_overrides(self.plan(),{'image':{',ref_only'}},self.loose('ref_only.iwi'))
+        self.assertEqual(out[0]['outcome'],'not_counted')
+    def test_the_match_is_case_insensitive_like_the_file_system_the_client_reads(self):
+        out=checks.loose_overrides(self.plan(),{'image':{'Camo_Zombies_NML'}},self.loose('camo_zombies_nml.IWI'))
+        self.assertEqual(out[0]['outcome'],'failed')
+        self.assertEqual(out[0]['names'],['Camo_Zombies_NML'])
+        self.assertIn('camo_zombies_nml.IWI',out[1]['detail'],'the row names the file as it is on disk')
+    def test_the_row_list_is_bounded_and_the_summary_still_counts_them_all(self):
+        names={f'camo_{i:03d}' for i in range(checks.MAX_LOOSE_ROWS+5)}
+        out=checks.loose_overrides(self.plan(),{'image':names},self.loose(*(f'{n}.iwi' for n in names)))
+        self.assertEqual(out[0]['count'],len(names))
+        self.assertEqual(len(out)-1,checks.MAX_LOOSE_ROWS)
+        self.assertIn(f'first {checks.MAX_LOOSE_ROWS} listed',out[0]['detail'])
+
+class LooseImagesDirectory(unittest.TestCase):
+    """The path is configured, never guessed: it comes from the storage key `pat configure` writes."""
+    def home(self,config_row=None):
+        temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup)
+        home=Path(temp.name)/'home';home.mkdir()
+        if config_row is not None:(home/'config.json').write_text(json.dumps(config_row))
+        saved=os.environ.get('PAT_HOME');os.environ['PAT_HOME']=str(home)
+        self.addCleanup(lambda:os.environ.__setitem__('PAT_HOME',saved) if saved else os.environ.pop('PAT_HOME',None))
+        return home
+    def test_the_configured_storage_folder_decides_the_loose_path(self):
+        storage=str(Path(tempfile.gettempdir()).resolve()/'pat-storage-t6')
+        self.home({'plutonium_storage_t6':storage})
+        self.assertEqual(checks.loose_images_dir(),Path(storage)/'images')
+    def test_no_storage_configured_is_none_so_the_check_reports_not_counted(self):
+        self.home({})
+        self.assertIsNone(checks.loose_images_dir())
+    def test_a_configuration_that_cannot_be_read_is_none_rather_than_a_failed_plan(self):
+        self.home({'not_a_known_key':'x'})
+        self.assertIsNone(checks.loose_images_dir())
 
 class ImageSources(unittest.TestCase):
     """A pack whose images have no pixels loads, renders blank and reports nothing; the plan has to say so."""

@@ -7,6 +7,20 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- New check `loose-overrides`. Plutonium reads an image's pixels from an image bank *or* from the
+  global loose path `storage/t6/images`, and a loose file there wins: it applies to every mod folder
+  on the machine and to the bare game with no mod selected. A loose `<name>.iwi` whose name one of
+  the base's own zones carries therefore repaints that name everywhere, on a pack that never touched
+  it and on the untouched base alike, and no composition can cause or cure it. `module plan` and
+  `module build` now list every loose texture whose name the base's image listing carries and refuse,
+  one `failed` row per file (`loose-overrides:<name>`) plus a summary with `count`, the first ten
+  `names`, `path` and `loose_images`. The loose path is not guessed: it is the `images/` folder of the
+  T6 storage directory saved with `pat configure --plutonium-storage-t6`, read from the `config.json`
+  under whichever home `PAT_HOME` selects. When no storage is configured, the configured folder has
+  no `images/`, or no base listing says which names the base owns, the summary is `not_counted` with
+  `counted: false` and which of those it was — an absent loose path is the ordinary case and is
+  neither a failure nor a pass. Nothing writes or deletes a loose file; the folder is global and the
+  user's. Offline unit tests on Linux; no native receipt, and no route status changes.
 - Two rules the donor-shadowing work paid for, in `docs/MODULES.md` and
   `docs/playbooks/compose-a-pack.md`. **A rendering fault is not evidence about a pack until the bare
   foundation has been loaded as a control on the same map**: a wrong texture writes nothing to the

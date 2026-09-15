@@ -782,6 +782,39 @@ The probe is first in dependency order. `_pack`/`_pub` compositions refuse every
 including through nested compositions. Probe-scoped contracts permit signed `round_set +N`;
 this is a round-counter transition, not proof of N naturally completed gameplay rounds.
 
+### A loose global texture wins over every bank, and over the bare game
+
+The second place pixels come from is not in any fastfile. Plutonium reads loose textures from the
+global path `storage/t6/images`, and a file there wins: it applies to every mod folder on the
+machine and to the bare game with no mod selected. A loose `<name>.iwi` whose name one of the base's
+own zones carries therefore repaints that name everywhere — the Pack-a-Punch and camo textures a
+stock weapon binds render from the loose file, on a pack that never touched them and on the
+untouched base alike. It is machine state. No composition causes it, no composition can cure it, and
+a readback of a package cannot see it, which is exactly why it survives a donor-shadowing fix and
+still looks like the pack's fault.
+
+`loose-overrides` is the check. It reads the loose path derived from the T6 storage folder the user
+configured (`pat configure --plutonium-storage-t6 <path>`; the loose path is that folder's
+`images/`), lists every `.iwi` there whose name appears in the base's own image listing, and refuses:
+one `failed` row per file, `loose-overrides:<image name>`, plus a `loose-overrides` summary with
+`count`, the first ten `names`, `path` and `loose_images` (how many loose textures it read). It is
+refusal-grade for the same reason `donor-shadowing` is — the rendering is wrong and the pack is not
+the cause — and refusing at plan time is what stops a machine-state fault from being shipped and then
+diagnosed as a package.
+
+Three answers are possible and the summary always says which:
+
+- `passed` — the loose path was read and carries none of the base's image names (`counted: true`);
+- `failed` — it was read and some of them are there (`counted: true`), with a row naming each file;
+- `not_counted` — nothing was compared. Either no base listing says which names the base owns, or no
+  T6 storage folder is configured, or the configured folder has no `images/` on this machine
+  (`counted: false`, with a `hint` naming `pat configure` in the unconfigured case). An absent loose
+  path is the ordinary case and is not a failure — but it is not a pass either, and the check says
+  `not counted` rather than pretending it looked.
+
+Nothing here writes or deletes a loose file: the folder is global to every mod on the machine and is
+the user's to change. The fix is to move the file out and load the bare foundation again.
+
 ## Declared replacement
 
 | Field | Contract |
