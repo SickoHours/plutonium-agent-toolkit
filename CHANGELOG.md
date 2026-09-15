@@ -7,6 +7,24 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- Shared files have one owner, and a member is cut on the pack's target. `module build` tells
+  the workspace's adapter builder the composition's foundation and map (`--foundation`, `--map`,
+  in the workspace's own foundation ids) whenever they differ from the recipe's, so a
+  donor-converted member is cut alone on the target the pack is for and its receipt is a build on
+  that target; same target, no flags, so an older builder keeps working. The adapter report
+  carries `recipe_target`, `built_target` and `retargeted`. The native-WeaponDef rule is a
+  declaration check: `knowledge/native-weapons.json` (per map, the WeaponDef names its zones
+  carry) joins the shipped tables, and a member registering one of them is refused as kind
+  `service` with no base listing in the composition; a listing still adds names on an untabled
+  map. `deliver: false` rows are staged under `raw/` at the path the compiled asset names, with
+  no zone line, so a model's export, a bank's WAV or a WeaponDef's accuracy graph is found by the
+  linker instead of failing the asset; two members withholding different bytes at one path are a
+  file decision like any other, and the build reports `withheld_staged`. The workspace builder
+  path from `--workspace` is resolved absolute before the job runs it. Verified by offline unit
+  tests on Linux against the fake backends and, in a private workspace, by two Der Riese packs
+  that plan and build: 21 GobbleGum effects on one shared bank, and Wave Gun, Winter's Howl and
+  Thundergun on one merged animation owner. Nothing here is a load or a verdict.
+
 - `module build` reads an adapter package back from a job directory beside the builder's output
   (`<job>/adapters/<id>.readback`) instead of inside it. The workspace foundation builder writes its
   own `readback/` under its output directory, so the toolkit's readback job refused with
