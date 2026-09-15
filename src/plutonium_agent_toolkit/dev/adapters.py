@@ -322,6 +322,7 @@ def build(module: dict, args, job: Job, workspace: str | None, foundation: str |
             "provides": seeds.provides_of(embedded), "strings": strings, "private": False, "missing": [],
             "manifest": record_path, "directory": stage, "loose_scripts": loose,
             "report": {"id": mid, "output": str(out), "builder": argv[-1] if argv else None, "log": log.name,
+                       "recipe": str(adapter["recipe"]), "recipe_key": module.get("recipe_key"),
                        "recipe_target": {"foundation": adapter["foundation"], "map": adapter["map"]},
                        "built_target": {"foundation": foundation or adapter["foundation"], "map": map_id or adapter["map"]},
                        "retargeted": bool(target),

@@ -894,6 +894,38 @@ class PoolAndDeliveryTests(CompositionFixture):
         package = json.loads((Path(result["result"]["output"]) / "packages" / "mod.ff").read_text())
         self.assertIn("accuracy/x.accu", package["rawfiles"], "the delivered copy is still in the zone")
 
+    def _client_module(self, mid, box_list, provides_weapons):
+        d = self.module(mid, provides={"weapons": provides_weapons})
+        (d / "scripts" / f"{mid}.csc").write_text(
+            'init()\n{\n    foreach (weapon in strtok("' + box_list + '", " "))\n        addzombieboxweapon(weapon, getweaponmodel(weapon), 0);\n}\n')
+        recipe = json.loads((d / "project.json").read_text())
+        recipe["scripts"].append({"source": f"scripts/{mid}.csc", "target": f"scripts/zm/{mid}.csc", "instance": "client"})
+        (d / "project.json").write_text(json.dumps(recipe, indent=2))
+        return d
+
+    def test_a_client_box_registration_for_a_weapon_nobody_provides_is_refused(self):
+        """wavegun_client.csc registered the VR-11's humangun_zm; the engine faulted at the first box use."""
+        self._client_module("wave", "humangun_zm humangun_upgraded_zm", ["microwavegundw_zm"])
+        code, result = invoke(["module", "plan", str(self.composition(["wave"])), "--allow-unqualified", "--output", self.out()])
+        self.assertFalse(result["ok"])
+        self.assertIn("Offline checks failed", result["message"])
+        self.assertIn("box-registration:scripts/zm/wave.csc", result["details"]["failed"])
+        self.assertIn("humangun_zm", result["message"])
+        self.assertIn("box-weapon-not-found", result["message"])
+
+    def test_a_client_box_registration_for_a_provided_weapon_passes(self):
+        self._client_module("wave", "microwavegundw_zm", ["microwavegundw_zm", "microwavegundw_upgraded_zm"])
+        code, result = invoke(["module", "plan", str(self.composition(["wave"])), "--allow-unqualified", "--output", self.out()])
+        rows = [c for c in result["result"]["checks"] if c["id"].startswith("box-registration:")]
+        self.assertEqual([c["outcome"] for c in rows], ["passed"])
+
+    def test_a_client_box_registration_may_name_a_weapon_another_member_provides(self):
+        self._client_module("wave", "thundergun_zm", [])
+        self.module("thunder", provides={"weapons": ["thundergun_zm"]})
+        code, result = invoke(["module", "plan", str(self.composition(["wave", "thunder"])), "--allow-unqualified", "--output", self.out()])
+        rows = [c for c in result["result"]["checks"] if c["id"].startswith("box-registration:")]
+        self.assertEqual([c["outcome"] for c in rows], ["passed"])
+
     def test_deliver_false_is_rawfile_only_and_boolean(self):
         d = self.module_with_assets("alpha", [{"source": "x.json", "target": "xmodel/x.json", "type": "xmodel", "name": "x", "deliver": False}])
         code, row = invoke(["module", "plan", str(self.composition(["alpha"])), "--output", self.out()])
@@ -933,3 +965,69 @@ class PoolAndDeliveryTests(CompositionFixture):
         code, row = invoke(["module", "plan", str(self.composition(["phd"], name="b2_phd_test", base="b2", map_id="zm_cosmodrome")), "--output", self.out()])
         self.assertEqual(code, 1, row)
         self.assertIn("declared for maps", row["message"], "Ascension carries the script, but the module is not declared for that map")
+
+    def test_an_image_a_member_ships_passes_and_the_plan_says_the_rest_is_undecided(self):
+        """A pack's images are the one pool the plan cannot read alone: the client's banks are not here."""
+        row = {"source": "assets/images/halo_tex.iwi", "target": "images/halo_tex.iwi", "type": "image", "name": "halo_tex"}
+        self.module_with_assets("skull", [row])
+        code, result = invoke(["module", "plan", str(self.composition(["skull"], name="stock_image_test")), "--output", self.out()])
+        self.assertEqual(code, 0, result)
+        rows = {c["id"]: c for c in result["result"]["checks"] if c["id"].startswith("image-sources")}
+        self.assertEqual(rows["image-sources:halo_tex"]["outcome"], "passed")
+        self.assertIn("stages it beside the package", rows["image-sources:halo_tex"]["detail"])
+        self.assertEqual(rows["image-sources"]["outcome"], "passed")
+        report = self.root / "shipped-check.json"
+        report.write_text(json.dumps({"pack": "stock_image_test", "images": [{"name": "halo_tex", "pixels": "present"}]}))
+        code, result = invoke(["module", "plan", str(self.composition(["skull"], name="stock_image_test")), "--output", self.out(),
+                               "--image-report", str(report)])
+        self.assertEqual(code, 0, result)
+        receipt = json.loads((Path(result["result"]["output"]) / "receipt.json").read_text())
+        self.assertIn(str(report.resolve()), receipt["inputs"], "the readback the plan was decided against is a hashed input")
+
+    def test_a_generated_image_name_is_shipped_and_a_path_separator_is_still_refused(self):
+        """T6 names a derived texture `~$black-rgb&~-rt5_weapon_mesh~5d8c5c3e`; a module that ships it must name it exactly."""
+        name = "~$black-rgb&~-rt5_weapon_mesh~5d8c5c3e"
+        self.module_with_assets("thundergun", [{"source": f"assets/images/{name}.iwi", "target": f"images/{name}.iwi",
+                                                "type": "image", "name": name}])
+        code, result = invoke(["module", "plan", str(self.composition(["thundergun"], name="stock_generated_image_test")), "--output", self.out()])
+        self.assertEqual(code, 0, result)
+        self.assertEqual(next(c for c in result["result"]["checks"] if c["id"] == f"image-sources:{name}")["outcome"], "passed")
+        from plutonium_agent_toolkit.dev.projects import _zone_target
+        for bad in ("images/../escape.iwi", "/images/x.iwi", "images/a:b.iwi"):
+            with self.assertRaises(Exception):
+                _zone_target(bad)
+
+    def test_a_pack_s_images_travel_beside_the_package(self):
+        """The fastfile carries an image's header, never its pixels; the client reads images/ in the mod's folder."""
+        row = {"source": "assets/images/halo_tex.iwi", "target": "images/halo_tex.iwi", "type": "image", "name": "halo_tex"}
+        self.module_with_assets("skull", [row])
+        code, result = invoke(["module", "build", str(self.composition(["skull"], name="stock_image_delivery_test")), "--output", self.out()])
+        self.assertEqual(code, 0, result)
+        self.assertEqual(result["result"]["images_beside_package"], ["halo_tex.iwi"])
+        packages = Path(result["result"]["output"]) / "packages"
+        self.assertEqual((packages / "images" / "halo_tex.iwi").read_bytes(), b"BYTES assets/images/halo_tex.iwi")
+
+    def test_a_readback_naming_an_image_with_no_pixels_refuses_the_pack(self):
+        self.module("thundergun")
+        report = self.root / "image-check.json"
+        report.write_text(json.dumps({"pack": "stock_image_gap_test", "images_dumped": 252,
+                                      "rows": [{"image": "t5_weapon_thundergun_n", "located": "the module's prepared images/"}]}))
+        comp = self.composition(["thundergun"], name="stock_image_gap_test")
+        code, row = invoke(["module", "plan", str(comp), "--output", self.out(), "--image-report", str(report)])
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "input_invalid")
+        self.assertIn("image-sources:t5_weapon_thundergun_n", row["message"])
+        self.assertIn("renders without them", row["message"])
+        self.assertIn("located: the module's prepared images/", row["message"])
+        failed = next(c for c in row["details"]["checks"] if c["id"] == "image-sources:t5_weapon_thundergun_n")
+        self.assertEqual(failed["outcome"], "failed")
+        self.assertIn("No member declares", failed["detail"])
+
+    def test_the_same_pack_without_the_readback_is_undecided_rather_than_accepted(self):
+        self.module("thundergun")
+        comp = self.composition(["thundergun"], name="stock_image_unmeasured_test")
+        code, result = invoke(["module", "plan", str(comp), "--output", self.out()])
+        self.assertEqual(code, 0, result)
+        summary = next(c for c in result["result"]["checks"] if c["id"] == "image-sources")
+        self.assertEqual(summary["outcome"], "not_counted")
+        self.assertIn("readback beside the banks", summary["detail"])

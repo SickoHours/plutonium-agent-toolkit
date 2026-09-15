@@ -143,7 +143,11 @@ def add_parser(sub, common):
         q.add_argument("--workspace", help="Workspace root whose registry/locations tables answer the members' placements needs (docs/target-sets.md)")
         q.add_argument("--target", action="append", default=[], metavar="KEY",
                        help="A target <foundation>/<map>/<mode>[/<location>][@<route>] to check placements against; repeatable. Its map must be the composition's, and a location two routes provide names one")
+        q.add_argument("--image-report", metavar="PATH",
+                       help="A readback measurement of which of this pack's images have no pixels in any bank the client opens (docs/MODULES.md); without it the image-sources check cannot decide a referenced image and says so")
         common(q)
+    from . import qualify as qualify_route
+    qualify_route.add_parser(actions, common)
     q = actions.add_parser("compose", help="Compose declared IDs against a foundation, or publish a successfully built recipe")
     q.add_argument("--name"); q.add_argument("--base"); q.add_argument("--map")
     q.add_argument("--game", choices=titles.names(), default=None, help="Title the recipe targets; inferred from the members when omitted")
@@ -1038,7 +1042,9 @@ def resolve(comp: dict, modules: list[dict], allow_unqualified: bool = False) ->
                 refusals.append(_refusal("conflict", f"{m['id']} declares a conflict with {other}; both are in the composition", modules=[m["id"], other]))
         base_mismatch = comp["base"] not in m["bases"]
         map_mismatch = "*" not in m["maps"] and comp["map"] not in m["maps"]
-        if allow_unqualified and (base_mismatch or map_mismatch):
+        if base_mismatch or map_mismatch:
+            # Listed whether or not the mismatch is tolerated: a refusal that names what is not
+            # declared for this target is what ``adapt`` turns into a work order.
             unqualified.append({"id": m["id"], "declared_bases": m["bases"], "declared_maps": m["maps"], "base": comp["base"], "map": comp["map"]})
         if base_mismatch and not allow_unqualified:
             refusals.append(_refusal("unqualified_base", f"{m['id']} is declared for bases {m['bases']}, not for {comp['base']!r}",
@@ -1074,6 +1080,53 @@ def resolve(comp: dict, modules: list[dict], allow_unqualified: bool = False) ->
                                          "Raise the budget deliberately after measuring, or leave a module out; the sum counts every module.",
                                          field=f"/budget/{field}", resource=field, total=totals[field], bound=comp["budget"][field]))
     return {"order": order, "resource_totals": totals, "unqualified": unqualified, "refusals": refusals}
+
+
+# What the plan can say about a member that is not declared for the target: why it is not, when
+# it can tell. ``unknown`` is the honest answer for everything a plan cannot see (a missing effect
+# root, a donor asset the target zones lack); only a build finds those, and `module qualify` types
+# them from its own receipts.
+ADAPT_PATTERNS = ("map-scripts", "dependency-unqualified", "adapter-recipe-single-target-without-recipes", "unknown")
+
+
+def adapt_rows(comp: dict, modules: list[dict], unqualified: list[dict], foundation: str | None, checks=()) -> list[dict]:
+    """One work order per member that is not declared for the composition's target.
+
+    Read-only: nothing is widened, built or written here. Each row names the module, the target
+    as ``<foundation>/<map>``, the command that would earn the widening, and the pattern the plan
+    could see. The patterns a plan can decide are a script the target map does not carry
+    (``map-scripts``, from a failed check this member owns), a dependency that is itself
+    undeclared (``dependency-unqualified``), and an adapter whose recipe is a cut for another
+    target with no ``recipes`` entry for this one
+    (``adapter-recipe-single-target-without-recipes``); everything else is ``unknown``."""
+    if not unqualified:
+        return []
+    undeclared = {row["id"] for row in unqualified}
+    by_id = {m["id"]: m for m in modules}
+    target = f"{foundation or comp['base']}/{comp['map']}"
+    failed_scripts = {c["id"][len("map-scripts:"):]: c for c in checks
+                      if c.get("outcome") == "failed" and str(c.get("id", "")).startswith("map-scripts:")}
+    rows = []
+    for row in unqualified:
+        m = by_id.get(row["id"])
+        if m is None:
+            continue
+        pattern, detail = "unknown", None
+        owned = sorted(name for name in failed_scripts if name in set(m.get("provides", {}).get("scripts", [])))
+        if owned:
+            pattern = "map-scripts"
+            detail = failed_scripts[owned[0]].get("detail")
+        elif m.get("adapter") is not None and m.get("recipe_key") is None \
+                and (m["adapter"]["foundation"], m["adapter"]["map"]) != (foundation, comp["map"]):
+            pattern = "adapter-recipe-single-target-without-recipes"
+            detail = f"the recipe is the {m['adapter']['foundation']}/{m['adapter']['map']} cut and recipes names no entry for {target}"
+        elif sorted(set(m["dependencies"]) & undeclared):
+            pattern = "dependency-unqualified"
+            detail = "depends on " + ", ".join(sorted(set(m["dependencies"]) & undeclared))
+        rows.append({"module": m["id"], "directory": str(m["directory"]), "target": target, "pattern": pattern,
+                     "detail": detail, "declared_bases": row["declared_bases"], "declared_maps": row["declared_maps"],
+                     "work_order": f"pat module qualify {m['directory']} --target {target}"})
+    return rows
 
 
 def collisions(modules: list[dict], loaded: dict[str, tuple], decisions: list[dict], base_owned: set[str] | None = None) -> tuple[list[dict], list[dict], list[dict]]:
@@ -1346,6 +1399,10 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
 
 
 def execute(args, job: Job) -> dict:
+    if args.action == "qualify":
+        from . import qualify
+
+        return qualify.execute(args, job)
     if args.action == "compose":
         from . import compose
         return compose.execute(args, job)
@@ -1375,7 +1432,8 @@ def execute(args, job: Job) -> dict:
     if resolved["refusals"]:
         raise refuse(resolved["refusals"], "; ".join(sorted({r["kind"] for r in resolved["refusals"]})),
                      "Read details.refusals: every refusal the composition has, with its kind and modules.",
-                     unqualified=resolved["unqualified"])
+                     unqualified=resolved["unqualified"],
+                     adapt=adapt_rows(comp, modules, resolved["unqualified"], pack_foundation))
     loaded = {}
     absent: list[dict] = []
     for m in modules:
@@ -1455,7 +1513,7 @@ def execute(args, job: Job) -> dict:
                       "aliases": m["adapter"]["aliases"], "loose_scripts": [s["target"] for s in m["adapter"]["scripts"]],
                       "prepared_present": m["adapter"]["prepared_present"]} for m in adapter_modules],
         "loads": [str(p) for p in loads], "zone_header": header,
-        "unqualified": resolved["unqualified"],
+        "unqualified": resolved["unqualified"], "adapt": adapt_rows(comp, modules, resolved["unqualified"], pack_foundation),
         "resource_totals": resolved["resource_totals"], "budget": comp["budget"],
         "decisions": decided, "undecided": undecided, "base_owned_names": len(comp.get("base_owned") or ()),
         "backends": checks, "backends_available": all(c["available"] for c in checks),
@@ -1465,6 +1523,11 @@ def execute(args, job: Job) -> dict:
     }
     plan["footprint"] = offline_checks.footprint(plan)
     plan["checks"] = offline_checks.evaluate(plan, getattr(args, "workspace", None))
+    # Image pixels are the one pool a plan cannot read on its own: the banks are not here. The
+    # check says what it can prove and stays not_counted for the rest unless a readback decides it.
+    image_report = getattr(args, "image_report", None)
+    plan["checks"] += offline_checks.image_sources(plan, offline_checks.read_image_report(job.input(Path(image_report))) if image_report else None)
+    provided_weapons = {w for m in modules for w in (m.get("provides", {}).get("weapons") or [])}
     pack_scripts = {t.as_posix() for _, t, _ in compiled} | {t.as_posix() for _, t, _, _ in loose}
     for m in modules:
         pack_scripts |= set(m.get("provides", {}).get("scripts", []))
@@ -1477,6 +1540,7 @@ def execute(args, job: Job) -> dict:
         except OSError: continue
         plan["checks"] += offline_checks.external_symbols(target.as_posix(),text,comp["game"])
         plan["checks"] += offline_checks.map_script_externals(target.as_posix(),text,comp["map"],foundation,comp["game"],pack_scripts)
+        plan["checks"] += offline_checks.box_registrations(target.as_posix(),text,provided_weapons)
     if args.action == "build":
         plan["checks"] += offline_checks.check_scripts(compiled,args,job,comp["game"])
     else:
@@ -1485,12 +1549,14 @@ def execute(args, job: Job) -> dict:
         plan["generated_entry"] = generated_entry["plan"]
     plan["placements"] = _placement_checks(comp, modules, args, job)
     plan["checks"] += [{"id": "placements:" + row["target"], "outcome": row["outcome"], "detail": row["detail"]} for row in plan["placements"]]
+    # The map-scripts rows exist only now, so the work orders are re-derived with them.
+    plan["adapt"] = adapt_rows(comp, modules, resolved["unqualified"], pack_foundation, plan["checks"])
     (job.root / "plan.json").write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
     summary = {"plan": "plan.json", "name": comp["name"], "title": comp["title"], "base": comp["base"], "map": comp["map"],
                "base_member": plan["base_member"],
                "modules": [{"id": r["id"], "version": r["version"], "order": i + 1, "payload": r["payload"], "role": r["role"]}
                            for i, r in enumerate(rows)],
-               "unqualified": resolved["unqualified"],
+               "unqualified": resolved["unqualified"], "adapt": plan["adapt"],
         "resource_totals": resolved["resource_totals"], "budget": comp["budget"],
                "scripts": len(compiled), "assets": len(loose), "seeds": len(seed_modules), "adapters": len(adapter_modules), "loads": len(loads),
                "decisions": decided, "undecided": undecided, "base_owned_names": len(comp.get("base_owned") or ()),
@@ -1508,7 +1574,8 @@ def execute(args, job: Job) -> dict:
         (job.root / "plan.json").write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
         raise refuse(late_refusals,"; ".join(sorted({r["kind"] for r in late_refusals})),
                      "Read details.refusals: every refusal the composition has, with its kind and modules.",
-                     checks=plan["checks"],failed=[c["id"] for c in failed],undecided=undecided)
+                     checks=plan["checks"],failed=[c["id"] for c in failed],undecided=undecided,
+                     unqualified=resolved["unqualified"],adapt=plan["adapt"])
     if args.action == "plan":
         return {**summary, "backends": checks, "backends_available": plan["backends_available"],
                 "input_files": plan["input_files"], "verification": plan["verification"]}
@@ -1800,6 +1867,9 @@ def _build_composition(comp: dict, plan: dict, compiled, loose, seed_modules, lo
             if dest.exists():
                 raise Failure(INPUT_INVALID, f"Two seeds ship the soundbank {name}; a pack carries one copy of each bank")
             shutil.copyfile(path, dest)
+    # An image's pixels are never inside the fastfile; the client reads them from a bank the header
+    # names or from images/ in the mod's folder, so the pack's own images travel beside it too.
+    staged_images = projects.stage_images(raw, banks)
     # Compiled scripts also travel loose beside the package: on this base the engine executes
     # scripts/zm/*.gsc from the profile folder (`loaded successfully from raw`) and does not run
     # the rawfile copies inside mod.ff. Every accepted stock profile ships them this way.
@@ -1834,7 +1904,8 @@ def _build_composition(comp: dict, plan: dict, compiled, loose, seed_modules, lo
     if missing_roots:
         raise Failure(BACKEND_FAILED, f"{len(missing_roots)} seed root(s) are not in the composed package: {missing_roots[:5]}",
                       "The linker did not copy them from the seed; check the loads and the seed manifest.", missing=missing_roots[:64])
-    return {**link, "unqualified": plan["unqualified"], "plan": "plan.json", "rawfiles_verified": len(rawfiles), "mod_ff": link["packages"][0]["path"],
+    return {**link, "unqualified": plan["unqualified"], "plan": "plan.json", "rawfiles_verified": len(rawfiles),
+            "images_beside_package": staged_images, "mod_ff": link["packages"][0]["path"],
             "withheld_staged": len(staged_withheld),
             "seed_roots_verified": sum(len(m["seed"]["roots"]) for m in seed_modules),
             "embedded_assets": len(embedded), "referenced_assets": len(referenced), "localized_strings": len(strings),

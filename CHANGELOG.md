@@ -7,6 +7,94 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- `pat module qualify <module dir> --target <foundation>/<map> --workspace <root>` builds one
+  module alone on one target and writes its records from the receipts. A declaration's `bases`
+  and `maps` grow only by a build on that target, and doing that by hand is four commands plus
+  four files edited from their output; the widening is now earned inside one job. The route
+  synthesizes the one-member composition with the module's declared dependency closure, the
+  foundation's `link_loads` and its `mod_zone_header` for the map, then plans and builds it with
+  `--allow-unqualified`, verifies, widens the declaration **in the staged copy**, plans and
+  builds it qualified and verifies again. Each step is a sub-receipt under the job directory. For
+  a project recipe the two packages must be the same bytes — a declaration is metadata the
+  package does not carry — and a difference refuses as `package-mismatch`. An adapter recipe is a
+  cut for one target, so widening alone cannot qualify one: the target's cut is written as
+  `recipe-<base>.json` from the declared recipe with only `foundation`, `map`, `profile` and
+  `revision` changed, built through the workspace's adapter builder and recorded under `recipes`;
+  an existing cut is reused and a recipe on disk is never overwritten.
+
+  Only after the second verify are the records written, together or not at all: `module.json`
+  widened by exactly that base and map, a `docs/TEST.md` section citing every receipt by relative
+  path and sha256, an `evidence.json` `built-alone` row through the ledger's own validator
+  (created when the module has none), and a build row on the module's entry in the workspace's
+  `registry/module-recipes.json`. Each file keeps its own JSON serialisation so a record is an
+  addition and not a reformat. A failure anywhere leaves the module byte for byte as it was and
+  the job directory holding the refusal, typed under `details.refusals`: `dependency-unqualified`,
+  `adapter-recipe-single-target-without-recipes`, `missing-dependency`, `probe`, `map-scripts`,
+  `missing-fx`, `plan-refused`, `build-failed`, `verify-failed`, `package-mismatch`,
+  `records-refused`. `--set <file>` runs a list of module directories in dependency order, one job
+  directory each, continues past failures and writes `results.json`; a module qualified earlier in
+  the run is a declared dependency for the ones after it. No parallelism inside the route, and no
+  game, network or install: a qualified module is offline verified on that target and nothing more.
+  `--output` must be inside the workspace, because a ledger receipt pointer is relative to the
+  workspace root and never climbs out of it; that is refused before anything is built rather than
+  after. The binding row names the id of the entry it was appended to, which a workspace may key
+  by directory rather than by declaration id. An adapter member's build report now carries the
+  recipe it was cut from and the `recipes` key it came from, so the test record and the ledger note
+  quote the workspace builder's own package beside the pack's.
+
+- `module plan` reports `result.adapt`, and carries the same list under `details.adapt` when it
+  refuses for an undeclared base or map: one row per member not declared for the composition's
+  target, with the `pat module qualify` command that would earn the widening and the pattern the
+  plan could decide (`map-scripts`, `dependency-unqualified`,
+  `adapter-recipe-single-target-without-recipes`, else `unknown`). `result.unqualified` is now
+  filled whether or not `--allow-unqualified` was passed, so a refusal names what is undeclared
+  instead of only saying that something is. Read-only: nothing is widened, built or written.
+- `module plan` and `module build` refuse a client script that registers a mystery-box weapon no
+  member of the pack provides (`box-registration:<script>`). A `.csc` that calls
+  `addzombieboxweapon` on a `_zm` name absent from every member's `provides.weapons` faults the
+  engine at the first box use (`AddZombieBoxWeapon: Failed to find weapon <name>`, then an access
+  violation); the check names the script and the names. Found when a weapon module's client script,
+  copied from another weapon's, still registered the donor's names. Offline unit tests on Linux.
+
+- The shipped T6 knowledge is re-exported from the maintainer's generator after its source corpus
+  was restored, so every file under `knowledge/` is generator output again. `engine-limits.json`
+  picks up the `observed_in` and `how_to_count` wording its own page
+  (`docs/knowledge/engine-limits.md`) moved forward to for `sound-assets`, `rawfile-assets` and
+  `image-bank-slots`; the shipped copy had been written before that page changed and never caught
+  up. `map-scripts.json` is unchanged as data and only reformats to the exporter's indentation.
+  `builtins.json`, `crash-signatures.json`, `native-weapons.json` and `occupancy.json` re-export
+  byte for byte, which is the point: several rows that had been edited into the shipped files by
+  hand are now produced by the generator, so a future regeneration cannot silently revert them.
+  Among those, `engine-limits.json`'s `actor-client-field-set` keeps `count_source`
+  `clientfield_bits.actor.server`, the path `dev/checks.py` reads against `occupancy.json` — the
+  generator had been deriving a deeper path that exists only in the maintainer's private file, so
+  an export would have made that pool check count nothing. No row was added or removed in any
+  file, and `stock-exports.json` is not an export product and is untouched. Verified by the full
+  offline suite on Linux; nothing was built, installed or played.
+- A pack whose images have no pixels is refused instead of built. `image-sources` is a plan-time
+  check: an `image` asset row whose file is on this machine passes (the linker reads the `.iwi`
+  from disk and the build stages it beside the package, with no bank and no header read spent), a
+  declared row whose file is missing or empty fails, and an
+  image a member's zone listing only references is `not_counted` — bank contents cannot be read
+  without the banks, so the plan never calls such an image loadable on its own. `module plan` and
+  `module build` take `--image-report PATH`, a readback of the package measured with the client's
+  banks beside it (`docs/MODULES.md`); every image it reports without pixels becomes a failed row
+  naming the image, the member that brought it in and where the measurement found the pixels, and
+  refuses the plan. The report is hashed as a build input, and only names and hints are read from
+  it, never paths.
+
+  The other half of that is a delivery the toolkit was not doing. A T6 fastfile carries an image's
+  header and never its pixels: linking fifteen freshly rooted 1024x1024 textures into a real pack's
+  `mod.ff` grew it by sixty-four bytes, and the readback still could not find data for any of them.
+  `project build` and `module build` now stage the zone's images into `packages/images/` beside
+  `mod.ff`, the way a seed's soundbanks already travel beside it, and record them on the receipt as
+  `images_beside_package`; with that folder in place the same readback resolved all fifteen. A zone
+  target part may now also contain `~`, `$` and `&`, which T6's asset pipeline generates in the
+  names of derived textures (`~$black-rgb&~-rt5_weapon_mesh~5d8c5c3e`) and a module that ships one
+  as its own asset has to name exactly; separators, `..` and absolute paths stay refused. Verified
+  on Linux by the test suite and by a readback of a real three-weapon pack; the rendering itself is
+  not claimed here.
+
 - An adapter module declares one cut per target. An adapter `recipe.json` names a single
   `foundation` and `map` and the workspace builder cuts exactly that, so a declaration with one
   recipe could only ever be built from that cut: a module whose declaration listed a second base
