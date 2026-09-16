@@ -639,6 +639,146 @@ def map_script_externals(name,text,map_id,foundation,game='t6',provided=()):
         return [{'id':'map-scripts:'+name,'outcome':'passed','detail':f'Every included or qualified stock script path is carried by {map_id} on {foundation}'}]
     return [{'id':'map-scripts:'+name,'outcome':'not_counted','detail':'No stock script path is included or called'}]
 
+# A ported script that still asks whether it is on its donor map. The test reads either the
+# `mapname` dvar or `level.script`, in single or double quotes, with `!=` (the body returns) or
+# `==` (the else returns); both say the same thing. Several tests in one condition name a set of
+# maps (`!= "a" && != "b"`, or the `== ... || ...` dual), which is one guard over that set.
+MAP_GUARD=re.compile(r'''(?:getdvar\s*\(\s*(["\'])mapname\1\s*\)|level\s*\.\s*script)\s*(?P<op>!=|==)\s*(["\'])(?P<map>[A-Za-z0-9_]{1,64})\3''',re.I)
+IF_OPEN=re.compile(r'\bif\s*\(')
+ELSE_AT=re.compile(r'\s*else\b')
+# The statements a guard may sit behind, and the statements its returning branch may hold beside
+# the return: setup that cannot decide anything. A call to anything else, a `thread`, or a nested
+# block means this conditional is program logic, not an entry guard, and is left unread.
+RETURN_AT=re.compile(r'^return\b')
+PRINT_CALL=re.compile(r'^i?print(ln)?(bold)?\s*\(',re.I)
+ASSIGN=re.compile(r'^[A-Za-z_][A-Za-z0-9_.\[\]\s]*(?<![=!<>])=(?!=)')
+WAIT_AT=re.compile(r'^wait\b',re.I)
+GUARD_ENTRIES=('main','init')
+
+def _statements(text):
+    """Top-level statements in a block body, split at `;` outside parentheses. ``None`` when the
+    body holds a brace block of its own, which no bare guard and no bare setup line does."""
+    if '{' in text or '}' in text:return None
+    rows=[];depth=0;start=0
+    for i,char in enumerate(text):
+        if char=='(':depth+=1
+        elif char==')':depth-=1
+        elif char==';' and depth==0:rows.append(text[start:i].strip());start=i+1
+    rows.append(text[start:].strip())
+    return [row for row in rows if row]
+
+def _block(masked,pos):
+    """The statement or brace block that starts at ``pos``, and the offset just past it."""
+    while pos<len(masked) and masked[pos].isspace():pos+=1
+    if pos<len(masked) and masked[pos]=='{':
+        depth=0
+        for i in range(pos,len(masked)):
+            if masked[i]=='{':depth+=1
+            elif masked[i]=='}':
+                depth-=1
+                if depth==0:return masked[pos:i+1],i+1
+        return masked[pos:],len(masked)
+    end=masked.find(';',pos)
+    if end<0:return masked[pos:],len(masked)
+    return masked[pos:end+1],end+1
+
+def _returns_unconditionally(block):
+    """Does this branch always return? A bare `return;`, or a brace block whose own statements are
+    only returns, prints and assignments. A nested `if (...) return;` returns only sometimes, so
+    the conditional around it is not an entry guard and this says no."""
+    body=block.strip()
+    if body.startswith('{'):body=body[1:-1] if body.endswith('}') else body[1:]
+    rows=_statements(body)
+    if rows is None:return False
+    returned=False
+    for row in rows:
+        if RETURN_AT.match(row):returned=True
+        elif not (PRINT_CALL.match(row) or ASSIGN.match(row)):return False
+    return returned
+
+def _is_first_statement(masked,body_start,if_start):
+    """Is this conditional the entry point's first statement? Prints, waits and assignments may
+    come before it -- none of them can decide anything -- but a thread, a call to another function
+    or a block of any kind means the entry point has already begun its work, and a map conditional
+    after that is program logic rather than a guard on the whole script."""
+    rows=_statements(masked[body_start:if_start])
+    if rows is None:return False
+    return all('thread' not in row.lower() and (WAIT_AT.match(row) or PRINT_CALL.match(row) or ASSIGN.match(row))
+               for row in rows)
+
+def _enclosing_if(masked,start):
+    """``(if offset, offset just past its `)`)`` for the innermost `if (...)` holding ``start``."""
+    for opener in reversed(list(IF_OPEN.finditer(masked,0,start))):
+        depth=0;close=None
+        for i in range(opener.end()-1,len(masked)):
+            if masked[i]=='(':depth+=1
+            elif masked[i]==')':
+                depth-=1
+                if depth==0:close=i;break
+        if close is not None and opener.end()<=start<close:return opener.start(),close+1
+    return None
+
+def _entry_of(masked,start):
+    """The function ``start`` sits in: its name, where its body begins, and whether ``start`` is at
+    that function's top level rather than inside a block of it."""
+    enclosing=None
+    for match in DEF.finditer(masked):
+        if match.end()>start:break
+        enclosing=match
+    if enclosing is None:return None,0,False
+    body=masked[enclosing.end():start]
+    return enclosing.group(1).lower(),enclosing.end(),body.count('{')==body.count('}')
+
+def map_guards(name,text,map_id):
+    """One row per script: does this source return unless the map is one of a named few?
+
+    A module ported from another map often keeps its donor's entry guard -- a
+    `if ( getdvar( "mapname" ) != "zm_transit" ) return;` as the first statement of `main()` or
+    `init()`, the `level.script` form of the same test, or the `==` form whose `else` returns. It
+    compiles, links and loads on any map; on a map the guard does not name, the entry point returns
+    and the member does nothing, with no compiler diagnostic, no unresolved external and no
+    load-time line to read. One condition may name several maps (`!= "a" && != "b"`); that is one
+    guard over that set, and only a target outside the set fails.
+
+    Read narrowly on purpose, because a failed row refuses the plan: the conditional must be the
+    entry point's first real statement, and its branch must return unconditionally. A map
+    conditional after the entry point has started working, or one whose branch returns only
+    sometimes, is program logic and is left `not_counted` -- which means unread, never clean."""
+    masked=mask_noncode(text)
+    groups={}
+    for match in MAP_GUARD.finditer(text):
+        if masked[match.start()]==' ':continue  # a guard inside a comment or a string is text
+        entry,body_start,top_level=_entry_of(masked,match.start())
+        if entry not in GUARD_ENTRIES or not top_level:continue
+        found=_enclosing_if(masked,match.start())
+        if found is None:continue
+        if_start,close=found
+        group=groups.setdefault(if_start,{'close':close,'body':body_start,'ops':[],'maps':[]})
+        group['ops'].append(match.group('op'))
+        if match.group('map') not in group['maps']:group['maps'].append(match.group('map'))
+    guarded=[]
+    for if_start,group in sorted(groups.items()):
+        if len(set(group['ops']))!=1:continue  # a condition mixing == and != is not read as a guard
+        if not _is_first_statement(masked,group['body'],if_start):continue
+        body,after=_block(masked,group['close'])
+        if group['ops'][0]=='!=':
+            returns=_returns_unconditionally(body)
+        else:
+            otherwise=ELSE_AT.match(masked,after)
+            returns=bool(otherwise and _returns_unconditionally(_block(masked,otherwise.end())[0]))
+        if returns:guarded.append(group['maps'])
+    for named in guarded:
+        if map_id not in named:
+            names=named[0] if len(named)==1 else 'one of '+', '.join(named)
+            return [{'id':'map-guard:'+name,'outcome':'failed','guard':named[0],'guards':named,
+                     'detail':f'returns unless mapname is {names}; this composition targets {map_id}, '
+                              f'so the script does nothing on it'}]
+    if guarded:
+        named=guarded[0]
+        return [{'id':'map-guard:'+name,'outcome':'passed','guard':map_id,'guards':named,
+                 'detail':f'the entry guard names {", ".join(named)}, which this composition targets'}]
+    return [{'id':'map-guard:'+name,'outcome':'not_counted','detail':'no map guard read'}]
+
 def evaluate(plan,root=None):
     limits=knowledge.load('engine-limits.json')['rows'];maps=knowledge.load('occupancy.json')['maps']
     occupancy=maps.get(plan['map'],{})

@@ -123,8 +123,10 @@ adapter recipe is named under `recipe` and told apart by its own shape.
 | `seed` | one of | Forward-slash relative path to the module's `seed.json`, inside the module directory, with `mod.ff` and its soundbanks beside it; no Windows drive prefix or rooted path, on any host. Path checks also apply to private declarations whose manifest is absent |
 | `bases` | yes | The base tokens the module has been built and tested on: `stock` for the unmodified game, or a base release's own short token (`b2` for Zombies Declassified Beta 2). A composition on a base not listed here is refused |
 | `maps` | yes | Map ids the module is built for, or `["*"]` for any map. A composition on a map not listed is refused. Grow this list by testing on the map, never by editing |
-| `dependencies` | no | Ids of modules that must be in the same composition and are built first. A cycle or a missing dependency is refused |
+| `dependencies` | no | Ids of modules that must be in the same composition and are built first. A cycle or a missing dependency is refused. An entry may be an object `{id, kind, why?}` saying what the dependency is for (`call`, `name`, `service`, `runtime`; below, "What a module promises") |
 | `conflicts` | no | Ids of modules this one must never be composed with. Both present is refused |
+| `exclusive` | no | Role words from a fixed list (`hud`, `box`, `loadscreen`, `boss`, `perk-machines`, `perk-art`) this module owns outright; two members owning one role is a refusal of kind `exclusive` (below) |
+| `service` | no | `true` when the module exists to own shared things (a map table, a sound bank, a role) so others depend on it and ship no copy; the planner names it in `ownership`, `replacement` and `service` refusals. Must provide something shareable and no weapon |
 | `provides` | no | What the module registers, by kind: `weapons`, `perks`, `gobblegums`, `powerups`, `equipment`, `localize`, `soundbanks`, `scripts`, `models`, `effects`, `rawfiles`, `aliases` (the sound alias names a bank module owns), each a list of up to 4096 names. Two modules providing the same name is a decision (below); a `rawfiles` name is a file target and is listed once, as the file collision. A seed's manifest fills this in; for the kinds the manifest derives (`weapons`, `localize`, `soundbanks`, `rawfiles`, `models`, `effects`) a declaration may narrow the manifest's list and never add to it, even when the manifest lists none of that kind; the other kinds are the declaration's |
 | `resource_contract` | no | Whole numbers the module adds to the engine's budgets: `threads`, `entities`, `hud`, `network_fields`. Missing fields count as 0. Summed across the composition and checked against the composition's `budget` |
 | `menu_route` | no | How a person reaches the feature in game, at most 200 characters; carried into the plan for the handoff |
@@ -516,7 +518,8 @@ composition's target: `{module, directory, target, pattern, detail, declared_bas
 declared_maps, work_order}`, where `work_order` is the `pat module qualify` command that would
 earn the widening. The same list travels under `details.adapt` when the plan refuses for
 `unqualified_base`/`unqualified_map`, so a caller reads work orders either way. `pattern` is what
-the plan itself can decide — `map-scripts`, `dependency-unqualified`,
+the plan itself can decide — `map-scripts`, `map-guard` (the member's entry guard names another
+map, so it is a port and no widening makes it run), `dependency-unqualified`,
 `adapter-recipe-single-target-without-recipes` — and `unknown` for everything only a build can
 find. Nothing is widened, built or written by `adapt`.
 
@@ -846,7 +849,27 @@ script namespace (`maps/`, `clientscripts/`, `common_scripts/`, `codescripts/`) 
 compiled scripts the target map's zones carry on that foundation (`knowledge/map-scripts.json`);
 a path the map lacks fails, since it is an unresolved external at load that no compiler sees;
 a path another member of the same pack provides (a staged script target, a seed or adapter
-script root, a `provides.scripts` name) is carried by the pack and passes. Projectile FX union requires
+script root, a `provides.scripts` name) is carried by the pack and passes.
+
+`map-guard:<script>` rows read the other half of "this script is on the wrong map", the half no
+zone table can see. A module ported from another map often keeps its donor's entry guard: an
+`if ( getdvar( "mapname" ) != "zm_transit" ) return;` as the first statement of `main()` or `init()`,
+the `level.script` form of the same test, or the `==` form whose `else` returns. That script
+compiles, links and loads on any map, and on a map the guard does not name its entry point returns
+and the member does nothing — with no compiler diagnostic, no unresolved external and no load-time
+line to read. One condition may name several maps (`!= "a" && != "b"`, or the `==`/`||` dual); that
+is one guard over that set, and the row fails only when the target is in none of them, listing every
+map the guard names. A guard naming the composition's own map passes; a source that never asks is
+`not_counted`, because a script that never asks runs everywhere.
+
+Because a failed row refuses the plan, the guard is read narrowly. It counts only as the entry
+point's first real statement — prints, waits and assignments may precede it, since none of them
+decides anything, but a `thread`, a call to another function or a block of any kind means the entry
+point has begun its work — and only when its branch returns unconditionally: a bare `return;`, or a
+block whose own statements are returns, prints and assignments. A map conditional further down, or
+one whose branch holds a nested `if (...) return;`, is program logic and stays `not_counted`, which
+means unread and never clean.
+Projectile FX union requires
 weapon blobs and is not inferred from weapon count. Soundbank listing is only a floor.
 Builds run a receipted `gsc check` dry run per script before linking. Compiler-reported unresolved
 externals fail; successful compilation alone cannot prove runtime external resolution and that
@@ -893,12 +916,265 @@ Three answers are possible and the summary always says which:
 Nothing here writes or deletes a loose file: the folder is global to every mod on the machine and is
 the user's to change. The fix is to move the file out and load the bare foundation again.
 
+## What a module promises: ownership, roles, services and dependency kinds
+
+A declaration already says what a module *registers* (`provides`), what it *needs* (`dependencies`)
+and what it *must not meet* (`conflicts`). Measured on a private bank of several hundred
+declarations, those name-level promises were honest wherever a byte could check them: every
+`replaces.functions` target matched a `replaceFunc` in source in both directions, no module called
+another module's script namespace without declaring the dependency, and no two modules provided the
+same weapon or string. The file-level promises were empty: `replaces.files` was used by no module
+while dozens of them staged copies of files the base or the map already carries, and nothing in
+the format could say "only one of these can be in a pack", "this module exists to own a shared
+file" or "this dependency is a sound bank, not a call". This section adds the four small pieces
+that were missing, and a route that reads a module's own bytes back against its declaration so a
+library can admit anyone's module on evidence rather than on trust.
+
+Every field below is optional; a declaration written before this section is unchanged and valid.
+Every new refusal is a typed row under `details.refusals[]` with the same shape as the rest
+(`kind`, `modules`, `message`, `hint`, `field`, plus the fields named per kind), so a caller that
+draws refusals as data draws these without new code. Nothing here reads a game, widens a base or a
+map, or moves a byte in a package.
+
+### The vocabulary, in one table
+
+| Field | Type | What it promises | What a checker can verify from bytes |
+| --- | --- | --- | --- |
+| `replaces.files` | list of relative zone paths | "I overwrite this file the base or the map already carries" | Fully: the staged targets classified against the base's own listings and the shipped per-map tables |
+| `exclusive` | list of role words | "Only one member of a pack can own this role, and I do" | Partially: a footprint per role (the calls, hooks or assets that role always touches); never that the module is the *right* owner |
+| `service` | `true` | "I exist to own shared things; depend on me and ship no copy" | Partially: the module provides at least one shareable thing and registers no weapon of its own |
+| `dependencies[]` entry as an object | `{id, kind, why?}` | "I need this module *because* I call it / name it / use what it owns / the engine needs it" | `call`, `name` and `service` fully; `runtime` is declaration-only and must say why |
+
+Four fields, one of them a widening of an existing one. Nothing else was needed for the behaviours
+the audit measured, and nothing else is designed here: placement, parameter consumers, versioning
+and runtime conflict detection stay where `docs/MODULES.md` already puts them.
+
+### File ownership: `replaces.files` is required for a base-owned path
+
+A module that stages a file under a path the base or the target map already carries is
+overwriting the base, whether or not any other member does the same. That is a promise about the
+game, and it must be declared: **when a member stages a base-owned path and does not list it under
+`replaces.files`, the plan refuses with kind `ownership`**. The row names the member, the path and
+what owns it (`base` or `map`), and its hint gives the two honest fixes: declare the path, or
+depend on the service module that owns it and ship no copy. One member is enough; the refusal does
+not wait for a second one, because the overwrite does not.
+
+Which paths are base-owned is read from evidence, never from a prefix list:
+
+1. the base's own asset listings (`--base-listings`, a foundation's `base_listings`, or the
+   composition's `base_owned`): every `rawfile,<path>` and `script,<path>` row is a file the base
+   carries, so a member staging that path overwrites it. This is the same source the donor-shadowing
+   check already reads, and it covers the map's animation tables (`animtrees/`, `animstatedefs/`),
+   its AI type scripts (`aitype/`), the stock weapon scripts under `maps/` and `clientscripts/`, the
+   visionsets and every other rawfile the zones carry;
+2. when no listing is on the machine, the shipped per-map tables: `knowledge/map-scripts.json`
+   for the compiled scripts the target map's zones carry on that foundation, and
+   `knowledge/native-weapons.json` for the WeaponDefs (a member staging `weapons/<name>` for a
+   native name is the same overwrite; the native-WeaponDef service refusal keeps firing for a
+   *declared* native weapon under `provides.weapons`, and `ownership` covers the staged file);
+3. `MAP_OWNED_PREFIXES` (`animstatedefs/`, `animtrees/`, `aitype/`) remains what it is today: the
+   last resort for the two-member `service` refusal when neither a listing nor a table covers the
+   target. It grows by nothing and it never refuses a single member on its own: a prefix is a guess
+   about ownership (a module's *new* animation tree under `animtrees/` matches it and overwrites
+   nothing), the two sources above are facts, and only a fact refuses one member.
+
+Two consequences follow from reading ownership this way. First, `replaces.files` is widened from
+"GSC or CSC scripts only" to any relative zone path (a table, a visionset, a `weapons/<name>` file
+or a script), lowercase, forward slashes, at most 64. Second, **accuracy tables are not
+base-owned by any evidence the toolkit holds**: no base zone listing carries a single
+`accuracy/` row, because the engine reads those graphs from its own search path when a WeaponDef
+is compiled, not from a fastfile. A member that delivers one as a rawfile is spending a rawfile
+slot on a file that overrides nothing the pack can see, and two members delivering different bytes
+at one `accuracy/` path stay what they are today, an ordinary file collision with a recorded
+owner. `verify-declaration` lists such paths under `stages.engine_tables` with that explanation
+so an author can decide to withhold them (`"deliver": false`), and the planner does not pretend to
+know who owns them.
+
+A declared overwrite of a path a second member also declares is the existing `replacement` hard
+refusal (`file:<path>`), which no owner decision can clear. That row now also carries `service`:
+the shelf module (with `--workspace`) whose `provides` owns the path, so the refusal says which
+module both members should depend on instead of each shipping a copy. When neither member
+declares the path, `ownership` fires for both and says the same thing. When one member is the
+service itself (it declares `service: true` and provides the path), the other member's undeclared
+copy is an `ownership` refusal naming that service, and its declared copy is a `replacement`
+refusal naming it too: a file two members would both overwrite is owned by the service, never by
+either member.
+
+### Exclusive roles: `exclusive`
+
+Some things in a Zombies pack have room for exactly one owner, and the format had no word for
+them: the audit found seventeen modules drawing on the HUD with no notion that a full HUD
+replacement excludes another, two dozen touching the mystery box with no declared conflict even
+where one of them removes the box, and five hand-written `conflicts` pairs standing in for three
+unnamed roles. `conflicts` cannot express a role: it names one other module, so a role with four
+occupants needs six pairs kept in sync by hand, and a fifth occupant from someone else's repository
+knows none of them.
+
+`exclusive` is a list of role words from a fixed vocabulary. A module lists a role when it owns
+that thing outright, not when it merely touches it.
+
+| Role | Owned by a module that | Not owned by |
+| --- | --- | --- |
+| `hud` | replaces the HUD layout as a whole (a new HUD, a total restyle) | a widget that adds a counter, a timer, a compass; those coexist and declare only `resource_contract.hud` |
+| `box` | decides whether the mystery box exists or how it chooses (removes it, re-weights it, replaces its selection) | a weapon that registers itself in the box; a module that adds names to the pool |
+| `loadscreen` | stages the map's load screen material or image | anything else |
+| `boss` | owns the special round (which boss comes, when, how many) | a boss whose module is only its assets and AI, brought by an owner |
+| `perk-machines` | decides how perks reach the player as a system (rotation, Wunderfizz-only, fixed machines) | one perk, one machine at one site |
+| `perk-art` | owns the perk presentation table (icons, shaders, names as a set) | a module that adds art for its own perk |
+
+Six words. Core rules are deliberately **not** a role: a rule module declares the functions it
+replaces under `replaces.functions`, that field is already exclusive per function, and the audit
+showed eight working modules that replace different functions of one script; a "one script, one
+owner" role would break every one of them for nothing. A module that needs a seventh word says so
+in an issue with the pack that needed it; the list grows by a measured collision, not by
+anticipation.
+
+**The planner refusal.** Two members that list the same role refuse with kind `exclusive`:
+
+```json
+{"kind": "exclusive", "role": "hud", "modules": ["classic_hud", "modern_hud"],
+ "message": "two members own hud: classic_hud, modern_hud",
+ "hint": "A pack has one owner per role. Keep one, or drop the other from the composition.",
+ "resolutions": [{"kind": "replace", "keep": "modern_hud", "drop": ["classic_hud"]},
+                 {"kind": "refuse"}],
+ "field": "/modules/3/exclusive"}
+```
+
+`modules` is in composition order, so the last one is the most recently added. `resolutions` is
+what a review screen needs to draw the two honest outcomes: **replace** (the newest member wins
+visibly, the others are dimmed, and undoing is one click because the composition is simply the
+member list with one entry removed; the plan records nothing, since the fix *is* the member list)
+or **refuse** (both stay, the pack does not build). There is no third kind and no owner decision:
+a role is not a file, and "both, with one first" is exactly the ambiguity the role exists to
+remove. A `conflicts` pair between two owners of the same role keeps working and is redundant; the
+verify route says so.
+
+**What a checker can see.** A role has a footprint in bytes: `hud` owners create HUD elements
+(`newclienthudelem`, `createfontstring` and kin) or stage a menu; `box` owners replace a
+`_zm_magicbox` function, set the box weight hook or call the chest functions; `loadscreen` owners
+stage a `loadscreen` material or image; `boss` owners replace or hook the special-round functions
+or stage an `aitype`; `perk-machines` owners replace `_zm_perks` functions or provide the rotation
+or Wunderfizz scripts; `perk-art` owners define the perk shader or icon table. `verify-declaration`
+reports, per declared role, whether that footprint is present (`agrees`) or absent
+(`declared_not_observed`), and reports a role footprint the module has and does not declare as
+`observed_not_declared` with the evidence, so an author sees "this looks like a box owner". It
+cannot prove that a module with the footprint should own the role; that stays the author's
+promise, and the row says `partial`.
+
+### Services: `service`
+
+A dozen modules in the audited bank are depended on by more than three others and nothing marks
+them; the resolver's only way to name "the module you should depend on instead" was a free tag
+that the documentation never mentioned. `service: true` is that mark as a typed field. It says:
+this module exists to own things other members would otherwise each carry, so depend on it and
+ship no copy. The planner prefers a `service: true` module over any other candidate when a
+`replacement`, `ownership` or `service` refusal names the module to depend on, and reads the old
+`shared-service` tag as the same mark for one release with a plan warning asking for the field.
+
+A service must provide at least one shareable thing (a `rawfiles`, `scripts`, `soundbanks` or
+`aliases` name, or an `exclusive` role) and must register no weapon of its own; a `service: true`
+declaration that fails either rule is a declaration error at inspect time, because a weapon module
+that also ships a shared table is the problem the service exists to solve, not its solution. That
+is also what the checker verifies: the provides, and the absence of a weapon.
+
+"Brought in by" needs no new field. A member that a plan pulled in through a dependency edge is
+already reported as such by the caller that read the `missing_dependency` rows and added it; the
+`by` field on those rows is the name to show. `service` adds the second half: when the plan
+*refuses* because two members overwrite one file, the row now names the service to bring in, so
+the same caller can offer the fix instead of only the diagnosis.
+
+### Dependency kinds: what a dependency is *for*
+
+`dependencies` stays a list of ids, and an id alone keeps meaning what it meant. An entry may
+instead be an object that says why the dependency exists:
+
+```json
+"dependencies": [
+  "powerup_runtime",
+  {"id": "gum_audio_bank", "kind": "service", "why": "my activation sound is in the shared bank"},
+  {"id": "powerup_insta_kill", "kind": "name"},
+  {"id": "round_pacing", "kind": "runtime", "why": "reads level.round_pacing set by that module's init"}
+]
+```
+
+| `kind` | Meaning | Verified by |
+| --- | --- | --- |
+| `call` | this module calls a script the dependency provides | a `<stem>::` or `<path>::` call in this module's source into a script the dependency provides |
+| `name` | this module names a thing the dependency registers (a power-up, perk, gum, weapon or string id) | that name as a literal in this module's source or recipe |
+| `service` | the dependency owns a file, table or bank this module uses, and this module ships no copy | none of the dependency's provided `rawfiles`, `scripts`, `soundbanks` or `aliases` appear among this module's own staged targets or bank rows |
+| `runtime` | a relationship only the engine shows (a level variable, a notify, an order of init) | nothing; `why` is required and the row is declaration-only |
+
+An entry with no `kind` is checked against all three observable kinds and the verify route
+reports which one it found, or `none`. This is what turns the audit's largest unexplained number
+(almost half the bank's dependency edges had no call in source) into three honest bins: an edge a
+call justifies, an edge a name or a bank justifies, and an edge nothing justifies. In the audited
+bank the second bin was mostly one sound bank depended on by every GobbleGum, which is a `service`
+edge and always was; only the third bin is a question for the author. The planner treats every
+kind alike for ordering and presence; the kind changes what can be checked, never what is built.
+
+### What a checker can verify, kind by kind
+
+`pat module verify-declaration <module dir> [--workspace <root>] [--base-listings <dir>]
+[--target <foundation>/<map>] [--strict] --json` reads one module's declaration, recipe, source
+tree, seed manifest or adapter recipe, and reports every promise beside what the bytes say. It
+creates no job, runs no backend and writes nothing; `--strict` exits 1 when any row differs, which
+is what a library gate wants. The result protocol is `pat.module-verify/1`.
+
+Every row has `field` (a JSON Pointer into the declaration), `declared`, `observed`, `how` (the
+method, in words) and an `outcome`: `agrees`, `declared_not_observed`, `observed_not_declared`,
+`partial` (the method sees only part of the truth, and the row says which part) or `not_counted`
+(with the reason). The honest ceiling per kind:
+
+| Promise | Method | Ceiling |
+| --- | --- | --- |
+| `provides.scripts` | recipe script and loose-script targets, seed or adapter script roots | full |
+| `provides.rawfiles` | delivered rawfile targets, seed `rawfile,` roots | full |
+| `provides.weapons` | recipe weapon rows, adapter `weapons`, seed `weapon,` roots, and registration literals in source (`include_zombie_weapon`, `add_zombie_weapon`, `register_tactical_grenade_for_level`) | full for a seed or adapter; `partial` for a project recipe whose weapon is registered through a computed name |
+| `provides.localize` | the `REFERENCE` lines of every `.str` the recipe names, the adapter's `localize` map, `&"NAME"` in source | full |
+| `provides.soundbanks`, `provides.aliases` | recipe soundbank rows and their alias CSV, adapter bank, seed bank files | full for banks; aliases full only when the CSV is on the machine |
+| `provides.models`, `provides.effects` | recipe asset rows of the type, seed manifest | full for a seed; `partial` for a recipe whose models are pulled in by a WeaponDef rather than rooted |
+| `provides.perks`, `provides.gobblegums`, `provides.powerups`, `provides.equipment` | the id as a string literal in this module's own source | `partial`: presence of the id, not proof it was registered (registration goes through another module's function with the id as one argument; a regex must not claim more) |
+| `replaces.functions` | `replaceFunc(path::fn` in comment- and string-masked source, both directions | full for literal targets; a computed target is invisible, as today |
+| `replaces.files` | every staged target classified base-owned by listing or table, both directions | full when a listing or table covers the target; `not_counted` per path otherwise, with `stages.base_owned`, `stages.engine_tables` and `stages.new_in_base_namespace` listed regardless |
+| `dependencies` | per kind, as in the table above | `call`, `name`, `service` full; `runtime` declaration-only |
+| `exclusive` | the role footprint | `partial` |
+| `service` | shareable provides present, no weapon provided | full for the rule; the *intent* is declaration-only |
+| `resource_contract.hud` | count of HUD-element constructors in source, as a floor | `partial`: a floor, never the total |
+| `conflicts` | both ends declaring the same `exclusive` role | reported as `redundant` when a role already covers the pair; otherwise `not_counted` |
+| `menu_route`, `tags`, `placements`, `parameters`, `bases`, `maps` | nothing in this route | `not_counted`, with the reason (a menu tree, a location table, a receipt) |
+
+`--propose` adds `proposal`: the declaration fields the observed side would fill (`replaces.files`
+from `stages.base_owned`, dependency kinds from the evidence found, the provides rows that were
+observed and not declared), written nowhere. A workspace fills its bank from that, one module at a
+time, and the author decides what the route could not (a `runtime` dependency, a role, a service).
+A proposal is an observation, not a verdict: it never removes a declared name, and a name it did
+not observe is reported, not deleted.
+
+Two limits are stated rather than hidden. The route reads a module alone, so a dependency's
+provides come from the dependency's own declaration under `--workspace` (or are `not_counted`),
+and whether a *base* owns a path needs the base's listing or the shipped table for the target;
+without either, `replaces.files` rows are `not_counted` per path and the route says which
+evidence would decide them. And a project recipe's `provides.weapons` is checked against the
+recipe rows and the source literals the toolkit knows how to read; a module that registers a
+weapon by building its name at run time is reported `partial`, never `agrees`.
+
+### Refusal kinds added by this section
+
+| Kind | Fires when | Row carries |
+| --- | --- | --- |
+| `ownership` | a member stages a path a base listing or a shipped per-map table says the base or the map carries, and does not declare it under `replaces.files` | `path`, `owner` (`base` or `map`), `evidence` (`listing` or `table`), `service` (the shelf module that provides the path, with `--workspace`, or null) |
+| `exclusive` | two or more members list the same role | `role`, `modules` in composition order, `resolutions` |
+
+`replacement` rows gain `service`; `service` rows are unchanged. `REFUSAL_KINDS` lists both new
+kinds, and a caller that folds kinds it does not know into "other" keeps working: the message
+and hint are complete sentences on their own.
+
 ## Declared replacement
 
 | Field | Contract |
 | --- | --- |
 | `replaces.functions` | Up to 256 lowercase, deduplicated `script/path::function` targets |
-| `replaces.files` | Up to 64 lowercase, deduplicated relative GSC/CSC paths |
+| `replaces.files` | Up to 64 lowercase, deduplicated relative zone paths the base or the map already carries (a script, a table, a visionset, a `weapons/<name>` file); required for every base-owned path a recipe stages ("What a module promises", `ownership`) |
 | `entry.replace`, `entry.register` | Optional paired function references for generated entry ownership |
 
 Engine callbacks, map/gametype main and gamemode_callback_setup are base-owned and refused.

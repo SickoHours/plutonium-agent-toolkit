@@ -102,6 +102,23 @@ does not link. A bare name no export row owns and no builtin witness covers is r
 - A stale worker from a previous life must not erase a newer worker's fields; carry a generation
   or life identity.
 
+## A ported script still asks which map it is on
+
+A map-specific script guards its own entry: `main()` or `init()` opens with
+`if ( getdvar( "mapname" ) != "zm_transit" ) return;`, or the same test against `level.script`, or
+an `==` whose `else` returns. On its own map the guard is invisible. Ported to another map the
+script still compiles, still links, still loads and still runs — the entry point returns on the
+first line and everything after it never happens. Nothing reports this: there is no unresolved
+external, no missing asset, no console line, and `gsc check` passes, because the script is
+correct. It is simply answering a question about a map it is no longer on. The symptom in the game
+is a member that is installed and does nothing, which reads like a broken feature rather than a
+port that was never finished. A guard may name several maps at once
+(`getdvar("mapname") != "a" && getdvar("mapname") != "b"`), which is the same statement over a set.
+Read the top of `main()` and `init()` before porting anything, and change the guard to the new map,
+widen its set or drop it; `module plan` reads it for you as `map-guard:<script>`, and reads only a
+conditional that sits first and returns unconditionally, so a map test further down is still yours
+to find.
+
 ## Iterating
 
 `map_restart` reruns the loaded scripts and is the fast loop for script logic. It does not reread

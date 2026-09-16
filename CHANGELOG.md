@@ -31,6 +31,40 @@ Every entry states what shipped, on which platform it was verified, and what rem
   with the verdict. A read-only sweep of 407 module sources in the private workspace turns up
   exactly the three known-broken scripts and no other row. Verified offline on Linux; nothing was
   built, installed or played.
+- New check `map-guard`. A module ported from another map often keeps its donor's entry guard — a
+  top-level `if ( getdvar( "mapname" ) != "zm_transit" ) return;` in `main()` or `init()`, or the
+  `level.script` form, or the `==` form whose `else` returns. It compiles, links and loads on any
+  map; on the map the guard does not name, the entry point returns and the member does nothing,
+  and no compiler, linker or load-time error says so. `module plan` and `module build` now read
+  every compiled `.gsc`/`.csc` for that guard and refuse when it names a map other than the
+  composition's (`map-guard:<script>`, one row per script). One condition may name several maps
+  (`!= "a" && != "b"`, or the `==`/`||` dual) and fails only when the target is in none of them,
+  listing every map named. A guard naming the target map passes. The reading is narrow, because a
+  failed row refuses: only a conditional that is the entry point's first real statement (prints,
+  waits and assignments may precede it) and whose branch returns unconditionally is a guard;
+  anything else, including a source with no guard at all, is `not_counted`. `adapt` gains the matching `map-guard` pattern: a
+  member whose guard names another map is a port, not a widening, because declaring the target
+  would not make a returning `main()` run. Offline verified on Linux; no game was loaded.
+- A module can declare what it *promises*, and the declaration reader checks it. `replaces.files`
+  is widened from GSC/CSC scripts to any relative zone path the base or the map already carries (a
+  table, a visionset, a `weapons/<name>` file), still lowercase, forward slashes, deduplicated and
+  at most 64: what the field promises is ownership, not a suffix. `module.json` takes three new
+  optional fields. `exclusive` lists the role words from a fixed vocabulary (`hud`, `box`,
+  `loadscreen`, `boss`, `perk-machines`, `perk-art`) a module owns outright, for the things a pack
+  has room for exactly one owner of. `service` is `true` when the module exists to own shared
+  things so others depend on it and ship no copy; it must provide something shareable
+  (`rawfiles`, `scripts`, `soundbanks`, `aliases`) or own a role, and must register no weapon of
+  its own, because a weapon module that also ships a shared table is the problem a service solves.
+  A `dependencies` entry may be an object `{id, kind, why?}` saying what the edge is for (`call`,
+  `name`, `service` or `runtime`; a `runtime` edge must say why, since nothing in the files can
+  verify it). A plain id keeps meaning exactly what it meant and `dependencies` stays a list of ids
+  everywhere it is read, so a declaration written before this change is unchanged and valid.
+  `module inspect` echoes `exclusive`, `service` and `dependency_kinds` only when the declaration
+  names them, `plan.json` records all three per member, and the shelf lookup that names "the module
+  to depend on instead" now prefers a declared `service: true` over the older `shared-service` tag,
+  which is read as the same mark for one more release. This change adds no planner refusal: two
+  members owning one role still plan. Offline unit tests on Linux
+  (`tests/test_promises_vocabulary.py`); no native receipt, and no route status changes.
 - `module qualify` now plans its synthesized composition with the base's asset listings, read from
   the foundation record's `base_listings` and from the directory the link loads sit in when it holds
   `<zone>-list.txt` beside them, and records them under `base_listings` in `qualify.json` and the
