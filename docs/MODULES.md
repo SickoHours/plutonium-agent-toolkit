@@ -195,8 +195,9 @@ registers `m1911_zm` in the mystery box passes the box-registration check when a
 provides that weapon, instead of failing for a weapon nobody ships.
 
 The provenance half is the ledger's `shipped` row ([evidence-ledger.md](evidence-ledger.md)). It
-says the game ships this on these maps and feeds none of the six facts: shipping with the game is
-not offline verification, an install, a run or a verdict.
+says the game ships this on these maps, names the listing or decompile it was read from and, in its
+optional `citations`, the lines inside one that say so. It feeds none of the six facts: shipping
+with the game is not offline verification, an install, a run or a verdict.
 
 ## Seed manifest: `seed.json`
 

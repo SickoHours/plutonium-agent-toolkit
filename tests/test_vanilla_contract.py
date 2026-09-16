@@ -26,7 +26,11 @@ from tests.test_dev_routes import invoke
 SCOPE = {"base": "stock", "foundation": "bo2-stock", "maps": ["zm_transit"]}
 SHIPPED = {"type": "shipped", "scope": SCOPE,
            "record": {"path": "knowledge/decompiled/stock/maps/mp/zombies/_zm_perks.gsc", "sha256": "a" * 64},
+           "citations": [{"file": "bo2-stock/zm_transit/maps/mp/zm_transit.gsc", "line": 90, "sha256": "b" * 64,
+                          "text": "level.zombiemode_using_juggernaut_perk = 1;"}],
            "note": "Shipped with the game on these maps. Not built, not installed, not played here."}
+CITATION = {"file": "bo2-stock/zm_transit/maps/mp/zm_transit.gsc", "line": 90, "sha256": "b" * 64,
+            "text": "level.zombiemode_using_juggernaut_perk = 1;"}
 VANILLA = {"zm_transit": {"present": True, "cost": {"value": 2500, "file": "maps/mp/zombies/_zm_perks.gsc", "line": 1698},
                           "entity_sites": [{"kind": "machine", "key": "targetname", "value": "vending_jugg"}],
                           "count": "unknown", "count_note": "The scripts iterate getentarray and state no count.",
@@ -265,14 +269,74 @@ class ShippedRow(unittest.TestCase):
         self.assertEqual(row["type"], "shipped")
         self.assertEqual(row["scope"], {"base": "stock", "foundation": "bo2-stock", "maps": ["zm_transit"]})
         self.assertEqual(row["record"]["sha256"], "a" * 64)
+        self.assertEqual(row["citations"], [CITATION])
         self.assertIn("Shipped with the game", row["note"])
 
-    def test_record_and_note_are_optional_and_scope_is_not(self):
-        self.assertEqual(ledger.validate_row({"type": "shipped", "scope": SCOPE}, "/rows/0"),
-                         {"type": "shipped", "scope": {"base": "stock", "foundation": "bo2-stock", "maps": ["zm_transit"]}})
+    def test_the_declaration_designs_example_row_validates(self):
+        """The row the vanilla design writes beside a stock declaration: the scope it ships at, the
+        decompile it was read from, and the lines inside it that say so."""
+        row = ledger.validate_row(
+            {"type": "shipped",
+             "scope": {"base": "b2", "foundation": "dlc5-beta2", "maps": ["zm_factory", "zm_sumpf"]},
+             "record": {"path": "knowledge/decompiled/stock/patch_zm/maps/mp/zombies/_zm_perks.gsc",
+                        "sha256": "0" * 64},
+             "citations": [
+                 {"file": "dlc5-beta2/zm_factory/maps/mp/zm_factory.gsc", "line": 90, "sha256": "1" * 64,
+                  "text": "level.zombiemode_using_juggernaut_perk = 1;"},
+                 {"file": "dlc5-beta2/zm_sumpf/maps/mp/zm_sumpf.gsc", "line": 44, "sha256": "2" * 64,
+                  "text": "level.zombiemode_using_juggernaut_perk = 1;"},
+                 {"file": "foundations/dlc5-beta2 base listing zm_factory-inspect-list.txt", "line": 4919,
+                  "sha256": "3" * 64, "text": "material, mc/mtl_zombie_vending_jugg"}],
+             "note": "Shipped with the base on these maps. Not built, not installed, not played here."},
+            "/rows/0")
+        self.assertEqual(row["scope"]["maps"], ["zm_factory", "zm_sumpf"])
+        self.assertEqual([c["line"] for c in row["citations"]], [90, 44, 4919])
+        self.assertNotIn("at", row, "a generated row carries no timestamp")
+
+    def test_a_row_without_a_record_is_refused_at_the_record(self):
+        """What the row was read from is the row: a scope with nothing behind it states nothing."""
         with self.assertRaises(Failure) as caught:
-            ledger.validate_row({"type": "shipped"}, "/rows/0")
+            ledger.validate_row({"type": "shipped", "scope": SCOPE}, "/rows/0")
         self.assertEqual(caught.exception.code, "input_invalid")
+        self.assertEqual(caught.exception.details["field"], "/rows/0/record")
+
+    def test_note_and_citations_are_optional_and_scope_is_not(self):
+        record = {"path": "knowledge/decompiled/stock/maps/mp/zombies/_zm_perks.gsc", "sha256": "a" * 64}
+        self.assertEqual(ledger.validate_row({"type": "shipped", "scope": SCOPE, "record": record}, "/rows/0"),
+                         {"type": "shipped", "record": record,
+                          "scope": {"base": "stock", "foundation": "bo2-stock", "maps": ["zm_transit"]}})
+        with self.assertRaises(Failure) as caught:
+            ledger.validate_row({"type": "shipped", "record": record}, "/rows/0")
+        self.assertEqual(caught.exception.code, "input_invalid")
+        self.assertEqual(caught.exception.details["field"], "/rows/0/scope")
+
+    def test_a_citation_names_a_file_a_line_a_digest_and_the_text(self):
+        for missing in ("file", "line", "sha256", "text"):
+            partial = {key: value for key, value in CITATION.items() if key != missing}
+            with self.assertRaises(Failure, msg=missing) as caught:
+                ledger.validate_row(dict(SHIPPED, citations=[partial]), "/rows/0")
+            self.assertEqual(caught.exception.details["field"], f"/rows/0/citations/0/{missing}")
+        for bad, where in ((dict(CITATION, line=0), "line"), (dict(CITATION, line=True), "line"),
+                           (dict(CITATION, sha256="A" * 64), "sha256"), (dict(CITATION, text="  "), "text"),
+                           (dict(CITATION, page=1), "page")):
+            with self.assertRaises(Failure, msg=str(bad)) as caught:
+                ledger.validate_row(dict(SHIPPED, citations=[bad]), "/rows/0")
+            self.assertEqual(caught.exception.details["field"], f"/rows/0/citations/0/{where}")
+
+    def test_at_most_sixty_four_citations(self):
+        self.assertEqual(len(ledger.validate_row(dict(SHIPPED, citations=[CITATION] * 64), "/rows/0")["citations"]), 64)
+        with self.assertRaises(Failure) as caught:
+            ledger.validate_row(dict(SHIPPED, citations=[CITATION] * 65), "/rows/0")
+        self.assertEqual(caught.exception.details["field"], "/rows/0/citations")
+        with self.assertRaises(Failure) as caught:
+            ledger.validate_row(dict(SHIPPED, citations="maps/mp/zm_transit.gsc:90"), "/rows/0")
+        self.assertEqual(caught.exception.details["field"], "/rows/0/citations")
+
+    def test_citations_belong_to_a_shipped_row_only(self):
+        row = {"type": "agent-reviewed", "scope": SCOPE, "outcome": "passed", "citations": [CITATION]}
+        with self.assertRaises(Failure) as caught:
+            ledger.validate_row(row, "/rows/0")
+        self.assertEqual(caught.exception.details["field"], "/rows/0/citations")
 
     def test_a_shipped_row_states_none_of_the_six_facts(self):
         self.assertEqual(ledger.row_facts(ledger.validate_row(SHIPPED, "/rows/0")), {})

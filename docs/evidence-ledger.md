@@ -163,14 +163,29 @@ package hash of the verdict it replaces), `package_sha256`. Feeds **player_accep
 
 **`shipped`**: the game ships this on these maps. This is the provenance of stock content
 (`distribution: stock`, [MODULES.md](MODULES.md)): a module with no bytes of its own, whose payload
-is the base. Required `scope`. Optional `record` (the listing or the decompile the row was read
-from), `note`, and the common `at`. It feeds **no fact**: all six stay unknown, because a thing
-shipping with the game is not a build, an install, a run or a verdict on it. `module state
---ledger` reports it separately, as `shipped`, per scope and per target.
+is the base. Required `scope` and **`record`** — the listing or the decompile the row was read from,
+in the shape every other row's record has — because a claim about what the game ships names what it
+was read from or it is an assertion. Optional `citations`, `note`, and the common `at`.
+
+`citations` is what makes the row auditable rather than asserted: the record names the file, and
+each citation names a line inside one. Each entry is `{"file", "line", "sha256", "text"}` — the file
+it was read in, the line number, the SHA-256 of that file, and the text of the line itself — all
+four required, at most 64 entries, refused at `/rows/<n>/citations` beyond that. A reader opens the
+file, checks the digest and sees the same words. The toolkit follows none of them: it neither opens
+a cited file nor verifies a digest, exactly as it does not follow a `record` pointer.
+
+It feeds **no fact**: all six stay unknown, because a thing shipping with the game is not a build,
+an install, a run or a verdict on it. `module state --ledger` reports it separately, as `shipped`,
+per scope and per target.
 
 ```json
 {"type": "shipped", "scope": {"base": "b2", "foundation": "dlc5-beta2", "maps": ["zm_factory", "zm_sumpf"]},
  "record": {"path": "knowledge/decompiled/stock/patch_zm/maps/mp/zombies/_zm_perks.gsc", "sha256": "<64 hex>"},
+ "citations": [
+   {"file": "dlc5-beta2/zm_factory/maps/mp/zm_factory.gsc", "line": 90, "sha256": "<64 hex>",
+    "text": "level.zombiemode_using_juggernaut_perk = 1;"},
+   {"file": "dlc5-beta2/zm_sumpf/maps/mp/zm_sumpf.gsc", "line": 44, "sha256": "<64 hex>",
+    "text": "level.zombiemode_using_juggernaut_perk = 1;"}],
  "note": "Shipped with the base on these maps. Not built, not installed, not played here."}
 ```
 

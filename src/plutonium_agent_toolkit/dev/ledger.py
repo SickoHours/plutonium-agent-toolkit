@@ -78,9 +78,9 @@ SHAPES = {
     "agent-reviewed": ({"by", "outcome"}, {"outcome", "scope"}),
     "game-tested": ({"run", "result", "capture", *OBSERVED}, {"run", "result", "scope"}),
     "player-accepted": ({"outcome", "reporter", "quote", "not_covered", "supersedes"}, {"outcome", "record", "scope"}),
-    # The game ships this on these maps. Nothing beyond COMMON: the scope is the statement, the
-    # optional record is the listing or decompile it was read from, and the note qualifies it.
-    "shipped": (set(), {"scope"}),
+    # The game ships this on these maps. The scope is the statement, the required record is the
+    # listing or decompile it was read from, and the optional citations are the lines in it.
+    "shipped": ({"citations"}, {"scope", "record"}),
 }
 OUTCOMES = {"agent-reviewed": ("passed", "failed", "noted"), "player-accepted": ("accepted", "rejected")}
 RESULTS = ("passed", "failed", "inconclusive")
@@ -193,6 +193,32 @@ def _strings(value, what: str, field: str, limit: int = 400) -> list:
     return list(value)
 
 
+def _citations(value, field: str) -> list:
+    """The lines a `shipped` row was read from: what makes it auditable instead of asserted.
+
+    A record names the file; a citation names the line inside it. Each one carries the file, the
+    line number, the SHA-256 of the file that line was read from and the text of the line itself,
+    so a reader opens the file, checks the digest and sees the same words. All four are required,
+    because three of them and a guess is not a citation. The toolkit follows none of them: it
+    neither opens the file nor verifies the hash, it only refuses a shape a reader could not use.
+    """
+    if not isinstance(value, list):
+        raise Failure(INPUT_INVALID, "citations is a list of {file, line, sha256, text} objects", field=field)
+    if len(value) > MAX_LIST:
+        raise Failure(INPUT_INVALID, f"citations holds at most {MAX_LIST} entries; {len(value)} were given", field=field)
+    result = []
+    for index, item in enumerate(value):
+        at = f"{field}/{index}"
+        _fields(item, {"file", "line", "sha256", "text"}, {"file", "line", "sha256", "text"}, "citation", at)
+        if type(item["line"]) is not int or item["line"] < 1:
+            raise Failure(INPUT_INVALID, "citation line is the line number in that file, a positive integer", field=at + "/line")
+        result.append({"file": _text(item["file"], "citation file", 4096, at + "/file"),
+                       "line": item["line"],
+                       "sha256": _hash(item["sha256"], "citation sha256", at + "/sha256"),
+                       "text": _text(item["text"], "citation text", MAX_TEXT, at + "/text")})
+    return result
+
+
 def _parent(value, field: str) -> dict:
     _fields(value, {"id", "declaration_sha256", "package_sha256", "record"}, {"id"}, "parent", field)
     if not isinstance(value["id"], str) or not re.fullmatch(r"[a-z0-9_-]{1,64}", value["id"]):
@@ -269,6 +295,8 @@ def validate_row(row, field: str) -> dict:
     for key in ("not_covered", "changes"):
         if key in row:
             out[key] = _strings(row[key], key, field + "/" + key)
+    if "citations" in row:
+        out["citations"] = _citations(row["citations"], field + "/citations")
     if "parent" in row:
         out["parent"] = _parent(row["parent"], field + "/parent")
     if "commit" in row:
