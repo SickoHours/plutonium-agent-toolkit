@@ -206,6 +206,16 @@ strings, the loose scripts (`loose_script`, `loose_scripts` or `scripts`), roote
 collide like a seed's, and fill `provides` the way a manifest does: a declaration may narrow
 them, never add a name the recipe does not deliver. The member's `payload` is `adapter`.
 
+`soundbank.exclude_aliases` is how a member that shares only part of its bank answers the
+`service` refusal below (one alias, one bank): 1 to 256 alias names this cut hands to the bank
+module that owns them, subtracted from the aliases the member is credited with (so the shared
+rows are one bank's, not a collision) and recorded as `excluded_aliases` on the plan row and on
+the `adapters[]` entry. The names are checked against the alias table wherever the prepared
+inputs are on this machine — a name the table does not carry is a stale list and is refused —
+and the workspace builder that cuts the bank must drop the same rows, with the readback of what
+it produced (`soundbanks` in the build receipt's `adapters[]`, read back from the package rather
+than taken from the builder's word) as the proof that it did.
+
 #### Where `prepared` points
 
 `prepared` is the directory of converted inputs the builder consumes, and the planner reads two
@@ -614,7 +624,8 @@ Optional `lineage` records a T4/T5 source relationship: `[{"game":"t5","map":"zm
 
 `lineage` is also the first row type of the evidence ledger: an optional `evidence.json` beside
 `module.json` holds typed, scoped rows (`lineage`, `authored`, `accepted-in-pack`,
-`extracted-from-release`, `built-alone`, `agent-reviewed`, `game-tested`, `player-accepted`) from
+`extracted-from-release`, `built-alone`, `agent-reviewed`, `game-tested`, `player-accepted`,
+`known-issue`) from
 which the six facts are derived per scope, unknown kept unknown. `module inspect` validates it
 when present; `module state --ledger` reports it. Format: [evidence-ledger.md](evidence-ledger.md).
 

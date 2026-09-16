@@ -1575,7 +1575,8 @@ def collisions(modules: list[dict], loaded: dict[str, tuple], decisions: list[di
 
 def _aliases_of(m: dict, loaded: dict[str, tuple]) -> dict[str, list[str]]:
     """Sound alias names a member's banks carry, by bank: an adapter's alias table when its
-    prepared inputs are on this machine, a recipe's soundbank row read from its alias CSV, or
+    prepared inputs are on this machine (minus the rows ``soundbank.exclude_aliases`` hands to
+    the bank module that owns them), a recipe's soundbank row read from its alias CSV, or
     the declaration's own ``provides.aliases``. A seed manifest carries none, so a seed's bank
     is never judged here."""
     out: dict[str, list[str]] = {}
@@ -1939,7 +1940,8 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
                               "prepared_present": a["prepared_present"], "prepared_resolved": a["prepared_resolved"],
                               "prepared_source": a["prepared_source"], "prepared_candidates": a["prepared_candidates"],
                               "declared_roots": len(a["embedded"]),
-                              "loose_scripts": [s["target"] for s in a["scripts"]], "soundbank": a["soundbank"], "aliases": a["aliases"]}
+                              "loose_scripts": [s["target"] for s in a["scripts"]], "soundbank": a["soundbank"], "aliases": a["aliases"],
+                              "excluded_aliases": a["excluded_aliases"]}
         else:
             row["seed_sha256"] = m["seed"]["files"]["mod.ff"] and job.inputs[str(m["seed"]["package"].resolve())]
             row["seed_manifest_sha256"] = job.inputs[str(m["seed"]["manifest"])]
@@ -2188,7 +2190,8 @@ def execute(args, job: Job) -> dict:
         "adapters": [{"id": m["id"], "recipe": str(m["adapter"]["recipe"]), "recipe_key": m.get("recipe_key"),
                       "foundation": m["adapter"]["foundation"], "map": m["adapter"]["map"],
                       "roots": m["adapter"]["embedded"], "soundbanks": [m["adapter"]["soundbank"]] if m["adapter"]["soundbank"] else [],
-                      "aliases": m["adapter"]["aliases"], "loose_scripts": [s["target"] for s in m["adapter"]["scripts"]],
+                      "aliases": m["adapter"]["aliases"], "excluded_aliases": m["adapter"]["excluded_aliases"],
+                      "loose_scripts": [s["target"] for s in m["adapter"]["scripts"]],
                       "prepared_present": m["adapter"]["prepared_present"],
                       "prepared_resolved": m["adapter"]["prepared_resolved"], "prepared_source": m["adapter"]["prepared_source"],
                       "prepared_candidates": m["adapter"]["prepared_candidates"],

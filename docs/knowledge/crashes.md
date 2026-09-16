@@ -59,15 +59,23 @@ regression that consumes the failed artifact was added; the preflight playbooks 
 | `Could not play rumble asset '<name>' because it was not registered and loaded` | A converted donor clip kept its compiled event tail; a `rmbnt#` entry names a rumble the donor game had and T6 does not; the match ends (`SV_Shutdown`) on first play | Rewrite the event tail at conversion: drop `rmbnt#` events, resolve `sndnt#` events through the weapon's notetrack sound map or drop them; poses and frames untouched |
 | `Unable to find client function: "init" in "scripts/zm/<name>"`, then `******* Linking to default stub function instead ******` | Not a fault on its own: the client VM calls `main()` and `init()` on every loose mod `.csc` and links a no-op stub for whichever is absent. One passing load printed 32 such lines, including the server twin for about twenty `main`-less scripts that work | Read it as a *shape marker* only — a `.csc` that defines `main()` but no `init()` is doing its work in the early pass (`gsc.md`). Scope the matcher to `scripts/zm`: every healthy load also prints the same line for `"soundNotify" in "clientscripts/mp/_dogs"` |
 | The same line **with zero `CSC Executed` lines in the slice** (a healthy load prints 14, or 18 when the pack carries two client halves of its own); the crash text has an empty `last gsc error message` and a `last gsc pos` naming a per-frame monitor loop | A client `main()` that does work. It runs in the early pass, before the client's own `_zm` rows exist, and the whole client-script pass dies there before the first `CSC Executed` line. Observed: `include_weapon` called from `main()` for weapon names the target map never registers, reaching native `addzombieboxweapon` — the registration-time twin of `box-weapon-not-found`. No script error is raised, so neither crash-text field names the site | Leave `main()` empty and do the work in `init()`, and check that every weapon name the script includes exists on the target map. `csc-main-body:<target>` rows in `module plan` and `project plan` refuse the shape offline. Do not name a script from `last gsc pos` when `last gsc error message` is empty |
+| `ERROR: sound bank failed to load <name>.all. You have a build problem.` | Not established, and the row says so. Seen four times in one session for four of one pack's banks while the pack's other banks in the same folder loaded; every named `.all.sabl` was beside `mod.ff` under exactly that name, and the same four had loaded from that folder the day before. The session's log slice is gone, so what separated those four is unknown | No repair is recorded for this line yet. Read the load's own console first: a bank that loads prints `Adding prioritized sound bank "<name>.all" from zone "mod"`, `Attempting to load soundbank <name>.all`, `Soundbank <name>.all has load asset bank <name>.all.sabl` and `SOUND Header load success ... <name>.all.sabl`. Check that every bank the zone names sits beside `mod.ff` under exactly that name, then count the pack's banks against the 32 `sound` asset limit |
 | "Out of memory" dialog at map load | Preloaded sound-bank reservation plus the fastfile's virtual block | Stream large samples losslessly; keep critical one-shots loaded |
 
-Neither of the two rows above is in the shipped signature data yet. Row `csc-main-only` (class
-`shape-marker`, regex `Unable to find client function: "init" in "scripts/zm/([a-z0-9_]+)"`, fix
-"leave `main()` empty and register from `init()`") is filed in the maintainer's generator and lands
-with the next export. `client-script-pass-died` is a *pairing* — that marker plus zero
-`CSC Executed` lines in the slice — which the line-oriented matcher cannot express, so it is
-documented here only. The `Exception Address` that came with them is one observed address on one
-client build and stays a corroborating field, never the key.
+Of the two rows above, `csc-main-only` (class `shape-marker`, regex
+`Unable to find client function: "init" in "scripts/zm/([a-z0-9_]+)"`) is now in the shipped
+signature data; it arrived with this export. `client-script-pass-died` is a *pairing* — that marker
+plus zero `CSC Executed` lines in the slice — which the line-oriented matcher cannot express, so it
+stays documented here only and the generator skips it rather than deriving a row from its wording.
+The `Exception Address` that came with them is one observed address on one client build and stays a
+corroborating field, never the key.
+
+The table's promise — a cause that was found and fixed — holds for every row but one.
+`sound-bank-failed-to-load` records a line whose cause was never found: the evidence rotated away
+before the diagnosis ran, and the two obvious explanations, a bank missing from the mod folder and a
+bank under the wrong name, were both checked and ruled out. It is here so the next occurrence is
+recognised rather than rediscovered. Read a match as "read the console and the mod folder", never as
+"this is what happened".
 
 The rows are data too: `src/plutonium_agent_toolkit/knowledge/crash-signatures.json` holds each
 as a regex with its class, cause and fix, and `pat knowledge signature --log <slice> --json`
