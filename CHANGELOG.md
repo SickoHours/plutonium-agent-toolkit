@@ -7,6 +7,17 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- New check `map-guard`. A module ported from another map often keeps its donor's entry guard — a
+  top-level `if ( getdvar( "mapname" ) != "zm_transit" ) return;` in `main()` or `init()`, or the
+  `level.script` form, or the `==` form whose `else` returns. It compiles, links and loads on any
+  map; on the map the guard does not name, the entry point returns and the member does nothing,
+  and no compiler, linker or load-time error says so. `module plan` and `module build` now read
+  every compiled `.gsc`/`.csc` for that guard and refuse when it names a map other than the
+  composition's (`map-guard:<script>`, one row per script). A guard naming the target map passes;
+  a source with no guard is `not_counted`. `adapt` gains the matching `map-guard` pattern: a
+  member whose guard names another map is a port, not a widening, because declaring the target
+  would not make a returning `main()` run. Offline verified on Linux; no game was loaded.
+
 - New check `loose-overrides`. Plutonium reads an image's pixels from an image bank *or* from the
   global loose path `storage/t6/images`, and a loose file there wins: it applies to every mod folder
   on the machine and to the bare game with no mod selected. A loose `<name>.iwi` whose name one of

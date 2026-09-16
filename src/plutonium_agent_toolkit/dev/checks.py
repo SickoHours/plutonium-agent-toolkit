@@ -539,6 +539,87 @@ def map_script_externals(name,text,map_id,foundation,game='t6',provided=()):
         return [{'id':'map-scripts:'+name,'outcome':'passed','detail':f'Every included or qualified stock script path is carried by {map_id} on {foundation}'}]
     return [{'id':'map-scripts:'+name,'outcome':'not_counted','detail':'No stock script path is included or called'}]
 
+# A ported script that still asks whether it is on its donor map. The test reads either the
+# `mapname` dvar or `level.script`, in single or double quotes, with `!=` (the body returns) or
+# `==` (the else returns); both say the same thing.
+MAP_GUARD=re.compile(r'''(?:getdvar\s*\(\s*(["'])mapname\1\s*\)|level\s*\.\s*script)\s*(?P<op>!=|==)\s*(["'])(?P<map>[A-Za-z0-9_]{1,64})\3''',re.I)
+IF_OPEN=re.compile(r'\bif\s*\(')
+RETURN=re.compile(r'\breturn\b')
+ELSE_AT=re.compile(r'\s*else\b')
+GUARD_ENTRIES=('main','init')
+
+def _block(masked,pos):
+    """The statement or brace block that starts at ``pos``, and the offset just past it."""
+    while pos<len(masked) and masked[pos].isspace():pos+=1
+    if pos<len(masked) and masked[pos]=='{':
+        depth=0
+        for i in range(pos,len(masked)):
+            if masked[i]=='{':depth+=1
+            elif masked[i]=='}':
+                depth-=1
+                if depth==0:return masked[pos:i+1],i+1
+        return masked[pos:],len(masked)
+    end=masked.find(';',pos)
+    if end<0:return masked[pos:],len(masked)
+    return masked[pos:end+1],end+1
+
+def _enclosing_if(masked,start):
+    """The offset just past the `)` of the innermost `if (...)` whose condition holds ``start``."""
+    for opener in reversed(list(IF_OPEN.finditer(masked,0,start))):
+        depth=0;close=None
+        for i in range(opener.end()-1,len(masked)):
+            if masked[i]=='(':depth+=1
+            elif masked[i]==')':
+                depth-=1
+                if depth==0:close=i;break
+        if close is not None and opener.end()<=start<close:return close+1
+    return None
+
+def _entry_of(masked,start):
+    """The function ``start`` sits in, and whether it sits at that function's top level."""
+    enclosing=None
+    for match in DEF.finditer(masked):
+        if match.end()>start:break
+        enclosing=match
+    if enclosing is None:return None,False
+    body=masked[enclosing.end():start]
+    return enclosing.group(1).lower(),body.count('{')==body.count('}')
+
+def map_guards(name,text,map_id):
+    """One row per script: does this source return unless the map is a specific one?
+
+    A module ported from another map often keeps its donor's entry guard — a top-level
+    `if ( getdvar( "mapname" ) != "zm_transit" ) return;` (or the `level.script` form, or the
+    `==` form whose `else` returns) in `main()` or `init()`. It compiles, links and loads on any
+    map; on the map the guard does not name, the entry point returns and the member does nothing.
+    No compiler, linker or load-time error says so, which is why the plan reads it. A guard naming
+    the composition's own map passes; a source with no guard is `not_counted`, because a script
+    that never asks is a script that runs everywhere."""
+    masked=mask_noncode(text)
+    guarded=[]
+    for match in MAP_GUARD.finditer(text):
+        if masked[match.start()]==' ':continue  # a guard inside a comment or a string is text
+        entry,top_level=_entry_of(masked,match.start())
+        if entry not in GUARD_ENTRIES or not top_level:continue
+        close=_enclosing_if(masked,match.start())
+        if close is None:continue
+        body,after=_block(masked,close)
+        if match.group('op')=='!=':
+            returns=bool(RETURN.search(body))
+        else:
+            otherwise=ELSE_AT.match(masked,after)
+            returns=bool(otherwise and RETURN.search(_block(masked,otherwise.end())[0]))
+        if returns:guarded.append(match.group('map'))
+    wrong=[m for m in guarded if m!=map_id]
+    if wrong:
+        return [{'id':'map-guard:'+name,'outcome':'failed','guard':wrong[0],
+                 'detail':f'returns unless mapname is {wrong[0]}; this composition targets {map_id}, '
+                          f'so the script does nothing on it'}]
+    if guarded:
+        return [{'id':'map-guard:'+name,'outcome':'passed','guard':map_id,
+                 'detail':f'the entry guard names {map_id}, which this composition targets'}]
+    return [{'id':'map-guard:'+name,'outcome':'not_counted','detail':'no map guard read'}]
+
 def evaluate(plan,root=None):
     limits=knowledge.load('engine-limits.json')['rows'];maps=knowledge.load('occupancy.json')['maps']
     occupancy=maps.get(plan['map'],{})

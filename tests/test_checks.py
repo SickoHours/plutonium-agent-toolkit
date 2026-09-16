@@ -237,6 +237,35 @@ class MapScriptExternals(unittest.TestCase):
         self.assertEqual(checks.map_script_externals('scripts/zm/a.gsc',src,'zm_nowhere','dlc5-beta2')[0]['outcome'],'not_counted')
         self.assertEqual(checks.map_script_externals('scripts/zm/a.gsc','main(){}\n','zm_factory','dlc5-beta2')[0]['outcome'],'not_counted')
 
+class MapGuards(unittest.TestCase):
+    """A ported script that still asks whether it is on its donor map does nothing on the new one,
+    compiles clean and links clean: only reading the guard finds it."""
+    def test_a_getdvar_guard_for_another_map_fails(self):
+        src='main()\n{\n    if ( getdvar( "mapname" ) != "zm_transit" )\n        return;\n    thread watch();\n}\n'
+        out=checks.map_guards('scripts/zm/bus.gsc',src,'zm_factory')
+        self.assertEqual(len(out),1);self.assertEqual(out[0]['id'],'map-guard:scripts/zm/bus.gsc')
+        self.assertEqual(out[0]['outcome'],'failed')
+        self.assertEqual(out[0]['detail'],'returns unless mapname is zm_transit; this composition targets zm_factory, so the script does nothing on it')
+        self.assertEqual(out[0]['guard'],'zm_transit')
+    def test_a_level_script_guard_for_another_map_fails(self):
+        src="init()\n{\n\tif( !isdefined( level.script ) || level.script != 'zm_transit' ) { return; }\n\tlevel thread run();\n}\n"
+        out=checks.map_guards('clientscripts/zm/bus.csc',src,'zm_factory')
+        self.assertEqual(out[0]['outcome'],'failed');self.assertIn('zm_transit',out[0]['detail'])
+    def test_an_equals_guard_whose_else_returns_fails(self):
+        src='main()\n{\n    if ( getdvar("mapname") == "zm_transit" )\n    {\n        thread watch();\n    }\n    else\n    {\n        return;\n    }\n}\n'
+        self.assertEqual(checks.map_guards('scripts/zm/bus.gsc',src,'zm_factory')[0]['outcome'],'failed')
+    def test_a_guard_naming_the_target_map_passes(self):
+        src='main()\n{\n    if ( getdvar( "mapname" ) != "zm_factory" )\n        return;\n    thread watch();\n}\n'
+        out=checks.map_guards('scripts/zm/bus.gsc',src,'zm_factory')
+        self.assertEqual(out[0]['outcome'],'passed');self.assertIn('zm_factory',out[0]['detail'])
+    def test_no_guard_is_not_counted(self):
+        for src in ('main()\n{\n    thread watch();\n}\n',
+                    '// if ( getdvar( "mapname" ) != "zm_transit" ) return;\nmain()\n{\n    thread watch();\n}\n',
+                    'main()\n{\n    if ( getdvar( "mapname" ) != "zm_transit" )\n        level.bus = 1;\n    thread watch();\n}\n',
+                    'helper()\n{\n    if ( getdvar( "mapname" ) != "zm_transit" )\n        return;\n}\n'):
+            out=checks.map_guards('scripts/zm/bus.gsc',src,'zm_factory')
+            self.assertEqual(out[0]['outcome'],'not_counted',src);self.assertEqual(out[0]['detail'],'no map guard read')
+
 class DonorShadowing(unittest.TestCase):
     """The link log is the fact: it names the zone every rooted asset's copy came from."""
     def plan(self,**extra):

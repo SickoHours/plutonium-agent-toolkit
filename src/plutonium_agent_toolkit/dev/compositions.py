@@ -1154,7 +1154,7 @@ def resolve(comp: dict, modules: list[dict], allow_unqualified: bool = False) ->
 # it can tell. ``unknown`` is the honest answer for everything a plan cannot see (a missing effect
 # root, a donor asset the target zones lack); only a build finds those, and `module qualify` types
 # them from its own receipts.
-ADAPT_PATTERNS = ("map-scripts", "dependency-unqualified", "adapter-recipe-single-target-without-recipes", "unknown")
+ADAPT_PATTERNS = ("map-scripts", "map-guard", "dependency-unqualified", "adapter-recipe-single-target-without-recipes", "unknown")
 
 
 def adapt_rows(comp: dict, modules: list[dict], unqualified: list[dict], foundation: str | None, checks=()) -> list[dict]:
@@ -1163,7 +1163,9 @@ def adapt_rows(comp: dict, modules: list[dict], unqualified: list[dict], foundat
     Read-only: nothing is widened, built or written here. Each row names the module, the target
     as ``<foundation>/<map>``, the command that would earn the widening, and the pattern the plan
     could see. The patterns a plan can decide are a script the target map does not carry
-    (``map-scripts``, from a failed check this member owns), a dependency that is itself
+    (``map-scripts``, from a failed check this member owns), a script whose entry guard names
+    another map (``map-guard``: the member is a port, not a widening, because declaring the
+    target would not make a returning ``main()`` run), a dependency that is itself
     undeclared (``dependency-unqualified``), and an adapter whose recipe is a cut for another
     target with no ``recipes`` entry for this one
     (``adapter-recipe-single-target-without-recipes``); everything else is ``unknown``."""
@@ -1174,6 +1176,8 @@ def adapt_rows(comp: dict, modules: list[dict], unqualified: list[dict], foundat
     target = f"{foundation or comp['base']}/{comp['map']}"
     failed_scripts = {c["id"][len("map-scripts:"):]: c for c in checks
                       if c.get("outcome") == "failed" and str(c.get("id", "")).startswith("map-scripts:")}
+    failed_guards = {c["id"][len("map-guard:"):]: c for c in checks
+                     if c.get("outcome") == "failed" and str(c.get("id", "")).startswith("map-guard:")}
     rows = []
     for row in unqualified:
         m = by_id.get(row["id"])
@@ -1181,9 +1185,13 @@ def adapt_rows(comp: dict, modules: list[dict], unqualified: list[dict], foundat
             continue
         pattern, detail = "unknown", None
         owned = sorted(name for name in failed_scripts if name in set(m.get("provides", {}).get("scripts", [])))
+        guarded = sorted(name for name in failed_guards if name in set(m.get("provides", {}).get("scripts", [])))
         if owned:
             pattern = "map-scripts"
             detail = failed_scripts[owned[0]].get("detail")
+        elif guarded:
+            pattern = "map-guard"
+            detail = failed_guards[guarded[0]].get("detail")
         elif m.get("adapter") is not None and m.get("recipe_key") is None \
                 and (m["adapter"]["foundation"], m["adapter"]["map"]) != (foundation, comp["map"]):
             pattern = "adapter-recipe-single-target-without-recipes"
@@ -1674,6 +1682,7 @@ def execute(args, job: Job) -> dict:
         except OSError: continue
         plan["checks"] += offline_checks.external_symbols(target.as_posix(),text,comp["game"])
         plan["checks"] += offline_checks.map_script_externals(target.as_posix(),text,comp["map"],foundation,comp["game"],pack_scripts)
+        plan["checks"] += offline_checks.map_guards(target.as_posix(),text,comp["map"])
         plan["checks"] += offline_checks.box_registrations(target.as_posix(),text,provided_weapons)
     if args.action == "build":
         plan["checks"] += offline_checks.check_scripts(compiled,args,job,comp["game"])
