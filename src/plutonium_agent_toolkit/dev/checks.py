@@ -393,36 +393,42 @@ DEF=re.compile(r'^\s*([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*\{',re.M)
 INCLUDE=re.compile(r'^\s*#include\s+([^;]+);',re.M|re.I)
 KEYWORDS=frozenset(('if','while','for','foreach','switch','return','wait','waittill','waittillmatch','endon','notify','thread','spawn','array','assert'))
 
+def scan_noncode(text):
+    """Yield ``(kind, start, end)`` for every comment and string literal in ``text``, in order.
+    ``kind`` is 'line', 'block' or 'string' and the span covers the whole token, delimiters
+    included. One lexer serves both the masker below and the literal reader further down, so the
+    two can never disagree about where a string ends and a comment begins."""
+    i=0;size=len(text)
+    while i<size:
+        char=text[i]
+        if char=='/' and i+1<size and text[i+1]=='/':
+            stop=text.find(chr(10),i+2);stop=size if stop<0 else stop
+            yield ('line',i,stop);i=stop;continue
+        if char=='/' and i+1<size and text[i+1]=='*':
+            stop=text.find('*/',i+2);stop=size if stop<0 else stop+2
+            yield ('block',i,stop);i=stop;continue
+        if char=='"':
+            stop=i+1
+            while stop<size:
+                if text[stop]==chr(92) and stop+1<size:stop+=2;continue
+                if text[stop]=='"':stop+=1;break
+                stop+=1
+            yield ('string',i,stop);i=stop;continue
+        i+=1
+
 def mask_noncode(text):
     """Blank comments and string literals, keeping every newline, so the line-anchored scans see
     only executable GSC. A quote inside a string is backslash-escaped; `//` or `/*` inside a
     string is text, not a comment."""
-    output=list(text);i=0;size=len(text);state='code'
-    while i<size:
-        char=text[i]
-        if state=='code':
-            if char=='/' and i+1<size and text[i+1]=='/':output[i]=output[i+1]=' ';i+=2;state='line'
-            elif char=='/' and i+1<size and text[i+1]=='*':output[i]=output[i+1]=' ';i+=2;state='block'
-            elif char=='"':output[i]=' ';i+=1;state='string'
-            else:i+=1
-        elif state=='line':
-            if char=='\n':state='code';i+=1
-            else:output[i]=' ';i+=1
-        elif state=='block':
-            if char=='*' and i+1<size and text[i+1]=='/':output[i]=output[i+1]=' ';i+=2;state='code'
-            else:
-                if char!='\n':output[i]=' '
-                i+=1
-        else:
-            if char=='\\' and i+1<size:
-                if text[i]!='\n':output[i]=' '
-                if text[i+1]!='\n':output[i+1]=' '
-                i+=2
-            elif char=='"':output[i]=' ';i+=1;state='code'
-            else:
-                if char!='\n':output[i]=' '
-                i+=1
+    output=list(text)
+    for _,start,stop in scan_noncode(text):
+        for i in range(start,stop):
+            if output[i]!=chr(10):output[i]=' '
     return ''.join(output)
+
+def string_spans(text):
+    """The ``(start, end)`` span of every string literal, quotes included."""
+    return [(start,stop) for kind,start,stop in scan_noncode(text) if kind=='string']
 
 def _script_vm(name):
     """The script VM a target path belongs to; None when the suffix does not name one, which keeps
@@ -473,7 +479,6 @@ CLIENTFIELD_HELPERS={'add_zombie_powerup':{'set':'toplayer','name_arg':{'server'
                                            'id_arg':0,'id_format':'powerup_{}'}}
 
 REGISTER_CALL=re.compile(r'\b(registerclientfield|'+'|'.join(sorted(CLIENTFIELD_HELPERS))+r')\s*\(',re.I)
-STRING_LITERAL=re.compile(r'^\s*"([^"]*)"\s*$')
 IF_HEADER=re.compile(r'\bif\s*\(',re.I)
 # A guard the other VM can mirror without reading state it does not have: an isdefined() test, or
 # a bare `level` field. Anything else is a fact one VM knows and the other does not.
@@ -490,10 +495,10 @@ def _close_paren(text,index):
             if depth==0:return i
     return None
 
-def _call_arguments(masked,text,open_index):
-    """The raw argument slices of the call whose `(` sits at ``open_index``. Structure comes from
-    the masked copy, where a comma or paren inside a string or comment is already blank; the
-    slices are cut from the original text at the same offsets so the literals survive."""
+def _call_arguments(masked,open_index):
+    """The ``(start, end)`` offsets of each argument of the call whose `(` sits at ``open_index``.
+    Structure comes from the masked copy, where a comma or paren inside a string or comment is
+    already blank, so the offsets are safe to read back against the original text."""
     depth=0;start=None;args=[]
     for i in range(open_index,len(masked)):
         char=masked[i]
@@ -503,16 +508,27 @@ def _call_arguments(masked,text,open_index):
         elif char in ')]':
             depth-=1
             if depth==0:
-                tail=text[start:i]
-                if args or tail.strip():args.append(tail)
+                if args or masked[start:i].strip():args.append((start,i))
                 return args
         elif char==',' and depth==1:
-            args.append(text[start:i]);start=i+1
+            args.append((start,i));start=i+1
     return []
 
-def _literal(raw):
-    match=STRING_LITERAL.match(raw or '')
-    return match.group(1) if match else None
+def _literal(masked,text,span,strings):
+    """The value of a string-literal argument, or None. An argument may carry comments around its
+    literal (`registerclientfield(/* set */ "toplayer", ...)`), and the masked copy shows a comment
+    as blanks, so the argument is a literal exactly when one string span lies inside it and
+    everything else in the masked copy is whitespace. A variable, a concatenation of two literals
+    and a localized `&"..."` all read as not-a-literal, which leaves the registration unread rather
+    than guessed at."""
+    if span is None:return None
+    start,end=span
+    inside=[(s,e) for s,e in strings if s>=start and e<=end]
+    if len(inside)!=1:return None
+    s,e=inside[0]
+    if e-s<2 or text[s]!='"' or text[e-1]!='"':return None
+    if masked[start:s].strip() or masked[e:end].strip():return None
+    return text[s+1:e-1]
 
 def _bare(term):
     """A term with its outer parentheses and leading `!` removed, so `!(isdefined(x))` reads as
@@ -545,7 +561,10 @@ def _guards(masked,offset):
     while i<offset:
         char=masked[i]
         if char=='{':
-            stack.append(carried);carried=None;pending=[];i+=1;continue
+            # A brace-less `if` governs the next statement, and that statement may itself be the
+            # braced `if` this `{` opens. Carrying the pendings into the frame keeps the outer
+            # condition on a nested chain and drops them again when the block closes.
+            stack.append(pending+([carried] if carried else []));carried=None;pending=[];i+=1;continue
         if char=='}':
             if stack:stack.pop()
             carried=None;pending=[];i+=1;continue
@@ -565,7 +584,7 @@ def _guards(masked,offset):
             close=_close_paren(masked,i)
             if close is not None and close<offset:i=close+1;continue
         i+=1
-    return [row for row in stack if row]+pending
+    return [row for frame in stack for row in frame]+pending
 
 def _condition_of(masked,offset):
     """The first governing `if` condition that is not a plain isdefined/level guard, or None."""
@@ -579,19 +598,20 @@ def _registrations(name,text):
     string literal is not read: the check refuses what it can prove, not what it guesses."""
     vm=_script_vm(name)
     if vm is None:return []
-    masked=mask_noncode(text);rows=[]
+    masked=mask_noncode(text);strings=string_spans(text);rows=[]
+    def literal(args,index):
+        return _literal(masked,text,args[index],strings) if index is not None and index<len(args) else None
     for match in REGISTER_CALL.finditer(masked):
         call=match.group(1).lower()
-        args=_call_arguments(masked,text,match.end()-1)
+        args=_call_arguments(masked,match.end()-1)
         if not args:continue
         if call=='registerclientfield':
-            field_set=_literal(args[0]);field=_literal(args[1]) if len(args)>1 else None
+            field_set=literal(args,0);field=literal(args,1)
         else:
             helper=CLIENTFIELD_HELPERS[call];field_set=helper['set']
-            index=helper['name_arg'].get(vm)
-            field=_literal(args[index]) if index is not None and index<len(args) else None
+            field=literal(args,helper['name_arg'].get(vm))
             if field is None:
-                ident=_literal(args[helper['id_arg']]) if helper['id_arg']<len(args) else None
+                ident=literal(args,helper['id_arg'])
                 field=helper['id_format'].format(ident) if ident else None
         if not field_set or not field:continue
         rows.append((field_set,field,_condition_of(masked,match.start()),call))
@@ -601,7 +621,7 @@ REMEDY=('ship the other half as a loose scripts/zm script (a .csc for a server r
         '.gsc for a client one) that registers the same name with the same width and version, '
         'unconditionally')
 
-def clientfield_symmetry(sources):
+def clientfield_symmetry(sources,game='t6'):
     """A clientfield the pack registers on one script VM and not on the other is
     `EXE_CLIENT_FIELD_MISMATCH` at map load: the engine compares the server's registration list
     with the client's and refuses the map before a script runs, so no compile, link or readback
@@ -619,6 +639,10 @@ def clientfield_symmetry(sources):
     condition the other VM cannot evaluate adds its own failed `:conditional` row: the tesla
     lesson is that guarding one half on state only that VM holds inverts the mismatch instead of
     curing it."""
+    if game!='t6':
+        return [{'id':'clientfield-symmetry','outcome':'not_counted',
+                 'detail':f'clientfield registrations are a T6 two-VM property; {game} runs one script VM and its '
+                          f'registrations are not judged here'}]
     found={};conditions={}
     for name,text,module in sources:
         for field_set,field,condition,call in _registrations(name,text):

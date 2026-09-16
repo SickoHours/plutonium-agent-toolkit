@@ -935,6 +935,55 @@ class PoolAndDeliveryTests(CompositionFixture):
         rows = [c for c in result["result"]["checks"] if c["id"].startswith("clientfield-symmetry")]
         self.assertEqual([(c["id"], c["outcome"]) for c in rows], [("clientfield-symmetry", "not_counted")])
 
+    def _csc_member(self, mid, body, target="scripts/zm/half.csc"):
+        """A module staging a `.csc` at a shared target, so two of them collide on one file."""
+        d = self.module(mid)
+        (d / "scripts" / f"{mid}.csc").write_text(body)
+        recipe = json.loads((d / "project.json").read_text())
+        recipe["scripts"].append({"source": f"scripts/{mid}.csc", "target": target, "instance": "client"})
+        (d / "project.json").write_text(json.dumps(recipe, indent=2))
+        return d
+
+    SILENT_CSC = "main()\n{\n}\n\ninit()\n{\n    level.nothing = 1;\n}\n"
+
+    def _collision_pack(self, owner, name):
+        self._clientfield_module("meter", self.REGISTER)
+        self._csc_member("winner", self.SILENT_CSC)
+        self._csc_member("loser", self.REGISTER)
+        comp = self.composition(["meter", "winner", "loser"], name=name,
+                                decisions=[{"collision": "scripts/zm/half.csc", "owner": owner, "reason": "the tested copy"}])
+        return invoke(["module", "plan", str(comp), "--output", self.out()])
+
+    def test_a_discarded_collision_loser_cannot_answer_for_the_client_half(self):
+        """Only `winner`'s silent copy is staged, so the client half is not in the package."""
+        code, result = self._collision_pack("winner", "stock_cf_loser_test")
+        self.assertFalse(result["ok"], result)
+        self.assertIn("clientfield-symmetry:halo_cr35_meter", result["details"]["failed"])
+        row = next(c for c in result["details"]["checks"] if c["id"] == "clientfield-symmetry:halo_cr35_meter")
+        self.assertEqual(row["outcome"], "failed")
+        self.assertIn("by no .csc in this pack", row["detail"])
+        self.assertNotIn("loser", row["detail"], "the discarded copy is not evidence of anything")
+
+    def test_the_collision_winner_is_the_copy_that_answers(self):
+        code, result = self._collision_pack("loser", "stock_cf_winner_test")
+        self.assertEqual(code, 0, result)
+        rows = [c for c in result["result"]["checks"] if c["id"].startswith("clientfield-symmetry")]
+        self.assertEqual([(c["id"], c["outcome"]) for c in rows], [("clientfield-symmetry:halo_cr35_meter", "passed")])
+        self.assertIn("module loser", rows[0]["detail"], "the staging owner names the row, not the last claimant")
+
+    def test_an_iw5_pack_has_no_two_vm_clientfield_property_to_judge(self):
+        d = self.module("iw5_thing", game="iw5")
+        (d / "scripts" / "iw5_thing.gsc").write_text(self.REGISTER)
+        recipe = json.loads((d / "project.json").read_text()); recipe["game"] = "iw5"; recipe["mode"] = "mp"
+        (d / "project.json").write_text(json.dumps(recipe))
+        comp = self.composition(["iw5_thing"], name="stock_iw5field_test", base="stock", map_id="mp_alpha", game="iw5")
+        code, row = invoke(["module", "plan", str(comp), "--output", self.out()])
+        checks = (row.get("result") or row.get("details") or {}).get("checks") or []
+        rows = [c for c in checks if c["id"].startswith("clientfield-symmetry")]
+        self.assertEqual([(c["id"], c["outcome"]) for c in rows], [("clientfield-symmetry", "not_counted")], row)
+        self.assertIn("clientfield registrations are a T6 two-VM property", rows[0]["detail"])
+        self.assertNotIn("clientfield-symmetry", (row.get("details") or {}).get("failed") or [])
+
     def _client_module(self, mid, box_list, provides_weapons):
         d = self.module(mid, provides={"weapons": provides_weapons})
         (d / "scripts" / f"{mid}.csc").write_text(

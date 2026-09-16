@@ -1527,6 +1527,37 @@ def service_refusals(modules: list[dict], loaded: dict[str, tuple], undecided: l
     return rows
 
 
+def staged_scripts(compiled, decided, modules) -> list:
+    """The compiled rows whose bytes actually reach the package, by the same two rules
+    ``_build_composition`` stages with, each with the module that ships it: a decided file collision
+    stages only the owner's copy, and
+    where two rows still land on one target the first one wins. A pack-level check must read this
+    list and not ``compiled``, which holds every member's row including the losers: a discarded
+    `.csc` that registers a clientfield would otherwise answer for a client half the package never
+    carries, and the check would pass a composition the engine refuses."""
+    owner_of = {d["collision"]: d["owner"] for d in decided if d["kind"] == "file"}
+    directories = [(m["id"], str(m["directory"])) for m in modules]
+
+    def owner_for(source) -> str | None:
+        for mid, directory in directories:
+            if str(source).startswith(directory):
+                return mid
+        return None
+
+    seen: set[str] = set()
+    rows = []
+    for source, target, instance in compiled:
+        key = target.as_posix().casefold()
+        mid = owner_for(source)
+        if key in owner_of and owner_of[key] != mid:
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append((source, target, instance, mid))
+    return rows
+
+
 def _backends(compiled: list, adapters_present: bool = False, workspace: str | None = None) -> list[dict]:
     checks = []
     for name in (["gsc"] if compiled else []) + ["linker", "unlinker"]:
@@ -1782,6 +1813,10 @@ def execute(args, job: Job) -> dict:
             kind, asset = row.split(",", 1)
             if kind in ("script", "rawfile") and asset.lower().endswith((".gsc", ".csc")):
                 pack_scripts.add(asset)
+    # Only the rows the build stages may answer for the pack: the loser of a file collision is
+    # dropped before the package is written, so its bytes are not a half of anything. A row is
+    # named by its (source, target) pair, which is exactly what tells the winner from the loser.
+    survivors = {(str(s), t.as_posix()): mid for s, t, _, mid in staged_scripts(compiled, decided, rows)}
     registrations=[]
     for source,target,_ in compiled:
         try: text=Path(source).read_text(encoding="utf-8",errors="replace")
@@ -1789,12 +1824,15 @@ def execute(args, job: Job) -> dict:
         plan["checks"] += offline_checks.external_symbols(target.as_posix(),text,comp["game"])
         plan["checks"] += offline_checks.map_script_externals(target.as_posix(),text,comp["map"],foundation,comp["game"],pack_scripts)
         plan["checks"] += offline_checks.box_registrations(target.as_posix(),text,provided_weapons)
-        registrations.append((target.as_posix(),text,owner_of_script.get(target.as_posix())))
+        key=(str(source),target.as_posix())
+        if key in survivors:
+            # The staging owner, not the last member to claim the target: on a collision they differ.
+            registrations.append((target.as_posix(),text,survivors[key] or owner_of_script.get(target.as_posix())))
     # A clientfield registered on one script VM and not the other is EXE_CLIENT_FIELD_MISMATCH at
     # map load, before a script runs. No single script carries the defect and no compile, link or
     # readback can see it: it is the two halves of the pack compared against each other, so it is
-    # read once here, after every compiled script has been named.
-    plan["checks"] += offline_checks.clientfield_symmetry(registrations)
+    # read once here, after every staged script has been named.
+    plan["checks"] += offline_checks.clientfield_symmetry(registrations,comp["game"])
     if args.action == "build":
         plan["checks"] += offline_checks.check_scripts(compiled,args,job,comp["game"])
     else:

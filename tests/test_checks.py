@@ -336,6 +336,66 @@ class ClientfieldSymmetry(unittest.TestCase):
         self.assertEqual(checks.clientfield_symmetry([('scripts/zm/a.gsc',text,'a')])[0]['outcome'],'not_counted')
     def test_a_target_without_a_script_vm_suffix_is_skipped(self):
         self.assertEqual(checks.clientfield_symmetry([('scripts/zm/a.txt',self.direct(),'a')])[0]['outcome'],'not_counted')
+    def test_a_registration_reached_through_nested_braceless_ifs_reports_the_outer_condition(self):
+        """`if (a) if (b) { reg(); }` — the braced inner block must not drop the outer `if`."""
+        nested=('main()\n{\n}\n\ninit()\n{\n    if (weapon_ready())\n        if (isdefined(level.zombie_powerups))\n'
+                '        {\n            registerclientfield("toplayer", "halo_cr35_meter", 1, 2, "int");\n        }\n}\n')
+        rows=checks.clientfield_symmetry([('scripts/zm/meter.gsc',nested,'m')])
+        conditional=[r for r in rows if r['id'].endswith(':conditional')]
+        self.assertEqual(len(conditional),1,rows)
+        self.assertIn('weapon_ready()',conditional[0]['detail'])
+        # Brace-less all the way down reports the outer condition too.
+        flat=('main()\n{\n}\n\ninit()\n{\n    if (weapon_ready())\n        if (isdefined(level.x))\n'
+              '            registerclientfield("toplayer", "halo_cr35_meter", 1, 2, "int");\n}\n')
+        rows=checks.clientfield_symmetry([('scripts/zm/meter.gsc',flat,'m')])
+        self.assertIn('weapon_ready()',[r for r in rows if r['id'].endswith(':conditional')][0]['detail'])
+    def test_a_braceless_if_governs_one_statement_only(self):
+        after=('main()\n{\n}\n\ninit()\n{\n    if (weapon_ready())\n        level.x = 1;\n'
+               '    registerclientfield("toplayer", "halo_cr35_meter", 1, 2, "int");\n}\n')
+        rows=checks.clientfield_symmetry([('scripts/zm/meter.gsc',after,'m')])
+        self.assertEqual([r['id'] for r in rows],['clientfield-symmetry:halo_cr35_meter'])
+        closed=('main()\n{\n}\n\ninit()\n{\n    if (weapon_ready())\n    {\n        level.x = 1;\n    }\n'
+                '    registerclientfield("toplayer", "halo_cr35_meter", 1, 2, "int");\n}\n')
+        rows=checks.clientfield_symmetry([('scripts/zm/meter.gsc',closed,'m')])
+        self.assertEqual([r['id'] for r in rows],['clientfield-symmetry:halo_cr35_meter'])
+
+    def test_comments_inside_the_argument_list_do_not_hide_the_literal(self):
+        text=('main()\n{\n}\n\ninit()\n{\n    registerclientfield(/* set */ "toplayer", /* name */ "meter", 1, 2, "int");\n}\n')
+        rows=checks.clientfield_symmetry([('scripts/zm/meter.gsc',text,'m')])
+        self.assertEqual([(r['id'],r['outcome']) for r in rows],[('clientfield-symmetry:meter','failed')])
+        self.assertIn('set toplayer',rows[0]['detail'])
+        trailing=('main()\n{\n}\n\ninit()\n{\n    registerclientfield("toplayer" /* the set */, "meter" // the name\n'
+                  '        , 1, 2, "int");\n}\n')
+        rows=checks.clientfield_symmetry([('scripts/zm/meter.gsc',trailing,'m')])
+        self.assertEqual([r['id'] for r in rows],['clientfield-symmetry:meter'])
+    def test_a_comment_around_a_powerup_id_is_read_the_same_way(self):
+        text=('main()\n{\n}\n\ninit()\n{\n    '+self.POWERUPS+'::add_zombie_powerup(/* id */ "tesla", "m", &"S", '
+              +self.POWERUPS+'::f, 1, 0, 0);\n}\n')
+        rows=checks.clientfield_symmetry([('scripts/zm/t.gsc',text,'t')])
+        self.assertEqual([r['id'] for r in rows],['clientfield-symmetry:powerup_tesla'])
+    def test_an_argument_that_is_not_one_plain_literal_is_still_not_read(self):
+        for expression in ('level.field_name','"meter" + level.suffix','&"ZOMBIE_METER"','get_name("meter")'):
+            text=f'main()\n{{\n}}\n\ninit()\n{{\n    registerclientfield("toplayer", {expression}, 1, 2, "int");\n}}\n'
+            rows=checks.clientfield_symmetry([('scripts/zm/meter.gsc',text,'m')])
+            self.assertEqual(rows[0]['outcome'],'not_counted',expression)
+
+    def test_a_title_without_two_script_vms_is_not_counted(self):
+        text='main()\n{\n}\n\ninit()\n{\n    registerclientfield("toplayer", "meter", 1, 2, "int");\n}\n'
+        rows=checks.clientfield_symmetry([('scripts/zm/meter.gsc',text,'m')],game='iw5')
+        self.assertEqual([(r['id'],r['outcome']) for r in rows],[('clientfield-symmetry','not_counted')])
+        self.assertIn('clientfield registrations are a T6 two-VM property',rows[0]['detail'])
+        self.assertIn('iw5',rows[0]['detail'])
+        self.assertEqual(checks.clientfield_symmetry([('scripts/zm/meter.gsc',text,'m')])[0]['outcome'],'failed')
+
+    def test_the_masker_and_the_literal_reader_share_one_lexer(self):
+        text='a = "x/*y*/z"; // "not a string"\n/* "also not" */ b = "real";\n'
+        masked=checks.mask_noncode(text)
+        self.assertEqual(len(masked),len(text))
+        values=[text[s+1:e-1] for s,e in checks.string_spans(text)]
+        self.assertEqual(values,['x/*y*/z','real'])
+        for start,end in checks.string_spans(text):
+            self.assertEqual(masked[start:end].strip(),'','a string span is blank in the masked copy')
+
     def test_the_helper_table_is_one_row_per_helper(self):
         row=checks.CLIENTFIELD_HELPERS['add_zombie_powerup']
         self.assertEqual(row['set'],'toplayer')

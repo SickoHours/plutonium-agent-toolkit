@@ -90,6 +90,6 @@ Composition checks front known signatures: `pool:sound-assets` refuses a counted
 uncounted; `pool:actor-client-field-set` remains uncounted without a numeric bound.
 `symbols:<script>` retains compiler-reported unresolved externals/errors before linking;
 compiler success does not establish runtime export availability.
-`clientfield-symmetry` groups every clientfield the pack's compiled `.gsc` and `.csc` scripts
+`clientfield-symmetry` groups every clientfield the pack's staged `.gsc` and `.csc` scripts
 register, directly or through a helper such as `add_zombie_powerup`, by set and name; a name
 registered on exactly one script VM fails before the engine ever compares the two lists.
