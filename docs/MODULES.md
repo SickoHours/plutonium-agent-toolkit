@@ -863,7 +863,6 @@ A recipe asset row may carry `"deliver": false` (rawfile rows only): the file is
 build input but never staged or rooted, for authoring inputs such as model exports and source
 WAVs that another row already compiles. Withheld rows are listed under `withheld` in the plan. The build still stages a withheld file under `raw/` at its target path with no zone line, so the linker finds the export, WAV or accuracy graph the compiled asset names; two members withholding different bytes at one path are a file collision like any other (`decisions`), and the build reports `withheld_staged`.
 
-<<<<<<< HEAD
 `externals:<script>` rows resolve a script's bare calls against `knowledge/stock-exports.json`,
 which holds the export lists and declared parameter counts of the stock utility scripts per script
 VM. The script's `#include` list is the scope: a call to a stock export the script neither includes
@@ -877,7 +876,7 @@ read that way; the client rows carry only proven names, so an absence there says
 builtin witness covers are listed separately as `externals-unknown:<script>`, `not_counted` — they
 cannot refuse a build, but they are where an unresolved external hides and they no longer share a
 row with the verdict.
-=======
+
 `clientfield-symmetry` is one pack-level check, read once per composition after every compiled
 script has been named rather than per script. It groups every clientfield the pack's own staged
 `.gsc` and `.csc` scripts register — a direct `registerclientfield("<set>", "<name>", ...)` or a helper
@@ -903,7 +902,6 @@ outer `if` reached through nested brace-less statements — a second
 `clientfield-symmetry:<name>:conditional` row fails as well: the other VM cannot read that fact, so guarding one half on state only one VM holds
 inverts the mismatch instead of curing it. `CLIENTFIELD_HELPERS` in `dev/checks.py` is the helper
 table; the next helper is one row.
->>>>>>> origin/main
 
 `map-scripts:<script>` rows check every `#include` and qualified `path::call` into a stock
 script namespace (`maps/`, `clientscripts/`, `common_scripts/`, `codescripts/`) against the

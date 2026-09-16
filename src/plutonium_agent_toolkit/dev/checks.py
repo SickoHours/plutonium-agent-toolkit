@@ -394,39 +394,6 @@ DEF=re.compile(r'^\s*([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*\{',re.M)
 INCLUDE=re.compile(r'^\s*#include\s+([^;]+);',re.M|re.I)
 KEYWORDS=frozenset(('if','while','for','foreach','switch','return','wait','waittill','waittillmatch','endon','notify','thread','spawn','array','assert'))
 
-<<<<<<< HEAD
-def mask_noncode(text,string_fill=' '):
-    """Blank comments and string literals, keeping every newline, so the line-anchored scans see
-    only executable GSC. A quote inside a string is backslash-escaped; `//` or `/*` inside a
-    string is text, not a comment. ``string_fill`` is what a string literal collapses to: a space
-    erases it, and `0` keeps it visible as one non-identifier token, which is what argument
-    counting needs — `f("x")` passes one argument, not none."""
-    output=list(text);i=0;size=len(text);state='code'
-    while i<size:
-        char=text[i]
-        if state=='code':
-            if char=='/' and i+1<size and text[i+1]=='/':output[i]=output[i+1]=' ';i+=2;state='line'
-            elif char=='/' and i+1<size and text[i+1]=='*':output[i]=output[i+1]=' ';i+=2;state='block'
-            elif char=='"':output[i]=string_fill;i+=1;state='string'
-            else:i+=1
-        elif state=='line':
-            if char=='\n':state='code';i+=1
-            else:output[i]=' ';i+=1
-        elif state=='block':
-            if char=='*' and i+1<size and text[i+1]=='/':output[i]=output[i+1]=' ';i+=2;state='code'
-            else:
-                if char!='\n':output[i]=' '
-                i+=1
-        else:
-            if char=='\\' and i+1<size:
-                if text[i]!='\n':output[i]=string_fill
-                if text[i+1]!='\n':output[i+1]=string_fill
-                i+=2
-            elif char=='"':output[i]=string_fill;i+=1;state='code'
-            else:
-                if char!='\n':output[i]=string_fill
-                i+=1
-=======
 def scan_noncode(text):
     """Yield ``(kind, start, end)`` for every comment and string literal in ``text``, in order.
     ``kind`` is 'line', 'block' or 'string' and the span covers the whole token, delimiters
@@ -450,15 +417,17 @@ def scan_noncode(text):
             yield ('string',i,stop);i=stop;continue
         i+=1
 
-def mask_noncode(text):
+def mask_noncode(text,string_fill=' '):
     """Blank comments and string literals, keeping every newline, so the line-anchored scans see
     only executable GSC. A quote inside a string is backslash-escaped; `//` or `/*` inside a
-    string is text, not a comment."""
+    string is text, not a comment. ``string_fill`` is what a string literal collapses to: a space
+    erases it, and `0` keeps it visible as one non-identifier token, which is what argument
+    counting needs -- `f("x")` passes one argument, not none."""
     output=list(text)
-    for _,start,stop in scan_noncode(text):
+    for kind,start,stop in scan_noncode(text):
+        fill=string_fill if kind=='string' else ' '
         for i in range(start,stop):
-            if output[i]!=chr(10):output[i]=' '
->>>>>>> origin/main
+            if output[i]!=chr(10):output[i]=fill
     return ''.join(output)
 
 def string_spans(text):
