@@ -3,7 +3,7 @@
 The vocabulary and its validation only, as specified in docs/MODULES.md under "What a module
 promises". The declaration reader accepts and checks the new fields, `module inspect` echoes them
 when the declaration names them, and the service lookup prefers the typed mark over the older tag.
-No refusal is added to the planner here: the plan tests below record that boundary.
+The refusals the planner reads these promises into are `tests/test_promises_planner.py`.
 """
 import json
 import unittest
@@ -198,8 +198,8 @@ class InspectEcho(CompositionFixture):
 
 
 class PlanCarriesThePromises(CompositionFixture):
-    """The planner reads the same declarations and records the new fields. No refusal is added
-    here: two owners of one role still plan, which is the boundary the next change moves."""
+    """The planner reads the same declarations and records the new fields, and refuses two owners
+    of one role; the refusal's own shape is `tests/test_promises_planner.py`."""
 
     def plan(self, comp):
         code, row = invoke(["module", "plan", str(comp), "--output", self.out()])
@@ -235,12 +235,13 @@ class PlanCarriesThePromises(CompositionFixture):
         self.assertEqual(code, 0, row)
         self.assertTrue(row["ok"], row)
 
-    def test_two_owners_of_one_role_still_plan_in_this_release(self):
+    def test_two_owners_of_one_role_refuse(self):
         self.module("alpha", exclusive=["hud"])
         self.module("beta", exclusive=["hud"])
         code, row = self.plan(self.composition(["alpha", "beta"], name="stock_two_hud_test"))
-        self.assertEqual(code, 0, row)
-        self.assertTrue(row["ok"], "the exclusive refusal is the planner's half, not this one's")
+        self.assertEqual(code, 1, row)
+        self.assertEqual([r["kind"] for r in row["details"]["refusals"]], ["exclusive"],
+                         "one row per role, with the members in composition order")
 
 
 class ServiceLookup(CompositionFixture):

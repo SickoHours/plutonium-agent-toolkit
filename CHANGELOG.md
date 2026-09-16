@@ -31,6 +31,62 @@ Every entry states what shipped, on which platform it was verified, and what rem
   `schemas/module-verify-v1.schema.json`. Offline tests on Linux (`tests/test_module_verify.py`); no
   native receipt, and the route status is `implemented`. A row measures bytes and never claims the
   module works.
+- The planner reads two of those promises and refuses on them. `ownership`: a member that stages a
+  path the base or the target map already carries and does not list it under `replaces.files` is
+  refused, one row per member and path, naming the path, the owner (`base` or `map`), the evidence
+  and the shelf module that provides the path when `--workspace` names one. One member is enough,
+  because the overwrite does not wait for a second one. Ownership is read from facts only: the
+  base's own asset listings (the composition's `base_owned`, `--base-listings`, or a foundation's
+  `base_listings`) and the shipped per-map tables (`knowledge/map-scripts.json` and
+  `knowledge/native-weapons.json`) on the target's foundation. `MAP_OWNED_PREFIXES` is unchanged by
+  this release and never refuses a single member: a prefix is a guess about ownership -- a module's
+  *new* animation tree under `animtrees/` matches it and overwrites nothing -- and it stays what it
+  was, the last resort for the two-member `service` refusal. A withheld row (`"deliver": false`)
+  stages under `raw/` with no zone line and is not an overwrite. `exclusive`: two or more members
+  that list the same role are refused with the role, the members in composition order and the two
+  honest `resolutions` a review screen draws, `replace` (keep the newest) and `refuse`; there is no
+  owner decision, because a role is not a file. A `replacement` row's collisions now carry
+  `service` too, so a file two members both declare names the module they should both depend on,
+  and a path an `ownership` row reported is not also reported as a map-owned-table `service` row.
+  Two plan warnings join the existing ones: a declared `replaces.files` path that no listing and no
+  table says the base carries (silent when no listing is on the machine, since then the plan cannot
+  tell), and a refusal that leaned on the older `shared-service` tag asking for `service: true`.
+  Offline unit tests on Linux (`tests/test_promises_planner.py`); no native receipt, and no route
+  status changes.
+- A module can declare who prints its one console line at init. `module.json` takes an optional
+  `registration`: `self` when the module's own server script prints `<id> >> registered` from its
+  registration path, `entry` when the module is entry-managed and the pack's generated entry script
+  prints the line on its behalf, `none` when nothing of the module runs at init. `entry` without an
+  `entry` field is refused at `/registration`; absent keeps meaning what every declaration written
+  before this field means, and changes nothing about how the module builds or plans. `module inspect`
+  echoes `registration` only when the declaration names it. `plan.json` and the `module plan` summary
+  carry `expected_lines`, one `{id, registration, line}` row per member in plan order with `line` set
+  for `self` and `entry` and `null` otherwise, so a load check, a test plan and a campaign tool read
+  one derived list instead of each keeping its own. `module build` emits
+  `println("<id> >> registered");` in the generated entry's `init()` immediately after each `entry`
+  member's register call, in the composition's dependency order. `test plan` adds one agent-verified
+  log check `present: "^<id> >> registered"` to the load phase per `self` or `entry` member, beside
+  the existing error-absence check, and lists a member that promises no line under `not_covered` as
+  "<id> prints no registration line". The phase count and order are unchanged. The
+  `verify-declaration` route that would compare the declaration against the module's source is
+  designed in `docs/MODULES.md` and is not implemented here. Verified by offline unit tests on Linux
+  (`tests/test_registration_line.py`); no native receipt and no route status changes. No line has yet
+  been observed in a real game console through this code: what ships is the declaration field, the
+  derived list, the generated `println` and the test-plan step, all checked offline.
+- New check `map-guard`. A module ported from another map often keeps its donor's entry guard — a
+  top-level `if ( getdvar( "mapname" ) != "zm_transit" ) return;` in `main()` or `init()`, or the
+  `level.script` form, or the `==` form whose `else` returns. It compiles, links and loads on any
+  map; on the map the guard does not name, the entry point returns and the member does nothing,
+  and no compiler, linker or load-time error says so. `module plan` and `module build` now read
+  every compiled `.gsc`/`.csc` for that guard and refuse when it names a map other than the
+  composition's (`map-guard:<script>`, one row per script). One condition may name several maps
+  (`!= "a" && != "b"`, or the `==`/`||` dual) and fails only when the target is in none of them,
+  listing every map named. A guard naming the target map passes. The reading is narrow, because a
+  failed row refuses: only a conditional that is the entry point's first real statement (prints,
+  waits and assignments may precede it) and whose branch returns unconditionally is a guard;
+  anything else, including a source with no guard at all, is `not_counted`. `adapt` gains the matching `map-guard` pattern: a
+  member whose guard names another map is a port, not a widening, because declaring the target
+  would not make a returning `main()` run. Offline verified on Linux; no game was loaded.
 - A module can declare what it *promises*, and the declaration reader checks it. `replaces.files`
   is widened from GSC/CSC scripts to any relative zone path the base or the map already carries (a
   table, a visionset, a `weapons/<name>` file), still lowercase, forward slashes, deduplicated and
@@ -48,8 +104,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
   `module inspect` echoes `exclusive`, `service` and `dependency_kinds` only when the declaration
   names them, `plan.json` records all three per member, and the shelf lookup that names "the module
   to depend on instead" now prefers a declared `service: true` over the older `shared-service` tag,
-  which is read as the same mark for one more release. This change adds no planner refusal: two
-  members owning one role still plan. Offline unit tests on Linux
+  which is read as the same mark for one more release. That change added no planner refusal; the
+  entry above adds them. Offline unit tests on Linux
   (`tests/test_promises_vocabulary.py`); no native receipt, and no route status changes.
 - `module qualify` now plans its synthesized composition with the base's asset listings, read from
   the foundation record's `base_listings` and from the directory the link loads sit in when it holds
