@@ -240,6 +240,32 @@ Composition pool/compiler checks are offline. Tests cover over-budget refusal, u
 missing projectile unions and compiler-reported unresolved symbols. Successful dry-run compilation
 is not a new external-resolution qualification. No runtime pool occupancy is inferred.
 
+`clientfield-symmetry` is offline and registers no new route: it is one pack-level check row on
+`module plan` and `module build`, whose status is unchanged. It reads the pack's own compiled
+`.gsc` and `.csc` sources for `registerclientfield("<set>", "<name>", ...)` and for the helpers in
+`CLIENTFIELD_HELPERS` (today `add_zombie_powerup`, which registers `powerup_<id>` in set
+`toplayer` on whichever VM calls it), groups them by `(set, name)`, and refuses a name registered
+on exactly one script VM. It reads only the scripts the build stages, by the same rules
+`_build_composition` stages with (`staged_scripts`), so a member that loses a file collision
+answers for nothing and the pack's generated entry script answers like any other compiled row; and it is `not_counted` for any title but T6, the only one of the two with
+two script VMs. Tests (`tests/test_checks.py`, `tests/test_compositions.py`, 32 tests) cover a server-only and a client-only direct registration refused with the field, set, VM, script,
+module and remedy; the pair passed, including across two members; the same name in two sets kept
+apart; `add_zombie_powerup` server-only refused as `powerup_<id>`; the ninth server argument
+naming the field when it is a literal; both halves passed with the shipped `isdefined` guards
+raising no conditional row; a braced non-trivial condition and a plain `level` guard; the empty
+pack `not_counted`; a commented-out call, a non-literal name and a target with no script-VM suffix
+all unread; a literal reached past comments inside the argument list; an outer condition reported
+through nested brace-less `if` statements; a discarded collision loser unable to answer for the
+client half and the winner's copy answering instead; the staging rules read directly, including a
+generated entry row owned by no member; an `iw5` composition `not_counted`; and a composition plan
+refusing with the row in `details.checks` and `details.failed`.
+What it does **not** establish: that a symmetric pack loads — the stock map's own registrations are
+outside the pack and are not compared here, so an order or width mismatch against them is still
+only visible in the game — or that the two halves register the same width and version, which the
+check does not read. The measurement behind it (two power-up modules whose server-only
+registrations were refused at map load with `EXE_CLIENT_FIELD_MISMATCH`) was made on the authoring
+host and is not checked in as a receipt.
+
 `loose-overrides` is offline too and registers no new route: it is a plan/build check row on
 `module plan` and `module build`, whose status is unchanged. It compares the base's own image
 listing against the file names in the `images/` folder of the configured T6 storage directory and

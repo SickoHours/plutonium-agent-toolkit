@@ -864,6 +864,32 @@ A recipe asset row may carry `"deliver": false` (rawfile rows only): the file is
 build input but never staged or rooted, for authoring inputs such as model exports and source
 WAVs that another row already compiles. Withheld rows are listed under `withheld` in the plan. The build still stages a withheld file under `raw/` at its target path with no zone line, so the linker finds the export, WAV or accuracy graph the compiled asset names; two members withholding different bytes at one path are a file collision like any other (`decisions`), and the build reports `withheld_staged`.
 
+`clientfield-symmetry` is one pack-level check, read once per composition after every compiled
+script has been named rather than per script. It groups every clientfield the pack's own staged
+`.gsc` and `.csc` scripts register — a direct `registerclientfield("<set>", "<name>", ...)` or a helper
+that registers one, such as `maps\mp\zombies\_zm_powerups::add_zombie_powerup("<id>", ...)`,
+which registers `powerup_<id>` in set `toplayer` on whichever VM calls it — by `(set, name)`. A
+name registered on exactly one VM is `failed`, naming the field, the set, the VM, the script and
+the module, because the engine compares the server's registration list with the client's and
+refuses the map with `EXE_CLIENT_FIELD_MISMATCH` at load, before a script runs: no compile, link
+or readback can see it (crash signature `clientfield-registrations-mismatch`). The remedy in the
+row is to ship the other half as a loose `scripts/zm` script — a `.csc` for a server registration,
+a `.gsc` for a client one — that registers the same name with the same width and version,
+unconditionally. A name registered on both VMs is `passed`; a pack that registers nothing on
+either VM is `not_counted`. Registrations the stock map already makes on both VMs are outside the
+pack and are never read here, and a call whose set or name is not a string literal is not read at
+all. Only the scripts the build actually stages are read: where two members collide on one script
+target the decided owner's copy is the package's, and the loser's bytes answer for nothing — a
+discarded `.csc` cannot supply a client half the package will not carry. The pack's generated
+entry script is a compiled row like any other and is read on the same terms. The whole check is T6's:
+an `iw5` composition is one `not_counted` row, because clientfield registrations are a T6 two-VM
+property and IW5 runs one script VM. A registration inside a conditional still counts as a
+registration, and where the condition is not a plain `isdefined`/`level` guard — including an
+outer `if` reached through nested brace-less statements — a second
+`clientfield-symmetry:<name>:conditional` row fails as well: the other VM cannot read that fact, so guarding one half on state only one VM holds
+inverts the mismatch instead of curing it. `CLIENTFIELD_HELPERS` in `dev/checks.py` is the helper
+table; the next helper is one row.
+
 `map-scripts:<script>` rows check every `#include` and qualified `path::call` into a stock
 script namespace (`maps/`, `clientscripts/`, `common_scripts/`, `codescripts/`) against the
 compiled scripts the target map's zones carry on that foundation (`knowledge/map-scripts.json`);
