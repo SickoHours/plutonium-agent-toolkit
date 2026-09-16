@@ -3,7 +3,7 @@ name: pat-build
 description: Build a T6 Zombies or IW5 multiplayer mod with pat and prove it offline. Use when the user wants to compile a script, link a fastfile, build or verify a project recipe, or asks whether a build "works". Ends at a receipt and the applicable preflights, never at a claim about gameplay.
 metadata:
   version: "1.0.0"
-  updated: "2026-09-13"
+  updated: "2026-09-16"
 ---
 
 # pat build
@@ -35,7 +35,12 @@ unfamiliar call.
    failure and so do you.
 4. Preflight. Run each playbook under `docs/playbooks/preflight-*.md` whose class the change
    touched: scripts always; weapon rig, HUD text, audio memory when those assets changed. Proof: each gate is recorded as pass, fail or unknown against the `mod.ff` hash.
-5. Verify when the build will be reused later. `pat project verify <receipt> --inputs --output
+5. Qualify when the module should carry the result. `pat module qualify <module dir> --target
+   <foundation>/<map> --output <new dir> --json` runs plan, build and verify twice
+   (declaration-blind, then against the widened declaration) as one job and, only when every step
+   succeeds, writes the declaration widening, the `docs/TEST.md` section and the `built-alone`
+   ledger row from its own receipts. A refusal writes nothing to the module.
+6. Verify when the build will be reused later. `pat project verify <receipt> --inputs --output
    <new dir> --json`. Proof: `result.outputs.verified` is `true` and, with `--inputs`,
    `result.inputs.verified` is `true`.
 

@@ -1709,7 +1709,13 @@ def execute(args, job: Job) -> dict:
                "footprint": plan["footprint"], "withheld": len(withheld)}
     summary["checks"] = plan["checks"]
     summary["placements"] = plan["placements"]
-    failed=[c for c in plan["checks"] if c["outcome"]=="failed"]
+    # A caller may name checks it records instead of refusing on. The rows keep outcome `failed`
+    # in the plan; only the late refusal skips them. `module qualify` is the one caller that does
+    # this, for a check about machine state rather than about the package (dev/qualify.py);
+    # `module plan` and `module build` invoked directly name none and refuse on every failed row.
+    report_only=tuple(getattr(args,"report_only_checks",()) or ())
+    failed=[c for c in plan["checks"] if c["outcome"]=="failed"
+            and not any(c["id"]==name or str(c["id"]).startswith(name+":") for name in report_only)]
     if failed:
         contributors=sorted({c["id"] for row in failed for c in row.get("contributors",[]) if c["id"] in by_id})
         late_refusals.append(_refusal("checks","Offline checks failed: "+"; ".join(f'{c["id"]}: {c["detail"]}' for c in failed)[:1200],

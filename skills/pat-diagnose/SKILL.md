@@ -3,7 +3,7 @@ name: pat-diagnose
 description: Diagnose a T6 Zombies mod that returned to the menu, closed the game, or showed an error dialog. Use when the user says "crashed", "it broke", "back to menu", or reports a load failure. Builds a red loop before any theory; ends by adding the gate that would have caught it.
 metadata:
   version: "1.0.0"
-  updated: "2026-09-13"
+  updated: "2026-09-16"
   source:
     repository: https://github.com/mattpocock/skills
     commit: 3cca18b368ae95cdbdebbff572ccafa662551015
@@ -41,6 +41,11 @@ saved slice. Steps: `docs/playbooks/diagnose-a-crash.md`.
 
 ## Hard guardrails
 
+- A rendering fault is not in this loop. A wrong texture, a missing camo or a repainted
+  Pack-a-Punch skin writes no console line at all, so no log slice and no readback can clear the
+  base: it needs a control load of the bare foundation on the same map, and Plutonium's global
+  `storage/t6/images` can repaint a stock image for that bare load too
+  (`docs/playbooks/compose-a-pack.md`, `docs/MODULES.md`). Never blame a pack on this evidence.
 - Never replay a `delivery_uncertain` game command; read fresh state.
 - Never focus, minimise, kill or send keystrokes to the game as a workaround; report instead.
 - A core that cannot be symbolised has unresolved frames; say so, never fill them in.
