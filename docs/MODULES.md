@@ -127,6 +127,7 @@ adapter recipe is named under `recipe` and told apart by its own shape.
 | `conflicts` | no | Ids of modules this one must never be composed with. Both present is refused |
 | `exclusive` | no | Role words from a fixed list (`hud`, `box`, `loadscreen`, `boss`, `perk-machines`, `perk-art`) this module owns outright; two members owning one role is a refusal of kind `exclusive` (below) |
 | `service` | no | `true` when the module exists to own shared things (a map table, a sound bank, a role) so others depend on it and ship no copy; the planner names it in `ownership`, `replacement` and `service` refusals. Must provide something shareable and no weapon |
+| `registration` | no | Who prints the module's one console line `<id> >> registered` at init: `self` (its own script), `entry` (the generated entry script, for an entry-managed module), or `none`. The plan derives `expected_lines` from it and `test plan` checks each line in the load phase ("The registration line", below) |
 | `provides` | no | What the module registers, by kind: `weapons`, `perks`, `gobblegums`, `powerups`, `equipment`, `localize`, `soundbanks`, `scripts`, `models`, `effects`, `rawfiles`, `aliases` (the sound alias names a bank module owns), each a list of up to 4096 names. Two modules providing the same name is a decision (below); a `rawfiles` name is a file target and is listed once, as the file collision. A seed's manifest fills this in; for the kinds the manifest derives (`weapons`, `localize`, `soundbanks`, `rawfiles`, `models`, `effects`) a declaration may narrow the manifest's list and never add to it, even when the manifest lists none of that kind; the other kinds are the declaration's |
 | `resource_contract` | no | Whole numbers the module adds to the engine's budgets: `threads`, `entities`, `hud`, `network_fields`. Missing fields count as 0. Summed across the composition and checked against the composition's `budget` |
 | `menu_route` | no | How a person reaches the feature in game, at most 200 characters; carried into the plan for the handoff |
@@ -944,8 +945,9 @@ map, or moves a byte in a package.
 | `exclusive` | list of role words | "Only one member of a pack can own this role, and I do" | Partially: a footprint per role (the calls, hooks or assets that role always touches); never that the module is the *right* owner |
 | `service` | `true` | "I exist to own shared things; depend on me and ship no copy" | Partially: the module provides at least one shareable thing and registers no weapon of its own |
 | `dependencies[]` entry as an object | `{id, kind, why?}` | "I need this module *because* I call it / name it / use what it owns / the engine needs it" | `call`, `name` and `service` fully; `runtime` is declaration-only and must say why |
+| `registration` | `self`, `entry` or `none` | "My registration prints `<id> >> registered` to the console" (or the pack's entry prints it for me, or I print nothing) | The literal in source for `self`; the build's own output for `entry`; whether the line reached the console is the load's evidence, never the checker's |
 
-Four fields, one of them a widening of an existing one. Nothing else was needed for the behaviours
+Five fields, one of them a widening of an existing one. Nothing else was needed for the behaviours
 the audit measured, and nothing else is designed here: placement, parameter consumers, versioning
 and runtime conflict detection stay where `docs/MODULES.md` already puts them.
 
@@ -1112,6 +1114,80 @@ bank the second bin was mostly one sound bank depended on by every GobbleGum, wh
 edge and always was; only the third bin is a question for the author. The planner treats every
 kind alike for ordering and presence; the kind changes what can be checked, never what is built.
 
+### The registration line: one console line per module
+
+A load is the last honest test and the console is its record. Today the only line a script is
+guaranteed to leave is the engine's `GSC Executed "<path>::main()"`, and for a member whose
+entry lives in the pack's generated entry script even that line names the pack, not the member.
+Measured on one load campaign: two groups of twelve and eleven modules printed nothing at init, so
+every game-tested row for them rests on "the entry script ran and no error named the module". A
+script that returned early behind a map guard, or never reached its registration, reads the same
+as one that worked.
+
+The fix is one line per module in a shape nothing has to be hand-written to match:
+
+```
+<id> >> registered
+```
+
+The id is the declaration's own `id`, lowercase with underscores, followed by a single space,
+`>>`, a space and the word `registered`. Anything after that on the same line is the module's
+own (a version, a mode, a count); a match is by prefix, and ids contain no spaces, so a prefix
+match is unambiguous across a pack. It is emitted with `println`, which T6 writes to the Zombies
+console log unchanged, and it is emitted once, from the function that performs the module's
+registration, after that registration has run: the line means "my registration ran", not "my
+file loaded".
+
+**The declaration says who emits it.** `registration` is optional and takes one of three words:
+
+| `registration` | Meaning | Who writes the line |
+| --- | --- | --- |
+| `self` | the module's own server script prints the line from its registration path | the module's source |
+| `entry` | the module is entry-managed (it declares `entry`) and the pack's generated entry script prints the line on its behalf, right after calling the module's `entry.register` function | `module build`, in the generated entry; no source edit |
+| `none` | the module has no server script that runs at init (an asset-only service, a bank, a client-only script) and emits nothing; the pack must witness it another way | nobody |
+
+`entry` on a module without `entry` is a declaration error at inspect time. Absent means the
+declaration does not say, which is what every existing declaration means today, and changes
+nothing about how the module builds or plans.
+
+**What the plan derives.** `plan.json` carries `expected_lines`: one row per member,
+`{id, registration, line}`, with `line` the exact prefix above for `self` and `entry` and `null`
+for `none` or absent. The row is derived from the declaration and nothing else, so a load check,
+a test plan and a campaign tool all read one list and none of them keeps its own. `pat test plan`
+adds one step per `self` or `entry` member to the load phase, an agent-verified log check
+`present: "^<id> >> registered"` (the id's underscores are literal; nothing in an id is a regex
+metacharacter), beside the existing error-absence check. A member declared `none` or absent gets
+no step and is listed under `not_covered` as "prints no registration line", so the plan says
+where its coverage is thin instead of pretending.
+
+**What the build emits.** For every `entry` member the generated entry script's `init()` calls
+the member's register function and then `println("<id> >> registered");`. The order is the
+composition's dependency order, as the calls already are. A `self` member's line is in its own
+source and the build changes nothing about it.
+
+**What a checker can see.** `verify-declaration` scans the module's server scripts, comments and
+strings masked as for `replaceFunc`, for a `println` whose literal begins with the exact prefix:
+
+| Declared | Found in source | Row |
+| --- | --- | --- |
+| `self` | yes | `agrees` (with `partial`: presence proves the literal exists, not that the path that prints it runs; the console proves that) |
+| `self` | no | `declared_not_observed`; the fix is a source edit, and the row says so |
+| `entry` | either | `agrees` when the declaration has `entry`; the line is the build's, so source is not consulted |
+| `none` | yes | `observed_not_declared`: the module prints the line and says it does not |
+| `none` | no | `agrees` |
+| absent | yes | `observed_not_declared`; `--propose` fills `registration: "self"` |
+| absent | no | `not_counted`, reason "the declaration does not say and the script prints no registration line"; `--propose` fills `"entry"` when the module declares `entry`, and otherwise names `self` as the edit an author would make |
+
+A line whose token is the module's id in another spelling (upper case, hyphens, a prefix word)
+is reported under `observed` so an author sees what is there, and does not match: the shape is
+fixed so that a matcher never guesses.
+
+**What this is not.** It is not a test contract step an author writes per module (the contract's
+`log` checks stay for the module's own behaviour), not a claim that the module works (it says the
+registration function ran, nothing after it), and not a replacement for the error scan (a line
+followed by a script error is still a failure). It adds one rawfile to nothing: the line lives in
+scripts that already exist.
+
 ### What a checker can verify, kind by kind
 
 `pat module verify-declaration <module dir> [--workspace <root>] [--base-listings <dir>]
@@ -1139,6 +1215,7 @@ method, in words) and an `outcome`: `agrees`, `declared_not_observed`, `observed
 | `dependencies` | per kind, as in the table above | `call`, `name`, `service` full; `runtime` declaration-only |
 | `exclusive` | the role footprint | `partial` |
 | `service` | shareable provides present, no weapon provided | full for the rule; the *intent* is declaration-only |
+| `registration` | a `println` literal beginning `<id> >> registered` in a server script (`self`); the `entry` field (`entry`) | `partial` for `self` (the literal, not the path); full for `entry` and `none` |
 | `resource_contract.hud` | count of HUD-element constructors in source, as a floor | `partial`: a floor, never the total |
 | `conflicts` | both ends declaring the same `exclusive` role | reported as `redundant` when a role already covers the pair; otherwise `not_counted` |
 | `menu_route`, `tags`, `placements`, `parameters`, `bases`, `maps` | nothing in this route | `not_counted`, with the reason (a menu tree, a location table, a receipt) |
@@ -1201,7 +1278,8 @@ An entry-managed module exposes its declared replace/register functions and defi
 script is `zz_<composition>_entry` under `titles.script_target` for the composition's game:
 `scripts/zm/zz_<composition>_entry.gsc` on T6, and the flat `scripts/zz_<composition>_entry.gsc`
 namespace on IW5. Its `main` calls replacements and its `init` calls registrations, both in
-composition order.
+composition order; after each registration whose module declares `registration: "entry"` it prints
+that module's `<id> >> registered` line ("The registration line", above).
 
 The target is reserved case-insensitively against every recipe script, loose asset target and seed
 rawfile before anything is staged, so a source that already maps that path refuses instead of
