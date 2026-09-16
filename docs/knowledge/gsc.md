@@ -18,22 +18,16 @@ A module script is delivered **loose** as a compiled file under the profile fold
 `mods/<profile>/scripts/zm/<name>.gsc`; the engine logs `Script source "scripts/zm/<name>.gsc"
 loaded successfully from raw` and calls its `main()` and `init()`. The same script packed only as
 a `rawfile` inside `mod.ff` is **not** executed on stock Black Ops II (observed 2026-09-13: eight
-packaged scripts, none executed, no registration prints; the loose copies ran). `module build`
-therefore writes every compiled script under `packages/scripts/` beside `mod.ff` as well as into
-the zone. `game install-mod` copies only `mod.ff` (and optional soundbanks), never
-`packages/scripts/`, so a full install takes a manual second step: after
-`pat game install-mod <build>/packages/mod.ff <profile>`, copy the build's `packages/scripts/`
-directory **contents** into the profile's `scripts/` directory, so `packages/scripts/zm/<name>.gsc`
-lands at `mods/<profile>/scripts/zm/<name>.gsc`. Copy the contents, never the directory itself
-into a path that already ends in `scripts/` or `zm/`, or the loose scripts land under
-`mods/<profile>/scripts/scripts/` or `.../zm/zm/` and the engine never sees them. A map-specific
-script sits under `maps/mp/zm_<map>.gsc` in the map's own fastfile. A loose
-global script under the storage folder's `raw/scripts/zm/` loads for every mod, which is how a
-shared developer menu is delivered; use that only for tooling shared across mods.
+packaged scripts, none executed; the loose copies ran), so `module build` writes every compiled
+script under `packages/scripts/` beside `mod.ff`. `game install-mod` copies only `mod.ff` and
+optional soundbanks: copy the build's `packages/scripts/` directory **contents** into the profile's
+`scripts/` directory yourself, so `packages/scripts/zm/<name>.gsc` lands at
+`mods/<profile>/scripts/zm/<name>.gsc` and never under `scripts/scripts/` or `zm/zm/`. A
+map-specific script sits under `maps/mp/zm_<map>.gsc` in the map's own fastfile; a loose global
+script under the storage folder's `raw/scripts/zm/` loads for every mod (shared tooling only).
 
-`examples/hello-zm` is the smallest working mod: one server script whose `main()` starts a
-thread that waits for players to connect and spawn. Its recipe maps `scripts/hello.gsc` to the
-target `scripts/zm/hello_zm.gsc`.
+`examples/hello-zm` is the smallest working mod: one server script whose `main()` starts a thread
+waiting for players to spawn; its recipe maps `scripts/hello.gsc` to `scripts/zm/hello_zm.gsc`.
 
 ## The client VM's two passes
 
@@ -41,10 +35,8 @@ The client VM calls both roots of every loose mod `.csc`, in **two passes over a
 script's `main()` first, then every script's `init()`. A passing load prints them in that order:
 
 ```
-CSC Executed "scripts/zm/halo_cr35_powerup_tesla::main()"
-CSC Executed "scripts/zm/zzz_zm_sumpffog::main()"
-CSC Executed "scripts/zm/halo_cr35_powerup_tesla::init()"
-CSC Executed "scripts/zm/zzz_zm_sumpffog::init()"
+CSC Executed "scripts/zm/a::main()"    CSC Executed "scripts/zm/b::main()"
+CSC Executed "scripts/zm/a::init()"    CSC Executed "scripts/zm/b::init()"
 ```
 
 So `main()` runs before the client's own `_zm` rows exist and before any other script's `init()`.
@@ -68,9 +60,8 @@ line for `"soundNotify" in "clientscripts/mp/_dogs"`. The line is a reliable *ma
 instance for the file's side. `--includes <dir>` adds a directory searched for `#include` files
 and hashes it into the receipt. Decompiling a compiled script uses the same tool in `decomp` mode.
 
-gsc-tool compiles a script that only uses engine builtins with no include files at all. Once a
-script calls helpers from the game's own scripts, it needs the includes those helpers come from,
-and the *engine* must have those scripts loaded too.
+gsc-tool compiles a script that only uses engine builtins with no include files at all. A script
+calling the game's own helpers needs their includes, and the *engine* must have those scripts loaded.
 
 ## Traps that compile and fail at load
 
@@ -82,10 +73,23 @@ and the *engine* must have those scripts loaded too.
   `externals:` check rows from `knowledge/stock-exports.json`. The include must be on the script's
   own VM: a `.csc` resolves against `clientscripts\mp\_utility` and
   `clientscripts\mp\zombies\_zm_utility`, and no stock client script includes a `maps\...` path.
-- **Unresolved external.** A helper that compiled because a name matched, but the engine could not
-  find it in a loaded script. `setclientfield` with two parameters lives in `maps/mp/_utility`;
-  include it. Resolve every unqualified call against the includes and exports the engine will
-  have, including code paths you think are unreachable.
+  **The link signature is the name and the argument count together, and the script's includes are
+  the whole scope.** A bare call resolves only against the script's own functions and the scripts it
+  `#include`s; nothing else the engine has loaded is reachable without a qualified path. Where two
+  stock scripts export one name at different arities the scope decides which you get, so the arities
+  are never merged: `get_players` takes no argument in `maps\mp\_utility` and one in
+  `common_scripts\utility`, and on 2026-09-15 `qol_instant_nuke` (both included) linked while
+  `qol_max_ammo` (only `maps\mp\_utility`) died at `Unresolved external "get_players" with 1
+  parameters`. Passing *fewer* arguments than the declaration lists is ordinary and safe — GSC binds
+  undefined to the rest, and 564 bare calls in the `patch_zm` decompile do it — so only an excess
+  fails. Qualifying a call to the wrong stock script is the same refusal: `register_tactical_grenade_for_level`
+  lives in `maps\mp\zombies\_zm_utility`, so `maps\mp\zombies\_zm_weapons::register_tactical_grenade_for_level`
+  does not link. A bare name no export row owns and no builtin witness covers is reported separately as
+  `externals-unknown:<script>`, `not_counted`: the toolkit cannot refuse on ignorance, but that name
+  is where an unresolved external hides, as `register_zombie_damage_callback` did for
+  `blast_furnace` before `maps\mp\zombies\_zm_spawner` was in the table.
+  (`setclientfield` with two parameters lives in `maps/mp/_utility`.) Resolve every unqualified call
+  against the includes the engine will have, including code paths you think are unreachable.
 - **A donor method that is not a T6 builtin.** A call that exists in Black Ops 1 or 3 may not be
   exposed by this client (`setanimknob` with four parameters was one). Compilation says nothing
   about builtin availability. Check a native T6 call site before relying on a method:
@@ -106,13 +110,11 @@ and the *engine* must have those scripts loaded too.
 
 - Every thread, helper entity, HUD element, effect loop and cached collection has an owner and a
   cleanup path for completion, cancellation, replacement, down, death, respawn, disconnect and
-  round or map transition.
-- Set per-player and global limits before the first test. Reserve before allocating. Overflow
-  falls back to a documented bounded behaviour, never to an unbounded queue of waiting threads.
-- Do work per tick that is bounded by design: no whole-collection sorts, string rebuilds, traces
-  or `setmodel` every frame unless a measurement justifies it.
-- A stale worker from a previous life must not erase a newer worker's fields; carry a generation
-  or life identity.
+  round or map transition. A stale worker from a previous life must not erase a newer worker's
+  fields; carry a generation or life identity.
+- Set per-player and global limits before the first test; overflow falls back to a documented
+  bounded behaviour, never an unbounded queue. Per-tick work is bounded by design: no
+  whole-collection sorts, string rebuilds, traces or `setmodel` every frame without a measurement.
 
 ## A ported script still asks which map it is on
 
@@ -134,8 +136,8 @@ to find.
 ## Iterating
 
 `map_restart` reruns the loaded scripts and is the fast loop for script logic. It does not reread
-the fastfile: after a rebuild, reinstall and `reload-mod`. A compile plus a clean startup is
-cheaper than a gameplay pass and must be reported as the cheaper thing.
+the fastfile: after a rebuild, reinstall and `reload-mod`. A compile plus a clean startup is not a
+gameplay pass and must be reported as the cheaper thing.
 
 ## Declared function replacements
 
