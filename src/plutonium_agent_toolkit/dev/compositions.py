@@ -2023,19 +2023,15 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
                "menu_route": m["menu_route"], "source": m["source"], "reference": m.get("reference"),
                "origin": m["origin"], "donor": m["donor"], "replaces":m["replaces"], "entry":m["entry"], "placements": m.get("placements"),
                "parameters": m.get("parameters_effective", {})}
-<<<<<<< HEAD
         reference = m.get("reference")
         if reference and reference.get("commit"):
             key = (str(m["directory"]), reference["commit"])
             if key not in staleness:
                 staleness[key] = pin_staleness(m["directory"], reference["commit"])
             row["stale"] = staleness[key]
-        if m["recipe"] is not None:
-=======
         if row["payload"] == "stock":
             pass                                # No payload, so no payload hash: the base carries it.
         elif m["recipe"] is not None:
->>>>>>> origin/main
             row["recipe_sha256"] = job.inputs[str(m["recipe"].resolve())]
         elif m.get("adapter") is not None:
             a = m["adapter"]
