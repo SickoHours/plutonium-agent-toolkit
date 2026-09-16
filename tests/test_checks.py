@@ -58,6 +58,12 @@ class PreLinkScriptChecks(unittest.TestCase):
         self.assertEqual(len(calls),1)
 class ExternalSymbols(unittest.TestCase):
     """Unqualified calls to stock exports without the matching #include link-fail in the engine."""
+    def row(self,rows,prefix):
+        """The one row with this id prefix. The check emits an `externals:` verdict and, separately,
+        an `externals-unknown:` listing of names no table owns, so a caller must say which it means."""
+        found=[r for r in rows if r['id'].startswith(prefix)]
+        self.assertEqual(len(found),1,[r['id'] for r in rows])
+        return found[0]
     def test_unqualified_stock_call_without_include_fails(self):
         src='init()\n{\n    players = get_players();\n    x = self get_player_equipment();\n}\n'
         rows=checks.external_symbols('scripts/zm/a.gsc',src)
@@ -72,9 +78,16 @@ class ExternalSymbols(unittest.TestCase):
     def test_comments_are_not_calls(self):
         src='// get_players( is only a comment\n/* get_player_equipment( */\ninit()\n{\n    helper();\n}\nhelper()\n{\n}\n'
         self.assertEqual(checks.external_symbols('scripts/zm/a.gsc',src)[0]['outcome'],'passed')
-    def test_unknown_names_stay_not_counted(self):
+    def test_unknown_names_stay_not_counted_in_their_own_row(self):
+        """Still not_counted — ignorance cannot refuse a build — but under `externals-unknown:`, so a
+        name that is really an unresolved external is not read beside two unwitnessed builtins."""
         src='init()\n{\n    totally_unknown_thing();\n}\n'
-        self.assertEqual(checks.external_symbols('scripts/zm/a.gsc',src)[0]['outcome'],'not_counted')
+        rows=checks.external_symbols('scripts/zm/a.gsc',src)
+        unknown=self.row(rows,'externals-unknown:')
+        self.assertEqual(unknown['outcome'],'not_counted')
+        self.assertIn('totally_unknown_thing',unknown['detail'])
+        self.assertIn('no table names an owner',unknown['detail'])
+        self.assertNotIn('totally_unknown_thing',self.row(rows,'externals:')['detail'])
     def test_a_string_literal_is_not_an_unqualified_call(self):
         src='init()\n{\n    iprintln("get_players(");\n}\n'
         self.assertEqual(checks.external_symbols('scripts/zm/a.gsc',src)[0]['outcome'],'passed')
@@ -92,11 +105,14 @@ class ExternalSymbols(unittest.TestCase):
         src='helper()\n{\n}\ninit()\n{\n    helper();\n}\n'
         self.assertEqual(checks.external_symbols('scripts/zm/a.gsc',src)[0]['outcome'],'passed')
     def test_server_only_builtin_in_a_client_script_never_passes(self):
+        """The `.csc` still gets no clean bill for a call witnessed only on the server VM: the name
+        is carried out on the unknown row, never silently dropped from the verdict."""
         src='init()\n{\n    precachemodel("model");\n}\n'
         rows=checks.external_symbols('scripts/zm/effects.csc',src)
-        self.assertNotEqual(rows[0]['outcome'],'passed')
-        self.assertEqual(rows[0]['outcome'],'not_counted')
-        self.assertIn('precachemodel',rows[0]['detail'])
+        unknown=self.row(rows,'externals-unknown:')
+        self.assertEqual(unknown['outcome'],'not_counted')
+        self.assertIn('precachemodel',unknown['detail'])
+        self.assertNotIn('precachemodel',self.row(rows,'externals:')['detail'])
     def test_server_only_builtin_in_a_server_script_resolves(self):
         src='init()\n{\n    precachemodel("model");\n}\n'
         self.assertEqual(checks.external_symbols('scripts/zm/hello.gsc',src)[0]['outcome'],'passed')
@@ -106,8 +122,11 @@ class ExternalSymbols(unittest.TestCase):
         self.assertEqual(rows[0]['outcome'],'not_counted')
     def test_builtin_spelling_is_case_insensitive(self):
         src='init()\n{\n    PrecacheModel("model");\n}\n'
-        self.assertNotEqual(checks.external_symbols('scripts/zm/effects.csc',src)[0]['outcome'],'passed')
-        self.assertEqual(checks.external_symbols('scripts/zm/hello.gsc',src)[0]['outcome'],'passed')
+        client=checks.external_symbols('scripts/zm/effects.csc',src)
+        self.assertIn('precachemodel',self.row(client,'externals-unknown:')['detail'])
+        server=checks.external_symbols('scripts/zm/hello.gsc',src)
+        self.assertEqual(self.row(server,'externals:')['outcome'],'passed')
+        self.assertEqual([r for r in server if r['id'].startswith('externals-unknown:')],[])
     def test_stock_export_spelling_is_case_insensitive(self):
         rows=checks.external_symbols('scripts/zm/a.gsc','Get_Players();\n')
         self.assertEqual(rows[0]['outcome'],'failed')
@@ -124,8 +143,10 @@ class ExternalSymbols(unittest.TestCase):
         so resolving a server export here would demand an include that cannot exist."""
         src='init()\n{\n    e = self get_player_equipment();\n}\n'
         rows=checks.external_symbols('scripts/zm/weapon.csc',src)
-        self.assertEqual(rows[0]['outcome'],'not_counted')
-        self.assertNotIn('maps/mp/zombies/_zm_utility',rows[0]['detail'])
+        self.assertNotEqual(self.row(rows,'externals:')['outcome'],'failed')
+        unknown=self.row(rows,'externals-unknown:')
+        self.assertEqual(unknown['outcome'],'not_counted')
+        self.assertNotIn('maps/mp/zombies/_zm_utility',unknown['detail'])
     def test_a_server_script_is_still_refused_for_the_same_export(self):
         src='init()\n{\n    e = self get_player_equipment();\n}\n'
         rows=checks.external_symbols('scripts/zm/weapon.gsc',src)
@@ -141,6 +162,78 @@ class ExternalSymbols(unittest.TestCase):
         self.assertEqual(rows[0]['outcome'],'failed')
         self.assertIn('clientscripts/mp/_utility',rows[0]['detail'])
         self.assertNotIn('common_scripts/utility',rows[0]['detail'])
+    def test_a_bare_call_no_include_covers_fails_naming_the_owner_that_exports_it(self):
+        """blast_furnace, 2026-09-15: `register_zombie_damage_callback(::ammo_damage)` with no
+        #include at all. The check had no `_zm_spawner` row and said not_counted; the campaign group
+        loaded and died at `COM_ERROR (6) Unresolved external "register_zombie_damage_callback"`."""
+        src='main()\n{\n    register_zombie_damage_callback(::ammo_damage);\n}\nammo_damage()\n{\n}\n'
+        row=self.row(checks.external_symbols('scripts/zm/halo_blast_furnace.gsc',src),'externals:')
+        self.assertEqual(row['outcome'],'failed')
+        self.assertIn('register_zombie_damage_callback',row['detail'])
+        self.assertIn('maps/mp/zombies/_zm_spawner',row['detail'])
+    def test_the_same_bare_call_with_its_include_passes(self):
+        src=('#include maps\\mp\\zombies\\_zm_spawner;\nmain()\n{\n'
+             '    register_zombie_damage_callback(::ammo_damage);\n}\nammo_damage()\n{\n}\n')
+        self.assertEqual(self.row(checks.external_symbols('scripts/zm/a.gsc',src),'externals:')['outcome'],'passed')
+    def test_the_same_call_qualified_needs_no_include(self):
+        src=('main()\n{\n    maps\\mp\\zombies\\_zm_spawner::register_zombie_damage_callback(::ammo_damage);\n'
+             '}\nammo_damage()\n{\n}\n')
+        self.assertEqual(self.row(checks.external_symbols('scripts/zm/a.gsc',src),'externals:')['outcome'],'passed')
+    def test_more_arguments_than_the_scope_takes_fails_naming_the_include_to_add(self):
+        """qol_max_ammo, 2026-09-15: includes only maps/mp/_utility, whose get_players takes no
+        argument. The call passed one and the load died at `Unresolved external "get_players" with 1
+        parameters`; common_scripts/utility exports the one-argument form."""
+        src='#include maps\\mp\\_utility;\nmain()\n{\n    players = get_players( self.team );\n}\n'
+        row=self.row(checks.external_symbols('scripts/zm/qol_max_ammo.gsc',src),'externals:')
+        self.assertEqual(row['outcome'],'failed')
+        self.assertIn('get_players called with 1 argument',row['detail'])
+        self.assertIn('only maps/mp/_utility exports it, with 0',row['detail'])
+        self.assertIn('add #include common_scripts\\utility',row['detail'])
+    def test_the_owner_that_declares_that_arity_being_in_scope_passes(self):
+        """qol_instant_nuke includes both utilities and links: the scope holds a one-argument
+        get_players, so the arities are judged per owner and never merged into one set."""
+        src=('#include common_scripts\\utility;\n#include maps\\mp\\_utility;\n'
+             'main()\n{\n    players = get_players( self.team );\n}\n')
+        self.assertEqual(self.row(checks.external_symbols('scripts/zm/qol_instant_nuke.gsc',src),'externals:')['outcome'],'passed')
+    def test_fewer_arguments_than_declared_is_not_a_fault(self):
+        """GSC passes undefined for an argument a call omits; 564 bare calls in the patch_zm
+        decompile do it, including maps/mp/_busing's two-argument setclientsysstate."""
+        src='#include maps\\mp\\_utility;\nmain()\n{\n    setclientsysstate( "busCmd", 1 );\n}\n'
+        self.assertEqual(self.row(checks.external_symbols('scripts/zm/a.gsc',src),'externals:')['outcome'],'passed')
+    def test_a_qualified_call_with_an_arity_its_owner_lacks_fails(self):
+        src='main()\n{\n    players = maps\\mp\\_utility::get_players( self.team );\n}\n'
+        row=self.row(checks.external_symbols('scripts/zm/a.gsc',src),'externals:')
+        self.assertEqual(row['outcome'],'failed')
+        self.assertIn('maps/mp/_utility::get_players called with 1 argument',row['detail'])
+    def test_a_qualified_call_naming_a_function_its_owner_does_not_export_fails(self):
+        """The linker refuses `owner::name` for an absent name exactly as it refuses a bare miss;
+        passing it would let a typo or a renamed helper through the only check that can see it."""
+        src='main()\n{\n    maps\\mp\\_utility::no_such_helper();\n}\n'
+        row=self.row(checks.external_symbols('scripts/zm/a.gsc',src),'externals:')
+        self.assertEqual(row['outcome'],'failed')
+        self.assertIn('maps/mp/_utility does not export no_such_helper',row['detail'])
+    def test_a_qualified_call_on_the_wrong_owner_names_the_owner_that_does_export_it(self):
+        """gersch, gstrike and matryoshka all qualify register_tactical_grenade_for_level to
+        _zm_weapons; it is declared in _zm_utility, so the linker refuses all three."""
+        src='main()\n{\n    maps\\mp\\zombies\\_zm_weapons::register_tactical_grenade_for_level("x");\n}\n'
+        row=self.row(checks.external_symbols('scripts/zm/a.gsc',src),'externals:')
+        self.assertEqual(row['outcome'],'failed')
+        self.assertIn('maps/mp/zombies/_zm_weapons does not export register_tactical_grenade_for_level',row['detail'])
+        self.assertIn('maps/mp/zombies/_zm_utility does',row['detail'])
+    def test_a_qualified_call_into_a_partial_row_is_not_read_negatively(self):
+        """The client rows carry only the names proven so far, so an absence there is silence, not
+        evidence the client utility lacks the name."""
+        src='main()\n{\n    clientscripts\\mp\\_utility::some_unproven_name();\n}\n'
+        self.assertEqual(self.row(checks.external_symbols('scripts/zm/a.csc',src),'externals:')['outcome'],'passed')
+    def test_a_qualified_call_into_a_path_no_row_owns_is_not_judged(self):
+        """A pack's own script, or any path the table has no row for, is map-scripts' business."""
+        src='main()\n{\n    maps\\mp\\halo\\mine::helper();\n}\n'
+        self.assertEqual(self.row(checks.external_symbols('scripts/zm/a.gsc',src),'externals:')['outcome'],'passed')
+    def test_a_string_literal_argument_is_counted_as_an_argument(self):
+        """The mask blanks string literals; counting arguments on the blanked text would read
+        `get_players("axis")` as passing none and miss the excess."""
+        src='#include maps\\mp\\_utility;\nmain()\n{\n    get_players( "axis" );\n}\n'
+        self.assertEqual(self.row(checks.external_symbols('scripts/zm/a.gsc',src),'externals:')['outcome'],'failed')
     def test_a_vm_with_no_export_rows_is_not_counted_rather_than_failed(self):
         table={'schema':1,'exports':{'common_scripts/utility':{'vm':'server','functions':['add_to_array']}}}
         with patch.object(checks.knowledge,'load',return_value=table):

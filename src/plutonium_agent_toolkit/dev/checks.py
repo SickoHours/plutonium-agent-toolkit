@@ -389,6 +389,7 @@ def script_result(name,text,passed):
             'detail':('; '.join(errors)[:800] or ('gsc check failed' if not passed else 'gsc check passed syntax/compilation; runtime external resolution is not proven'))}
 
 CALL=re.compile(r'(?<![\w\\:.\[])([A-Za-z_][A-Za-z0-9_]*)\s*\(')
+QUALIFIED_CALL=re.compile(r'([A-Za-z_][A-Za-z0-9_\\/]*[\\/][A-Za-z0-9_\\/]+)::([A-Za-z_][A-Za-z0-9_]*)\s*\(')
 DEF=re.compile(r'^\s*([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*\{',re.M)
 INCLUDE=re.compile(r'^\s*#include\s+([^;]+);',re.M|re.I)
 KEYWORDS=frozenset(('if','while','for','foreach','switch','return','wait','waittill','waittillmatch','endon','notify','thread','spawn','array','assert'))
@@ -416,14 +417,17 @@ def scan_noncode(text):
             yield ('string',i,stop);i=stop;continue
         i+=1
 
-def mask_noncode(text):
+def mask_noncode(text,string_fill=' '):
     """Blank comments and string literals, keeping every newline, so the line-anchored scans see
     only executable GSC. A quote inside a string is backslash-escaped; `//` or `/*` inside a
-    string is text, not a comment."""
+    string is text, not a comment. ``string_fill`` is what a string literal collapses to: a space
+    erases it, and `0` keeps it visible as one non-identifier token, which is what argument
+    counting needs -- `f("x")` passes one argument, not none."""
     output=list(text)
-    for _,start,stop in scan_noncode(text):
+    for kind,start,stop in scan_noncode(text):
+        fill=string_fill if kind=='string' else ' '
         for i in range(start,stop):
-            if output[i]!=chr(10):output[i]=' '
+            if output[i]!=chr(10):output[i]=fill
     return ''.join(output)
 
 def string_spans(text):
@@ -444,6 +448,34 @@ def stock_exports(vm):
     `.gsc`; without a VM nothing is resolved."""
     if vm is None:return {}
     return {path:row['functions'] for path,row in knowledge.load('stock-exports.json')['exports'].items() if row.get('vm')==vm}
+
+def stock_arities(vm):
+    """The declared parameter counts beside :func:`stock_exports`, keyed the same way. GSC passes
+    undefined for an argument a call omits, so a declaration accepts every argument count up to its
+    own; only an excess is the `Unresolved external ... with N parameters` the linker reports."""
+    if vm is None:return {}
+    return {path:row.get('arity',{}) for path,row in knowledge.load('stock-exports.json')['exports'].items() if row.get('vm')==vm}
+
+def stock_complete(vm):
+    """The rows on ``vm`` whose export list is the whole script's. Only those can be read
+    negatively: a name a complete row does not list is a name its owner does not export, while the
+    same absence in a partial row is silence."""
+    if vm is None:return set()
+    return {path for path,row in knowledge.load('stock-exports.json')['exports'].items() if row.get('vm')==vm and row.get('complete')}
+
+def call_arguments(text,paren):
+    """The top-level argument count of the call whose `(` sits at ``paren``; None when the
+    parentheses do not close. Nested calls, arrays and commas inside them belong to one argument."""
+    depth=0;count=0;seen=False
+    for index in range(paren,len(text)):
+        char=text[index]
+        if char in '([':depth+=1
+        elif char in ')]':
+            depth-=1
+            if depth==0:return count+1 if seen else 0
+        elif char==',' and depth==1:count+=1
+        elif depth==1 and not char.isspace():seen=True
+    return None
 
 BOX_LIST=re.compile(r'strtok\(\s*"([^"]+)"\s*,\s*" "\s*\)',re.I)
 BOX_CALL=re.compile(r'\baddzombieboxweapon\s*\(',re.I)
@@ -683,40 +715,109 @@ def _owners(rows):
                              for name,module,call in rows}))
 
 def external_symbols(name,text,game='t6'):
-    """Unqualified calls resolved against the stock export rows of this script's own VM: failed when
-    the call needs an #include the script lacks; passed when every known call resolves on this
-    script's VM; not_counted when the title is not T6 (the tables are T6-only), when the export
-    table holds no row for this VM, when a call is neither a local function, a builtin witnessed on
-    this VM, nor a stock export of this VM, or when the target suffix does not name a VM. A builtin
-    witnessed only on the other VM stays not_counted, never passed: the witness table is an absence
-    of evidence, not proof the other VM lacks the call. Resolving across VMs would refuse a correct
-    client script for lacking a server include no stock `.csc` carries."""
+    """Unqualified calls resolved against the stock export rows of this script's own VM. The
+    script's `#include` list is the scope: a bare call resolves only against an export whose owner
+    the script included, and the call's argument count must be one a declaration in that scope
+    takes. A declaration takes every count up to its own parameter count, because GSC passes
+    undefined for an argument a call omits, so the fault is always an excess — 564 stock calls in
+    `patch_zm` pass fewer arguments than the declaration lists. A name two stock scripts export at
+    different arities is judged per owner, never merged: `get_players` is 0 parameters in
+    `maps/mp/_utility` and 1 in `common_scripts/utility`, and a one-argument call resolves only for
+    a script that included the latter (2026-09-15, `qol_instant_nuke` links, `qol_max_ammo` dies at
+    `Unresolved external "get_players" with 1 parameters`). A qualified `owner::name(...)` call is
+    judged against that owner's arities alone, and a qualified call naming a function a complete row
+    does not list fails too: the linker refuses `owner::name` for an absent name exactly as it
+    refuses a bare one.
+
+    `externals:<script>` is failed when a call needs an #include the script lacks or carries more
+    arguments than the scope takes, and passed otherwise. Bare identifiers no export row owns and
+    no builtin witness covers on this VM leave a separate `externals-unknown:<script>` row, still
+    not_counted — ignorance cannot refuse a build — but under its own id so a reader is not left
+    reading an unresolved external beside two unwitnessed builtins. not_counted on `externals:`
+    itself when the title is not T6 (the tables are T6-only) or the export table holds no row for
+    this VM. A builtin witnessed only on the other VM stays unknown, never passed: the witness
+    table is an absence of evidence, not proof the other VM lacks the call. Resolving across VMs
+    would refuse a correct client script for lacking a server include no stock `.csc` carries."""
     if game != 't6':
         return [{'id':'externals:'+name,'outcome':'not_counted',
                  'detail':f'External stock and builtin witness data is T6-only; {game} calls are not judged'}]
-    text=mask_noncode(text)
+    text=mask_noncode(text,string_fill='0')
     vm=_script_vm(name)
     exports=stock_exports(vm)
     if vm is not None and not exports:
         return [{'id':'externals:'+name,'outcome':'not_counted',
                  'detail':f'The stock export table is empty for the {vm} VM, so unqualified calls here are judged against no exports rather than against another VM'}]
-    includes={inc.strip().replace(chr(92),'/').lower() for inc in INCLUDE.findall(text)}
+    arities=stock_arities(vm)
+    includes=[inc.strip().replace(chr(92),'/').lower() for inc in INCLUDE.findall(text)]
     defined={match.lower() for match in DEF.findall(text)}
-    calls={match.lower() for match in CALL.findall(text)}
-    missing=[];unknown=[]
-    for call in sorted(calls-defined-KEYWORDS):
+    calls={}
+    for match in CALL.finditer(text):
+        count=call_arguments(text,match.end()-1)
+        if count is not None:calls.setdefault(match.group(1).lower(),set()).add(count)
+    missing=[];unknown=[];overrun=[]
+    for call in sorted(set(calls)-defined-KEYWORDS):
         owners=[path for path,names in exports.items() if call in names]
         if owners:
-            if not any(o in includes for o in owners):missing.append(f'{call} ({" or ".join(owners)})')
+            covered=[owner for owner in owners if owner in includes]
+            if not covered:missing.append(f'{call} ({" or ".join(owners)})')
+            else:overrun+=arity_faults(call,calls[call],covered,owners,arities)
             continue
         if vm is None:unknown.append(call);continue
         witness=knowledge.builtin(call,vm)
         if witness.get('verdict')=='builtin':continue
         if witness.get('also_on'):unknown.append(f'{call} (witnessed on {", ".join(witness["also_on"])} only)')
         else:unknown.append(call)
-    if missing:return [{'id':'externals:'+name,'outcome':'failed','detail':'Unqualified stock calls without #include: '+'; '.join(missing)[:800]}]
-    if unknown:return [{'id':'externals:'+name,'outcome':'not_counted','detail':'No witness on this script VM (absence of evidence, not evidence of absence): '+', '.join(unknown)[:400]}]
-    return [{'id':'externals:'+name,'outcome':'passed','detail':'Every unqualified call is local, a witnessed builtin, or covered by an #include'}]
+    complete=stock_complete(vm)
+    for match in QUALIFIED_CALL.finditer(text):
+        owner=match.group(1).replace(chr(92),'/').lower();call=match.group(2).lower()
+        count=call_arguments(text,match.end()-1)
+        if count is None or owner not in arities:continue
+        if call not in arities[owner]:
+            # The linker refuses a qualified miss exactly like a bare one; only a row that lists the
+            # whole script can say the name is absent rather than merely unproven.
+            if owner in complete:
+                elsewhere=[path for path,names in exports.items() if call in names]
+                overrun.append(f'{owner} does not export {call}'+
+                               (f'; {" or ".join(elsewhere)} does' if elsewhere else ''))
+            continue
+        overrun+=arity_faults(f'{owner}::{call}',{count},[owner],[owner],arities,key=call)
+    rows=[]
+    if missing or overrun:
+        detail='; '.join([part for part in
+            ('Unqualified stock calls without #include: '+'; '.join(missing) if missing else '',
+             'Stock calls the owner cannot resolve: '+'; '.join(sorted(set(overrun))) if overrun else '') if part])
+        rows.append({'id':'externals:'+name,'outcome':'failed','detail':detail[:800]})
+    elif unknown:
+        rows.append({'id':'externals:'+name,'outcome':'passed',
+                     'detail':'Every unqualified call an export row names an owner for is covered by an #include at an argument count it takes'})
+    else:
+        rows.append({'id':'externals:'+name,'outcome':'passed','detail':'Every unqualified call is local, a witnessed builtin, or covered by an #include'})
+    if unknown:
+        rows.append({'id':'externals-unknown:'+name,'outcome':'not_counted',
+                     'detail':', '.join(unknown)[:400]+': no table names an owner; if this is a stock helper, the call is an unresolved external at link unless the script #includes its owner'})
+    return rows
+
+def arity_faults(label,counts,covered,owners,arities,key=None):
+    """One message per argument count no declaration in scope accepts. Scope is the script's
+    includes: a name two stock scripts export at different arities resolves against the owners the
+    script included, never against the pair merged, so the fault names each owner's own count and
+    the include that would bring an owner that takes this call. A declaration accepts every count
+    up to its parameter count — GSC passes undefined for an argument a call omits — so the fault is
+    always an excess."""
+    call=key or label;faults=[]
+    def declares(owner):return sorted(arities.get(owner,{}).get(call,()))
+    for count in sorted(counts):
+        if any(value>=count for owner in covered for value in declares(owner)):continue
+        if not any(declares(owner) for owner in covered):continue
+        scoped=[owner for owner in covered if declares(owner)]
+        scope=(f'only {scoped[0]} exports it, with {", ".join(str(v) for v in declares(scoped[0]))}' if len(scoped)==1
+               else ', '.join(f'{owner} exports it with {", ".join(str(v) for v in declares(owner))}' for owner in scoped))
+        remedy=[f'{owner} exports it with {", ".join(str(v) for v in declares(owner))}, '
+                f'add #include {owner.replace("/",chr(92))}'
+                for owner in owners if owner not in covered and any(v>=count for v in declares(owner))]
+        faults.append(f'{label} called with {count} argument{"" if count==1 else "s"}; in scope '
+                      f'{scope}'+('; '+'; '.join(remedy) if remedy else ''))
+    return faults
 
 # A composition names its base by profile prefix token; the occupancy table names the foundation.
 # Without this map every pool check on a `b2` composition ran against empty occupancy and passed.
