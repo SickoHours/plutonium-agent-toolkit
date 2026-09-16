@@ -29,6 +29,93 @@ Every entry states what shipped, on which platform it was verified, and what rem
   checker can verify, kind by kind" and "How to run it". Verified by offline unit tests on Linux
   (`tests/test_verify_version.py`); no native receipt, and the route's status is unchanged.
 
+- `pat module qualify` can take an unfinished port knowingly. Measured on the merged toolkit:
+  qualifying a module whose `module.json` declares `port_status: "loads-but-wrong"` refused at step
+  `plan-unqualified` with the planner's typed `port_status` refusal ("... is loads-but-wrong and
+  this composition does not accept it"), because `qualify` synthesizes the one-member composition
+  itself and wrote every member as a plain string, so nothing could name `accept`, which is where
+  acceptance lives: it is a fact about the composition, not about the declaration. `module qualify`
+  now takes `--accept <status>` (repeatable,
+  1 to 2 distinct values from `loads-but-wrong` and `not-ported`, the same vocabulary and validation
+  a composition member's `accept` has; an unknown word is refused at the argument). With it, every
+  member of the synthesized composition whose declaration is not `finished` — the module and its
+  declared dependency closure alike — is written as `{"path": ..., "accept": [...]}`, and the
+  acceptance is recorded in `qualify.json`, the results row, the receipt, the `docs/TEST.md` section
+  and the `built-alone` ledger note, which says the package builds and not that the port is
+  finished. The declaration's own `port_status` is never changed by qualification. Without
+  `--accept` behaviour is unchanged: the refusal stands, and the results row carries it as
+  `plan-refused` with the planner's `port_status` row inside. Offline verified on Linux; no game was
+  loaded.
+- A compiled script packed outside the root its client loads from is refused, not shipped.
+  `script-reach:<target>` is a new per-script check: a T6 client registers a mod's scripts out of
+  `scripts/zm/` and an IW5 client out of the flat `scripts/` namespace, and every compiled script
+  the toolkit links is a `rawfile,<target>` zone row, so a target anywhere else reaches the client
+  only as a rawfile the engine never registers -- no `Overridden rawfile:` line at load, then
+  `Could not load scriptparsetree "<path>"`, unresolved externals and `SV_Shutdown` at the first
+  qualified call into it, after a green compile and a byte-perfect readback. The row states the
+  engine fact, the console line and the retarget with the caller rewrite, and refuses in
+  `pat project plan|build` (where a module built alone is judged) and in `pat module plan|build`.
+  A stock script path the shipped map tables carry is `not_counted` instead: that is an override of
+  a script the map's own zones already load, which no receipt here settles, and retargeting it
+  would stop it being an override. The loose delivery beside the package narrowed with it: that
+  filter was `scripts/` and is now the title's loaded roots (`scripts/zm/` on T6), so a script that
+  passes the check is the script that travels, and a `.csc` under the loaded root is delivered like
+  a `.gsc`. Nothing leaves that delivery unsaid. A compiled target and a recipe's own `rawfile`
+  asset row whose target is a script are both judged on the root and refused, in `pat project
+  plan|build` and `pat module plan|build` alike, where the recipe that names the path can be
+  changed. A `rawfile` row already inside a member's own package -- a seed's `mod.ff`, an adapter's
+  `rawfiles` -- is not refused, because this pack roots no target for it and there is nothing to
+  retarget; it gets a `not_counted` `script-reach:<path>` row stating that it is carried, never
+  registered and not delivered loose, which nothing else said (the receipt's `loose_scripts` only
+  omitted it, and `map-scripts` judges the stock namespaces alone).
+  `map-scripts` no longer counts a path the pack ships only as an unregistered rawfile as carried
+  -- a false pass that let a pack vouch for its own unreachable script -- and names it with its
+  `script-reach` row instead; a `script,` zone row a seed or adapter roots is a real
+  scriptparsetree asset and still counts. An adapter's staged
+  script outside the roots was silently dropped on compose (the harvest walks `stage/scripts`
+  only); it is now refused rather than widened to roots the engine does not register. A member
+  whose every script is unreachable gets the `script-unreachable` adapt pattern: a port, not a
+  widening. Offline unit tests on Linux (`tests/test_script_reach.py`); the engine facts are read
+  from console logs of earlier loads, and no load was run for this change.
+
+- A declaration for content the game already ships, and the ledger row that says so.
+  `distribution: stock` is a module with **no payload**: no `recipe`, no `seed`, no `recipes`,
+  nothing to fetch, compile or link, because its bytes are the base's. The distribution is now read
+  before the payload rule, so a declaration naming neither a recipe nor a seed is admitted here and
+  refused everywhere else; `origin` must be `vanilla` (refused at `/origin` otherwise, including for
+  `unverified`), `donor` stays optional, `provides` may be empty or absent, and `pat module inspect`
+  reports `payload: "stock"`. An optional `vanilla` object carries what the stock scripts show per
+  map -- costs, tiers, entity targetnames, behaviour notes and their citations -- bounded at 32 KiB
+  of JSON with lowercase keys and JSON scalar, list or object values; it is refused at `/vanilla` on
+  any other distribution, and the toolkit interprets none of it. In a composition a stock member is
+  never built, staged or counted: it stages no script, rawfile, asset, seed, bank or image, adds
+  nothing to any pool or resource total, and the file, replacement, ownership and service rules skip
+  it. The plan and the `module plan` summary list it under `stock` (`id`, `version`, `provides`).
+  What it *provides* is still read as what the map already has, so a client box registration naming
+  a weapon a stock member provides passes instead of failing for a weapon nobody ships; its `bases`
+  and `maps` are judged like any other member's, unqualified refusals included. The ledger gains a
+  `shipped` row type: required `scope` and `record` (the listing or decompile it was read from, in
+  the shape every other row's record has), optional `citations` -- what makes the row auditable
+  rather than asserted, each one `{file, line, sha256, text}` with all four required and at most 64
+  of them -- plus the common `note` and `at`. The toolkit follows no citation and verifies no digest,
+  exactly as it follows no `record` pointer. The row feeds none of the six facts -- shipping with the
+  game is not offline verification -- and `module state --ledger` reports it as a separate `shipped`
+  field for the query, per scope and per target, with no unknown: a row states it or nothing claims
+  it. `docs/MODULES.md` ("Stock content") and `docs/evidence-ledger.md`.
+  Offline unit tests on Linux (`tests/test_vanilla_contract.py`); no native receipt, no route status
+  changes, and nothing here touches a game.
+- A test probe is a fact about running a member's tests, not about composing a pack. Measured: a
+  55-member release composition was refused by `pat module plan` with a `probe` refusal reading
+  "Test probe is forbidden in release profiles" and no modules named, because fourteen of its
+  members declared agent probe verbs (`perk_give`, `power_on`, ...) in their test contracts; the
+  same 55 members planned clean under a `_test` name. `module plan` and `module build` now admit
+  the probe only on a `_test`/`_probe` composition. A `_pack`/`_pub` composition still reads and
+  validates every member's `tests` contract, but takes no probe need from it and pulls no probe in,
+  so a pack of members that have probe-scoped tests composes. What a release profile still refuses
+  is a test-only member itself, declared or brought along, now always with the typed `test_only`
+  refusal rather than a `probe` one. `pat test plan` is unchanged: it asks for the probe by asking
+  for the plan, so a release name still refuses there. Offline verified on Linux; no game was
+  loaded.
 - Re-exported T6 knowledge, carrying two new crash-signature rows and one corrected regex.
   `sound-bank-failed-to-load` (class `asset-missing`) matches
   `ERROR: sound bank failed to load <name>.all. You have a build problem.` and is the first row in

@@ -80,6 +80,16 @@ Lives in the module's directory beside its payload. The payload is one of three 
 workspace builder cuts (below). A declaration names exactly one of `recipe` or `seed`; an
 adapter recipe is named under `recipe` and told apart by its own shape.
 
+A recipe's script targets are not free. A T6 client loads a mod's scripts from `scripts/zm/` and
+an IW5 client from the flat `scripts/` namespace (`dev/titles.py`, `loaded_script_roots`); a
+compiled script packed anywhere else reaches the client only as a `rawfile` inside `mod.ff` that
+the engine never registers as a script, so it can never run however the module is later composed.
+`pat project plan` and `pat project build` refuse such a target where a module built alone is
+judged, and `pat module plan`/`build` refuse it again for a pack, both with the retarget and the
+caller rewrite in the `script-reach:<target>` row's detail. Put a module's own scripts under the
+loaded root and keep `maps\mp\...` for the stock paths you *call into*, which is a different
+question and the one `map-scripts` answers.
+
 ```json
 {
   "schema": 1,
@@ -133,7 +143,7 @@ adapter recipe is named under `recipe` and told apart by its own shape.
 | `provides` | no | What the module registers, by kind: `weapons`, `perks`, `gobblegums`, `powerups`, `equipment`, `localize`, `soundbanks`, `scripts`, `models`, `effects`, `rawfiles`, `aliases` (the sound alias names a bank module owns), each a list of up to 4096 names. Two modules providing the same name is a decision (below); a `rawfiles` name is a file target and is listed once, as the file collision. A seed's manifest fills this in; for the kinds the manifest derives (`weapons`, `localize`, `soundbanks`, `rawfiles`, `models`, `effects`) a declaration may narrow the manifest's list and never add to it, even when the manifest lists none of that kind; the other kinds are the declaration's |
 | `resource_contract` | no | Whole numbers the module adds to the engine's budgets: `threads`, `entities`, `hud`, `network_fields`. Missing fields count as 0. Summed across the composition and checked against the composition's `budget` |
 | `menu_route` | no | How a person reaches the feature in game, at most 200 characters; carried into the plan for the handoff |
-| `distribution` | no | `source` (buildable from the repository; the default for a recipe), `seed` (the package is committed beside the manifest; the default for a seed), or `private` (recipe source/assets or a seed package are not published; the payload type remains recipe or seed, and plan/build still require the local inputs) |
+| `distribution` | no | `source` (buildable from the repository; the default for a recipe), `seed` (the package is committed beside the manifest; the default for a seed), `private` (recipe source/assets or a seed package are not published; the payload type remains recipe or seed, and plan/build still require the local inputs), or `stock` (the content ships with the game: no `recipe`, no `seed`, no `recipes`, `origin` must be `vanilla`, and `payload` inspects as `stock`; "Stock content", below) |
 | `source` | no | Where the module comes from: an `https` `repository` URL and, ideally, the 40-hex `commit`. Carried into the plan so a pack can say what it was built from |
 | `origin` | no | One lowercase word for the game or series the thing's identity comes from (`bo3`, `waw`, `saints-row`), or `unverified` when nobody has established it. It drives the title: an ICR-1 converted from a community pack is still "ICR-1 (Black Ops III)". Never defaulted to the donor. A browse word, never a resolution rule |
 | `donor` | no | One line of credit, at most 400 characters, for where the bytes came from: a conversion pack and its author, a capture, a person. It drives the credit line, never the title. Preserved on every re-cut |
@@ -148,6 +158,58 @@ A declaration says nothing about evidence. Whether the module is offline verifie
 playable or accepted on a base is a receipt's and a person's statement, not a field here; a
 module that lists a base under `bases` has been built there by whoever wrote the declaration,
 and the composition's own receipt is the only proof for the composed result.
+
+### Stock content: `distribution: stock`
+
+A stock declaration is a shelf entry for something the game already ships -- Pack-a-Punch, a perk
+machine, later a weapon or a power-up. It has **no payload**: no `recipe`, no `seed`, no `recipes`,
+nothing to fetch, compile or link, because its bytes are the base's. It exists so a map's baseline
+stands on the shelf beside what can be added to it, and so a pack can say what it is adding *to*.
+
+```json
+{
+  "schema": 1, "id": "vanilla_perks_juggernog", "version": "0.1.0", "title": "Juggernog (vanilla)",
+  "category": "perks", "kind": "machine", "tags": ["vanilla"],
+  "bases": ["b2"], "maps": ["zm_factory", "zm_sumpf"],
+  "distribution": "stock", "origin": "vanilla",
+  "provides": {"perks": ["specialty_armorvest"], "models": ["zombie_vending_jugg", "zombie_vending_jugg_on"]},
+  "vanilla": {"zm_factory": {"cost": {"value": 2500, "file": "maps/mp/zombies/_zm_perks.gsc", "line": 1698}}}
+}
+```
+
+- **`distribution` is read before the payload rule**, so a declaration that names neither a recipe
+  nor a seed is admitted only here. Any other distribution still names exactly one payload.
+- **`origin` must be `vanilla`.** Stock content's identity comes from the game it shipped in;
+  any other origin (including `unverified`) is refused at `/origin`. `donor` stays optional --
+  a credit line for the game's authors is a credit line like any other.
+- **`provides` may be empty or absent.** What a stock item registers is a reading of the game's
+  own scripts, and a declaration that has not made that reading yet claims nothing.
+- **`vanilla`** is an optional object, accepted only on a stock declaration and refused at
+  `/vanilla` on any other. It holds what the stock scripts show per map -- costs, tiers, camo
+  index, entity targetnames, behaviour notes and the citations behind them -- keyed however the
+  reader keys it. At most 32 KiB of JSON; every key is one lowercase word (a map id, or the name
+  of one fact about it) and every value a JSON scalar, list or object. The toolkit bounds it and
+  interprets none of it: a claim about the game belongs to whoever read the scripts and cited
+  them, not to the toolkit.
+- **`bases` and `maps` are judged like any other member's.** A stock item exists on the maps it
+  exists on; a composition on a map the declaration does not list is `unqualified_map`, exactly as
+  for a module with bytes.
+
+In a composition a stock member is **never built, staged or counted**. It contributes no script,
+no rawfile, no asset, no seed, no sound bank, no image and no resource contract; it can collide
+with nothing and replaces nothing, so the file, replacement, ownership and service rules skip it,
+and no pool counts it (counting it would charge the pack for the base it is measured against).
+The plan lists it under a `stock` summary list with its `id`, `version` and `provides`, and its
+plan row reports `payload: "stock"` with no payload hash.
+
+What it **provides** is still read, because that is what the map already has: a client script that
+registers `m1911_zm` in the mystery box passes the box-registration check when a stock member
+provides that weapon, instead of failing for a weapon nobody ships.
+
+The provenance half is the ledger's `shipped` row ([evidence-ledger.md](evidence-ledger.md)). It
+says the game ships this on these maps, names the listing or decompile it was read from and, in its
+optional `citations`, the lines inside one that say so. It feeds none of the six facts: shipping
+with the game is not offline verification, an install, a run or a verdict.
 
 ## Seed manifest: `seed.json`
 
@@ -482,6 +544,7 @@ as one job:
 ```
 pat module qualify <module dir> --target <foundation>/<map> --workspace <root> --output <new dir> --json
 pat module qualify --set <file of module dirs> --target <foundation>/<map> --workspace <root> --output <new dir> --json
+pat module qualify <module dir> --target <foundation>/<map> --workspace <root> --output <new dir> --accept loads-but-wrong --json
 ```
 
 `--target` is `<foundation>/<map>`: the foundation id as the workspace's `foundations/<id>.json`
@@ -513,6 +576,21 @@ built alone keeps its `failed` rows under `warnings` in `qualify.json` and the r
 them to the built-alone note, and still qualifies. `module plan` and `module build` invoked directly
 are unchanged and still refuse on that check: there the question is whether to ship a pack on this
 machine, not whether this module builds on this target.
+
+**An unfinished port: `--accept`.** A member whose `port_status` is not `finished` is refused by
+the planner unless the composition names that status under the member's `accept` ("Where a person
+finds it", below), and this is the one route that writes the composition for the caller. `--accept
+loads-but-wrong` (or `--accept not-ported`; repeatable, 1 to 2 distinct values, the same vocabulary
+and validation a member's own `accept` takes, an unknown word refused at the argument) is how the
+caller says it. Every member of the synthesized composition whose declaration is not `finished` —
+the module and its dependency closure alike — is then written as `{"path": …, "accept":
+["loads-but-wrong"]}`; a finished member stays the plain path. The declaration's own `port_status`
+is **not** changed by qualification. The acceptance is recorded where the build is claimed:
+`qualify.json`, the results row, this route's receipt, the `docs/TEST.md` section, and the
+`built-alone` note, which reads "port_status loads-but-wrong accepted for this build; the row says
+the package builds, not that the port is finished." Without `--accept` nothing changes: the plan
+refuses at step (b) and the results row carries it as `plan-refused` with the planner's
+`port_status` row inside.
 
 The declaration is widened in the staged copy, so both builds read the same paths and the two
 packages are comparable. For a project recipe they must be the same bytes: a declaration is
@@ -918,8 +996,37 @@ table; the next helper is one row.
 script namespace (`maps/`, `clientscripts/`, `common_scripts/`, `codescripts/`) against the
 compiled scripts the target map's zones carry on that foundation (`knowledge/map-scripts.json`);
 a path the map lacks fails, since it is an unresolved external at load that no compiler sees;
-a path another member of the same pack provides (a staged script target, a seed or adapter
-script root, a `provides.scripts` name) is carried by the pack and passes.
+a path another member of the same pack provides is carried by the pack and passes — but only when
+the pack ships it in a form this client opens: a target under a loaded root, or a `script,` zone row
+a seed or adapter roots, which is a real scriptparsetree asset. A path the pack carries *only* as a
+rawfile the engine never registers does not make the caller's call resolve; the row fails, names the
+path, and points at its `script-reach` row. (Counting those was a false pass: the pack vouched for a
+script nothing opens, and the caller got a green row before an `SV_Shutdown`.)
+
+`script-reach:<target>` rows judge whether the client can open a compiled script at all, from the
+root it is packed under. Every compiled script the toolkit links becomes a `rawfile,<target>` zone
+row, and a T6 client registers a mod's rawfiles as scripts only under `scripts/zm/` (IW5: the flat
+`scripts/` namespace): a load prints one `Overridden rawfile: scripts/zm/<name> from zone mod` per
+script it accepts out of the zone and none at all for a rawfile rooted elsewhere, which is carried
+into the zone and never opened. The failure surfaces only at the first qualified call into such a
+path, as `Could not load scriptparsetree "<path>"` followed by unresolved externals and
+`SV_Shutdown` — after a green compile and a byte-perfect readback, neither of which can see it.
+A target outside the root fails with the retarget and the caller rewrite in its detail; a target
+under it passes. One exception is `not_counted`: a stock script path the shipped map tables carry
+is an *override* of a script the map's own zones already load, a case no receipt here settles, and
+retargeting it would stop it being an override at all — replace such a function from a script under
+the loaded root instead. The same root rule decides which compiled scripts travel loose beside the
+package, so a script that passes the check is the script that is delivered.
+
+A recipe's own `rawfile` asset row whose target is a `.gsc` or `.csc` is judged on the same root:
+the pack roots that path itself, and the loose delivery copies it only from a loaded root, so
+outside them it is neither registered nor delivered. It fails like a compiled target, where the
+recipe naming it can be changed. A `rawfile` row already inside a *member's own package* — a seed's
+`mod.ff`, an adapter's `rawfiles`, its embedded loose scripts — is `not_counted` instead: this pack
+roots no target for it, so there is nothing here to retarget. The row exists so the drop is named
+rather than silent, because nothing else names it — the build receipt's `loose_scripts` only omits
+the path, and `map-scripts` judges the stock namespaces alone. If the pack needs that script, add
+it under the loaded root in a module of the pack.
 
 `map-guard:<script>` rows read the other half of "this script is on the wrong map", the half no
 zone table can see. A module ported from another map often keeps its donor's entry guard: an
@@ -953,13 +1060,22 @@ Builds run a receipted `gsc check` dry run per script before linking. Compiler-r
 externals fail; successful compilation alone cannot prove runtime external resolution and that
 symbol check remains `not_counted`. Plans themselves do not run the compiler.
 
-Probe actions with an agent actor cause `test plan` and `module build` to include exactly one
-local sibling module named `test_probe`, tagged `test-only`, on `_test`/`_probe` profiles.
-The planner searches member siblings and the workspace's modules directory, refuses missing or
-ambiguous candidates, and emits a buildable composition with the probe explicitly included.
-The probe is first in dependency order. `_pack`/`_pub` compositions refuse every test-only member,
-including through nested compositions. Probe-scoped contracts permit signed `round_set +N`;
-this is a round-counter transition, not proof of N naturally completed gameplay rounds.
+Probe actions with an agent actor cause `test plan` to include exactly one local sibling module
+named `test_probe`, tagged `test-only`, on `_test`/`_probe` profiles; on a `_pack`/`_pub` profile
+`test plan` refuses, because asking for the plan is asking for the probe. The planner searches
+member siblings and the workspace's modules directory, refuses missing or ambiguous candidates,
+and emits a buildable composition with the probe explicitly included. The probe is first in
+dependency order.
+
+**A probe verb in a member's contract does not follow the member into a release pack.** `module
+plan` and `module build` read and validate every member's `tests` contract, but needing a probe is
+a fact about running that member's test plan, not about composing a pack that contains it: a
+`_pack`/`_pub` composition plans and builds unchanged with members whose contracts declare agent
+probe verbs, and pulls no probe in. Only a `_test`/`_probe` composition carries the probe into the
+package. What a release profile still refuses is a test-only member itself — declared or brought
+along through a nested composition — with the typed `test_only` refusal. Probe-scoped contracts
+permit signed `round_set +N`; this is a round-counter transition, not proof of N naturally
+completed gameplay rounds.
 
 ### A loose global texture wins over every bank, and over the bare game
 
