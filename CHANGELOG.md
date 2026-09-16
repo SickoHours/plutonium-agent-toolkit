@@ -39,6 +39,32 @@ Every entry states what shipped, on which platform it was verified, and what rem
   widening. Offline unit tests on Linux (`tests/test_script_reach.py`); the engine facts are read
   from console logs of earlier loads, and no load was run for this change.
 
+- A declaration for content the game already ships, and the ledger row that says so.
+  `distribution: stock` is a module with **no payload**: no `recipe`, no `seed`, no `recipes`,
+  nothing to fetch, compile or link, because its bytes are the base's. The distribution is now read
+  before the payload rule, so a declaration naming neither a recipe nor a seed is admitted here and
+  refused everywhere else; `origin` must be `vanilla` (refused at `/origin` otherwise, including for
+  `unverified`), `donor` stays optional, `provides` may be empty or absent, and `pat module inspect`
+  reports `payload: "stock"`. An optional `vanilla` object carries what the stock scripts show per
+  map -- costs, tiers, entity targetnames, behaviour notes and their citations -- bounded at 32 KiB
+  of JSON with lowercase keys and JSON scalar, list or object values; it is refused at `/vanilla` on
+  any other distribution, and the toolkit interprets none of it. In a composition a stock member is
+  never built, staged or counted: it stages no script, rawfile, asset, seed, bank or image, adds
+  nothing to any pool or resource total, and the file, replacement, ownership and service rules skip
+  it. The plan and the `module plan` summary list it under `stock` (`id`, `version`, `provides`).
+  What it *provides* is still read as what the map already has, so a client box registration naming
+  a weapon a stock member provides passes instead of failing for a weapon nobody ships; its `bases`
+  and `maps` are judged like any other member's, unqualified refusals included. The ledger gains a
+  `shipped` row type: required `scope` and `record` (the listing or decompile it was read from, in
+  the shape every other row's record has), optional `citations` -- what makes the row auditable
+  rather than asserted, each one `{file, line, sha256, text}` with all four required and at most 64
+  of them -- plus the common `note` and `at`. The toolkit follows no citation and verifies no digest,
+  exactly as it follows no `record` pointer. The row feeds none of the six facts -- shipping with the
+  game is not offline verification -- and `module state --ledger` reports it as a separate `shipped`
+  field for the query, per scope and per target, with no unknown: a row states it or nothing claims
+  it. `docs/MODULES.md` ("Stock content") and `docs/evidence-ledger.md`.
+  Offline unit tests on Linux (`tests/test_vanilla_contract.py`); no native receipt, no route status
+  changes, and nothing here touches a game.
 - A test probe is a fact about running a member's tests, not about composing a pack. Measured: a
   55-member release composition was refused by `pat module plan` with a `probe` refusal reading
   "Test probe is forbidden in release profiles" and no modules named, because fourteen of its

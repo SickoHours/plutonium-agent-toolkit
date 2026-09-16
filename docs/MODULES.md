@@ -143,7 +143,7 @@ question and the one `map-scripts` answers.
 | `provides` | no | What the module registers, by kind: `weapons`, `perks`, `gobblegums`, `powerups`, `equipment`, `localize`, `soundbanks`, `scripts`, `models`, `effects`, `rawfiles`, `aliases` (the sound alias names a bank module owns), each a list of up to 4096 names. Two modules providing the same name is a decision (below); a `rawfiles` name is a file target and is listed once, as the file collision. A seed's manifest fills this in; for the kinds the manifest derives (`weapons`, `localize`, `soundbanks`, `rawfiles`, `models`, `effects`) a declaration may narrow the manifest's list and never add to it, even when the manifest lists none of that kind; the other kinds are the declaration's |
 | `resource_contract` | no | Whole numbers the module adds to the engine's budgets: `threads`, `entities`, `hud`, `network_fields`. Missing fields count as 0. Summed across the composition and checked against the composition's `budget` |
 | `menu_route` | no | How a person reaches the feature in game, at most 200 characters; carried into the plan for the handoff |
-| `distribution` | no | `source` (buildable from the repository; the default for a recipe), `seed` (the package is committed beside the manifest; the default for a seed), or `private` (recipe source/assets or a seed package are not published; the payload type remains recipe or seed, and plan/build still require the local inputs) |
+| `distribution` | no | `source` (buildable from the repository; the default for a recipe), `seed` (the package is committed beside the manifest; the default for a seed), `private` (recipe source/assets or a seed package are not published; the payload type remains recipe or seed, and plan/build still require the local inputs), or `stock` (the content ships with the game: no `recipe`, no `seed`, no `recipes`, `origin` must be `vanilla`, and `payload` inspects as `stock`; "Stock content", below) |
 | `source` | no | Where the module comes from: an `https` `repository` URL and, ideally, the 40-hex `commit`. Carried into the plan so a pack can say what it was built from |
 | `origin` | no | One lowercase word for the game or series the thing's identity comes from (`bo3`, `waw`, `saints-row`), or `unverified` when nobody has established it. It drives the title: an ICR-1 converted from a community pack is still "ICR-1 (Black Ops III)". Never defaulted to the donor. A browse word, never a resolution rule |
 | `donor` | no | One line of credit, at most 400 characters, for where the bytes came from: a conversion pack and its author, a capture, a person. It drives the credit line, never the title. Preserved on every re-cut |
@@ -158,6 +158,58 @@ A declaration says nothing about evidence. Whether the module is offline verifie
 playable or accepted on a base is a receipt's and a person's statement, not a field here; a
 module that lists a base under `bases` has been built there by whoever wrote the declaration,
 and the composition's own receipt is the only proof for the composed result.
+
+### Stock content: `distribution: stock`
+
+A stock declaration is a shelf entry for something the game already ships -- Pack-a-Punch, a perk
+machine, later a weapon or a power-up. It has **no payload**: no `recipe`, no `seed`, no `recipes`,
+nothing to fetch, compile or link, because its bytes are the base's. It exists so a map's baseline
+stands on the shelf beside what can be added to it, and so a pack can say what it is adding *to*.
+
+```json
+{
+  "schema": 1, "id": "vanilla_perks_juggernog", "version": "0.1.0", "title": "Juggernog (vanilla)",
+  "category": "perks", "kind": "machine", "tags": ["vanilla"],
+  "bases": ["b2"], "maps": ["zm_factory", "zm_sumpf"],
+  "distribution": "stock", "origin": "vanilla",
+  "provides": {"perks": ["specialty_armorvest"], "models": ["zombie_vending_jugg", "zombie_vending_jugg_on"]},
+  "vanilla": {"zm_factory": {"cost": {"value": 2500, "file": "maps/mp/zombies/_zm_perks.gsc", "line": 1698}}}
+}
+```
+
+- **`distribution` is read before the payload rule**, so a declaration that names neither a recipe
+  nor a seed is admitted only here. Any other distribution still names exactly one payload.
+- **`origin` must be `vanilla`.** Stock content's identity comes from the game it shipped in;
+  any other origin (including `unverified`) is refused at `/origin`. `donor` stays optional --
+  a credit line for the game's authors is a credit line like any other.
+- **`provides` may be empty or absent.** What a stock item registers is a reading of the game's
+  own scripts, and a declaration that has not made that reading yet claims nothing.
+- **`vanilla`** is an optional object, accepted only on a stock declaration and refused at
+  `/vanilla` on any other. It holds what the stock scripts show per map -- costs, tiers, camo
+  index, entity targetnames, behaviour notes and the citations behind them -- keyed however the
+  reader keys it. At most 32 KiB of JSON; every key is one lowercase word (a map id, or the name
+  of one fact about it) and every value a JSON scalar, list or object. The toolkit bounds it and
+  interprets none of it: a claim about the game belongs to whoever read the scripts and cited
+  them, not to the toolkit.
+- **`bases` and `maps` are judged like any other member's.** A stock item exists on the maps it
+  exists on; a composition on a map the declaration does not list is `unqualified_map`, exactly as
+  for a module with bytes.
+
+In a composition a stock member is **never built, staged or counted**. It contributes no script,
+no rawfile, no asset, no seed, no sound bank, no image and no resource contract; it can collide
+with nothing and replaces nothing, so the file, replacement, ownership and service rules skip it,
+and no pool counts it (counting it would charge the pack for the base it is measured against).
+The plan lists it under a `stock` summary list with its `id`, `version` and `provides`, and its
+plan row reports `payload: "stock"` with no payload hash.
+
+What it **provides** is still read, because that is what the map already has: a client script that
+registers `m1911_zm` in the mystery box passes the box-registration check when a stock member
+provides that weapon, instead of failing for a weapon nobody ships.
+
+The provenance half is the ledger's `shipped` row ([evidence-ledger.md](evidence-ledger.md)). It
+says the game ships this on these maps, names the listing or decompile it was read from and, in its
+optional `citations`, the lines inside one that say so. It feeds none of the six facts: shipping
+with the game is not offline verification, an install, a run or a verdict.
 
 ## Seed manifest: `seed.json`
 
