@@ -153,6 +153,8 @@ question and the one `map-scripts` answers.
 | `registration` | no | Who prints the module's one console line `<id> >> registered` at init: `self` (its own script), `entry` (the generated entry script, for an entry-managed module), or `none`. The plan derives `expected_lines` from it and `test plan` checks each line in the load phase ("The registration line", below) |
 | `system` | no | The player-facing system a person finds the module under, one of `pack-a-punch`, `perks`, `hud`, `weapons`, `powerups`, `box`, `core-rules`, `gums`, `bosses`, `equipment`, `audio`, `map`; a browse word, never a resolution rule ("Where a person finds it", below) |
 | `port_status` | no | `finished` (default), `loads-but-wrong` or `not-ported`; a member that is not `finished` is refused (kind `port_status`) unless the composition's member object names it under `accept` |
+| `reach` | no | How a player reaches the feature: `wall-or-box`, `machine`, `granted`, `drop`, `passive` or `menu`; the plan derives per-member `reachable` for its map as a warning, never a refusal ("Whether a player can reach it", below) |
+| `hud` | no | `icon` when the module ships or names the icon a player sees for a pickup-shaped feature, `none` when it draws nothing; the plan warns on a perk, gum, power-up or equipment member with `none` or nothing |
 | `provides` | no | What the module registers, by kind: `weapons`, `perks`, `gobblegums`, `powerups`, `equipment`, `localize`, `soundbanks`, `scripts`, `models`, `effects`, `rawfiles`, `aliases` (the sound alias names a bank module owns), each a list of up to 4096 names. Two modules providing the same name is a decision (below); a `rawfiles` name is a file target and is listed once, as the file collision. A seed's manifest fills this in; for the kinds the manifest derives (`weapons`, `localize`, `soundbanks`, `rawfiles`, `models`, `effects`) a declaration may narrow the manifest's list and never add to it, even when the manifest lists none of that kind; the other kinds are the declaration's |
 | `resource_contract` | no | Whole numbers the module adds to the engine's budgets: `threads`, `entities`, `hud`, `network_fields`. Missing fields count as 0. Summed across the composition and checked against the composition's `budget` |
 | `menu_route` | no | How a person reaches the feature in game, at most 200 characters; carried into the plan for the handoff |
@@ -473,6 +475,14 @@ plan also reads each target's location table as a hashed input and reports under
 per target, which members' declared `placements` needs the table satisfies, which fall back and
 which are refused; a refused need fails the plan as a `placements:<target>` check. No provider
 module is generated. Format and rules: [target-sets.md](target-sets.md).
+
+**What `plan` proves about reaching a feature.** Every plan row (and every `--json` summary row)
+carries `reachable` (`true`, `false` or `null` for unknown) and a one-line `reason`, derived from
+the member's `reach`, this composition and the placement outcome above. Two kinds of row land in
+`warnings` and never in `refusals`: `<id>: reachable false|unknown on <map>: <reason>` for every
+member a player cannot be shown to reach, and `<id>: hud none|absent; a <system> a player cannot
+see is one they will report as broken` for a `perks`, `gums`, `powerups` or `equipment` member that
+draws nothing. Both are specified under "Whether a player can reach it", below.
 
 ### Declared parameters: what a composition configures, and the `parameters` refusal
 
@@ -1168,8 +1178,10 @@ map, or moves a byte in a package.
 | `registration` | `self`, `entry` or `none` | "My registration prints `<id> >> registered` to the console" (or the pack's entry prints it for me, or I print nothing) | The literal in source for `self`; the build's own output for `entry`; whether the line reached the console is the load's evidence, never the checker's |
 | `system` | one of twelve system words | "A player looks for me under this system" | Nothing; a browse word, `not_counted` |
 | `port_status` | `finished`, `loads-but-wrong`, `not-ported` | "I work as intended here" or "I load and misbehave" or "I am not ported yet" | Nothing from bytes; a person's verdict, read by the planner |
+| `reach` | `wall-or-box`, `machine`, `granted`, `drop`, `passive`, `menu` | "A player gets to me this way" | Byte signatures per word (below); `machine` and `granted` also need the composition |
+| `hud` | `icon` or `none` | "A player can see that they have me" | An image or material asset row, a shader precache or a stock icon name |
 
-Seven fields, one of them a widening of an existing one. Nothing else was needed for the behaviours
+Nine fields, one of them a widening of an existing one. Nothing else was needed for the behaviours
 the audit measured, and nothing else is designed here: placement, parameter consumers, versioning
 and runtime conflict detection stay where `docs/MODULES.md` already puts them.
 
@@ -1388,6 +1400,70 @@ Both fields are echoed by `module inspect` when named, recorded on every plan ro
 `expected_lines`' sibling rows nowhere else. Neither widens `bases` or `maps` or moves a byte in
 a package.
 
+### Whether a player can reach it: `reach` and `hud`
+
+Fifty-five game-tested modules were played on one map and nothing was reachable: thirteen perks
+shipped no machine and no grant, so no player could buy or be given them; fourteen rule tweaks
+left no trace a player could see; and on the next map seven perks answered "acquired" and drew
+nothing, because the module set its flag and shipped no icon. Every one of them was honestly
+game-tested: the script ran and no error named it. What the declaration could not say was how a
+player gets to the feature, and whether they can see that they have it.
+
+**`reach`** is one word from a closed list, the way a player gets the feature on a map:
+
+| `reach` | Meaning | What the checker sees in bytes |
+| --- | --- | --- |
+| `wall-or-box` | a weapon registered into the map's availability tables (wall buy, box or both) | `include_zombie_weapon` / `add_zombie_weapon` / `addzombieboxweapon` literals, or an availability table row |
+| `machine` | needs a placed site; the declaration names the site kind it needs under `placements` (`perk-machine`, `gum-site`, `wunderfizz`, `pack-a-punch`) | a `placements` row of that kind, and a machine registration in source |
+| `granted` | given at spawn or by another module | a give call on player spawn or connect, or a dependency edge to the module that grants it |
+| `drop` | a power-up the round can spawn | `add_zombie_powerup` or the power-up runtime's registration |
+| `passive` | a rule that changes play with no pickup; requires the registration line, since nothing else shows it ran | a `replaceFunc`, a level variable or a dvar set, plus `registration` not `none` |
+| `menu` | reached through the developer menu only; not a player feature | a `menu_route` naming the developer menu and nothing above |
+
+Absent means the declaration does not say. `reach` is orthogonal to `exclusive` (what a module
+owns), `service` (what others depend on) and `system` (where a person browses for it): it is what
+a player can get to.
+
+Two facts measured on the first placed-machine work, so the words are read correctly: on the
+Zombies Declassified Beta 2 cut of Der Riese no perk machine exists as an entity in any loaded zone
+(no machine structs, no vending trigger), so every machine on that base is module-placed or absent
+and `reach: machine` is never satisfied by the map itself; and a ported perk whose script never
+calls the engine's perk-set function has no HUD slot at all, so its `hud: none` is literal rather
+than a missing icon.
+
+**Reachability is a fact about a composition on a map, not about the module.** `module plan`
+derives, per member, `reachable: true | false | unknown` for the composition's map, with a
+one-line `reason`, on the plan row and on the summary row:
+
+- `wall-or-box`, `drop`, `passive`: `true` (the declaration's own promise is enough; the
+  checker's `partial` on the byte side stays on the verify report);
+- `machine`: `true` only when the composition satisfies the member's `placements` need for
+  this map (a site module or a location table row of that kind, the same reading the
+  `placements:<target>` check does with `--workspace --target`), `false` with the site kind named
+  when nothing does, `unknown` when no target is given;
+- `granted`: `true` when the granting module is in the composition, or the grant is on spawn in
+  the member's own source; `false` naming the missing module otherwise;
+- `menu`: `false` with reason "developer menu only";
+- absent: `unknown`, reason "the declaration does not say".
+
+Every `false` or `unknown` row also lands in the plan's `warnings`, never in `refusals`: a person
+may want the module in the pack for a machine they will place later. The app's tile and pack
+builder read `reachable` and its reason.
+
+**`hud`** is the second half, for anything pickup-shaped (a perk, a gum, a power-up, a piece of
+equipment): whether the player can see that they have it. `hud: icon` promises the module ships or
+names an icon (an `image` or `material` asset row, a `precacheshader`, a stock shader name in a
+`setshader` or the perk icon table); `hud: none` says it draws nothing. The checker derives it:
+`icon` declared with no such byte is `declared_not_observed`, a byte found with `none` or nothing
+declared is `observed_not_declared`. `module plan` warns on a member whose `system` is `perks`,
+`gums`, `powerups` or `equipment` and whose `hud` is `none` or absent: a perk a player cannot see is
+one they will report as broken. A rule with no pickup (`reach: passive`) has no `hud` row.
+
+Both fields are optional, echoed by `module inspect` when named, recorded on every plan row, and
+filled from bytes by `verify-declaration --propose` where the table above says the byte is
+enough; `machine`, `granted` and `menu` are never proposed: a site, a grantor and a menu route are
+the author's promises, not footprints.
+
 ### The registration line: one console line per module
 
 A load is the last honest test and the console is its record. Today the only line a script is
@@ -1492,6 +1568,8 @@ method, in words) and an `outcome`: `agrees`, `declared_not_observed`, `observed
 | `registration` | a `println` literal beginning `<id> >> registered` in a server script (`self`); the `entry` field (`entry`) | `partial` for `self` (the literal, not the path); full for `entry` and `none` |
 | `version` | the folder's fingerprint against the commit that introduced the newest `evidence.json` row carrying a `package_sha256` (`built-alone`, `game-tested` or `player-accepted`) | full for the bytes it covers: `declared_not_observed` when they moved and `version` did not, `agrees` when they did not move or the version did, `not_counted` without a ledger, without git or outside a repository |
 | `system`, `port_status` | nothing in bytes | `not_counted`: a browse word and a person's verdict |
+| `reach` | the byte signature per word: registration literals, `add_zombie_powerup`, a give on spawn, a `replaceFunc` or level variable, a `placements` row, a developer-menu route | `partial` for every word (a signature is a footprint, not proof the path runs); `machine` and `granted` full only against a composition |
+| `hud` | an `image`/`material` asset row, `precacheshader`, a stock shader name in source | full for `icon` present; `none` is `agrees` when no such byte exists |
 | `resource_contract.hud` | count of HUD-element constructors in source, as a floor | `partial`: a floor, never the total |
 | `conflicts` | both ends declaring the same `exclusive` role | reported as `redundant` when a role already covers the pair; otherwise `not_counted` |
 | `menu_route`, `tags`, `placements`, `parameters`, `bases`, `maps` | nothing in this route | `not_counted`, with the reason (a menu tree, a location table, a receipt) |

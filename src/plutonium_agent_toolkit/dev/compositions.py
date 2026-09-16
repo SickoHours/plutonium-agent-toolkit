@@ -121,6 +121,19 @@ SYSTEMS = ("pack-a-punch", "perks", "hud", "weapons", "powerups", "box", "core-r
 # keep unfinished work visible in the bank, and a composition takes such a member only by naming
 # its status under that member's `accept`.
 PORT_STATUSES = ("finished", "loads-but-wrong", "not-ported")
+# How a player gets to the feature on a map. Orthogonal to `exclusive` (what a module owns),
+# `service` (what others depend on) and `system` (where a person browses for it): this is the route
+# a player takes to the thing (docs/MODULES.md, "Whether a player can reach it").
+REACH = ("wall-or-box", "machine", "granted", "drop", "passive", "menu")
+# Whether a player can see that they have a pickup-shaped feature: the module ships or names the
+# icon, or it draws nothing at all.
+HUD = ("icon", "none")
+# The systems whose features a player picks up and then carries. A member on one of these shelves
+# that draws no icon answers "acquired" and shows nothing, which is what a player reports as broken.
+PICKUP_SYSTEMS = ("perks", "gums", "powerups", "equipment")
+# The provides kinds a grant hands over: what one module's `provides` must name for another
+# module's `granted` reach to be satisfied by it.
+GRANTED_KINDS = ("perks", "gobblegums", "powerups", "equipment")
 # What a dependency is *for*. `call`, `name` and `service` leave evidence in bytes; `runtime` is a
 # relationship only the engine shows (a level variable, a notify, an order of init), so it says why.
 DEPENDENCY_KINDS = ("call", "name", "service", "runtime")
@@ -254,12 +267,12 @@ MAX_INSPECTION_CODE = 200
 MODULE_METADATA_FIELDS = ("id", "version", "game", "title", "category", "kind", "tags", "bases", "maps",
                           "dependencies", "conflicts", "origin", "donor", "distribution", "menu_route", "payload", "recipes",
                           "lineage", "replaces", "entry", "placements", "parameters", "exclusive", "service", "registration",
-                          "dependency_kinds", "system", "port_status", "vanilla")
+                          "dependency_kinds", "system", "port_status", "reach", "hud", "vanilla")
 # Echoed only when the declaration names them, so a declaration written before a field is unchanged.
 # `port_status` is here too: absent normalizes to "finished", and echoing that default would put a
 # claim in the metadata of a declaration that never made one.
 MODULE_METADATA_OPTIONAL = ("replaces", "entry", "placements", "parameters", "recipes", "exclusive", "service", "registration",
-                            "dependency_kinds", "system", "port_status", "vanilla")
+                            "dependency_kinds", "system", "port_status", "reach", "hud", "vanilla")
 COMPOSITION_METADATA_FIELDS = ("name", "title", "game", "tags", "base", "map", "origin", "donor", "members")
 
 
@@ -624,6 +637,43 @@ def _port_status(value, owner: str) -> str:
     return value
 
 
+def _reach(value, owner: str, registration, placements) -> str | None:
+    """How a player gets to the feature on a map. Absent means the declaration does not say, which
+    is what every declaration written before this field means.
+
+    Two words need a second field to be true at all, and both are refused here rather than derived
+    away later: a ``passive`` rule leaves no pickup, so its registration line is the only thing that
+    shows it ran, and a ``machine`` needs a placed site, which the declaration names under
+    ``placements`` (docs/MODULES.md, "Whether a player can reach it")."""
+    if value is None:
+        return None
+    if not isinstance(value, str) or value not in REACH:
+        raise Failure(INPUT_INVALID, f"{owner}: reach is one of {list(REACH)}",
+                      "wall-or-box a weapon in the map's availability tables, machine a placed site, granted a give at spawn "
+                      "or from another module, drop a power-up the round can spawn, passive a rule with no pickup, "
+                      "menu the developer menu only.")
+    if value == "passive" and registration == "none":
+        raise Failure(INPUT_INVALID, f"{owner}: a passive rule needs its registration line; nothing else shows it ran",
+                      "Declare registration self (or entry) and print the line, or name the reach a player actually uses.")
+    if value == "machine" and not placements:
+        raise Failure(INPUT_INVALID, f"{owner}: a machine needs a placements row naming the site kind",
+                      "Declare placements with the site kind the machine needs (perk-machine, gobblegum, wunderfizz, "
+                      "pack-a-punch), or name the reach a player actually uses.")
+    return value
+
+
+def _hud(value, owner: str) -> str | None:
+    """Whether a player can see that they have it. ``icon`` promises the module ships or names the
+    icon; ``none`` says it draws nothing. Absent is neither claim."""
+    if value is None:
+        return None
+    if not isinstance(value, str) or value not in HUD:
+        raise Failure(INPUT_INVALID, f"{owner}: hud is one of {list(HUD)}",
+                      "icon when the module ships or names the icon a player sees for a pickup-shaped feature, "
+                      "none when it draws nothing.")
+    return value
+
+
 def _dependencies(value, owner: str) -> tuple[list[str], dict[str, dict]]:
     """Ids, and what each dependency is *for*. An entry is a module id, or an object
     ``{id, kind, why?}`` saying why the edge exists. The ids are the plan's fact either way: the
@@ -831,7 +881,7 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
     _fields(data, {"schema", "id", "version", "game", "title", "category", "kind", "tags", "recipe", "recipes", "seed", "bases", "maps",
                             "dependencies", "conflicts", "provides", "resource_contract", "menu_route", "distribution", "source",
                             "origin", "donor", "lineage", "tests", "replaces", "entry", "placements", "parameters",
-                            "exclusive", "service", "registration", "system", "port_status", "vanilla"},
+                            "exclusive", "service", "registration", "system", "port_status", "reach", "hud", "vanilla"},
                      {"schema", "id", "version", "bases", "maps"}, where)
     if data["schema"] != 1:
         raise Failure(INPUT_INVALID, f"{where}: expected schema 1", field='/schema')
@@ -914,6 +964,7 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
     service = _at("/service", _service, data.get("service"), mid, provides, exclusive)
     dependencies, dependency_kinds = _at("/dependencies", _dependencies, data.get("dependencies", []), mid)
     registration = _at("/registration", _registration, data.get("registration"), mid, data.get("entry"))
+    placements = _placements(data.get("placements"), mid)
     origin = _at("/origin", _origin, data.get("origin"), mid)
     if distribution == "stock" and origin != ORIGIN_VANILLA:
         raise Failure(INPUT_INVALID, f"{mid}: stock content's origin is {ORIGIN_VANILLA!r}: it is the game's own content, "
@@ -923,7 +974,7 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
     return {"id": mid, "version": data["version"], "game": game, "title": title, "category": category, "kind": kind, "tags": list(tags),
             "payload": payload, "payload_path": payload_path, "recipes": recipes, "distribution": distribution, "tests": tests,
             "replaces":_at("/replaces",_replaces,data.get("replaces")), "entry":_at("/entry",_entry,data.get("entry")),
-            "placements": _placements(data.get("placements"), mid),
+            "placements": placements,
             "parameters": parameters.validate_declared(data.get("parameters"), mid),
             "bases": list(bases), "maps": list(maps),
             "dependencies": dependencies, "dependency_kinds": dependency_kinds,
@@ -931,6 +982,10 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
             "provides": provides, "exclusive": exclusive, "service": service, "registration": registration,
             "system": _at("/system", _system, data.get("system"), mid),
             "port_status": _at("/port_status", _port_status, data.get("port_status"), mid),
+            # After registration and placements: what each of the two conditional reach words needs
+            # is read from what the declaration already says.
+            "reach": _at("/reach", _reach, data.get("reach"), mid, registration, placements),
+            "hud": _at("/hud", _hud, data.get("hud"), mid),
             "resource_contract": _at("/resource_contract", _contract, data.get("resource_contract"), f"{mid}: resource_contract"),
             "menu_route": menu_route, "source": source,
             "lineage": validate_lineage(data.get("lineage")),
@@ -2005,6 +2060,98 @@ def pin_staleness(directory: Path, commit: str) -> dict | None:
     return {"pinned": commit, "newest": sha, "commits_between": behind}
 
 
+# A give on spawn, as two halves near each other in masked source: the hook that runs when a
+# player spawns or connects, and the call that hands the thing over. `near` is one window, so a
+# hook at the top of a file and an unrelated give at the bottom are not read as one grant.
+SPAWN_HOOKS = r"on_player_spawned|spawned_player|on_player_connect|player_connected"
+GIVE_CALLS = r"give_perk|setperk|giveweapon|doperkgive"
+GIVE_WINDOW = 2000
+GIVE_ON_SPAWN = re.compile(rf"(?:{SPAWN_HOOKS})[\s\S]{{0,{GIVE_WINDOW}}}?(?:{GIVE_CALLS})"
+                           rf"|(?:{GIVE_CALLS})[\s\S]{{0,{GIVE_WINDOW}}}?(?:{SPAWN_HOOKS})", re.I)
+
+
+def gives_on_spawn(texts) -> bool:
+    """Whether this module hands its own thing over when a player spawns or connects. Masked, so a
+    commented-out grant is not a grant."""
+    return any(GIVE_ON_SPAWN.search(mask_gsc(text)) for text in texts)
+
+
+def _machine_reach(mid: str, placements: list[dict]) -> tuple[bool | None, str]:
+    """A machine is reachable when the composition's target has the site it needs. The reading is
+    the placements check's own, per target: a need with no table decides nothing."""
+    rows = [(row, need) for row in placements for need in row["needs"] if need["module"] == mid]
+    if not rows:
+        return None, "no --target, so the site table was not read"
+    unread = [row for row, need in rows if need["outcome"] == "no_table"]
+    if unread:
+        row = unread[0]
+        if "table_path" not in row:
+            return None, "no --target, so the site table was not read"
+        return None, f"no location table for {row['target']}, so the site table was not read"
+    refused = sorted({need["needs"] for _row, need in rows if need["outcome"] == "refused"})
+    if refused:
+        return False, f"no {', '.join(refused)} row in the site table for this map"
+    # `omit` places nothing, and a rotation or Wunderfizz fallback the table has no row for is the
+    # same emptiness by another name: neither puts a site in front of a player.
+    empty = sorted({need["needs"] for _row, need in rows
+                    if need["outcome"] == "fallback" and (need["fallback"] == "omit" or need.get("fallback_rows_in_table") == 0)})
+    if empty:
+        return False, f"no {', '.join(empty)} row in the site table, and the declared fallback places nothing"
+    return True, "the site table has a row for every site this machine needs, or a fallback that places one"
+
+
+def _granted_reach(m: dict, by_id: dict[str, dict], texts: list[str]) -> tuple[bool | None, str]:
+    """A grant is reachable when something in the composition performs it: the module itself on
+    spawn, or a dependency that is here and provides what this module provides.
+
+    When nothing does, the reason names the nearest thing to a grantor there was: a dependency that
+    is here and hands nothing over first, then one that is not here at all. A module that names no
+    perk, gum, power-up or piece of equipment has no candidate to name, because there is nothing for
+    a grantor to provide."""
+    if gives_on_spawn(texts):
+        return True, "the module gives it on player spawn"
+    mine = sorted({name for kind in GRANTED_KINDS for name in (m["provides"].get(kind) or [])})
+    present: list[str] = []
+    for dep in m["dependencies"]:
+        other = by_id.get(dep)
+        if other is None:
+            continue
+        shared = sorted(set(mine) & {name for kind in GRANTED_KINDS for name in (other["provides"].get(kind) or [])})
+        if shared:
+            return True, f"{dep} is in the composition and provides {', '.join(shared)}"
+        present.append(dep)
+    if mine:
+        if present:
+            return False, f"{present[0]} is in the composition but provides none of {', '.join(mine)}"
+        missing = [dep for dep in m["dependencies"] if dep not in by_id]
+        if missing:
+            return False, f"{missing[0]} is not in the composition"
+    return False, "no member grants it and it does not grant itself on spawn"
+
+
+def reach_rows(modules: list[dict], placements: list[dict], sources: dict[str, list[str]]) -> dict[str, tuple[bool | None, str]]:
+    """Per member, whether a player can reach it in this composition on this map, with the reason.
+
+    Derived, never declared: the same module is reachable in a pack that places its machine and not
+    in one that does not. Nothing here refuses; a person may want the module in the pack for a
+    machine they will place later (docs/MODULES.md, "Whether a player can reach it")."""
+    by_id = {m["id"]: m for m in modules}
+    out: dict[str, tuple[bool | None, str]] = {}
+    for m in modules:
+        reach = m.get("reach")
+        if reach in ("wall-or-box", "drop", "passive"):
+            out[m["id"]] = (True, f"reach {reach}: the declaration's own promise is enough for this map")
+        elif reach == "machine":
+            out[m["id"]] = _machine_reach(m["id"], placements)
+        elif reach == "granted":
+            out[m["id"]] = _granted_reach(m, by_id, sources.get(m["id"], []))
+        elif reach == "menu":
+            out[m["id"]] = (False, "developer menu only")
+        else:
+            out[m["id"]] = (None, "the declaration does not say")
+    return out
+
+
 def _plan_rows(modules: list[dict], order: list[str], job: Job, loaded: dict[str, tuple] | None = None) -> list[dict]:
     by_id = {m["id"]: m for m in modules}
     rows = []
@@ -2019,6 +2166,7 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job, loaded: dict[str
                "distribution": m["distribution"], "dependencies": m["dependencies"], "conflicts": m["conflicts"],
                "dependency_kinds": m["dependency_kinds"], "exclusive": m["exclusive"], "service": m["service"],
                "registration": m["registration"], "system": m["system"], "port_status": m["port_status"],
+               "reach": m["reach"], "hud": m["hud"],
                "bases": m["bases"], "maps": m["maps"], "provides": m["provides"], "resource_contract": m["resource_contract"],
                "menu_route": m["menu_route"], "source": m["source"], "reference": m.get("reference"),
                "origin": m["origin"], "donor": m["donor"], "replaces":m["replaces"], "entry":m["entry"], "placements": m.get("placements"),
@@ -2406,9 +2554,15 @@ def execute(args, job: Job) -> dict:
     # named by its (source, target) pair, which is exactly what tells the winner from the loser.
     survivors = {(str(s), t.as_posix()): mid for s, t, _, mid in staged_scripts(compiled, decided, rows)}
     registrations=[]
+    # Read once and kept per member: the reach derivation below asks a `granted` member's own
+    # source whether it hands its thing over at spawn, and these are the same bytes.
+    member_sources: dict[str, list[str]] = {}
     for source,target,_ in compiled:
         try: text=Path(source).read_text(encoding="utf-8",errors="replace")
         except OSError: continue
+        owner = owner_of_script.get(target.as_posix())
+        if owner is not None:
+            member_sources.setdefault(owner, []).append(text)
         plan["checks"] += offline_checks.external_symbols(target.as_posix(),text,comp["game"])
         plan["checks"] += offline_checks.map_script_externals(target.as_posix(),text,comp["map"],foundation,comp["game"],pack_scripts,unreachable_scripts)
         plan["checks"] += offline_checks.map_guards(target.as_posix(),text,comp["map"])
@@ -2432,12 +2586,30 @@ def execute(args, job: Job) -> dict:
         plan["generated_entry"] = generated_entry["plan"]
     plan["placements"] = _placement_checks(comp, modules, args, job)
     plan["checks"] += [{"id": "placements:" + row["target"], "outcome": row["outcome"], "detail": row["detail"]} for row in plan["placements"]]
+    # Whether a player can reach each member, derived from the declaration, the composition and the
+    # placement outcome that exists only now. Every row that is not `true` is a warning and never a
+    # refusal: a person may want the module in the pack for a machine they will place later.
+    reachable = reach_rows(modules, plan["placements"], member_sources)
+    for row in rows:
+        row["reachable"], row["reason"] = reachable[row["id"]]
+        if row["reachable"] is not True:
+            warnings.append({"module": row["id"],
+                             "message": f"{row['id']}: reachable {'false' if row['reachable'] is False else 'unknown'} "
+                                        f"on {comp['map']}: {row['reason']}"})
+    # And whether they can see they have it. A rule with no pickup (`reach: passive`) draws nothing
+    # by design and is not asked for an icon.
+    for row in rows:
+        if row["system"] in PICKUP_SYSTEMS and row["reach"] != "passive" and row["hud"] in (None, "none"):
+            warnings.append({"module": row["id"],
+                             "message": f"{row['id']}: hud {row['hud'] or 'absent'}; a {row['system']} a player cannot see "
+                                        "is one they will report as broken"})
     # The map-scripts rows exist only now, so the work orders are re-derived with them.
     plan["adapt"] = adapt_rows(comp, modules, resolved["unqualified"], pack_foundation, plan["checks"])
     (job.root / "plan.json").write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
     summary = {"plan": "plan.json", "name": comp["name"], "title": comp["title"], "base": comp["base"], "map": comp["map"],
                "base_member": plan["base_member"],
                "modules": [{"id": r["id"], "version": r["version"], "order": i + 1, "payload": r["payload"], "role": r["role"],
+                            "reachable": r["reachable"], "reason": r["reason"],
                             "parameters": r.get("parameters", {}), **({"stale": r["stale"]} if "stale" in r else {})}
                            for i, r in enumerate(rows)],
                "expected_lines": expected_lines, "stock": plan["stock"],
