@@ -1792,6 +1792,33 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
     return rows
 
 
+def package_scripts(modules, compiled):
+    """``(target, text)`` for every script that ends up in the package: the members' compiled
+    targets, and the loose scripts an adapter stage produces.
+
+    An adapter's own scripts are staged into the package at build without ever entering
+    ``compiled``, so a loop that reads ``compiled`` alone never sees them -- and a `.csc` an adapter
+    stages under ``scripts/zm`` runs in the same early client pass as any other. A source that
+    cannot be read is skipped rather than judged, so a check built on this set is never the thing
+    that turns an unreadable file into a refusal."""
+    for source, target, _ in compiled:
+        try:
+            text = Path(source).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        yield target.as_posix(), text
+    for m in modules:
+        adapter = m.get("adapter")
+        if not adapter:
+            continue
+        for row in adapter["scripts"]:
+            try:
+                text = (Path(adapter["directory"]) / row["source"]).read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            yield row["target"], text
+
+
 def _derive_base_listings(comp: dict, loads: list[Path], args, job: Job) -> None:
     """Fill ``base_owned`` from the composition's own loads instead of making a cart hand-list them.
 
@@ -2044,6 +2071,8 @@ def execute(args, job: Job) -> dict:
         plan["checks"] += offline_checks.map_script_externals(target.as_posix(),text,comp["map"],foundation,comp["game"],pack_scripts)
         plan["checks"] += offline_checks.map_guards(target.as_posix(),text,comp["map"])
         plan["checks"] += offline_checks.box_registrations(target.as_posix(),text,provided_weapons)
+    for target,text in package_scripts(modules,compiled):
+        plan["checks"] += offline_checks.csc_main_body(target,text,comp["game"])
     if args.action == "build":
         plan["checks"] += offline_checks.check_scripts(compiled,args,job,comp["game"])
     else:
