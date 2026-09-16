@@ -1511,7 +1511,8 @@ def resolve(comp: dict, modules: list[dict], allow_unqualified: bool = False) ->
 # it can tell. ``unknown`` is the honest answer for everything a plan cannot see (a missing effect
 # root, a donor asset the target zones lack); only a build finds those, and `module qualify` types
 # them from its own receipts.
-ADAPT_PATTERNS = ("map-scripts", "map-guard", "dependency-unqualified", "adapter-recipe-single-target-without-recipes", "unknown")
+ADAPT_PATTERNS = ("script-unreachable", "map-scripts", "map-guard", "dependency-unqualified",
+                  "adapter-recipe-single-target-without-recipes", "unknown")
 
 
 def adapt_rows(comp: dict, modules: list[dict], unqualified: list[dict], foundation: str | None, checks=()) -> list[dict]:
@@ -1519,8 +1520,10 @@ def adapt_rows(comp: dict, modules: list[dict], unqualified: list[dict], foundat
 
     Read-only: nothing is widened, built or written here. Each row names the module, the target
     as ``<foundation>/<map>``, the command that would earn the widening, and the pattern the plan
-    could see. The patterns a plan can decide are a script the target map does not carry
-    (``map-scripts``, from a failed check this member owns), a script whose entry guard names
+    could see. The patterns a plan can decide are a member whose every script is packed outside
+    the roots this client loads from (``script-unreachable``: a port, not a widening -- declaring
+    the target would not make a script the engine never registers run), a script the target map
+    does not carry (``map-scripts``, from a failed check this member owns), a script whose entry guard names
     another map (``map-guard``: the member is a port, not a widening, because declaring the
     target would not make a returning ``main()`` run), a dependency that is itself
     undeclared (``dependency-unqualified``), and an adapter whose recipe is a cut for another
@@ -1535,6 +1538,8 @@ def adapt_rows(comp: dict, modules: list[dict], unqualified: list[dict], foundat
                       if c.get("outcome") == "failed" and str(c.get("id", "")).startswith("map-scripts:")}
     failed_guards = {c["id"][len("map-guard:"):]: c for c in checks
                      if c.get("outcome") == "failed" and str(c.get("id", "")).startswith("map-guard:")}
+    unreachable = {c["id"][len("script-reach:"):] for c in checks
+                   if c.get("outcome") == "failed" and str(c.get("id", "")).startswith("script-reach:")}
     rows = []
     for row in unqualified:
         m = by_id.get(row["id"])
@@ -1543,7 +1548,12 @@ def adapt_rows(comp: dict, modules: list[dict], unqualified: list[dict], foundat
         pattern, detail = "unknown", None
         owned = sorted(name for name in failed_scripts if name in set(m.get("provides", {}).get("scripts", [])))
         guarded = sorted(name for name in failed_guards if name in set(m.get("provides", {}).get("scripts", [])))
-        if owned:
+        mine = sorted(m.get("provides", {}).get("scripts", []))
+        if mine and all(name in unreachable for name in mine):
+            pattern = "script-unreachable"
+            detail = ("every script this member packs is outside the roots this client loads from: "
+                      + ", ".join(mine)[:400])
+        elif owned:
             pattern = "map-scripts"
             detail = failed_scripts[owned[0]].get("detail")
         elif guarded:
@@ -2274,13 +2284,47 @@ def execute(args, job: Job) -> dict:
     if comp["game"] == "t6":
         plan["checks"] += offline_checks.loose_overrides(plan, comp.get("base_shadowable"), offline_checks.loose_images_dir())
     provided_weapons = {w for m in modules for w in (m.get("provides", {}).get("weapons") or [])}
-    pack_scripts = {t.as_posix() for _, t, _ in compiled} | {t.as_posix() for _, t, _, _ in loose}
+    # A pack script counts as carried only in a form this client opens. Everything the toolkit
+    # compiles or stages becomes a `rawfile,` row, so it is judged on its root; a `script,` row a
+    # seed or adapter already roots is a scriptparsetree asset and counts wherever it sits. The
+    # rest is `unreachable`: shipped, never registered, and named in the caller's failure instead
+    # of silently vouching for it (dev/checks.py map_script_externals).
+    pack_scripts, unreachable_scripts = set(), set()
+    for path in ({t.as_posix() for _, t, _ in compiled} | {t.as_posix() for _, t, _, _ in loose}
+                 | {s for m in modules for s in m.get("provides", {}).get("scripts", [])}):
+        (pack_scripts if offline_checks.loads_script(path, comp["game"]) else unreachable_scripts).add(path)
     for m in modules:
-        pack_scripts |= set(m.get("provides", {}).get("scripts", []))
         for row in (m["seed"]["embedded"] if m["seed"] and not m["seed"].get("private") else m["adapter"]["embedded"] if m.get("adapter") else []):
             kind, asset = row.split(",", 1)
             if kind in ("script", "rawfile") and asset.lower().endswith((".gsc", ".csc")):
-                pack_scripts.add(asset)
+                if kind == "script" or offline_checks.loads_script(asset, comp["game"]):
+                    pack_scripts.add(asset)
+                    unreachable_scripts.discard(asset)
+                elif asset not in pack_scripts:
+                    unreachable_scripts.add(asset)
+    plan["checks"] += [row for _,target,_ in compiled for row in offline_checks.script_reach(target.as_posix(),comp["game"])]
+    # A recipe's own `rawfile` asset row whose target is a script is the same case as a compiled
+    # one: the pack roots the path itself, and the loose delivery below copies it only from a loaded
+    # root, so outside them it is neither registered nor delivered. Judged and refused here, where
+    # the recipe that names it can be changed, instead of dropped without a row.
+    plan["checks"] += [row for _,target,kind,_ in loose if kind == "rawfile" and target.suffix.lower() in (".gsc", ".csc")
+                       for row in offline_checks.script_reach(target.as_posix(),comp["game"])]
+    # An adapter stages its own loose scripts, and the compose harvest copies only the ones under
+    # `scripts/`. A staged script outside the loaded roots is therefore dropped from the pack
+    # entirely -- no loose copy, no zone row, an empty `loose_scripts` on the receipt. The drop is
+    # refused here rather than widened: the roots it would be widened to are the ones the engine
+    # does not register (dev/adapters.py).
+    for m in adapter_modules:
+        for row in m["adapter"]["scripts"]:
+            plan["checks"] += offline_checks.script_reach(row["target"],comp["game"])
+    # The rest of `unreachable_scripts` is what this pack carries without rooting: a `rawfile` row
+    # inside a member's own package, or a `provides.scripts` name no payload produces. Nothing here
+    # can retarget those, so they are named rather than refused -- one row each, so a script that is
+    # shipped and never opened is a row on the plan and not a silent gap in `loose_scripts`.
+    named = {c["id"] for c in plan["checks"]}
+    for path in sorted(unreachable_scripts):
+        if "script-reach:" + path not in named:
+            plan["checks"] += offline_checks.carried_script_reach(path,comp["game"])
     # Only the rows the build stages may answer for the pack: the loser of a file collision is
     # dropped before the package is written, so its bytes are not a half of anything. A row is
     # named by its (source, target) pair, which is exactly what tells the winner from the loser.
@@ -2290,7 +2334,7 @@ def execute(args, job: Job) -> dict:
         try: text=Path(source).read_text(encoding="utf-8",errors="replace")
         except OSError: continue
         plan["checks"] += offline_checks.external_symbols(target.as_posix(),text,comp["game"])
-        plan["checks"] += offline_checks.map_script_externals(target.as_posix(),text,comp["map"],foundation,comp["game"],pack_scripts)
+        plan["checks"] += offline_checks.map_script_externals(target.as_posix(),text,comp["map"],foundation,comp["game"],pack_scripts,unreachable_scripts)
         plan["checks"] += offline_checks.map_guards(target.as_posix(),text,comp["map"])
         plan["checks"] += offline_checks.box_registrations(target.as_posix(),text,provided_weapons)
         key=(str(source),target.as_posix())
@@ -2709,10 +2753,14 @@ def _build_composition(comp: dict, plan: dict, compiled, loose, seed_modules, lo
     staged_images = projects.stage_images(raw, banks)
     # Compiled scripts also travel loose beside the package: on this base the engine executes
     # scripts/zm/*.gsc from the profile folder (`loaded successfully from raw`) and does not run
-    # the rawfile copies inside mod.ff. Every accepted stock profile ships them this way.
+    # the rawfile copies inside mod.ff. Every accepted stock profile ships them this way. The
+    # filter was `scripts/` and is now the title's loaded roots (`scripts/zm/` on T6), the same
+    # set `script-reach` refuses a target outside, so a script that passed the check is the script
+    # that travels (dev/titles.py). The narrowing drops nothing without a row: every rawfile here
+    # is a compiled target or a recipe asset row, and both are judged above.
     loose_scripts = []
     for rel in rawfiles:
-        if rel.as_posix().startswith("scripts/") and rel.suffix.lower() in (".gsc", ".csc"):
+        if rel.suffix.lower() in (".gsc", ".csc") and offline_checks.loads_script(rel.as_posix(), game):
             dest = banks / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(raw / rel, dest)

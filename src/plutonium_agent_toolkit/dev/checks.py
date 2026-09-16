@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from pathlib import Path
 from ..core.jobs import Job
 from ..core.errors import Failure, INPUT_INVALID
-from . import knowledge, scripts
+from . import knowledge, scripts, titles
 
 def get(data,key):
     for part in key.split('.'):
@@ -837,17 +837,101 @@ def foundation_of(base,root=None):
         if found:return found
     return BASE_FOUNDATIONS.get(base,base)
 
+def loads_script(target,game='t6'):
+    """Whether this title's client loads a compiled script packed at ``target``. The one place
+    the root rule is applied, so the check, the loose delivery and the ``provided`` set of
+    ``map_script_externals`` cannot drift apart."""
+    lowered=target.replace(chr(92),'/').lower()
+    return any(lowered.startswith(root) for root in titles.loaded_script_roots(game))
+
+_STOCK_SCRIPTS=None
+
+def stock_script_paths():
+    """Every script path the shipped per-map tables carry, across every map. A path in this set is
+    a stock script the map's own zones already load, so a package rooting it is overriding an
+    asset that exists rather than adding one that does not."""
+    global _STOCK_SCRIPTS
+    if _STOCK_SCRIPTS is None:
+        _STOCK_SCRIPTS={s.lower() for row in knowledge.load('map-scripts.json')['maps'].values() for s in row['scripts']}
+    return _STOCK_SCRIPTS
+
+def script_reach(name,game='t6'):
+    """Whether the client can open this compiled script at all, judged on the root it is packed
+    under. Every compiled script the toolkit links becomes a ``rawfile,<target>`` zone row, and on
+    T6 the engine registers a mod's rawfiles as scripts only under ``scripts/zm/``: a load prints
+    one ``Overridden rawfile: scripts/zm/<name> from zone mod`` per script it accepts and none for
+    a rawfile rooted elsewhere, which is then carried into the zone and never opened. The failure
+    surfaces at the first qualified call into it, as ``Could not load scriptparsetree "<path>"``
+    followed by unresolved externals and ``SV_Shutdown``, so a green compile and a byte-perfect
+    readback say nothing about it. Refusal-grade: the pack would ship a script that cannot run.
+
+    A stock path the shipped map tables carry is ``not_counted`` instead of failed: that is an
+    override of a script the map's own zones already load, which is not the measured case."""
+    roots=titles.loaded_script_roots(game)
+    if loads_script(name,game):
+        return [{'id':'script-reach:'+name,'outcome':'passed',
+                 'detail':f'Packed under {roots[0]}, the root this client loads a mod\'s scripts from'}]
+    if name.lower() in stock_script_paths():
+        # A stock path the map's own zones already carry is an override, not a new script, and no
+        # receipt on this machine settles whether a mod zone's rawfile overrides a scriptparsetree
+        # the map loads: every measured case was a module-owned path with nothing to override, and
+        # retargeting one would stop it being an override at all. Unproven either way, and said so
+        # rather than refused.
+        return [{'id':'script-reach:'+name,'outcome':'not_counted',
+                 'detail':f'{name} is a stock script the map\'s own zones carry, so this is an override rather '
+                          f'than a new script; whether a mod zone\'s rawfile overrides a stock scriptparsetree has '
+                          f'no receipt here. Retargeting it under {roots[0]} would stop it being an override: a '
+                          f'replacement belongs in a script under {roots[0]} that calls replacefunc'}]
+    path=Path(name)
+    retarget=roots[0]+path.name
+    old=path.with_suffix('').as_posix().replace('/',chr(92))
+    new_call=retarget.rsplit('.',1)[0].replace('/',chr(92))
+    return [{'id':'script-reach:'+name,'outcome':'failed','roots':list(roots),
+             'detail':f'This client loads a mod\'s scripts only from {", ".join(roots)}, so {name} reaches it '
+                      f'as a rawfile inside mod.ff that is never registered as a script; the load prints '
+                      f'Could not load scriptparsetree "{name}" at the first qualified call into it. '
+                      f'Retarget to {retarget} and rewrite every caller\'s qualified path ({old}:: becomes '
+                      f'{new_call}::) or #include; a {path.parts[0]}/... path inside mod.ff is never registered'}]
+
+def carried_script_reach(name,game='t6'):
+    """The same reach question for a script the pack carries but roots no target for: a ``rawfile``
+    row already embedded in a member's own package (a seed's ``mod.ff``, an adapter's ``rawfiles``
+    or its embedded loose scripts), or a ``provides.scripts`` name no payload produces. The engine
+    fact is ``script_reach``'s: outside the loaded roots nothing registers it, and the loose
+    delivery beside the package does not copy it either, so it is shipped and never opened.
+
+    ``not_counted``, not refused: the row is inside bytes this pack only loads, so there is no
+    target here to retarget. Its purpose is that the drop is named. Nothing else names it -- the
+    receipt's ``loose_scripts`` just omits it, and ``map_script_externals`` judges only the stock
+    namespaces, so a caller into a ``scripts/...`` path of this kind raises no row of its own."""
+    roots=titles.loaded_script_roots(game)
+    return [{'id':'script-reach:'+name,'outcome':'not_counted','roots':list(roots),
+             'detail':f'This pack carries {name} only as a rawfile outside {", ".join(roots)}, the roots this '
+                      f'client loads a mod\'s scripts from: the engine never registers it as a script, and it does '
+                      f'not travel loose beside the package either, so it is shipped and never opened. Nothing here '
+                      f'roots that path -- it is inside a member\'s own package -- so there is no target to retarget '
+                      f'and this row refuses nothing; if the pack needs that script, add it under {roots[0]} in a '
+                      f'module of this pack'}]
+
+
 INCLUDE_PATH=re.compile(r'^\s*#include\s+([^;]+);',re.M|re.I)
 QUALIFIED=re.compile(r'([A-Za-z_][A-Za-z0-9_\\/]*[\\/][A-Za-z0-9_\\/]+)::[A-Za-z_]')
 
-def map_script_externals(name,text,map_id,foundation,game='t6',provided=()):
+def map_script_externals(name,text,map_id,foundation,game='t6',provided=(),unreachable=()):
     """Every script this source includes or calls with a qualified path must be carried by the zones
     the target map loads on this foundation. A path the map lacks is an unresolved external at load
     (`COM_ERROR ... Unresolved external`), which the compiler cannot see. not_counted when the map is
     not in the table or the title is not T6. Only stock-looking paths (maps/, clientscripts/,
     common_scripts/, codescripts/) are judged, and a path another member of the same pack
-    provides (``provided``: every script target the pack stages or a seed roots) is carried by
-    the pack itself, not missing."""
+    provides is carried by the pack itself, not missing.
+
+    ``provided`` is the pack's scripts in a form this client can open: a target under a loaded
+    root (``titles.loaded_script_roots``), or a ``script,`` zone row a seed or adapter roots,
+    which is a real scriptparsetree asset. ``unreachable`` is the rest -- the pack's own script
+    targets that reach the client only as a ``rawfile`` the engine never registers. Those do not
+    make a path carried: counting them is how a pack used to vouch for a script it ships in a
+    form nothing opens, and the caller that needed it got a green row before a `SV_Shutdown`.
+    A missing path the pack ships that way is named with its ``script-reach`` row."""
     if game!='t6':
         return [{'id':'map-scripts:'+name,'outcome':'not_counted','detail':'Per-map script tables are T6-only'}]
     table=knowledge.load('map-scripts.json')['maps'].get(map_id)
@@ -862,7 +946,14 @@ def map_script_externals(name,text,map_id,foundation,game='t6',provided=()):
     judged={p for p in wanted if p.startswith(('maps/','clientscripts/','common_scripts/','codescripts/'))}
     missing=sorted(p for p in judged if p+suffix not in carried and p+'.gsc' not in carried and p+'.csc' not in carried)
     if missing:
-        return [{'id':'map-scripts:'+name,'outcome':'failed','detail':f'{map_id} on {foundation} does not carry: '+', '.join(missing)[:800],'missing':missing[:32]}]
+        shipped={p.lower() for p in unreachable}
+        named=sorted({p+s for p in missing for s in (suffix,'.gsc','.csc') if p+s in shipped})
+        detail=f'{map_id} on {foundation} does not carry: '+', '.join(missing)[:800]
+        if named:
+            detail+=('. This pack ships '+', '.join(named)[:400]+', but as a rawfile the engine never registers as a script: '
+                     'see the script-reach:'+named[0]+' row for the root this client loads from and the retarget')
+        return [{'id':'map-scripts:'+name,'outcome':'failed','detail':detail,'missing':missing[:32],
+                 **({'unreachable':named[:32]} if named else {})}]
     if judged:
         return [{'id':'map-scripts:'+name,'outcome':'passed','detail':f'Every included or qualified stock script path is carried by {map_id} on {foundation}'}]
     return [{'id':'map-scripts:'+name,'outcome':'not_counted','detail':'No stock script path is included or called'}]
