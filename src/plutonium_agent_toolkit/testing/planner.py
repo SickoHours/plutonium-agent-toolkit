@@ -2,6 +2,7 @@
 import os
 import copy
 import hashlib
+import re
 from itertools import combinations
 from pathlib import Path
 from types import SimpleNamespace
@@ -61,7 +62,8 @@ def load(args,job):
             raise Failure('input_changed','Contract changed while loading',field=field)
         if composition['map'] not in c['maps']:raise Failure(INPUT_INVALID,'Member contract does not cover the composition map',field=field+'/maps/'+composition['map'])
         contracts[mid]=c
-        members.append({'id':mid,'directory':str(m['directory']),'declaration_sha256':job.inputs[str(m['declaration'])],'provides':m['provides'],'tests':m['tests']})
+        members.append({'id':mid,'directory':str(m['directory']),'declaration_sha256':job.inputs[str(m['declaration'])],'provides':m['provides'],'tests':m['tests'],
+                        'registration':m.get('registration')})
     return dict(name=composition['name'],base=composition['base'],map=composition['map'],order=resolved['order'],modules=members,mode=args.mode,
                 probe=probe_active,probe_module=(str(probe['added']['directory']) if probe['added'] else None),source=str(composition['source'])),contracts,decisions
 
@@ -135,7 +137,18 @@ def stitch(plan, contracts, decisions):
         soak_steps=[{'id':'soak','actor':'agent' if plan.get('probe') else 'human','verifier':'agent','prompt':f'Advance {soak} additional rounds, then verify the log.',
                      'action':{'verb':'round_set','arg':'+'+str(soak)},'check':error}]
         if result['mode']=='background' and not plan.get('probe'):raise Failure(INPUT_INVALID,'Background soak needs a test probe',field='/phases/3/steps/0/actor')
-    result['phases']=[{'name':'load','steps':[{'id':'load-clean','actor':'agent','verifier':'agent','action':{'verb':'check_load'},'check':error}]},
+    # Beside the error-absence check, one log check per member whose declaration promises a console
+    # line: the load then says which members registered, instead of only that nothing errored. A
+    # member declared `none` or absent gets no step and says so under not_covered, so the plan names
+    # where its coverage is thin (docs/MODULES.md, "The registration line").
+    load_steps=[{'id':'load-clean','actor':'agent','verifier':'agent','action':{'verb':'check_load'},'check':error}]
+    for mid in plan['order']:
+        if members[mid].get('registration') in ('self','entry'):
+            load_steps.append({'id':'registration/'+mid,'actor':'agent','verifier':'agent',
+                               'check':{'source':'log','present':'^'+re.escape(mid)+comp.REGISTRATION_SUFFIX}})
+        else:
+            result['not_covered'].append(mid+' prints no registration line')
+    result['phases']=[{'name':'load','steps':load_steps},
                       {'name':'members','steps':steps},{'name':'interactions','steps':pairs},{'name':'soak','steps':soak_steps}]
     for sid in result['excluded_steps']:result['not_covered'].append('Owner decision excluded check/action '+sid)
     return result
