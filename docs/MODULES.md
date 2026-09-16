@@ -324,6 +324,18 @@ builder the plan lists `adapter_builder` as unavailable and the build refuses be
 Member, load and base-listing paths cannot begin with `/`, including on Windows where
 that spelling is rooted on the current drive rather than relative to the composition.
 
+**A pin says what the pack was built from; the plan says what has happened since.** For a member
+written as `{"name": …, "commit": …, "path": …}`, `plan` asks git in the fetched directory,
+read-only and without ever fetching: is the pinned commit known here, and how many commits have
+touched that folder since it. A folder that has moved on gives the plan row `"stale": {"pinned":
+…, "newest": …, "commits_between": n}` and one warning naming the member; a pin that is still the
+newest commit to touch the folder gives `"stale": null`. Where git cannot answer — no git, the
+directory is not inside a repository, the pin is not a commit this clone knows — `newest` and
+`commits_between` are `null` beside a one-line `reason`, and there is no warning. It is a warning
+and never a refusal: a pinned pack is honest about what it was built from, and re-fetching is the
+person's decision (`pat module fetch`, `docs/REGISTRY.md`). A member named by a local path alone
+carries no `stale` key at all, in the plan row or in the summary, and costs no git call.
+
 ## What `plan` proves and what it does not
 
 `pat module plan <composition.json> --output <new dir> --json` reads every declaration, recipe

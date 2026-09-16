@@ -50,6 +50,7 @@ import os
 import stat
 import re
 import shutil
+import subprocess
 from pathlib import Path, PureWindowsPath
 from types import SimpleNamespace
 
@@ -1861,9 +1862,53 @@ def _backends(compiled: list, adapters_present: bool = False, workspace: str | N
     return checks
 
 
+def pin_staleness(directory: Path, commit: str) -> dict | None:
+    """What has happened to a pinned member's folder since the commit the pack pinned.
+
+    ``None`` when the pin is the newest commit that touched the folder, so a plan row reads
+    ``"stale": null``. A dict when the folder moved on (``pinned``, ``newest``,
+    ``commits_between``) or when git cannot answer here (``newest`` and ``commits_between``
+    ``None``, with a one-line ``reason``): no git, the directory is not in a repository, or the
+    pin is not a commit this clone knows. Read-only and never fetches; a pinned pack is honest
+    about what it was built from, so this is a warning and never a refusal.
+    """
+    def unknown(reason: str) -> dict:
+        return {"pinned": commit, "newest": None, "commits_between": None, "reason": reason}
+
+    def git(*argv: str):
+        try:
+            return subprocess.run(["git", "-C", str(directory), *argv], capture_output=True, text=True, timeout=10)
+        except (OSError, subprocess.SubprocessError):
+            return None
+
+    known = git("rev-parse", "--verify", f"{commit}^{{commit}}")
+    if known is None:
+        return unknown("git could not be run here")
+    if known.returncode != 0:
+        if "not a git repository" in (known.stderr or "").lower():
+            return unknown("the member directory is not inside a git repository")
+        return unknown(f"{commit[:12]} is not a known commit in this repository")
+    counted = git("rev-list", "--count", f"{commit}..HEAD", "--", ".")
+    if counted is None or counted.returncode != 0:
+        return unknown(f"git could not count the commits after {commit[:12]}")
+    try:
+        behind = int((counted.stdout or "").strip())
+    except ValueError:
+        return unknown(f"git could not count the commits after {commit[:12]}")
+    if behind <= 0:
+        return None
+    newest = git("log", "-1", "--format=%H", "--", ".")
+    sha = (newest.stdout or "").strip() if newest is not None and newest.returncode == 0 else ""
+    if not sha:
+        return unknown("git could not name the newest commit that touched the folder")
+    return {"pinned": commit, "newest": sha, "commits_between": behind}
+
+
 def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
     by_id = {m["id"]: m for m in modules}
     rows = []
+    # One git read per (directory, commit) in a plan: two rows that pin the same folder ask once.
+    staleness: dict[tuple[str, str], dict | None] = {}
     for mid in order:
         m = by_id[mid]
         row = {"id": mid, "version": m["version"], "title": m["title"], "category": m["category"], "kind": m["kind"],
@@ -1877,6 +1922,12 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
                "menu_route": m["menu_route"], "source": m["source"], "reference": m.get("reference"),
                "origin": m["origin"], "donor": m["donor"], "replaces":m["replaces"], "entry":m["entry"], "placements": m.get("placements"),
                "parameters": m.get("parameters_effective", {})}
+        reference = m.get("reference")
+        if reference and reference.get("commit"):
+            key = (str(m["directory"]), reference["commit"])
+            if key not in staleness:
+                staleness[key] = pin_staleness(m["directory"], reference["commit"])
+            row["stale"] = staleness[key]
         if m["recipe"] is not None:
             row["recipe_sha256"] = job.inputs[str(m["recipe"].resolve())]
         elif m.get("adapter") is not None:
@@ -2109,6 +2160,12 @@ def execute(args, job: Job) -> dict:
     adapter_modules = [by_id[mid] for mid in resolved["order"] if by_id[mid].get("adapter")]
     checks = _backends(compiled, bool(adapter_modules), getattr(args, "workspace", None))
     rows = _plan_rows(modules, resolved["order"], job)
+    # A pinned member whose folder has moved on since the pin: said once, as a warning. The pack is
+    # what it was built from, so nothing here refuses; the person decides whether to fetch again.
+    warnings += [{"module": r["id"],
+                  "message": f"{r['id']} is pinned at {r['stale']['pinned'][:12]} and its folder has "
+                             f"{r['stale']['commits_between']} newer commit(s), newest {r['stale']['newest'][:12]}"}
+                 for r in rows if (r.get("stale") or {}).get("commits_between")]
     # One row per member in plan order: the console line the declaration promises, or None where it
     # promises none. Derived from the declaration and nothing else, so a load check, a test plan and
     # a campaign tool read one list instead of each keeping its own (docs/MODULES.md).
@@ -2210,7 +2267,7 @@ def execute(args, job: Job) -> dict:
     summary = {"plan": "plan.json", "name": comp["name"], "title": comp["title"], "base": comp["base"], "map": comp["map"],
                "base_member": plan["base_member"],
                "modules": [{"id": r["id"], "version": r["version"], "order": i + 1, "payload": r["payload"], "role": r["role"],
-                            "parameters": r.get("parameters", {})}
+                            "parameters": r.get("parameters", {}), **({"stale": r["stale"]} if "stale" in r else {})}
                            for i, r in enumerate(rows)],
                "expected_lines": expected_lines,
                "unqualified": resolved["unqualified"], "adapt": plan["adapt"],
