@@ -518,7 +518,8 @@ composition's target: `{module, directory, target, pattern, detail, declared_bas
 declared_maps, work_order}`, where `work_order` is the `pat module qualify` command that would
 earn the widening. The same list travels under `details.adapt` when the plan refuses for
 `unqualified_base`/`unqualified_map`, so a caller reads work orders either way. `pattern` is what
-the plan itself can decide — `map-scripts`, `dependency-unqualified`,
+the plan itself can decide — `map-scripts`, `map-guard` (the member's entry guard names another
+map, so it is a port and no widening makes it run), `dependency-unqualified`,
 `adapter-recipe-single-target-without-recipes` — and `unknown` for everything only a build can
 find. Nothing is widened, built or written by `adapt`.
 
@@ -834,7 +835,27 @@ script namespace (`maps/`, `clientscripts/`, `common_scripts/`, `codescripts/`) 
 compiled scripts the target map's zones carry on that foundation (`knowledge/map-scripts.json`);
 a path the map lacks fails, since it is an unresolved external at load that no compiler sees;
 a path another member of the same pack provides (a staged script target, a seed or adapter
-script root, a `provides.scripts` name) is carried by the pack and passes. Projectile FX union requires
+script root, a `provides.scripts` name) is carried by the pack and passes.
+
+`map-guard:<script>` rows read the other half of "this script is on the wrong map", the half no
+zone table can see. A module ported from another map often keeps its donor's entry guard: an
+`if ( getdvar( "mapname" ) != "zm_transit" ) return;` as the first statement of `main()` or `init()`,
+the `level.script` form of the same test, or the `==` form whose `else` returns. That script
+compiles, links and loads on any map, and on a map the guard does not name its entry point returns
+and the member does nothing — with no compiler diagnostic, no unresolved external and no load-time
+line to read. One condition may name several maps (`!= "a" && != "b"`, or the `==`/`||` dual); that
+is one guard over that set, and the row fails only when the target is in none of them, listing every
+map the guard names. A guard naming the composition's own map passes; a source that never asks is
+`not_counted`, because a script that never asks runs everywhere.
+
+Because a failed row refuses the plan, the guard is read narrowly. It counts only as the entry
+point's first real statement — prints, waits and assignments may precede it, since none of them
+decides anything, but a `thread`, a call to another function or a block of any kind means the entry
+point has begun its work — and only when its branch returns unconditionally: a bare `return;`, or a
+block whose own statements are returns, prints and assignments. A map conditional further down, or
+one whose branch holds a nested `if (...) return;`, is program logic and stays `not_counted`, which
+means unread and never clean.
+Projectile FX union requires
 weapon blobs and is not inferred from weapon count. Soundbank listing is only a floor.
 Builds run a receipted `gsc check` dry run per script before linking. Compiler-reported unresolved
 externals fail; successful compilation alone cannot prove runtime external resolution and that
