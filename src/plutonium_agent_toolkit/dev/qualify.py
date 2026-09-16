@@ -32,6 +32,13 @@ declared recipe with only ``foundation``, ``map``, ``profile`` and ``revision`` 
 to be the same bytes (the profile name is inside the cut), so their hashes are both recorded and
 neither is asserted against the other.
 
+A module whose ``port_status`` is not ``finished`` is refused by the planner unless the composition
+names that status under the member's ``accept``, and this is the one route that writes the
+composition for the caller: ``--accept <status>`` is how the caller says it. Every member of the
+synthesized composition whose declaration is unfinished is written as ``{"path": ..., "accept":
+[...]}``; the declaration's own ``port_status`` is never changed, and the records say the package
+builds, not that the port is finished.
+
 Nothing here touches a game, a network or a running process. Nothing is installed. A qualified
 module is offline verified on that target and nothing more.
 """
@@ -67,6 +74,10 @@ REFUSAL_KINDS = ("target-unstaged", "shelf-missing", "missing-dependency", "depe
 # The linker names a root it cannot resolve; an effect the target's zones do not carry is the one
 # the lanes met (``ERROR: Missing asset "..." of type "fx"``).
 MISSING_ASSET = 'ERROR: Missing asset "'
+# The unfinished port statuses a composition can take knowingly. This route synthesizes the
+# composition on the caller's behalf, so `--accept` is the only place the caller can name one, and
+# it names it from the same list a member's own `accept` takes.
+TAKEABLE = tuple(status for status in compositions.PORT_STATUSES if status != "finished")
 
 
 def add_parser(actions, common):
@@ -80,6 +91,10 @@ def add_parser(actions, common):
     q.add_argument("--workspace", required=True, help="Workspace root holding foundations/, modules/ and registry/")
     q.add_argument("--member-root", action="append", default=[], metavar="DIR",
                    help="Directory of module directories to resolve dependencies from; repeatable (default: <workspace>/modules)")
+    q.add_argument("--accept", action="append", default=[], metavar="STATUS", choices=TAKEABLE,
+                   help=f"An unfinished port_status this build composes knowingly, one of {list(TAKEABLE)}; repeatable. "
+                        "Every member of the synthesized composition whose port_status is not finished is written with "
+                        "this accept. The declaration's own port_status is never changed")
     common(q)
 
 
@@ -95,6 +110,20 @@ def parse_target(text: str) -> tuple[str, str]:
     if not targets.FOUNDATION.match(foundation) or not targets.MAP.match(map_id):
         raise Failure(INPUT_INVALID, f"--target is <foundation>/<map>, for example dlc5-beta2/zm_factory: {text!r}")
     return foundation, map_id
+
+
+def accepted_statuses(values: list[str]) -> list[str]:
+    """The unfinished port statuses this run composes knowingly, from ``--accept``. The vocabulary
+    and the bounds are a composition member's own, because the member objects this route writes are
+    what the planner reads; only the refusal names the flag instead of a member."""
+    if not values:
+        return []
+    try:
+        return compositions._accept(list(values), "--accept", "/accept")
+    except Failure as exc:
+        raise Failure(INPUT_INVALID, f"--accept names 1 to {len(TAKEABLE)} distinct statuses from {list(TAKEABLE)}: {values}",
+                      "Each --accept names one unfinished port status this build composes knowingly; "
+                      "a finished member needs none.") from exc
 
 
 def read_json(path: Path, job: Job, limit: int = MAX_JSON) -> dict:
@@ -414,6 +443,9 @@ def test_section(row: dict, number: int) -> str:
     else:
         lines.append(f"- `mod.ff` sha256 `{steps['build-qualified']['package_sha256']}`; the declaration-blind build produced the same bytes"
                      f" (`{steps['build-unqualified']['package_sha256']}`).")
+    if accept_note(row):
+        lines.append(f"- Accepted for this build: `--accept {' '.join(row['accept'])}`; "
+                     + accept_note(row).strip() + " The declaration's own `port_status` was not changed by this build.")
     lines.append(f"- Declaration sha256 after widening `bases` by `{row['base']}` and `maps` by `{row['map']}`: `{row['records']['declaration_sha256']}`.")
     for label, keys in (("Pre-declaration attempt (`--allow-unqualified`; this module was reported unqualified for the target)",
                          ("plan-unqualified", "build-unqualified", "verify-unqualified")),
@@ -442,6 +474,20 @@ def warning_note(row: dict) -> str:
             f"this machine (not a package fact). ")
 
 
+def accept_note(row: dict) -> str:
+    """What an accepted unfinished port adds to the built-alone row. The status is the
+    declaration's own and this route never changes it, so the note says what the row is not."""
+    status, accept = row.get("port_status", "finished"), row.get("accept") or []
+    parts = []
+    if status != "finished" and status in accept:
+        parts.append(f"port_status {status} accepted for this build; the row says the package builds, "
+                     f"not that the port is finished.")
+    others = [m for m in row.get("accepted_members") or () if m["id"] != row["id"]]
+    if others:
+        parts.append("Accepted in the closure: " + ", ".join(f"{m['id']} ({m['port_status']})" for m in others) + ".")
+    return " ".join(parts) + " " if parts else ""
+
+
 def ledger_row(row: dict) -> dict:
     build = row["steps"]["build-qualified"]
     cut = next((a for a in build.get("adapters") or [] if a.get("id") == row["id"]), None)
@@ -457,6 +503,7 @@ def ledger_row(row: dict) -> dict:
                     f"pat project verify --inputs unchanged. "
                     + (f"The workspace builder cut this module's adapter recipe for the target to mod.ff {cut['mod_ff_sha256']} and the "
                        f"package above is the pack that links alone against it. " if cut else "")
+                    + accept_note(row)
                     + warning_note(row)
                     + f"The declaration was widened to this base and map by this receipt. "
                       f"Offline only: not installed, not launched, not played."}
@@ -540,7 +587,19 @@ def refuse(row: dict, kind: str, message: str, hint: str = "", **extra) -> dict:
     return row
 
 
-def qualify_one(directory: Path, index: dict[str, tuple[Path, dict]], info: dict, args, job: Job, workspace: Path) -> dict:
+def member_entry(path: str, port_status: str, accept: list[str]):
+    """One member of the synthesized composition. A member whose port_status is not ``finished``
+    is written as an object naming what this build accepts, because the planner takes such a member
+    only when the composition says so (``docs/MODULES.md``, "The planner refusal"); a finished
+    member stays the plain path it has always been."""
+    if port_status == "finished" or not accept:
+        return path
+    return {"path": path, "accept": list(accept)}
+
+
+def qualify_one(directory: Path, index: dict[str, tuple[Path, dict]], info: dict, args, job: Job, workspace: Path,
+                accept: list[str] | None = None) -> dict:
+    accept = list(accept or [])
     metadata = index_entry(directory, index, job)
     mid = metadata["id"]
     base, map_id, foundation = info["base"], info["map"], info["foundation"]
@@ -554,6 +613,7 @@ def qualify_one(directory: Path, index: dict[str, tuple[Path, dict]], info: dict
            "at": now(), "outcome": "refused", "steps": {}, "refusals": [], "records": {},
            "already_declared": declared_for(metadata, base, map_id), "recipe_cut": list(cut) if cut else None,
            "base_listings": [str(d) for d in info.get("base_listings") or ()], "warnings": [],
+           "port_status": metadata["port_status"], "accept": accept, "accepted_members": [],
            "job": relative_to(home, workspace)}
 
     members, missing = closure(mid, index)
@@ -590,9 +650,15 @@ def qualify_one(directory: Path, index: dict[str, tuple[Path, dict]], info: dict
     pack = home / "pack"
     pack.mkdir(parents=True, exist_ok=True)
     composition = pack / "composition.json"
+    # A member the shelf declares unfinished is written with this job's acceptance, the module
+    # itself and its dependency closure alike: a dependency brought in as `loads-but-wrong` is
+    # refused by the planner for the same reason the module would be.
+    row["accepted_members"] = [{"id": m, "port_status": index[m][1]["port_status"]}
+                               for m in members if index[m][1]["port_status"] != "finished" and accept]
     composition.write_text(json.dumps(
         {"schema": 1, "name": f"{base}_{mid}_test", "base": base, "map": map_id,
-         "modules": [relative_to(staged_root / index[m][0].name, pack) for m in members],
+         "modules": [member_entry(relative_to(staged_root / index[m][0].name, pack), index[m][1]["port_status"], accept)
+                     for m in members],
          "loads": [relative_to(load, pack) for load in info["loads"]],
          "zone_header": info["zone_header"]}, indent=2) + "\n", encoding="utf-8")
     row["composition"] = relative_to(composition, workspace)
@@ -790,6 +856,7 @@ def execute(args, job: Job) -> dict:
     if bool(args.module) == bool(args.module_set):
         raise Failure(INPUT_INVALID, "Name one module directory, or --set with a file of them", "Not both, and not neither.")
     foundation, map_id = parse_target(args.target)
+    accept = accepted_statuses(getattr(args, "accept", []) or [])
     workspace = Path(args.workspace).expanduser().resolve()
     if not workspace.is_dir():
         raise Failure(INPUT_MISSING, f"Workspace is missing: {workspace}")
@@ -813,7 +880,7 @@ def execute(args, job: Job) -> dict:
     for mid in order:
         job.check_deadline()
         try:
-            row = qualify_one(wanted[mid], index, info, args, job, workspace)
+            row = qualify_one(wanted[mid], index, info, args, job, workspace, accept)
         except Failure as exc:
             # The set continues past a failure; the module's own row carries it.
             row = {"id": mid, "directory": str(wanted[mid]), "target": f"{foundation}/{map_id}", "outcome": "refused",
@@ -824,14 +891,18 @@ def execute(args, job: Job) -> dict:
         rows.append(row)
         index = shelf(roots, job)  # a qualified module is a declared dependency for the next one
         results.write_text(json.dumps({"schema": 1, "protocol": PROTOCOL, "target": f"{foundation}/{map_id}",
-                                       "modules": table(rows)}, indent=2) + "\n", encoding="utf-8")
+                                       "accept": accept, "modules": table(rows)}, indent=2) + "\n", encoding="utf-8")
     qualified = [r for r in rows if r["outcome"] == "qualified"]
     summary = {"protocol": PROTOCOL, "target": f"{foundation}/{map_id}", "base": info["base"],
-               "workspace": str(workspace), "results": "results.json" if results.is_file() else None,
+               "workspace": str(workspace), "accept": accept,
+               "results": "results.json" if results.is_file() else None,
                "modules": table(rows), "qualified": len(qualified), "refused": len(rows) - len(qualified),
                "elapsed_seconds": round(time.monotonic() - started, 3),
                "verification": "each module built alone on the target twice (declaration-blind and qualified), read back and verified; "
-                               "records written from those receipts only. Offline: nothing installed, launched or played."}
+                               "records written from those receipts only. Offline: nothing installed, launched or played."
+                               + (f" Composed with --accept {' '.join(accept)}: a member of that port_status was taken knowingly, "
+                                  "which says the package builds, not that the port is finished, and no declaration's "
+                                  "port_status was changed." if accept else "")}
     if args.module and not qualified:
         raise Failure(INPUT_INVALID, rows[0]["refusals"][0]["message"] if rows[0]["refusals"] else "The module was not qualified",
                       rows[0]["refusals"][0].get("hint", "") if rows[0]["refusals"] else "",
@@ -843,6 +914,8 @@ def table(rows: list[dict]) -> list[dict]:
     """The results table: one row per module, the same fields whatever the outcome."""
     return [{"id": r["id"], "outcome": r["outcome"], "target": r["target"], "job": r.get("job"),
              "already_declared": r.get("already_declared"),
+             "port_status": r.get("port_status"), "accept": r.get("accept") or [],
+             "accepted_members": r.get("accepted_members") or [],
              "package_sha256": (r["steps"].get("build-qualified") or {}).get("package_sha256"),
              "package_identical": r.get("package_identical"),
              "adapter_cuts": (r["steps"].get("build-qualified") or {}).get("adapters") or [],

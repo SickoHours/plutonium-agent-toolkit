@@ -7,6 +7,23 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- `pat module qualify` can take an unfinished port knowingly. Measured on the merged toolkit:
+  qualifying a module whose `module.json` declares `port_status: "loads-but-wrong"` refused at step
+  `plan-unqualified` with the planner's typed `port_status` refusal ("... is loads-but-wrong and
+  this composition does not accept it"), because `qualify` synthesizes the one-member composition
+  itself and wrote every member as a plain string, so nothing could name `accept`, which is where
+  acceptance lives: it is a fact about the composition, not about the declaration. `module qualify`
+  now takes `--accept <status>` (repeatable,
+  1 to 2 distinct values from `loads-but-wrong` and `not-ported`, the same vocabulary and validation
+  a composition member's `accept` has; an unknown word is refused at the argument). With it, every
+  member of the synthesized composition whose declaration is not `finished` — the module and its
+  declared dependency closure alike — is written as `{"path": ..., "accept": [...]}`, and the
+  acceptance is recorded in `qualify.json`, the results row, the receipt, the `docs/TEST.md` section
+  and the `built-alone` ledger note, which says the package builds and not that the port is
+  finished. The declaration's own `port_status` is never changed by qualification. Without
+  `--accept` behaviour is unchanged: the refusal stands, and the results row carries it as
+  `plan-refused` with the planner's `port_status` row inside. Offline verified on Linux; no game was
+  loaded.
 - A compiled script packed outside the root its client loads from is refused, not shipped.
   `script-reach:<target>` is a new per-script check: a T6 client registers a mod's scripts out of
   `scripts/zm/` and an IW5 client out of the flat `scripts/` namespace, and every compiled script
