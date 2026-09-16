@@ -12,6 +12,7 @@ import unittest
 from pathlib import Path
 
 from plutonium_agent_toolkit.core.errors import Failure
+from plutonium_agent_toolkit.dev import checks
 from plutonium_agent_toolkit.dev.compositions import (REGISTRATION_KINDS, REGISTRATION_SUFFIX,
                                                       registration_line, validate_declaration_metadata)
 from tests.test_compositions import CompositionFixture, declaration
@@ -138,6 +139,16 @@ class GeneratedEntryLine(CompositionFixture):
         source = Path(out) / "generated-entry/zz_stock_pack_test_entry.gsc"
         self.assertTrue(source.is_file())
         return source.read_text().splitlines()
+
+    def test_the_generated_entry_is_judged_by_externals_and_passes(self):
+        """The generated entry is a compiled source, so `externals:` judges it like any other. Its
+        qualified calls name module paths no stock export row owns, which must not be read
+        negatively, and `println` is a witnessed server builtin, so it carries no unknown row."""
+        self.entry_member("alpha", registration="entry")
+        source = "\n".join(self.entry_lines(self.composition(["alpha"]))) + "\n"
+        rows = checks.external_symbols("scripts/zm/zz_stock_pack_test_entry.gsc", source)
+        self.assertEqual([r["outcome"] for r in rows], ["passed"], rows)
+        self.assertEqual([r for r in rows if r["id"].startswith("externals-unknown:")], [])
 
     def test_the_println_follows_the_register_call(self):
         self.entry_member("alpha", registration="entry")
