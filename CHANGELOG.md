@@ -7,6 +7,26 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- A module can declare what it *promises*, and the declaration reader checks it. `replaces.files`
+  is widened from GSC/CSC scripts to any relative zone path the base or the map already carries (a
+  table, a visionset, a `weapons/<name>` file), still lowercase, forward slashes, deduplicated and
+  at most 64: what the field promises is ownership, not a suffix. `module.json` takes three new
+  optional fields. `exclusive` lists the role words from a fixed vocabulary (`hud`, `box`,
+  `loadscreen`, `boss`, `perk-machines`, `perk-art`) a module owns outright, for the things a pack
+  has room for exactly one owner of. `service` is `true` when the module exists to own shared
+  things so others depend on it and ship no copy; it must provide something shareable
+  (`rawfiles`, `scripts`, `soundbanks`, `aliases`) or own a role, and must register no weapon of
+  its own, because a weapon module that also ships a shared table is the problem a service solves.
+  A `dependencies` entry may be an object `{id, kind, why?}` saying what the edge is for (`call`,
+  `name`, `service` or `runtime`; a `runtime` edge must say why, since nothing in the files can
+  verify it). A plain id keeps meaning exactly what it meant and `dependencies` stays a list of ids
+  everywhere it is read, so a declaration written before this change is unchanged and valid.
+  `module inspect` echoes `exclusive`, `service` and `dependency_kinds` only when the declaration
+  names them, `plan.json` records all three per member, and the shelf lookup that names "the module
+  to depend on instead" now prefers a declared `service: true` over the older `shared-service` tag,
+  which is read as the same mark for one more release. This change adds no planner refusal: two
+  members owning one role still plan. Offline unit tests on Linux
+  (`tests/test_promises_vocabulary.py`); no native receipt, and no route status changes.
 - New check `loose-overrides`. Plutonium reads an image's pixels from an image bank *or* from the
   global loose path `storage/t6/images`, and a loose file there wins: it applies to every mod folder
   on the machine and to the bare game with no mod selected. A loose `<name>.iwi` whose name one of
