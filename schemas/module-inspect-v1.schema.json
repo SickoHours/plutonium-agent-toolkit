@@ -694,6 +694,15 @@
           "description": "Present only when the declaration names service: true when the module exists to own shared things, so others depend on it and ship no copy. Format: docs/MODULES.md.",
           "type": "boolean"
         },
+        "registration": {
+          "description": "Present only when the declaration names registration: who prints the module's one console line '<id> >> registered' at init. 'self' is the module's own script, 'entry' the pack's generated entry script on its behalf (the declaration must name entry), 'none' a module with nothing that runs at init. Format: docs/MODULES.md.",
+          "type": "string",
+          "enum": [
+            "self",
+            "entry",
+            "none"
+          ]
+        },
         "dependency_kinds": {
           "description": "Present only when at least one dependencies entry was an object: what each dependency is for, by id. A kind of null is an entry that did not say. Format: docs/MODULES.md.",
           "type": "object",
