@@ -31,6 +31,26 @@ Every entry states what shipped, on which platform it was verified, and what rem
   with the verdict. A read-only sweep of 407 module sources in the private workspace turns up
   exactly the three known-broken scripts and no other row. Verified offline on Linux; nothing was
   built, installed or played.
+- `clientfield-symmetry`: a new pack-level check in `module plan` and `module build`. It reads every
+  clientfield the composition's own compiled `.gsc` and `.csc` scripts register — a direct
+  `registerclientfield("<set>", "<name>", ...)` or a helper that registers one, with
+  `maps\mp\zombies\_zm_powerups::add_zombie_powerup` (which registers `powerup_<id>` in set
+  `toplayer` on whichever VM calls it) as the first row of the `CLIENTFIELD_HELPERS` table — and
+  groups them by `(set, name)`. A name registered on exactly one script VM fails, naming the field,
+  the set, the VM, the script and the module, with the remedy to ship the other half as a loose
+  `scripts/zm` script registering the same name with the same width and version, unconditionally. A
+  name registered on both passes; a pack that registers nothing on either VM is `not_counted`; a
+  registration under a condition that is not a plain `isdefined`/`level` guard adds a failed
+  `clientfield-symmetry:<name>:conditional` row. Only the scripts the build stages are read, by the
+  same rules the build stages with, so a member that loses a file collision cannot answer for a half
+  the package will not carry; and the check is T6's alone, `not_counted` on `iw5`, which runs one
+  script VM. The engine compares the two registration lists at
+  map load and refuses the map with `EXE_CLIENT_FIELD_MISMATCH` before a script runs, so compile,
+  link and readback all pass first; two packs shipped a server-only power-up registration on
+  2026-09-16 and were refused at load. `docs/knowledge/crashes.md` now carries the loose-`.csc`
+  client-half remedy and the unconditional rule beside the existing `_zm::init` redirect. The
+  shipped `crash-signatures.json` is generator output and is unchanged; the maintainer's next export
+  carries the amended row. Offline verified on Linux; no game was loaded.
 - A module can say where a person finds it and whether its port works yet. `module.json` takes an
   optional `system`, one of `pack-a-punch`, `perks`, `hud`, `weapons`, `powerups`, `box`,
   `core-rules`, `gums`, `bosses`, `equipment`, `audio` or `map`: the player-facing system a module
@@ -83,7 +103,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   script and `declared_not_observed` when it is not, `entry` agrees on the entry field alone, `none` is
   `observed_not_declared` when the module prints anyway, and an absent field is `not_counted` with the other
   spelling it saw, or `observed_not_declared` with `--propose` filling `self`.
-<<<<<<< HEAD
 - An adapter recipe's `prepared` path now resolves the same way for the planner and for the builder.
   An absolute path is unchanged; a relative one is resolved against the module directory first and
   then the workspace root when `--workspace` is given, first directory wins, and when neither is one
@@ -102,7 +121,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   with the builder's own traceback, depending on where `pat` was run from. Offline verified on Linux;
   no game was loaded.
 
-=======
 - The `externals:` check now judges a bare call against the script's `#include` scope and against
   the argument count the export declares, and `knowledge/stock-exports.json` carries the arities to
   do it with. Two load failures this table could not see: `blast_furnace` called
@@ -127,7 +145,6 @@ Every entry states what shipped, on which platform it was verified, and what rem
   with the verdict. A read-only sweep of 407 module sources in the private workspace turns up
   exactly the three known-broken scripts and no other row. Verified offline on Linux; nothing was
   built, installed or played.
->>>>>>> origin/fix/externals-stock-coverage
 - The planner reads two of those promises and refuses on them. `ownership`: a member that stages a
   path the base or the target map already carries and does not list it under `replaces.files` is
   refused, one row per member and path, naming the path, the owner (`base` or `map`), the evidence

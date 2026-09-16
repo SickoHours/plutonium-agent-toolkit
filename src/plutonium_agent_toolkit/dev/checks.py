@@ -394,6 +394,7 @@ DEF=re.compile(r'^\s*([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*\{',re.M)
 INCLUDE=re.compile(r'^\s*#include\s+([^;]+);',re.M|re.I)
 KEYWORDS=frozenset(('if','while','for','foreach','switch','return','wait','waittill','waittillmatch','endon','notify','thread','spawn','array','assert'))
 
+<<<<<<< HEAD
 def mask_noncode(text,string_fill=' '):
     """Blank comments and string literals, keeping every newline, so the line-anchored scans see
     only executable GSC. A quote inside a string is backslash-escaped; `//` or `/*` inside a
@@ -425,7 +426,44 @@ def mask_noncode(text,string_fill=' '):
             else:
                 if char!='\n':output[i]=string_fill
                 i+=1
+=======
+def scan_noncode(text):
+    """Yield ``(kind, start, end)`` for every comment and string literal in ``text``, in order.
+    ``kind`` is 'line', 'block' or 'string' and the span covers the whole token, delimiters
+    included. One lexer serves both the masker below and the literal reader further down, so the
+    two can never disagree about where a string ends and a comment begins."""
+    i=0;size=len(text)
+    while i<size:
+        char=text[i]
+        if char=='/' and i+1<size and text[i+1]=='/':
+            stop=text.find(chr(10),i+2);stop=size if stop<0 else stop
+            yield ('line',i,stop);i=stop;continue
+        if char=='/' and i+1<size and text[i+1]=='*':
+            stop=text.find('*/',i+2);stop=size if stop<0 else stop+2
+            yield ('block',i,stop);i=stop;continue
+        if char=='"':
+            stop=i+1
+            while stop<size:
+                if text[stop]==chr(92) and stop+1<size:stop+=2;continue
+                if text[stop]=='"':stop+=1;break
+                stop+=1
+            yield ('string',i,stop);i=stop;continue
+        i+=1
+
+def mask_noncode(text):
+    """Blank comments and string literals, keeping every newline, so the line-anchored scans see
+    only executable GSC. A quote inside a string is backslash-escaped; `//` or `/*` inside a
+    string is text, not a comment."""
+    output=list(text)
+    for _,start,stop in scan_noncode(text):
+        for i in range(start,stop):
+            if output[i]!=chr(10):output[i]=' '
+>>>>>>> origin/main
     return ''.join(output)
+
+def string_spans(text):
+    """The ``(start, end)`` span of every string literal, quotes included."""
+    return [(start,stop) for kind,start,stop in scan_noncode(text) if kind=='string']
 
 def _script_vm(name):
     """The script VM a target path belongs to; None when the suffix does not name one, which keeps
@@ -492,6 +530,220 @@ def box_registrations(name,text,provided):
         return [{'id':'box-registration:'+name,'outcome':'failed',
                  'detail':f'{name} registers {", ".join(missing)} in the mystery box and no member of this pack provides that weapon; the engine faults at the first box use (crash signature box-weapon-not-found). Register only weapons the pack provides'}]
     return [{'id':'box-registration:'+name,'outcome':'passed','detail':f'{name} registers only weapons a member provides: {", ".join(sorted(names))}'}]
+
+# Stock helpers that register a clientfield without the pack ever writing `registerclientfield`.
+# One row per helper: `set` is the clientfield set it registers into, `name_arg` the zero-based
+# argument that carries the field name as a literal on each VM, and `id_arg`/`id_format` render
+# the name the helper derives itself when that argument is absent or is not a literal
+# (`add_zombie_powerup("tesla", ...)` registers `powerup_tesla`). The qualified path in front of
+# the call does not change what it registers, so only the call name is keyed. The next helper is
+# one row.
+CLIENTFIELD_HELPERS={'add_zombie_powerup':{'set':'toplayer','name_arg':{'server':8,'client':1},
+                                           'id_arg':0,'id_format':'powerup_{}'}}
+
+REGISTER_CALL=re.compile(r'\b(registerclientfield|'+'|'.join(sorted(CLIENTFIELD_HELPERS))+r')\s*\(',re.I)
+IF_HEADER=re.compile(r'\bif\s*\(',re.I)
+# A guard the other VM can mirror without reading state it does not have: an isdefined() test, or
+# a bare `level` field. Anything else is a fact one VM knows and the other does not.
+TRIVIAL_GUARD=re.compile(r'^(?:isdefined\s*\(.*\)|level(?:\.[A-Za-z_][A-Za-z0-9_]*|\[[^\]]*\])+)$',re.I)
+
+def _close_paren(text,index):
+    """The index of the `)` matching the `(` at ``index``, or None. Read from masked text, where a
+    paren inside a string or comment is already blank."""
+    depth=0
+    for i in range(index,len(text)):
+        if text[i]=='(':depth+=1
+        elif text[i]==')':
+            depth-=1
+            if depth==0:return i
+    return None
+
+def _call_arguments(masked,open_index):
+    """The ``(start, end)`` offsets of each argument of the call whose `(` sits at ``open_index``.
+    Structure comes from the masked copy, where a comma or paren inside a string or comment is
+    already blank, so the offsets are safe to read back against the original text."""
+    depth=0;start=None;args=[]
+    for i in range(open_index,len(masked)):
+        char=masked[i]
+        if char in '([':
+            depth+=1
+            if depth==1:start=i+1
+        elif char in ')]':
+            depth-=1
+            if depth==0:
+                if args or masked[start:i].strip():args.append((start,i))
+                return args
+        elif char==',' and depth==1:
+            args.append((start,i));start=i+1
+    return []
+
+def _literal(masked,text,span,strings):
+    """The value of a string-literal argument, or None. An argument may carry comments around its
+    literal (`registerclientfield(/* set */ "toplayer", ...)`), and the masked copy shows a comment
+    as blanks, so the argument is a literal exactly when one string span lies inside it and
+    everything else in the masked copy is whitespace. A variable, a concatenation of two literals
+    and a localized `&"..."` all read as not-a-literal, which leaves the registration unread rather
+    than guessed at."""
+    if span is None:return None
+    start,end=span
+    inside=[(s,e) for s,e in strings if s>=start and e<=end]
+    if len(inside)!=1:return None
+    s,e=inside[0]
+    if e-s<2 or text[s]!='"' or text[e-1]!='"':return None
+    if masked[start:s].strip() or masked[e:end].strip():return None
+    return text[s+1:e-1]
+
+def _bare(term):
+    """A term with its outer parentheses and leading `!` removed, so `!(isdefined(x))` reads as
+    the isdefined test it is."""
+    term=term.strip()
+    while True:
+        if term.startswith('(') and _close_paren(term,0)==len(term)-1:term=term[1:-1].strip();continue
+        if term.startswith('!'):term=term[1:].strip();continue
+        return term
+
+def _terms(condition):
+    """Top-level `&&`/`||` terms; a term inside parentheses stays whole."""
+    rows=[];depth=0;start=0;i=0
+    while i<len(condition):
+        char=condition[i]
+        if char in '([':depth+=1
+        elif char in ')]':depth-=1
+        elif depth==0 and condition[i:i+2] in ('&&','||'):
+            rows.append(condition[start:i]);i+=2;start=i;continue
+        i+=1
+    rows.append(condition[start:])
+    return [row for row in (r.strip() for r in rows) if row]
+
+def _guards(masked,offset):
+    """Every `if` condition governing the code at ``offset``: one per enclosing braced `if` block,
+    plus a brace-less `if` whose single statement this is. Read from the masked copy, so a brace or
+    semicolon inside a string or comment is already blank. `else`, loops and switches carry no
+    condition here and leave the code unguarded, which keeps the check conservative."""
+    stack=[];pending=[];carried=None;i=0
+    while i<offset:
+        char=masked[i]
+        if char=='{':
+            # A brace-less `if` governs the next statement, and that statement may itself be the
+            # braced `if` this `{` opens. Carrying the pendings into the frame keeps the outer
+            # condition on a nested chain and drops them again when the block closes.
+            stack.append(pending+([carried] if carried else []));carried=None;pending=[];i+=1;continue
+        if char=='}':
+            if stack:stack.pop()
+            carried=None;pending=[];i+=1;continue
+        if char==';':
+            pending=[];i+=1;continue
+        header=IF_HEADER.match(masked,i)
+        if header:
+            close=_close_paren(masked,header.end()-1)
+            if close is None or close>=offset:i=header.end();continue
+            condition=' '.join(masked[header.end():close].split())
+            after=close+1
+            while after<len(masked) and masked[after].isspace():after+=1
+            if after<len(masked) and masked[after]=='{':carried=condition
+            else:pending.append(condition)
+            i=close+1;continue
+        if char=='(':
+            close=_close_paren(masked,i)
+            if close is not None and close<offset:i=close+1;continue
+        i+=1
+    return [row for frame in stack for row in frame]+pending
+
+def _condition_of(masked,offset):
+    """The first governing `if` condition that is not a plain isdefined/level guard, or None."""
+    for condition in _guards(masked,offset):
+        if any(not TRIVIAL_GUARD.match(_bare(term)) for term in _terms(condition)):return condition
+    return None
+
+def _registrations(name,text):
+    """Every clientfield this script registers: ``(set, field, condition)``, where ``condition`` is
+    the non-trivial `if` the registration sits under, or None. A call whose set or name is not a
+    string literal is not read: the check refuses what it can prove, not what it guesses."""
+    vm=_script_vm(name)
+    if vm is None:return []
+    masked=mask_noncode(text);strings=string_spans(text);rows=[]
+    def literal(args,index):
+        return _literal(masked,text,args[index],strings) if index is not None and index<len(args) else None
+    for match in REGISTER_CALL.finditer(masked):
+        call=match.group(1).lower()
+        args=_call_arguments(masked,match.end()-1)
+        if not args:continue
+        if call=='registerclientfield':
+            field_set=literal(args,0);field=literal(args,1)
+        else:
+            helper=CLIENTFIELD_HELPERS[call];field_set=helper['set']
+            field=literal(args,helper['name_arg'].get(vm))
+            if field is None:
+                ident=literal(args,helper['id_arg'])
+                field=helper['id_format'].format(ident) if ident else None
+        if not field_set or not field:continue
+        rows.append((field_set,field,_condition_of(masked,match.start()),call))
+    return rows
+
+REMEDY=('ship the other half as a loose scripts/zm script (a .csc for a server registration, a '
+        '.gsc for a client one) that registers the same name with the same width and version, '
+        'unconditionally')
+
+def clientfield_symmetry(sources,game='t6'):
+    """A clientfield the pack registers on one script VM and not on the other is
+    `EXE_CLIENT_FIELD_MISMATCH` at map load: the engine compares the server's registration list
+    with the client's and refuses the map before a script runs, so no compile, link or readback
+    sees it (crash signature `clientfield-registrations-mismatch`). This is a property of the
+    pack's two halves together, so it is read once per composition rather than per script.
+
+    ``sources`` is ``(target, text, module)`` per compiled `.gsc` and `.csc`. Every direct
+    `registerclientfield("<set>", "<name>", ...)` and every ``CLIENTFIELD_HELPERS`` call is
+    grouped by ``(set, name)``: a pair on both VMs passes, a name on exactly one VM fails naming
+    the field, the set, the VM, the script and the module, and a pack that registers nothing on
+    either VM is not_counted. Registrations the stock map already makes on both VMs are outside
+    the pack and are never read here; only what the pack's own scripts register is compared.
+
+    A registration under a condition is still a registration, so it counts for the pairing, and a
+    condition the other VM cannot evaluate adds its own failed `:conditional` row: the tesla
+    lesson is that guarding one half on state only that VM holds inverts the mismatch instead of
+    curing it."""
+    if game!='t6':
+        return [{'id':'clientfield-symmetry','outcome':'not_counted',
+                 'detail':f'clientfield registrations are a T6 two-VM property; {game} runs one script VM and its '
+                          f'registrations are not judged here'}]
+    found={};conditions={}
+    for name,text,module in sources:
+        for field_set,field,condition,call in _registrations(name,text):
+            vm=_script_vm(name)
+            found.setdefault((field_set,field),{}).setdefault(vm,[]).append((name,module,call))
+            if condition:conditions.setdefault((field_set,field),[]).append((vm,name,module,condition))
+    if not found:
+        return [{'id':'clientfield-symmetry','outcome':'not_counted',
+                 'detail':'No clientfield registration read: no compiled script in this pack calls registerclientfield '
+                          'or a helper that registers a field, so there is nothing to compare across the two VMs'}]
+    rows=[]
+    for key in sorted(found):
+        field_set,field=key;vms=found[key]
+        if 'server' in vms and 'client' in vms:
+            rows.append({'id':'clientfield-symmetry:'+field,'outcome':'passed',
+                         'detail':f'"{field}" in set {field_set} is registered on both script VMs: '
+                                  f'{_owners(vms["server"])} on the server and {_owners(vms["client"])} on the client'})
+        else:
+            vm=next(iter(vms));missing='client' if vm=='server' else 'server'
+            suffix='.csc' if missing=='client' else '.gsc'
+            rows.append({'id':'clientfield-symmetry:'+field,'outcome':'failed','field':field,'set':field_set,'vm':vm,
+                         'detail':f'"{field}" in set {field_set} is registered on the {vm} VM only, by {_owners(vms[vm])}, '
+                                  f'and by no {suffix} in this pack; the engine compares the two registration lists at map '
+                                  f'load and refuses the map with EXE_CLIENT_FIELD_MISMATCH before a script runs (crash '
+                                  f'signature clientfield-registrations-mismatch). Remedy: {REMEDY}'})
+        for vm,name,module,condition in conditions.get(key,()):
+            rows.append({'id':f'clientfield-symmetry:{field}:conditional','outcome':'failed',
+                         'detail':f'{_owner(name,module)} registers "{field}" in set {field_set} on the {vm} VM under '
+                                  f'`if ({condition})`: registered under a condition on one VM; the other VM cannot read '
+                                  f'that fact, so the registration must be unconditional'})
+    return rows
+
+def _owner(name,module):
+    return f'{name} (module {module})' if module else name
+
+def _owners(rows):
+    return ', '.join(sorted({f'{_owner(name,module)} through {call}' if call!='registerclientfield' else _owner(name,module)
+                             for name,module,call in rows}))
 
 def external_symbols(name,text,game='t6'):
     """Unqualified calls resolved against the stock export rows of this script's own VM. The
