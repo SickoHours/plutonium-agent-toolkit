@@ -206,6 +206,34 @@ strings, the loose scripts (`loose_script`, `loose_scripts` or `scripts`), roote
 collide like a seed's, and fill `provides` the way a manifest does: a declaration may narrow
 them, never add a name the recipe does not deliver. The member's `payload` is `adapter`.
 
+#### Where `prepared` points
+
+`prepared` is the directory of converted inputs the builder consumes, and the planner reads two
+things out of it: the soundbank's alias table and the weapons' clips from `prepared.json`. An
+**absolute** path is used exactly as the recipe gives it. A **relative** path is resolved against
+the module directory first — the recipe's own directory is the only base that travels with the
+module — and then against the workspace root when `--workspace` names one, which is what a shelf
+whose builder was run by hand from that root means. The first candidate that is a directory wins.
+When neither is a directory the inputs are absent, the plan drops the alias table and the clip list
+as before, and the row says which paths were tried; the resolved copy below still states the
+module-directory reading, so a builder that runs anyway fails naming the path the recipe meant
+rather than one inside the job directory.
+
+The plan row records the reading: `adapter.prepared_resolved` (the absolute path used),
+`adapter.prepared_source` (`recipe` for an absolute path, `module-dir` or `workspace` for a relative
+one) and `adapter.prepared_candidates`. **The builder is given the same reading.** Because it reads
+the recipe from disk by path, `build` writes a resolved copy beside the builder's output directory,
+at `<job>/adapters/<id>.recipe.resolved.json`, and passes *that* path: the same document with
+`prepared` and every loose-script `source` absolute. A copy outside the module directory has to
+state those paths in full, and a builder that resolves them as `recipe.parent / source` is
+unaffected, because joining an absolute path returns it unchanged. The copy is a sibling of the
+output directory, never inside it — the builder owns that directory and creates it itself. The
+build report and the plan row name it as `recipe_resolved` (`null` on a plan, which writes none),
+and the report's `recipe` still names the cut the copy was made from. Before this the two halves
+disagreed: the planner tested a relative `prepared` against the caller's working directory while
+the builder ran with the job's output directory as its own, so the same recipe planned as "prepared
+absent" and then failed the build, and which it did depended on where `pat` was run from.
+
 ### One cut per target: `recipes`
 
 An adapter recipe is a cut, not a source tree: it names one `foundation` and one `map`, and the

@@ -59,6 +59,24 @@ Every entry states what shipped, on which platform it was verified, and what rem
   script and `declared_not_observed` when it is not, `entry` agrees on the entry field alone, `none` is
   `observed_not_declared` when the module prints anyway, and an absent field is `not_counted` with the other
   spelling it saw, or `observed_not_declared` with `--propose` filling `self`.
+- An adapter recipe's `prepared` path now resolves the same way for the planner and for the builder.
+  An absolute path is unchanged; a relative one is resolved against the module directory first and
+  then the workspace root when `--workspace` is given, first directory wins, and when neither is one
+  the inputs are absent and the plan row names both candidates tried. The copy handed to the builder
+  states an absolute `prepared` in every case, falling back to the module-directory reading when
+  nothing resolved, so the builder never resolves a relative path against the job directory. The adapter plan row gains
+  `prepared_resolved`, `prepared_source` (`recipe`, `module-dir`, `workspace`), `prepared_candidates`
+  and `recipe_resolved`. Because the builder reads the recipe from disk by path, `module build` now
+  writes a resolved copy beside the builder's output directory —
+  `<job>/adapters/<id>.recipe.resolved.json`, the same document with `prepared` and every
+  loose-script `source` absolute — and passes that path in the builder argv; a builder resolving
+  `recipe.parent / source` is unaffected, since joining an absolute path returns it unchanged. Before
+  this the planner tested a relative `prepared` against the caller's working directory and the
+  builder ran with the job's output directory as its own, so a workspace-relative recipe planned as
+  "prepared absent" — silently dropping its alias table and clip list — and then failed the build
+  with the builder's own traceback, depending on where `pat` was run from. Offline verified on Linux;
+  no game was loaded.
+
 - The planner reads two of those promises and refuses on them. `ownership`: a member that stages a
   path the base or the target map already carries and does not list it under `replaces.files` is
   refused, one row per member and path, naming the path, the owner (`base` or `map`), the evidence
