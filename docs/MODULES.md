@@ -128,6 +128,8 @@ adapter recipe is named under `recipe` and told apart by its own shape.
 | `exclusive` | no | Role words from a fixed list (`hud`, `box`, `loadscreen`, `boss`, `perk-machines`, `perk-art`) this module owns outright; two members owning one role is a refusal of kind `exclusive` (below) |
 | `service` | no | `true` when the module exists to own shared things (a map table, a sound bank, a role) so others depend on it and ship no copy; the planner names it in `ownership`, `replacement` and `service` refusals. Must provide something shareable and no weapon |
 | `registration` | no | Who prints the module's one console line `<id> >> registered` at init: `self` (its own script), `entry` (the generated entry script, for an entry-managed module), or `none`. The plan derives `expected_lines` from it and `test plan` checks each line in the load phase ("The registration line", below) |
+| `system` | no | The player-facing system a person finds the module under, one of `pack-a-punch`, `perks`, `hud`, `weapons`, `powerups`, `box`, `core-rules`, `gums`, `bosses`, `equipment`, `audio`, `map`; a browse word, never a resolution rule ("Where a person finds it", below) |
+| `port_status` | no | `finished` (default), `loads-but-wrong` or `not-ported`; a member that is not `finished` is refused (kind `port_status`) unless the composition's member object names it under `accept` |
 | `provides` | no | What the module registers, by kind: `weapons`, `perks`, `gobblegums`, `powerups`, `equipment`, `localize`, `soundbanks`, `scripts`, `models`, `effects`, `rawfiles`, `aliases` (the sound alias names a bank module owns), each a list of up to 4096 names. Two modules providing the same name is a decision (below); a `rawfiles` name is a file target and is listed once, as the file collision. A seed's manifest fills this in; for the kinds the manifest derives (`weapons`, `localize`, `soundbanks`, `rawfiles`, `models`, `effects`) a declaration may narrow the manifest's list and never add to it, even when the manifest lists none of that kind; the other kinds are the declaration's |
 | `resource_contract` | no | Whole numbers the module adds to the engine's budgets: `threads`, `entities`, `hud`, `network_fields`. Missing fields count as 0. Summed across the composition and checked against the composition's `budget` |
 | `menu_route` | no | How a person reaches the feature in game, at most 200 characters; carried into the plan for the handoff |
@@ -203,6 +205,34 @@ strings, the loose scripts (`loose_script`, `loose_scripts` or `scripts`), roote
 `native_scripts`, `extra_effects` and the `assets` lists. Those roots count against the pools,
 collide like a seed's, and fill `provides` the way a manifest does: a declaration may narrow
 them, never add a name the recipe does not deliver. The member's `payload` is `adapter`.
+
+#### Where `prepared` points
+
+`prepared` is the directory of converted inputs the builder consumes, and the planner reads two
+things out of it: the soundbank's alias table and the weapons' clips from `prepared.json`. An
+**absolute** path is used exactly as the recipe gives it. A **relative** path is resolved against
+the module directory first — the recipe's own directory is the only base that travels with the
+module — and then against the workspace root when `--workspace` names one, which is what a shelf
+whose builder was run by hand from that root means. The first candidate that is a directory wins.
+When neither is a directory the inputs are absent, the plan drops the alias table and the clip list
+as before, and the row says which paths were tried; the resolved copy below still states the
+module-directory reading, so a builder that runs anyway fails naming the path the recipe meant
+rather than one inside the job directory.
+
+The plan row records the reading: `adapter.prepared_resolved` (the absolute path used),
+`adapter.prepared_source` (`recipe` for an absolute path, `module-dir` or `workspace` for a relative
+one) and `adapter.prepared_candidates`. **The builder is given the same reading.** Because it reads
+the recipe from disk by path, `build` writes a resolved copy beside the builder's output directory,
+at `<job>/adapters/<id>.recipe.resolved.json`, and passes *that* path: the same document with
+`prepared` and every loose-script `source` absolute. A copy outside the module directory has to
+state those paths in full, and a builder that resolves them as `recipe.parent / source` is
+unaffected, because joining an absolute path returns it unchanged. The copy is a sibling of the
+output directory, never inside it — the builder owns that directory and creates it itself. The
+build report and the plan row name it as `recipe_resolved` (`null` on a plan, which writes none),
+and the report's `recipe` still names the cut the copy was made from. Before this the two halves
+disagreed: the planner tested a relative `prepared` against the caller's working directory while
+the builder ran with the job's output directory as its own, so the same recipe planned as "prepared
+absent" and then failed the build, and which it did depended on where `pat` was run from.
 
 ### One cut per target: `recipes`
 
@@ -284,7 +314,7 @@ builder the plan lists `adapter_builder` as unavailable and the build refuses be
 | `origin`, `donor` | no | The same two facts as on a module, for a pack that is one thing ("Ghosts weapons on TranZit" has origin `ghosts`); a pack of mixed origins leaves them out and the plan carries each member's own |
 | `base` | yes | The base token every module must declare |
 | `map` | yes | One concrete map id. A composition is planned for one map; plan another composition for another map |
-| `modules` | yes | 1 to 128 members. A member is a relative path (forward slashes, from the composition's directory) to a directory holding `module.json`, **or** a directory holding another `composition.json` (its modules are flattened in; it must declare the same base and map; nesting is bounded), **or** an object: `{"path": …, "role": "base"}` marks the one member the others attach to; `{"name": "<github-owner>/<id>", "commit": "<40 hex>", "path": …}` records a published module pinned at a commit, with the local directory it was fetched into; `{"path": …, "parameters": {"cadence": "timer"}}` sets that member's declared parameters (below), and a member that is a nested composition takes none. Listing order does not matter; the plan orders by dependencies, base members first |
+| `modules` | yes | 1 to 128 members. A member is a relative path (forward slashes, from the composition's directory) to a directory holding `module.json`, **or** a directory holding another `composition.json` (its modules are flattened in; it must declare the same base and map; nesting is bounded), **or** an object: `{"path": …, "role": "base"}` marks the one member the others attach to; `{"name": "<github-owner>/<id>", "commit": "<40 hex>", "path": …}` records a published module pinned at a commit, with the local directory it was fetched into; `{"path": …, "parameters": {"cadence": "timer"}}` sets that member's declared parameters (below), and a member that is a nested composition takes none; `{"path": …, "accept": ["loads-but-wrong"]}` composes a member whose `port_status` is not `finished` knowingly ("Where a person finds it", below). Listing order does not matter; the plan orders by dependencies, base members first |
 | `loads` | no | Relative paths to fastfiles the linker loads for asset lookup: the base's zones. They may live beside the pack |
 | `zone_header` | no | Linker metadata lines the base needs at the top of the zone (Zombies Declassified Beta 2 needs its `>level.ipak_read` rows); at most 32 |
 | `budget` | no | Whole-number ceilings for the summed resource contracts. Absent means the totals are reported and not enforced. A number here is a decision you made after measuring, not a guess |
@@ -317,7 +347,7 @@ row's, and a message with more rows says how many follow. Kinds: `probe`, `test_
 `unqualified_base` and `unqualified_map` (with `declared` and `wanted`), `private_payload`,
 `cycle`, `budget` (with `resource`, `total`, `bound`), `replacement` (with `collisions`),
 `parameters` (below, with `parameter`), `service` (below), `ownership` (with `path`, `owner`,
-`evidence` and `service`) and `exclusive` (with `role` and `resolutions`), both specified under
+`evidence` and `service`), `exclusive` (with `role` and `resolutions`) and `port_status` (with `status`), all specified under
 "What a module promises", and `checks` (with `failed`, the ids
 of the failed check rows). A caller that brings dependencies along reads every
 `missing_dependency` row at once instead of re-planning per message.
@@ -872,7 +902,15 @@ point has begun its work — and only when its branch returns unconditionally: a
 block whose own statements are returns, prints and assignments. A map conditional further down, or
 one whose branch holds a nested `if (...) return;`, is program logic and stays `not_counted`, which
 means unread and never clean.
-Projectile FX union requires
+
+`csc-main-body:<target>` rows refuse a T6 client script that does its work in `main()`. The client
+VM runs every loose `.csc`'s `main()` in one early pass and every `init()` in a second pass, so a
+`main()` body runs before the client's own `_zm` rows exist and before any script's `init()`; the
+client-script pass dies there with zero `CSC Executed` lines and no script error
+(`knowledge/crashes.md`, `client-script-pass-died`). An empty or absent `main()` passes — the engine
+links a no-op stub for an absent root — and a `.gsc` is `not_counted`, because a server `main()`
+runs after the server's own rows and threading from it is the normal shape. `project plan` raises
+the same rows for a recipe's own scripts. Projectile FX union requires
 weapon blobs and is not inferred from weapon count. Soundbank listing is only a floor.
 Builds run a receipted `gsc check` dry run per script before linking. Compiler-reported unresolved
 externals fail; successful compilation alone cannot prove runtime external resolution and that
@@ -948,8 +986,10 @@ map, or moves a byte in a package.
 | `service` | `true` | "I exist to own shared things; depend on me and ship no copy" | Partially: the module provides at least one shareable thing and registers no weapon of its own |
 | `dependencies[]` entry as an object | `{id, kind, why?}` | "I need this module *because* I call it / name it / use what it owns / the engine needs it" | `call`, `name` and `service` fully; `runtime` is declaration-only and must say why |
 | `registration` | `self`, `entry` or `none` | "My registration prints `<id> >> registered` to the console" (or the pack's entry prints it for me, or I print nothing) | The literal in source for `self`; the build's own output for `entry`; whether the line reached the console is the load's evidence, never the checker's |
+| `system` | one of twelve system words | "A player looks for me under this system" | Nothing; a browse word, `not_counted` |
+| `port_status` | `finished`, `loads-but-wrong`, `not-ported` | "I work as intended here" or "I load and misbehave" or "I am not ported yet" | Nothing from bytes; a person's verdict, read by the planner |
 
-Five fields, one of them a widening of an existing one. Nothing else was needed for the behaviours
+Seven fields, one of them a widening of an existing one. Nothing else was needed for the behaviours
 the audit measured, and nothing else is designed here: placement, parameter consumers, versioning
 and runtime conflict detection stay where `docs/MODULES.md` already puts them.
 
@@ -1116,6 +1156,58 @@ bank the second bin was mostly one sound bank depended on by every GobbleGum, wh
 edge and always was; only the third bin is a question for the author. The planner treats every
 kind alike for ordering and presence; the kind changes what can be checked, never what is built.
 
+### Where a person finds it, and whether it works yet: `system` and `port_status`
+
+Two more one-word fields, both with a closed list, both optional, both filled from evidence later
+and never required of an existing declaration.
+
+**`system`** is the player-facing system of T6 Zombies the module belongs to: the shelf a person
+would look under, not the file type it is built from. `category` and `kind` are the toolkit's
+build taxonomy and stay; a bank organised by them puts ninety-odd modules under `scripts`, which
+is a junk drawer by a player's standard. One value per module, from:
+
+`pack-a-punch`, `perks`, `hud`, `weapons`, `powerups`, `box`, `core-rules`, `gums`, `bosses`,
+`equipment`, `audio`, `map`.
+
+A module that spans two picks the one a player would look under (a perk that also changes the
+box is `perks`). `system` is orthogonal to `exclusive`: a role is what a module owns outright and
+refuses a second owner; a system is where a person finds it and refuses nothing. A library, a
+shelf and a contribution form group by `system`; the planner ignores it. The checker cannot see
+it in bytes and says so (`not_counted`).
+
+**`port_status`** says whether a ported module does what it is meant to do on its target:
+
+| Value | Meaning |
+| --- | --- |
+| `finished` | the module behaves as intended on the targets it declares; the default when absent, so nothing already declared changes |
+| `loads-but-wrong` | the package builds and loads, and the behaviour is known to be wrong (a weapon that fires but has no sound, an effect that plays at the wrong place); the module stays in the bank so the work is visible |
+| `not-ported` | the declaration exists and the port has not been made; nothing here is expected to load |
+
+**The planner refusal.** A member whose `port_status` is not `finished` is refused with kind
+`port_status` unless the composition names it explicitly: the member is written as an object
+with `accept` listing the statuses the composition takes knowingly:
+
+```json
+"modules": [{"path": "../mark3", "accept": ["loads-but-wrong"]}]
+```
+
+```json
+{"kind": "port_status", "modules": ["mark3"], "status": "loads-but-wrong",
+ "message": "mark3 is loads-but-wrong and this composition does not accept it",
+ "hint": "Write the member as {\"path\": ..., \"accept\": [\"loads-but-wrong\"]} to compose it knowingly, or leave it out.",
+ "field": "/modules/2"}
+```
+
+One row per such member, collected with the other refusals in one run. A campaign or a shelf
+reads the same field to skip such members by default; a member brought in as a dependency is
+refused the same way, since the composition did not name it and its status has not changed.
+`accept` on a member whose status is `finished` is harmless and recorded. `accept` takes values
+from the list minus `finished`; a nested composition's members carry their own `accept`.
+
+Both fields are echoed by `module inspect` when named, recorded on every plan row, and travel on
+`expected_lines`' sibling rows nowhere else. Neither widens `bases` or `maps` or moves a byte in
+a package.
+
 ### The registration line: one console line per module
 
 A load is the last honest test and the console is its record. Today the only line a script is
@@ -1218,6 +1310,7 @@ method, in words) and an `outcome`: `agrees`, `declared_not_observed`, `observed
 | `exclusive` | the role footprint | `partial` |
 | `service` | shareable provides present, no weapon provided | full for the rule; the *intent* is declaration-only |
 | `registration` | a `println` literal beginning `<id> >> registered` in a server script (`self`); the `entry` field (`entry`) | `partial` for `self` (the literal, not the path); full for `entry` and `none` |
+| `system`, `port_status` | nothing in bytes | `not_counted`: a browse word and a person's verdict |
 | `resource_contract.hud` | count of HUD-element constructors in source, as a floor | `partial`: a floor, never the total |
 | `conflicts` | both ends declaring the same `exclusive` role | reported as `redundant` when a role already covers the pair; otherwise `not_counted` |
 | `menu_route`, `tags`, `placements`, `parameters`, `bases`, `maps` | nothing in this route | `not_counted`, with the reason (a menu tree, a location table, a receipt) |
@@ -1237,12 +1330,29 @@ evidence would decide them. And a project recipe's `provides.weapons` is checked
 recipe rows and the source literals the toolkit knows how to read; a module that registers a
 weapon by building its name at run time is reported `partial`, never `agrees`.
 
+**How to run it.** The route reads one module directory and needs nothing else to start:
+
+```
+pat module verify-declaration modules/my_module --json
+pat module verify-declaration modules/my_module --workspace . --base-listings foundations/stock/listings \
+    --target stock/zm_transit --strict --json
+```
+
+Each flag adds a source of fact, and the rows say what is missing without it: `--workspace` reads
+each dependency's own declaration from `<root>/modules/*/module.json` (without it every
+`dependencies` row is `not_counted`), `--base-listings` and `--target` are the two ways a path is
+shown to be base-owned (without either, each staged path in a base namespace is `not_counted` and
+the row names the evidence that would decide it), `--strict` is the library gate (exit 1, with the
+whole report under `details.report`), and `--propose` prints the fields the observed side would
+fill. There is no `--output`: the route writes nothing.
+
 ### Refusal kinds added by this section
 
 | Kind | Fires when | Row carries |
 | --- | --- | --- |
 | `ownership` | a member stages a path a base listing or a shipped per-map table says the base or the map carries, and does not declare it under `replaces.files` | `path`, `owner` (`base` or `map`), `evidence` (`listing` or `table`), `service` (the shelf module that provides the path, with `--workspace`, or null) |
 | `exclusive` | two or more members list the same role | `role`, `modules` in composition order, `resolutions` |
+| `port_status` | a member's `port_status` is not `finished` and the composition's member object does not list it under `accept` | `status` |
 
 `replacement` rows gain `service`; `service` rows are unchanged. `REFUSAL_KINDS` lists both new
 kinds, and a caller that folds kinds it does not know into "other" keeps working: the message

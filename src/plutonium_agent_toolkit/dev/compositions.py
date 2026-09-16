@@ -99,6 +99,16 @@ EXCLUSIVE_ROLES = ("hud", "box", "loadscreen", "boss", "perk-machines", "perk-ar
 # behalf, or nobody (docs/MODULES.md, "The registration line").
 REGISTRATION_KINDS = ("self", "entry", "none")
 REGISTRATION_SUFFIX = " >> registered"
+# The player-facing system a person looks for the module under: the shelf, not the build taxonomy
+# `category` and `kind` describe. A browse word, never a resolution rule; a module that spans two
+# names the one a player would look under (docs/MODULES.md, "Where a person finds it").
+SYSTEMS = ("pack-a-punch", "perks", "hud", "weapons", "powerups", "box", "core-rules", "gums", "bosses", "equipment",
+           "audio", "map")
+# Whether a ported module does what it is meant to do on its target. `finished` is what every
+# declaration written before this field already means, so absence normalizes to it; the other two
+# keep unfinished work visible in the bank, and a composition takes such a member only by naming
+# its status under that member's `accept`.
+PORT_STATUSES = ("finished", "loads-but-wrong", "not-ported")
 # What a dependency is *for*. `call`, `name` and `service` leave evidence in bytes; `runtime` is a
 # relationship only the engine shows (a level variable, a notify, an order of init), so it says why.
 DEPENDENCY_KINDS = ("call", "name", "service", "runtime")
@@ -162,6 +172,17 @@ def add_parser(sub, common):
     q = actions.add_parser("inspect", help="Validate one declaration's metadata without resolving payloads or creating a job")
     q.add_argument("declaration", help="Path to module.json or composition.json")
     q.add_argument("--json", action="store_true")
+    q = actions.add_parser("verify-declaration", help="Read one module's own bytes back against its declaration: every promise beside what the files say")
+    q.add_argument("directory", help="Module directory holding module.json")
+    q.add_argument("--workspace", help="Workspace root whose modules/ hold the dependency declarations this module's edges are judged against")
+    q.add_argument("--base-listings", action="append", default=[], metavar="DIR",
+                   help="A directory of asset listings of the base's zones (<zone>-list.txt, the shape an unlinker --list prints); "
+                        "repeatable. Every rawfile and script row is a file the base carries, so a staged copy of that path overwrites it. "
+                        "With --workspace and --target, the foundation's own base_listings are read too")
+    q.add_argument("--target", metavar="KEY", help="The '<foundation>/<map>' this module is judged against, so the shipped per-map script and WeaponDef tables can say what the map already carries")
+    q.add_argument("--strict", action="store_true", help="Exit 1 when any row is declared_not_observed or observed_not_declared; what a library gate wants")
+    q.add_argument("--propose", action="store_true", help="Add the declaration fields the observed side would fill; written nowhere, and never removing a declared name")
+    q.add_argument("--json", action="store_true")
     for action, help_text in (("plan", "Resolve a composition, list collisions as decisions and hash its inputs; runs no backend"),
                               ("build", "Compile, link against seeds and loads, read back and compare every module into one mod.ff")):
         q = actions.add_parser(action, help=help_text)
@@ -214,10 +235,12 @@ MAX_INSPECTION_CODE = 200
 MODULE_METADATA_FIELDS = ("id", "version", "game", "title", "category", "kind", "tags", "bases", "maps",
                           "dependencies", "conflicts", "origin", "donor", "distribution", "menu_route", "payload", "recipes",
                           "lineage", "replaces", "entry", "placements", "parameters", "exclusive", "service", "registration",
-                          "dependency_kinds")
+                          "dependency_kinds", "system", "port_status")
 # Echoed only when the declaration names them, so a declaration written before a field is unchanged.
+# `port_status` is here too: absent normalizes to "finished", and echoing that default would put a
+# claim in the metadata of a declaration that never made one.
 MODULE_METADATA_OPTIONAL = ("replaces", "entry", "placements", "parameters", "recipes", "exclusive", "service", "registration",
-                            "dependency_kinds")
+                            "dependency_kinds", "system", "port_status")
 COMPOSITION_METADATA_FIELDS = ("name", "title", "game", "tags", "base", "map", "origin", "donor", "members")
 
 
@@ -516,6 +539,32 @@ def _registration(value, owner: str, entry) -> str | None:
     return value
 
 
+def _system(value, owner: str) -> str | None:
+    """The player-facing system a person finds this module under. Orthogonal to ``exclusive``: a
+    role is what a module owns outright and refuses a second owner, a system is a shelf and
+    refuses nothing. The planner never reads it."""
+    if value is None:
+        return None
+    if not isinstance(value, str) or value not in SYSTEMS:
+        raise Failure(INPUT_INVALID, f"{owner}: system is one of {list(SYSTEMS)}",
+                      "A module that spans two systems names the one a player would look under; the build taxonomy stays in "
+                      "category and kind.")
+    return value
+
+
+def _port_status(value, owner: str) -> str:
+    """Whether the port works yet: the author's verdict, which no byte shows. Absent is
+    ``finished``, the fact every declaration written before this field states, so nothing already
+    declared changes."""
+    if value is None:
+        return "finished"
+    if not isinstance(value, str) or value not in PORT_STATUSES:
+        raise Failure(INPUT_INVALID, f"{owner}: port_status is one of {list(PORT_STATUSES)}",
+                      "finished is the default; loads-but-wrong is a package that builds and loads and behaves wrong, "
+                      "not-ported a declaration whose port has not been made.")
+    return value
+
+
 def _dependencies(value, owner: str) -> tuple[list[str], dict[str, dict]]:
     """Ids, and what each dependency is *for*. An entry is a module id, or an object
     ``{id, kind, why?}`` saying why the edge exists. The ids are the plan's fact either way: the
@@ -723,7 +772,7 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
     _fields(data, {"schema", "id", "version", "game", "title", "category", "kind", "tags", "recipe", "recipes", "seed", "bases", "maps",
                             "dependencies", "conflicts", "provides", "resource_contract", "menu_route", "distribution", "source",
                             "origin", "donor", "lineage", "tests", "replaces", "entry", "placements", "parameters",
-                            "exclusive", "service", "registration"},
+                            "exclusive", "service", "registration", "system", "port_status"},
                      {"schema", "id", "version", "bases", "maps"}, where)
     if data["schema"] != 1:
         raise Failure(INPUT_INVALID, f"{where}: expected schema 1", field='/schema')
@@ -803,6 +852,8 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
             "dependencies": dependencies, "dependency_kinds": dependency_kinds,
             "conflicts": _at("/conflicts", _ids, data.get("conflicts", []), "conflicts", mid),
             "provides": provides, "exclusive": exclusive, "service": service, "registration": registration,
+            "system": _at("/system", _system, data.get("system"), mid),
+            "port_status": _at("/port_status", _port_status, data.get("port_status"), mid),
             "resource_contract": _at("/resource_contract", _contract, data.get("resource_contract"), f"{mid}: resource_contract"),
             "menu_route": menu_route, "source": source,
             "lineage": validate_lineage(data.get("lineage")),
@@ -845,7 +896,8 @@ def _recipe_for_target(declaration: dict, directory: Path, job: Job, target: tup
     return chosen, chosen_key
 
 
-def load_declaration(directory: Path, job: Job, target: tuple[str | None, str | None] | None = None) -> dict:
+def load_declaration(directory: Path, job: Job, target: tuple[str | None, str | None] | None = None,
+                     workspace: str | None = None) -> dict:
     path = directory / "module.json"
     if path.is_symlink() or not path.is_file():
         raise Failure(INPUT_MISSING, f"Module directory has no module.json: {directory}")
@@ -873,7 +925,7 @@ def load_declaration(directory: Path, job: Job, target: tuple[str | None, str | 
                 shape = None
             if adapters.is_adapter_recipe(shape):
                 recipe, recipe_key = _recipe_for_target(declaration, directory, job, target)
-                adapter = adapters.load_recipe(recipe, directory, job, mid)
+                adapter = adapters.load_recipe(recipe, directory, job, mid, workspace)
                 recipe = None
         if recipe is not None and declaration["recipes"]:
             raise Failure(INPUT_INVALID, f"{mid}: recipes belongs to an adapter recipe; {declaration['payload_path']} is a project recipe the toolkit compiles itself",
@@ -1021,6 +1073,22 @@ def _decisions(value, comp_name: str) -> list[dict]:
     return rows
 
 
+def _accept(value, path: str, field: str) -> list[str]:
+    """The unfinished port statuses this composition takes knowingly for one member. ``finished``
+    is not among them: a member that works needs no naming, and naming it would read as a claim
+    the composition cannot make."""
+    if value is None:
+        return []
+    takeable = [status for status in PORT_STATUSES if status != "finished"]
+    if not isinstance(value, list) or not value or len(value) > len(takeable) \
+            or not all(isinstance(status, str) and status in takeable for status in value) \
+            or len(set(value)) != len(value):
+        raise Failure(INPUT_INVALID, f"Member {path}: accept lists 1 to {len(takeable)} distinct statuses from {takeable}",
+                      "accept names the unfinished statuses this composition composes knowingly; a finished member needs none.",
+                      field=field)
+    return list(value)
+
+
 def validate_composition_metadata(data) -> dict:
     """Authoritative composition checks without opening members, loads or listings."""
     _fields(data, {"schema", "name", "game", "base", "map", "modules", "loads", "budget", "decisions", "title", "tags", "zone_header",
@@ -1054,7 +1122,7 @@ def validate_composition_metadata(data) -> dict:
     base_members = 0
     for index, entry in enumerate(entries):
         row = {"path": entry} if isinstance(entry, str) else entry
-        _fields(row, {"path", "name", "commit", "role", "parameters"}, set(), "composition member", f"/modules/{index}")
+        _fields(row, {"path", "name", "commit", "role", "parameters", "accept"}, set(), "composition member", f"/modules/{index}")
         role = row.get("role", "module")
         if role not in ("module", "base"):
             raise Failure(INPUT_INVALID, "A member's role is module or base", field=f"/modules/{index}/role")
@@ -1076,6 +1144,7 @@ def validate_composition_metadata(data) -> dict:
         if role == "base":
             base_members += 1
         members.append({"path": row["path"], "role": role, "name": row.get("name"), "commit": row.get("commit"),
+                        "accept": _accept(row.get("accept"), row["path"], f"/modules/{index}/accept"),
                         "parameters": parameters.validate_setting(row.get("parameters"), f"Member {row['path']}", f"/modules/{index}/parameters")})
     if base_members > 1:
         raise Failure(INPUT_INVALID, "A composition names at most one member with role base",
@@ -1121,7 +1190,7 @@ def load_composition(path: Path, job: Job, depth: int = 0, seen: tuple = ()) -> 
         nested = directory / "composition.json"
         if (directory / "module.json").is_file():
             member = {"kind": "module", "directory": directory, "role": role, "path": row["path"], "parameters": row["parameters"],
-                      "index": index,
+                      "index": index, "accept": row["accept"],
                       "reference": {"name": row["name"], "commit": row["commit"]} if row["name"] is not None else None}
         elif nested.is_file() and not nested.is_symlink():
             if row["parameters"]:
@@ -1147,12 +1216,15 @@ def load_composition(path: Path, job: Job, depth: int = 0, seen: tuple = ()) -> 
                    "base_owned_zone": base_owned_zone, "base_listings": listings, "source": src}
 
 
-def flatten(comp: dict, job: Job, target: tuple[str | None, str | None] | None = None) -> tuple[list[dict], list[Path], list[dict], list[str]]:
+def flatten(comp: dict, job: Job, target: tuple[str | None, str | None] | None = None,
+            workspace: str | None = None) -> tuple[list[dict], list[Path], list[dict], list[str]]:
     """Every module in this composition and its nested compositions, with the loads and
     decisions gathered along the way. A nested composition's decisions apply to its own
     collisions; the outer recipe records the ones between its members. ``target`` is the pack's
     ``(foundation, map)``, which an adapter member's ``recipes`` picks its cut by; a nested
-    composition declares the same base and map, so the outer target is its target too."""
+    composition declares the same base and map, so the outer target is its target too.
+    ``workspace`` is the second base an adapter recipe's relative ``prepared`` path may be stated
+    against (``adapters.resolve_prepared``)."""
     modules: list[dict] = []
     loads: list[Path] = list(comp["loads"])
     decisions: list[dict] = list(comp["decisions"])
@@ -1163,17 +1235,22 @@ def flatten(comp: dict, job: Job, target: tuple[str | None, str | None] | None =
     header: list[str] = list(comp["zone_header"])
     for member in comp["members"]:
         if member["kind"] == "module":
-            declaration = load_declaration(member["directory"], job, target)
+            declaration = load_declaration(member["directory"], job, target, workspace)
             declaration["role"] = member["role"]
             declaration["parameters_set"] = member["parameters"]
             # The pointer a parameters refusal carries is into the composition file that set the
             # value, by that file's own member index, not into the flattened order.
             declaration["parameters_field"] = f"/modules/{member['index']}/parameters"
+            # What this composition takes knowingly, and the pointer to the member that says so:
+            # the member in the file that listed it, by that file's own index. A nested pack's
+            # members carry the accept their own composition.json wrote, never the outer one's.
+            declaration["accept"] = member["accept"]
+            declaration["accept_field"] = f"/modules/{member['index']}"
             declaration["reference"] = member["reference"]
             declaration["via"] = comp["name"]
             modules.append(declaration)
         else:
-            inner_modules, inner_loads, inner_decisions, inner_header = flatten(member["composition"], job, target)
+            inner_modules, inner_loads, inner_decisions, inner_header = flatten(member["composition"], job, target, workspace)
             header += [h for h in inner_header if h not in header]
             for declaration in inner_modules:
                 if member["role"] == "base":
@@ -1208,7 +1285,7 @@ def _order(modules: list[dict]) -> list[str]:
 
 REFUSAL_KINDS = ("probe", "test_only", "duplicate_id", "missing_dependency", "conflict", "unqualified_base", "unqualified_map",
                  "private_payload", "cycle", "budget", "replacement", "service", "checks", "parameters",
-                 "ownership", "exclusive")
+                 "ownership", "exclusive", "port_status")
 
 
 def _refusal(kind: str, message: str, hint: str = "", modules=(), field: str | None = None, **extra) -> dict:
@@ -1259,7 +1336,7 @@ def resolve(comp: dict, modules: list[dict], allow_unqualified: bool = False) ->
                                  "A module appears once in a pack, including through nested compositions.", modules=duplicates))
     known = set(ids)
     unqualified = []
-    for m in modules:
+    for i, m in enumerate(modules):
         for dep in m["dependencies"]:
             if dep not in known:
                 refusals.append(_refusal("missing_dependency", f"{m['id']} depends on {dep}, which is not in the composition",
@@ -1286,6 +1363,13 @@ def resolve(comp: dict, modules: list[dict], allow_unqualified: bool = False) ->
             refusals.append(_refusal("private_payload", f"{m['id']} is distribution private and its seed package is not on this machine (missing: {m['seed'].get('missing')})",
                                      "Others can read what a private module provides from its manifest; building a pack with it needs the package beside the manifest.",
                                      modules=[m["id"]], missing=m["seed"].get("missing")))
+        # A port that is not finished is composed only when the composition names its status: the
+        # member says so, not the module, so a member brought in by a dependency is refused too.
+        status = m["port_status"]
+        if status != "finished" and status not in (m.get("accept") or []):
+            refusals.append(_refusal("port_status", f"{m['id']} is {status} and this composition does not accept it",
+                                     "Write the member as {\"path\": ..., \"accept\": [\"" + status + "\"]} to compose it knowingly, or leave it out.",
+                                     modules=[m["id"]], field=m.get("accept_field", f"/modules/{i}"), status=status))
     # A role with room for exactly one owner, owned twice. `conflicts` cannot express this: it
     # names one other module, so a role with four occupants needs six hand-kept pairs and knows
     # nothing of a fifth occupant from someone else's repository (docs/MODULES.md, "Exclusive
@@ -1758,7 +1842,7 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
                "payload": "seed" if m["seed"] else "adapter" if m.get("adapter") else "recipe",
                "distribution": m["distribution"], "dependencies": m["dependencies"], "conflicts": m["conflicts"],
                "dependency_kinds": m["dependency_kinds"], "exclusive": m["exclusive"], "service": m["service"],
-               "registration": m["registration"],
+               "registration": m["registration"], "system": m["system"], "port_status": m["port_status"],
                "bases": m["bases"], "maps": m["maps"], "provides": m["provides"], "resource_contract": m["resource_contract"],
                "menu_route": m["menu_route"], "source": m["source"], "reference": m.get("reference"),
                "origin": m["origin"], "donor": m["donor"], "replaces":m["replaces"], "entry":m["entry"], "placements": m.get("placements"),
@@ -1771,7 +1855,9 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
             row["recipes"] = sorted(m.get("recipes") or ())
             row["adapter"] = {"foundation": a["foundation"], "map": a["map"], "profile": a["profile"],
                               "recipe_key": m.get("recipe_key"),
-                              "prepared_present": a["prepared_present"], "declared_roots": len(a["embedded"]),
+                              "prepared_present": a["prepared_present"], "prepared_resolved": a["prepared_resolved"],
+                              "prepared_source": a["prepared_source"], "prepared_candidates": a["prepared_candidates"],
+                              "declared_roots": len(a["embedded"]),
                               "loose_scripts": [s["target"] for s in a["scripts"]], "soundbank": a["soundbank"], "aliases": a["aliases"]}
         else:
             row["seed_sha256"] = m["seed"]["files"]["mod.ff"] and job.inputs[str(m["seed"]["package"].resolve())]
@@ -1779,6 +1865,33 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
             row["seed_roots"] = len(m["seed"]["roots"])
         rows.append(row)
     return rows
+
+
+def package_scripts(modules, compiled):
+    """``(target, text)`` for every script that ends up in the package: the members' compiled
+    targets, and the loose scripts an adapter stage produces.
+
+    An adapter's own scripts are staged into the package at build without ever entering
+    ``compiled``, so a loop that reads ``compiled`` alone never sees them -- and a `.csc` an adapter
+    stages under ``scripts/zm`` runs in the same early client pass as any other. A source that
+    cannot be read is skipped rather than judged, so a check built on this set is never the thing
+    that turns an unreadable file into a refusal."""
+    for source, target, _ in compiled:
+        try:
+            text = Path(source).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        yield target.as_posix(), text
+    for m in modules:
+        adapter = m.get("adapter")
+        if not adapter:
+            continue
+        for row in adapter["scripts"]:
+            try:
+                text = (Path(adapter["directory"]) / row["source"]).read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            yield row["target"], text
 
 
 def _derive_base_listings(comp: dict, loads: list[Path], args, job: Job) -> None:
@@ -1860,7 +1973,7 @@ def execute(args, job: Job) -> dict:
     # The pack's target in the workspace's own foundation ids, resolved once: an adapter member
     # whose declaration names a recipe for it is planned and built from that cut, not the default.
     pack_foundation = offline_checks.foundation_of(comp["base"], getattr(args, "workspace", None))
-    modules, loads, decisions, header = flatten(comp, job, (pack_foundation, comp["map"]))
+    modules, loads, decisions, header = flatten(comp, job, (pack_foundation, comp["map"]), getattr(args, "workspace", None))
     from ..testing.planner import prepare_probe
     try:
         prepare_probe(comp,modules,job)
@@ -1989,7 +2102,11 @@ def execute(args, job: Job) -> dict:
                       "foundation": m["adapter"]["foundation"], "map": m["adapter"]["map"],
                       "roots": m["adapter"]["embedded"], "soundbanks": [m["adapter"]["soundbank"]] if m["adapter"]["soundbank"] else [],
                       "aliases": m["adapter"]["aliases"], "loose_scripts": [s["target"] for s in m["adapter"]["scripts"]],
-                      "prepared_present": m["adapter"]["prepared_present"]} for m in adapter_modules],
+                      "prepared_present": m["adapter"]["prepared_present"],
+                      "prepared_resolved": m["adapter"]["prepared_resolved"], "prepared_source": m["adapter"]["prepared_source"],
+                      "prepared_candidates": m["adapter"]["prepared_candidates"],
+                      # Written by the build, so a plan that builds nothing records none.
+                      "recipe_resolved": None} for m in adapter_modules],
         "loads": [str(p) for p in loads], "zone_header": header,
         "unqualified": resolved["unqualified"], "adapt": adapt_rows(comp, modules, resolved["unqualified"], pack_foundation),
         "resource_totals": resolved["resource_totals"], "budget": comp["budget"],
@@ -2033,6 +2150,8 @@ def execute(args, job: Job) -> dict:
         plan["checks"] += offline_checks.map_script_externals(target.as_posix(),text,comp["map"],foundation,comp["game"],pack_scripts)
         plan["checks"] += offline_checks.map_guards(target.as_posix(),text,comp["map"])
         plan["checks"] += offline_checks.box_registrations(target.as_posix(),text,provided_weapons)
+    for target,text in package_scripts(modules,compiled):
+        plan["checks"] += offline_checks.csc_main_body(target,text,comp["game"])
     if args.action == "build":
         plan["checks"] += offline_checks.check_scripts(compiled,args,job,comp["game"])
     else:
@@ -2098,9 +2217,12 @@ def execute(args, job: Job) -> dict:
         workspace = getattr(args, "workspace", None)
         from . import targets
         builder_foundation = targets.foundation_for_base(Path(workspace).expanduser(), comp["base"]) if workspace else None
+        rows_by_id = {row["id"]: row for row in plan["adapters"]}
         for m in adapter_modules:
             m["seed"] = adapters.build(m, args, job, workspace, builder_foundation, comp["map"])
             plan["adapter_builds"].append(m["seed"]["report"])
+            # The resolved copy exists now, so the plan row names the file the builder was given.
+            rows_by_id[m["id"]]["recipe_resolved"] = m["seed"]["report"]["recipe_resolved"]
         seed_modules = [by_id[mid] for mid in resolved["order"] if by_id[mid]["seed"]]
         plan["seeds"] = [{"id": m["id"], "package": str(m["seed"]["package"]), "roots": m["seed"]["roots"],
                           "soundbanks": [n for n in m["seed"]["files"] if n != "mod.ff"],

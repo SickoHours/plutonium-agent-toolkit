@@ -1,0 +1,291 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "pat.module-verify/1 invocation envelope",
+  "description": "A module's declared promises beside what its own bytes say. The route is inert: it creates no job directory that outlives the call, runs no backend, opens no network and writes nothing. A row is a measurement with its method and its ceiling, never a verdict about the game: `agrees` means the method saw the promise, not that the module works; `partial` means the method sees only part of the truth and the row says which part; `not_counted` means nothing on this machine could decide it, and the row says which evidence would. What each promise can be checked against is the table in docs/MODULES.md, \"What a checker can verify, kind by kind\". With --strict a differing row is an ordinary input_invalid failure whose details.report carries this same result. Exit-2 argument/usage failures are ordinary invocation envelopes outside this protocol and have no details.report.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "toolkit_version",
+    "command",
+    "request_id",
+    "at",
+    "ok"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "toolkit_version": {
+      "type": "string"
+    },
+    "command": {
+      "const": "module verify-declaration"
+    },
+    "request_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "result": {
+      "$ref": "#/$defs/report"
+    },
+    "error_code": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "message": {
+      "type": "string",
+      "maxLength": 2048
+    },
+    "hint": {
+      "type": "string",
+      "maxLength": 2048
+    },
+    "details": {
+      "type": "object",
+      "properties": {
+        "report": {
+          "$ref": "#/$defs/report"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "module",
+        "directory",
+        "declaration_sha256",
+        "payload",
+        "rows",
+        "stages",
+        "summary",
+        "inputs"
+      ],
+      "properties": {
+        "protocol": {
+          "const": "pat.module-verify/1"
+        },
+        "module": {
+          "description": "The id the declaration gives, not the directory name.",
+          "type": "string"
+        },
+        "directory": {
+          "type": "string"
+        },
+        "declaration_sha256": {
+          "description": "The exact bytes of module.json this report was read from.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "payload": {
+          "description": "Which payload the declaration named and the route resolved.",
+          "enum": [
+            "recipe",
+            "seed",
+            "adapter"
+          ]
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/row"
+          }
+        },
+        "stages": {
+          "description": "Every staged target, classified. Listed regardless of whether a listing or a table was on this machine to decide it.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "base_owned",
+            "engine_tables",
+            "new_in_base_namespace"
+          ],
+          "properties": {
+            "base_owned": {
+              "description": "Staged paths the base or the map already carries, each with what says so.",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "path",
+                  "owner",
+                  "evidence"
+                ],
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "owner": {
+                    "enum": [
+                      "base",
+                      "map"
+                    ]
+                  },
+                  "evidence": {
+                    "enum": [
+                      "listing",
+                      "table"
+                    ]
+                  }
+                }
+              }
+            },
+            "engine_tables": {
+              "description": "Staged accuracy/ paths. No base zone listing carries one: the engine reads those graphs from its own search path when a WeaponDef is compiled, so the path overrides nothing the pack can see and no ownership is claimed for it.",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "path",
+                  "note"
+                ],
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "note": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "new_in_base_namespace": {
+              "description": "Staged paths under a namespace the base owns that no listing and no table calls base-owned: new, as far as the evidence here reaches.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "agrees",
+            "declared_not_observed",
+            "observed_not_declared",
+            "partial",
+            "not_counted"
+          ],
+          "properties": {
+            "agrees": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "declared_not_observed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "observed_not_declared": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "partial": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "not_counted": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "inputs": {
+          "description": "What the caller supplied. A dependency's provides come from its own declaration under workspace; whether a base owns a path needs base_listings or the shipped table for target.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "workspace",
+            "base_listings",
+            "target"
+          ],
+          "properties": {
+            "workspace": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "base_listings": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "target": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "proposal": {
+          "description": "Only with --propose: the declaration fields the observed side would fill. An observation, not a verdict; it never removes a declared name, and exclusive and service are the author's decision and are never proposed.",
+          "type": "object"
+        },
+        "proposal_notes": {
+          "description": "Only with --propose: the role footprints found, and what a proposal deliberately leaves to the author.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "field",
+        "declared",
+        "observed",
+        "how",
+        "outcome"
+      ],
+      "properties": {
+        "field": {
+          "description": "A JSON Pointer into the declaration.",
+          "type": "string"
+        },
+        "declared": {
+          "type": "array"
+        },
+        "observed": {
+          "type": "array"
+        },
+        "how": {
+          "description": "The method, in words.",
+          "type": "string"
+        },
+        "outcome": {
+          "enum": [
+            "agrees",
+            "declared_not_observed",
+            "observed_not_declared",
+            "partial",
+            "not_counted"
+          ]
+        },
+        "note": {
+          "description": "Which part of the truth the method saw, or the reason a row was not counted and the evidence that would decide it.",
+          "type": "string"
+        }
+      }
+    }
+  }
+}
