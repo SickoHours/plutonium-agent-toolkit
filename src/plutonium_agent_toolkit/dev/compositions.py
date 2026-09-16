@@ -83,13 +83,22 @@ KINDS = {"weapons": ("wonder", "firearm", "melee", "launcher", "special"), "perk
          "bosses": ("boss", "special-round"), "companions": ("companion",), "maps": ("map", "patch"),
          "ui": ("hud", "menu"), "core": ("inventory", "registry", "adapter"), "scripts": ("script",),
          "audio": ("bank", "music"), "tooling": ("tool",), "pack": ("pack",), "module": ()}
-DISTRIBUTIONS = ("source", "seed", "private")
+# How the module's bytes reach the person building with it. `stock` is the case with no bytes at
+# all: the content ships with the game, so the declaration is a shelf entry for a map's baseline
+# and there is nothing to fetch, compile or link (docs/MODULES.md, "Stock content").
+DISTRIBUTIONS = ("source", "seed", "private", "stock")
 # Origin is the game or series the thing's identity comes from (the ICR-1 is a Black Ops III rifle
 # whichever pack it was converted from); it drives the title. Donor is who or what the bytes came
 # from (a conversion pack, a capture, a person) and drives the credit line. Neither affects
 # resolution. An origin nobody has verified says so instead of defaulting to the donor.
 ORIGIN_UNVERIFIED = "unverified"
+# Stock content's identity comes from the game it shipped in, and nothing else can be its origin.
+ORIGIN_VANILLA = "vanilla"
 MAX_DONOR = 400
+# The `vanilla` block: what the stock scripts show for the item, per map. The toolkit bounds it
+# and carries it; the meaning of every leaf belongs to whoever read the scripts.
+MAX_VANILLA_BYTES = 32 * 1024
+VANILLA_KEY = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}\Z")
 PROVIDES_KINDS = ("weapons", "perks", "gobblegums", "powerups", "equipment", "localize", "soundbanks", "scripts", "models", "effects",
                   "rawfiles", "aliases")
 # Roles a pack has room for exactly one owner of. A module lists a role when it owns that thing
@@ -139,6 +148,13 @@ MAX_LIST = 64
 MAX_TAGS = 16
 MAX_CONTRACT = 100_000
 MAX_NESTING = 4
+
+
+def is_stock(m: dict) -> bool:
+    """A member that ships with the game. It has no payload, so it stages no file, occupies no
+    pool and can collide with nobody: the base already carries every byte it names. What it
+    *provides* is still read, because that is what the map has (docs/MODULES.md, "Stock content")."""
+    return m.get("distribution") == "stock"
 
 
 def registration_line(mid: str) -> str:
@@ -237,12 +253,12 @@ MAX_INSPECTION_CODE = 200
 MODULE_METADATA_FIELDS = ("id", "version", "game", "title", "category", "kind", "tags", "bases", "maps",
                           "dependencies", "conflicts", "origin", "donor", "distribution", "menu_route", "payload", "recipes",
                           "lineage", "replaces", "entry", "placements", "parameters", "exclusive", "service", "registration",
-                          "dependency_kinds", "system", "port_status")
+                          "dependency_kinds", "system", "port_status", "vanilla")
 # Echoed only when the declaration names them, so a declaration written before a field is unchanged.
 # `port_status` is here too: absent normalizes to "finished", and echoing that default would put a
 # claim in the metadata of a declaration that never made one.
 MODULE_METADATA_OPTIONAL = ("replaces", "entry", "placements", "parameters", "recipes", "exclusive", "service", "registration",
-                            "dependency_kinds", "system", "port_status")
+                            "dependency_kinds", "system", "port_status", "vanilla")
 COMPOSITION_METADATA_FIELDS = ("name", "title", "game", "tags", "base", "map", "origin", "donor", "members")
 
 
@@ -435,6 +451,46 @@ def _donor(value, owner: str) -> str | None:
     if not isinstance(value, str) or not value.strip() or len(value) > MAX_DONOR or "\n" in value or "\r" in value:
         raise Failure(INPUT_INVALID, f"{owner}: donor is one line of credit of at most {MAX_DONOR} characters "
                                      "(the pack, capture or person the bytes came from)")
+    return value
+
+
+def _vanilla(value, owner: str, distribution: str):
+    """What the stock scripts show for this item, per map: costs, tiers, camo index, entity
+    targetnames, behaviour notes and the citations behind them.
+
+    The toolkit bounds the block and reads nothing out of it. The facts are a reading of a
+    decompiled corpus that lives on the reader's machine, and a claim about the game is theirs
+    to make and cite, not the toolkit's to interpret. Only stock content carries it: a module
+    with a payload states what *it* provides, and does not speak for what the game already does.
+    """
+    if value is None:
+        return None
+    if distribution != "stock":
+        raise Failure(INPUT_INVALID, f"{owner}: vanilla says what the game's own scripts show, so it belongs to a "
+                                     f"distribution {DISTRIBUTIONS[-1]!r} declaration; a module with a payload declares "
+                                     "what it provides instead")
+    if not isinstance(value, dict):
+        raise Failure(INPUT_INVALID, f"{owner}: vanilla is an object, keyed by the map each fact is about")
+    try:
+        size = len(json.dumps(value, ensure_ascii=False).encode("utf-8"))
+    except (TypeError, ValueError, RecursionError) as exc:
+        raise Failure(INPUT_INVALID, f"{owner}: vanilla holds a value JSON cannot represent") from exc
+    if size > MAX_VANILLA_BYTES:
+        raise Failure(INPUT_LIMIT, f"{owner}: vanilla is at most {MAX_VANILLA_BYTES} bytes of JSON, and this is {size}",
+                      "Keep the per-map facts and their citations here; a corpus belongs in a record the ledger points at.")
+    stack = [value]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, dict):
+            for key, sub in item.items():
+                if not isinstance(key, str) or not VANILLA_KEY.match(key):
+                    raise Failure(INPUT_INVALID, f"{owner}: a vanilla key is one lowercase word -- a map id, or the "
+                                                 f"name of one fact about it: {key!r}")
+                stack.append(sub)
+        elif isinstance(item, list):
+            stack.extend(item)
+        elif item is not None and not isinstance(item, (str, int, float, bool)):
+            raise Failure(INPUT_INVALID, f"{owner}: a vanilla value is a JSON scalar, list or object")
     return value
 
 
@@ -774,7 +830,7 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
     _fields(data, {"schema", "id", "version", "game", "title", "category", "kind", "tags", "recipe", "recipes", "seed", "bases", "maps",
                             "dependencies", "conflicts", "provides", "resource_contract", "menu_route", "distribution", "source",
                             "origin", "donor", "lineage", "tests", "replaces", "entry", "placements", "parameters",
-                            "exclusive", "service", "registration", "system", "port_status"},
+                            "exclusive", "service", "registration", "system", "port_status", "vanilla"},
                      {"schema", "id", "version", "bases", "maps"}, where)
     if data["schema"] != 1:
         raise Failure(INPUT_INVALID, f"{where}: expected schema 1", field='/schema')
@@ -801,21 +857,33 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
     if not isinstance(tags, list) or len(tags) > MAX_TAGS or not all(isinstance(t, str) and TAG.match(t) for t in tags) \
             or len(set(tags)) != len(tags):
         raise Failure(INPUT_INVALID, f"{mid}: tags is a list of at most {MAX_TAGS} distinct lowercase words (a source game, a series, a theme)", field='/tags')
-    if ("recipe" in data) == ("seed" in data):
-        raise Failure(INPUT_INVALID, f"{mid}: a declaration names exactly one payload: recipe (project.json) or seed (seed.json)", field='/recipe')
-    payload = "recipe" if "recipe" in data else "seed"
-    payload_path = _at("/" + payload, _text, data[payload], f"{mid}: {payload}", 4096)
-    if payload == "recipe":
-        _at("/recipe", _recipe_path, payload_path)
-    recipes = _recipes(data.get("recipes"), mid)
-    if recipes and payload != "recipe":
-        raise Failure(INPUT_INVALID, f"{mid}: recipes belongs to a recipe payload; a seed is one package, not a cut per target", field='/recipes')
+    # The distribution decides whether there is a payload at all, so it is read before the payload
+    # rule rather than after it: stock content is the base's own bytes, and a declaration for it
+    # names no recipe and no seed. Widening the enum alone would leave that rule refusing first.
     distribution = data.get("distribution", "seed" if "seed" in data else "source")
     if distribution not in DISTRIBUTIONS:
         raise Failure(INPUT_INVALID, f"{mid}: distribution is one of {list(DISTRIBUTIONS)}", field='/distribution')
-    if payload == "seed" and ("\\" in payload_path or Path(payload_path).is_absolute()
-                              or PureWindowsPath(payload_path).anchor or ".." in Path(payload_path).parts):
-        raise Failure(INPUT_INVALID, f"{mid}: seed is a forward-slash relative path inside the module directory", field="/seed")
+    recipes = _recipes(data.get("recipes"), mid)
+    if distribution == "stock":
+        for named in ("recipe", "seed"):
+            if named in data:
+                raise Failure(INPUT_INVALID, f"{mid}: stock content already ships with the game, so a stock declaration names no {named}",
+                              "Drop the payload, or declare a distribution that has one: source, seed or private.", field='/' + named)
+        if recipes:
+            raise Failure(INPUT_INVALID, f"{mid}: recipes belongs to a recipe payload; stock content has no payload to cut per target", field='/recipes')
+        payload, payload_path = "stock", None
+    else:
+        if ("recipe" in data) == ("seed" in data):
+            raise Failure(INPUT_INVALID, f"{mid}: a declaration names exactly one payload: recipe (project.json) or seed (seed.json)", field='/recipe')
+        payload = "recipe" if "recipe" in data else "seed"
+        payload_path = _at("/" + payload, _text, data[payload], f"{mid}: {payload}", 4096)
+        if payload == "recipe":
+            _at("/recipe", _recipe_path, payload_path)
+        if recipes and payload != "recipe":
+            raise Failure(INPUT_INVALID, f"{mid}: recipes belongs to a recipe payload; a seed is one package, not a cut per target", field='/recipes')
+        if payload == "seed" and ("\\" in payload_path or Path(payload_path).is_absolute()
+                                  or PureWindowsPath(payload_path).anchor or ".." in Path(payload_path).parts):
+            raise Failure(INPUT_INVALID, f"{mid}: seed is a forward-slash relative path inside the module directory", field="/seed")
     bases = data["bases"]
     if not isinstance(bases, list) or not bases or len(bases) > MAX_LIST or not all(isinstance(b, str) and BASE.match(b) for b in bases) \
             or len(set(bases)) != len(bases):
@@ -845,6 +913,12 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
     service = _at("/service", _service, data.get("service"), mid, provides, exclusive)
     dependencies, dependency_kinds = _at("/dependencies", _dependencies, data.get("dependencies", []), mid)
     registration = _at("/registration", _registration, data.get("registration"), mid, data.get("entry"))
+    origin = _at("/origin", _origin, data.get("origin"), mid)
+    if distribution == "stock" and origin != ORIGIN_VANILLA:
+        raise Failure(INPUT_INVALID, f"{mid}: stock content's origin is {ORIGIN_VANILLA!r}: it is the game's own content, "
+                                     "not an identity carried in from somewhere else",
+                      f"Declare origin {ORIGIN_VANILLA!r}, or declare a distribution for content that has a payload.",
+                      field='/origin')
     return {"id": mid, "version": data["version"], "game": game, "title": title, "category": category, "kind": kind, "tags": list(tags),
             "payload": payload, "payload_path": payload_path, "recipes": recipes, "distribution": distribution, "tests": tests,
             "replaces":_at("/replaces",_replaces,data.get("replaces")), "entry":_at("/entry",_entry,data.get("entry")),
@@ -859,7 +933,8 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
             "resource_contract": _at("/resource_contract", _contract, data.get("resource_contract"), f"{mid}: resource_contract"),
             "menu_route": menu_route, "source": source,
             "lineage": validate_lineage(data.get("lineage")),
-            "origin": _at("/origin", _origin, data.get("origin"), mid), "donor": _at("/donor", _donor, data.get("donor"), mid)}
+            "vanilla": _at("/vanilla", _vanilla, data.get("vanilla"), mid, distribution),
+            "origin": origin, "donor": _at("/donor", _donor, data.get("donor"), mid)}
 
 
 def _recipe_for_target(declaration: dict, directory: Path, job: Job, target: tuple[str | None, str | None] | None) -> tuple[Path, str | None]:
@@ -913,7 +988,11 @@ def load_declaration(directory: Path, job: Job, target: tuple[str | None, str | 
     distribution = declaration["distribution"]
     recipe = seed = adapter = None
     recipe_key = None
-    if declaration["payload"] == "recipe":
+    if declaration["payload"] == "stock":
+        # Nothing to resolve: the payload is the base itself. What the declaration provides is
+        # what the map already carries, and no file of this module's is ever staged.
+        pass
+    elif declaration["payload"] == "recipe":
         recipe = projects._rel(declaration["payload_path"], directory)
         if recipe.is_symlink() or not recipe.is_file():
             raise Failure(INPUT_MISSING, f"{mid}: recipe is missing: {data['recipe']}")
@@ -1417,7 +1496,8 @@ def resolve(comp: dict, modules: list[dict], allow_unqualified: bool = False) ->
         order = _order(orderable)
     except Failure as exc:
         refusals.append(_refusal("cycle", exc.message, modules=[m["id"] for m in modules if m["id"] in exc.message]))
-    totals = {field: sum(m["resource_contract"][field] for m in modules) for field in CONTRACT_FIELDS}
+    # A stock member is the baseline the budget is measured against, never a contribution to it.
+    totals = {field: sum(m["resource_contract"][field] for m in modules if not is_stock(m)) for field in CONTRACT_FIELDS}
     if comp["budget"] is not None:
         for field in CONTRACT_FIELDS:
             if totals[field] > comp["budget"][field]:
@@ -1880,7 +1960,7 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
         row = {"id": mid, "version": m["version"], "title": m["title"], "category": m["category"], "kind": m["kind"],
                "tags": m["tags"], "role": m.get("role", "module"), "via": m.get("via"), "directory": str(m["directory"]),
                "declaration_sha256": job.inputs[str(m["declaration"])],
-               "payload": "seed" if m["seed"] else "adapter" if m.get("adapter") else "recipe",
+               "payload": "stock" if m["distribution"] == "stock" else "seed" if m["seed"] else "adapter" if m.get("adapter") else "recipe",
                "distribution": m["distribution"], "dependencies": m["dependencies"], "conflicts": m["conflicts"],
                "dependency_kinds": m["dependency_kinds"], "exclusive": m["exclusive"], "service": m["service"],
                "registration": m["registration"], "system": m["system"], "port_status": m["port_status"],
@@ -1888,7 +1968,9 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
                "menu_route": m["menu_route"], "source": m["source"], "reference": m.get("reference"),
                "origin": m["origin"], "donor": m["donor"], "replaces":m["replaces"], "entry":m["entry"], "placements": m.get("placements"),
                "parameters": m.get("parameters_effective", {})}
-        if m["recipe"] is not None:
+        if row["payload"] == "stock":
+            pass                                # No payload, so no payload hash: the base carries it.
+        elif m["recipe"] is not None:
             row["recipe_sha256"] = job.inputs[str(m["recipe"].resolve())]
         elif m.get("adapter") is not None:
             a = m["adapter"]
@@ -2054,7 +2136,12 @@ def execute(args, job: Job) -> dict:
             raise
     if absent:
         raise refuse(absent, "private_payload", "Read details.refusals: every private member whose inputs are absent here.")
-    warnings=replacement_warnings(modules,loaded)
+    # Every member that could put a byte in the zone. A stock member has no payload, so it stages
+    # nothing, replaces nothing and registers nothing the base does not already register: it is
+    # excluded from the file, replacement, ownership and service rules, all of which judge what a
+    # module ships. It stays in `modules` for base/map fit, order and what it provides.
+    staging = [m for m in modules if not is_stock(m)]
+    warnings=replacement_warnings(staging,loaded)
     by_id = {m["id"]: m for m in modules}
     compiled, loose = [], []
     owner_of_script: dict[str, str] = {}
@@ -2077,7 +2164,7 @@ def execute(args, job: Job) -> dict:
     if len(compiled) > projects.MAX_SCRIPTS or len(loose) > projects.MAX_ASSETS or len(loads) > projects.MAX_LOADS or len(seed_modules) > MAX_MODULES:
         raise Failure(INPUT_LIMIT, f"A composition holds at most {projects.MAX_SCRIPTS} scripts, {projects.MAX_ASSETS} assets, {projects.MAX_LOADS} loads and {MAX_MODULES} seeds")
     _derive_base_listings(comp, loads, args, job)
-    decided, undecided, refused = collisions(modules, loaded, decisions, comp.get("base_owned"))
+    decided, undecided, refused = collisions(staging, loaded, decisions, comp.get("base_owned"))
     # The shelf is read once: a replacement, ownership or service refusal all name the module to
     # depend on instead from the same rows.
     shelf = shelf_services(getattr(args, "workspace", None))
@@ -2098,12 +2185,12 @@ def execute(args, job: Job) -> dict:
     # The native-WeaponDef rule is a declaration check: the shipped per-map table names what the
     # map already registers, and a composition's own base listings add to it.
     owned_weapons = (comp.get("base_owned") or set()) | native_weapons(comp["map"], foundation)
-    services = service_refusals(modules, loaded, undecided, owned_weapons, shelf)
+    services = service_refusals(staging, loaded, undecided, owned_weapons, shelf)
     # A member that stages a base-owned path and does not declare it refuses on its own: the
     # overwrite does not wait for a second member, so this is not a collision decision.
-    ownership = ownership_refusals(modules, loaded, comp, foundation, shelf)
+    ownership = ownership_refusals(staging, loaded, comp, foundation, shelf)
     late_refusals += ownership
-    warnings += declared_not_owned_warnings(modules, comp, foundation)
+    warnings += declared_not_owned_warnings(staging, comp, foundation)
     if ownership:
         # One path, one report: an ownership row already names the path, its owner and the service.
         reported = {row["path"] for row in ownership}
@@ -2154,6 +2241,10 @@ def execute(args, job: Job) -> dict:
                       "prepared_candidates": m["adapter"]["prepared_candidates"],
                       # Written by the build, so a plan that builds nothing records none.
                       "recipe_resolved": None} for m in adapter_modules],
+        # The members the game already ships: nothing is built, staged or counted for them, and
+        # what they provide is what this map has before the pack adds anything.
+        "stock": [{"id": m["id"], "version": m["version"], "provides": m["provides"]}
+                  for mid in resolved["order"] for m in [by_id[mid]] if is_stock(m)],
         "loads": [str(p) for p in loads], "zone_header": header,
         "unqualified": resolved["unqualified"], "adapt": adapt_rows(comp, modules, resolved["unqualified"], pack_foundation),
         "resource_totals": resolved["resource_totals"], "budget": comp["budget"],
@@ -2229,7 +2320,7 @@ def execute(args, job: Job) -> dict:
                "modules": [{"id": r["id"], "version": r["version"], "order": i + 1, "payload": r["payload"], "role": r["role"],
                             "parameters": r.get("parameters", {})}
                            for i, r in enumerate(rows)],
-               "expected_lines": expected_lines,
+               "expected_lines": expected_lines, "stock": plan["stock"],
                "unqualified": resolved["unqualified"], "adapt": plan["adapt"],
         "resource_totals": resolved["resource_totals"], "budget": comp["budget"],
                "scripts": len(compiled), "assets": len(loose), "seeds": len(seed_modules), "adapters": len(adapter_modules), "loads": len(loads),
