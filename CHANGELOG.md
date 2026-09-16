@@ -70,6 +70,27 @@ Every entry states what shipped, on which platform it was verified, and what rem
   at all, and it never writes one. Designed in `docs/MODULES.md`, "A generated changelog per
   module". Offline verified on Linux (`tests/test_module_changelog.py`); no native receipt, and no
   existing route's status changed.
+- A program reading `pat` can now pin the shape of every result and say which code produced it.
+  Three additive fields, nothing renamed or removed. `module plan`'s result carries
+  `protocol: "pat.module-plan/1"` and `module state`'s `--composition` result carries
+  `protocol: "pat.module-state/1"`, each as the first field, joining the protocol strings
+  `module inspect`, `module verify-declaration`, `module accept`, `module qualify`,
+  `module ledger-add`, `module ledger-from-registry`, `target list|inspect|validate`,
+  `test plan` and `workspace catalog` already returned; `plan.json` on disk is untouched and
+  keeps its `schema_version`. Every `pat manifest` route row gains `result_protocol`: the
+  protocol string that route's success result carries, or `null` where it carries none, so a
+  reader learns from discovery which literal to pin instead of hard-coding a table. `module
+  state` is the one route with two subjects -- its row names `pat.module-state/1` for the
+  `--composition` form, and the `--ledger` form answers with `pat.module-ledger/1`, which is
+  said on the row's notes and in `docs/MODULES.md` rather than collapsed into one string.
+  `pat version`'s result gains `source_commit` (40 hex) and `dirty` (bool) when the toolkit is
+  an editable install running out of a git checkout, and `null` for both otherwise: an installed
+  wheel has no such fact, and a guess would be worse than silence. Resolution is read-only
+  (`rev-parse`, `status`), bounded, and never raises or fails the route; `pat --version` is
+  still the bare version string, byte for byte. A test holds both directions of the claim: no
+  manifest row may name a protocol no source file emits, and no source file may emit a protocol
+  the known list does not carry. Offline verified on Linux
+  (`tests/test_result_protocols.py`); no native receipt, and no route's status changed.
 - A declaration can now say how a player reaches a feature and whether they can see they have it,
   and `module plan` derives reachability per composition and map. `reach` is one word from
   `wall-or-box`, `machine`, `granted`, `drop`, `passive` and `menu`; `hud` is `icon` or `none`.

@@ -43,6 +43,11 @@ class Route:
     requires_windows: bool = False
     evidence: str = "Keep this invocation's stdout JSON and exit status."
     notes: str = ""
+    # The protocol string this route's success result carries in its own `protocol` field, or
+    # None where the result carries none. A reader pins the literal it was written against and
+    # reports a mismatch instead of rendering a result it does not understand. Adding a field to
+    # a result keeps the string; changing or removing one is a new version.
+    result_protocol: str | None = None
 
     @property
     def id(self) -> str:

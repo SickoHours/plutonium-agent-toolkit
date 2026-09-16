@@ -261,7 +261,11 @@ def run(argv: list[str]) -> dict:
     command = group if group in ("version", "manifest", "doctor", "describe", "configure") else f"{group} {args.action}"
 
     if group == "version":
-        return success(command, {"version": __version__, "platform": platform.describe()})
+        from .core import source
+
+        # source_commit/dirty answer "which code is this": known for an editable install out of a
+        # git checkout, null otherwise. Never raises; `--version` stays the bare string.
+        return success(command, {"version": __version__, **source.identity(), "platform": platform.describe()})
 
     if group == "manifest":
         return success(command, manifest(platform.describe()))
