@@ -315,6 +315,14 @@ class LooseOverrides(unittest.TestCase):
         self.assertEqual(out[0]['outcome'],'not_counted');self.assertFalse(out[0]['counted'])
         self.assertIn('is not a directory',out[0]['detail'])
         self.assertIn('not a pass either',out[0]['detail'])
+    def test_a_scan_the_bound_cut_short_with_no_hit_is_not_counted(self):
+        # The shadowing file may be one the bound never reached; a partial negative proves nothing.
+        # Directory order is the filesystem's, so the bound is set where nothing can be read.
+        directory=self.loose('camo_zombies_nml.iwi')
+        with patch.object(checks,'MAX_LOOSE_FILES',0):
+            out=checks.loose_overrides(self.plan(),self.owned(),directory)
+        self.assertEqual(out[0]['outcome'],'not_counted');self.assertFalse(out[0]['counted'])
+        self.assertIn('stopped before reading all of them',out[0]['detail'])
     def test_without_a_base_listing_nothing_is_compared(self):
         out=checks.loose_overrides(self.plan(),{'image':set()},self.loose('camo_zombies_nml.iwi'))
         self.assertEqual(out[0]['outcome'],'not_counted');self.assertIn('No base listing',out[0]['detail'])

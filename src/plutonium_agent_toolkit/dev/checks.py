@@ -339,8 +339,9 @@ def loose_overrides(plan,shadowable=None,directory=None):
                        count=0,names=[],counted=False)
     files=[];truncated=False
     try:
-        for entry in sorted(directory.iterdir(),key=lambda p:p.name):
-            if len(files)>=MAX_LOOSE_FILES:truncated=True;break
+        # Lazy: the bound is on directory entries read, before any is sorted or stat-ed.
+        for index,entry in enumerate(directory.iterdir()):
+            if index>=MAX_LOOSE_FILES:truncated=True;break
             if entry.is_file():files.append(entry.name)
     except OSError as error:
         return summary('not_counted',
@@ -353,6 +354,14 @@ def loose_overrides(plan,shadowable=None,directory=None):
     by_fold={name.casefold():name for name in sorted(owned)}
     hits=sorted((by_fold[fold],images[fold]) for fold in sorted(set(images)&set(by_fold)))
     scanned=len(images)
+    if truncated and not hits:
+        # An incomplete scan that found nothing proves nothing: the file that shadows may be one
+        # the bound stopped short of.
+        return summary('not_counted',
+                       f'Plutonium\'s global loose texture path is not counted: {directory} holds more than {MAX_LOOSE_FILES} entries, '
+                       f'so the scan stopped before reading all of them and found no hit among the first {scanned} texture(s). '
+                       f'{len(owned)} base-owned image name(s) may still be shadowed by a file it never reached',
+                       count=0,names=[],counted=False,path=str(directory),loose_images=scanned)
     if not hits:
         return summary('passed',
                        f'None of the {scanned} loose texture(s) in {directory} carries one of the {len(owned)} image name(s) the base owns, '

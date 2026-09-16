@@ -1215,6 +1215,16 @@ class LooseOverrideTests(CompositionFixture):
         self.assertFalse(check["counted"])
         self.assertIn("pat configure --plutonium-storage-t6", check["hint"])
 
+    def test_an_iw5_pack_is_never_judged_against_t6_s_loose_folder(self):
+        self.storage("camo_zombies_nml.iwi")
+        d = self.module("iw5_thing", game="iw5")
+        recipe = json.loads((d / "project.json").read_text()); recipe["game"] = "iw5"; recipe["mode"] = "mp"
+        (d / "project.json").write_text(json.dumps(recipe))
+        comp = self.composition(["iw5_thing"], name="iw5_loose_test", base="stock", map_id="mp_alpha", game="iw5")
+        code, row = invoke(["module", "plan", str(comp), "--output", self.out()])
+        checks = (row.get("result") or row.get("details") or {}).get("checks") or []
+        self.assertFalse([c for c in checks if c["id"].startswith("loose-overrides")], row)
+
     def test_a_composition_with_no_base_listing_compares_nothing(self):
         self.storage("camo_zombies_nml.iwi")
         comp = self.composition(["skull"], name="stock_loose5_test", loads=["../zones/common_zm.ff"])

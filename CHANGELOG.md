@@ -101,7 +101,9 @@ Every entry states what shipped, on which platform it was verified, and what rem
   cut for one target, so widening alone cannot qualify one: the target's cut is written as
   `recipe-<base>.json` from the declared recipe with only `foundation`, `map`, `profile` and
   `revision` changed, built through the workspace's adapter builder and recorded under `recipes`;
-  an existing cut is reused and a recipe on disk is never overwritten.
+  an existing cut is reused and a recipe on disk is never overwritten. The check runs for `t6` compositions only (`storage/t6` is T6's folder), reads the directory
+  lazily under its entry bound, and a scan the bound cut short with no hit is `not_counted`, never
+  `passed`.
 
   Only after the second verify are the records written, together or not at all: `module.json`
   widened by exactly that base and map, a `docs/TEST.md` section citing every receipt by relative

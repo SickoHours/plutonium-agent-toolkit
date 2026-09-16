@@ -1635,7 +1635,9 @@ def execute(args, job: Job) -> dict:
     # storage/t6/images wins over every bank, for every mod folder and for the bare game. It is
     # machine state no composition can cause or cure, and the plan is the last place that knows
     # which image names the base owns, so this is where a loose file shadowing one is named.
-    plan["checks"] += offline_checks.loose_overrides(plan, comp.get("base_shadowable"), offline_checks.loose_images_dir())
+    # storage/t6 is T6's folder alone: an IW5 pack is never judged against it.
+    if comp["game"] == "t6":
+        plan["checks"] += offline_checks.loose_overrides(plan, comp.get("base_shadowable"), offline_checks.loose_images_dir())
     provided_weapons = {w for m in modules for w in (m.get("provides", {}).get("weapons") or [])}
     pack_scripts = {t.as_posix() for _, t, _ in compiled} | {t.as_posix() for _, t, _, _ in loose}
     for m in modules:
