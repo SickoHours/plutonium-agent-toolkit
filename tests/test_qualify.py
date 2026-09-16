@@ -355,3 +355,119 @@ class AdaptOutcomeTests(QualifyFixture):
         code, row = invoke(["module", "plan", str(comp), "--workspace", str(self.root), "--output", self.out()])
         self.assertEqual(code, 0, row)
         self.assertEqual(row["result"]["adapt"], [])
+
+
+class QualifyBaseListingTests(QualifyFixture):
+    """A module qualified alone is judged on its package bytes.
+
+    Two checks stood between every donor-loading module and its receipt, and neither was about the
+    package. `donor-shadowing` refused because the synthesized composition passed no base listings,
+    even though the foundation names them; `loose-overrides` then refused on files in this machine's
+    global `storage/t6/images`, which no package contains and no build can change.
+    """
+
+    def donor_module(self, mid="alpha", **overrides):
+        """A module whose own recipe loads a zone the foundation does not name as base."""
+        directory = self.module(mid, bases=["stock"], maps=["zm_transit"], **overrides)
+        donor = directory / "donor" / "zm_moon_patch.ff"
+        donor.parent.mkdir(parents=True, exist_ok=True)
+        donor.write_text(json.dumps({"zone": "zm_moon_patch", "assets": [], "rawfiles": {}}))
+        recipe = json.loads((directory / "project.json").read_text())
+        recipe["loads"] = ["donor/zm_moon_patch.ff"]
+        (directory / "project.json").write_text(json.dumps(recipe, indent=2))
+        return directory
+
+    def listing(self, *rows):
+        """A `<zone>-list.txt` for the base zone, in the directory the link loads live in."""
+        rows = rows or ("image, camo_zombies_nml", "material, mtl_stock")
+        path = self.load.parent / "common_zm-list.txt"
+        path.write_text("".join(f"{row}\n" for row in rows))
+        return path
+
+    def test_without_a_listing_a_donor_loading_module_refuses_before_it_is_built(self):
+        self.foundation()
+        code, row = self.qualify(str(self.donor_module()))
+        self.assertEqual(code, 1, row)
+        refusal = row["details"]["modules"][0]["refusal"]
+        self.assertEqual(refusal["kind"], "plan-refused")
+        self.assertIn("donor-shadowing", refusal["message"])
+        self.assertIn("no base listing says which image and material names the base owns", refusal["message"])
+
+    def test_a_listing_beside_the_link_loads_is_read_and_the_module_qualifies(self):
+        self.foundation()
+        self.listing()
+        directory = self.donor_module()
+        code, row = self.qualify(str(directory))
+        self.assertEqual(code, 0, row)
+        entry = row["result"]["modules"][0]
+        self.assertEqual(entry["outcome"], "qualified")
+        self.assertEqual(entry["base_listings"], [str(self.load.parent)])
+        qualified = json.loads((self.root / entry["job"] / "qualify.json").read_text())
+        self.assertEqual(qualified["base_listings"], [str(self.load.parent)])
+
+    def test_a_foundation_that_names_its_listings_directory_is_read_too(self):
+        path = self.foundation()
+        record = json.loads(path.read_text())
+        listings = self.root / "listings"
+        listings.mkdir(parents=True, exist_ok=True)
+        (listings / "common_zm-list.txt").write_text("image, camo_zombies_nml\n")
+        record["base_listings"] = ["listings"]
+        path.write_text(json.dumps(record, indent=2))
+        code, row = self.qualify(str(self.donor_module()))
+        self.assertEqual(code, 0, row)
+        self.assertEqual(row["result"]["modules"][0]["base_listings"], [str(listings)])
+
+
+class QualifyLooseOverrideTests(QualifyFixture):
+    """`loose-overrides` is machine state: a file in Plutonium's global `storage/t6/images` that no
+    package contains, that every mod folder and the bare game read, and that no build can change.
+    A module qualified alone is judged on its package bytes, so the row is recorded, not refusing.
+    `module plan` and `module build` invoked directly are unchanged and still refuse."""
+
+    def setUp(self):
+        super().setUp()
+        self.foundation()
+        (self.load.parent / "common_zm-list.txt").write_text("image, camo_zombies_nml\nmaterial, mtl_stock\n")
+        storage = self.root / "storage" / "t6"
+        (storage / "images").mkdir(parents=True, exist_ok=True)
+        (storage / "images" / "camo_zombies_nml.iwi").write_bytes(b"IWi\x0d" + b"\0" * 32)
+        code, row = invoke(["configure", "--plutonium-storage-t6", str(storage)])
+        self.assertEqual(code, 0, row)
+
+    def donor_module(self, mid="alpha"):
+        directory = self.module(mid, bases=["stock"], maps=["zm_transit"])
+        donor = directory / "donor" / "zm_moon_patch.ff"
+        donor.parent.mkdir(parents=True, exist_ok=True)
+        donor.write_text(json.dumps({"zone": "zm_moon_patch", "assets": [], "rawfiles": {}}))
+        recipe = json.loads((directory / "project.json").read_text())
+        recipe["loads"] = ["donor/zm_moon_patch.ff"]
+        (directory / "project.json").write_text(json.dumps(recipe, indent=2))
+        return directory
+
+    def test_a_loose_shadowing_file_is_a_warning_on_the_module_not_a_refusal(self):
+        directory = self.donor_module()
+        code, row = self.qualify(str(directory))
+        self.assertEqual(code, 0, row)
+        entry = row["result"]["modules"][0]
+        self.assertEqual(entry["outcome"], "qualified")
+        self.assertEqual([w["id"] for w in entry["warnings"]], ["loose-overrides", "loose-overrides:camo_zombies_nml"])
+        self.assertTrue(all(w["outcome"] == "failed" for w in entry["warnings"]))
+        qualified = json.loads((self.root / entry["job"] / "qualify.json").read_text())
+        self.assertEqual([w["id"] for w in qualified["warnings"]], [w["id"] for w in entry["warnings"]])
+        book = json.loads((directory / "evidence.json").read_text())
+        note = next(r for r in book["rows"] if r["type"] == "built-alone")["note"]
+        self.assertIn("loose-overrides: 1 loose global textures shadow base names on this machine "
+                      "(not a package fact)", note)
+
+    def test_module_plan_invoked_directly_on_the_same_composition_still_refuses(self):
+        code, row = self.qualify(str(self.donor_module()))
+        self.assertEqual(code, 0, row)
+        entry = row["result"]["modules"][0]
+        composition = self.root / json.loads(
+            (self.root / entry["job"] / "qualify.json").read_text())["composition"]
+        # The same composition, the same listings: only the caller differs.
+        code, row = invoke(["module", "plan", str(composition), "--workspace", str(self.root),
+                            *sum((["--base-listings", d] for d in entry["base_listings"]), []),
+                            "--output", self.out()])
+        self.assertEqual(code, 1, row)
+        self.assertIn("loose-overrides:camo_zombies_nml", row["message"])

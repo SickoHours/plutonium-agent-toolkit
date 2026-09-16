@@ -455,6 +455,20 @@ Per module, in one job directory, each step leaving its own receipt:
 | e | `<id>/plan-qualified/`, `<id>/build-qualified/`, `<id>/verify-qualified/` | the same three after the **staged** declaration is widened |
 | f | the module directory | the records, written together or not at all |
 
+The synthesized composition is planned with the base's asset listings, which the workspace already
+knows the location of: the directories the foundation record names under `base_listings`, and the
+directory the link loads themselves sit in when it holds `<zone>-list.txt` files beside them. They
+are passed exactly as `--base-listings <dir>` would, and `qualify.json` and the results table record
+which directories were used under `base_listings`. Without them a module whose recipe loads a donor
+zone refuses `donor-shadowing` before anything is built, for want of a listing the workspace had all
+along; when no listing exists anywhere the refusal stands, because nothing then says which names the
+base owns. One check is recorded rather than refused on: `loose-overrides` counts files in this
+machine's global `storage/t6/images`, which no package contains and no build can change, so a module
+built alone keeps its `failed` rows under `warnings` in `qualify.json` and the results table, adds
+them to the built-alone note, and still qualifies. `module plan` and `module build` invoked directly
+are unchanged and still refuse on that check: there the question is whether to ship a pack on this
+machine, not whether this module builds on this target.
+
 The declaration is widened in the staged copy, so both builds read the same paths and the two
 packages are comparable. For a project recipe they must be the same bytes: a declaration is
 metadata the package does not contain, and a difference means an input moved between the builds,

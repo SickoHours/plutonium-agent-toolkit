@@ -3,7 +3,7 @@ name: pat-review
 description: "Review a T6 Zombies mod change before install on three separate axes: standards (the contracts in docs/knowledge), spec (what was asked for), and evidence (which of the six build facts the change has actually earned). Use when the user asks to review a build, a branch, or a candidate, or before any package-and-install."
 metadata:
   version: "1.0.0"
-  updated: "2026-09-13"
+  updated: "2026-09-16"
   source:
     repository: https://github.com/mattpocock/skills
     commit: 3cca18b368ae95cdbdebbff572ccafa662551015
@@ -46,8 +46,11 @@ For the six build facts, state which the candidate has earned and cite the artif
 verified (receipt `status: succeeded`, readback count, preflight results by hash); installed
 (install receipt hash equals build hash); launched, playable (a fresh inspected frame with a
 spawned character); captured; accepted (a dated scoped verdict by a person on this exact hash,
-map and form). Anything without an artifact is "not earned". A claim in prose that outruns its
-artifact is a finding on this axis. Under 200 words.
+map and form). Where the module keeps an evidence ledger, `pat module state --ledger <module dir>
+--base <token> --map <id> --json` is the artifact-backed reading: each fact carries the row
+numbers behind it, and a fact no row states is `null`, which is "not earned", never false
+(`docs/evidence-ledger.md`). Anything without an artifact is "not earned". A claim in prose that
+outruns its artifact is a finding on this axis. Under 200 words.
 
 ## Aggregate
 
