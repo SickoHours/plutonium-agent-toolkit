@@ -1,6 +1,6 @@
 {
  "counts": {"client": 297, "server": 878},
- "exported_at": "2026-09-15T11:54:18Z",
+ "exported_at": "2026-09-16T03:09:22Z",
  "exported_by": "t6-knowledge-export",
  "foundation": "dlc5-beta2",
  "layers": ["dlc5-beta2/mod_load", "dlc5-beta2/zm_asylum", "dlc5-beta2/zm_cosmodrome", "dlc5-beta2/zm_factory", "dlc5-beta2/zm_moon", "dlc5-beta2/zm_pentagon", "dlc5-beta2/zm_prototype", "dlc5-beta2/zm_sumpf", "dlc5-beta2/zm_temple", "dlc5-beta2/zm_theater", "stock/code_post_gfx_zm", "stock/common_zm", "stock/patch_zm", "stock/zm_buried", "stock/zm_buried_patch", "stock/zm_highrise", "stock/zm_highrise_patch", "stock/zm_nuked", "stock/zm_nuked_patch", "stock/zm_prison", "stock/zm_prison_patch", "stock/zm_tomb", "stock/zm_tomb_patch", "stock/zm_transit", "stock/zm_transit_dr", "stock/zm_transit_dr_patch", "stock/zm_transit_patch"],

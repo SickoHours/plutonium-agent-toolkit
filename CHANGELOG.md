@@ -29,6 +29,21 @@ Every entry states what shipped, on which platform it was verified, and what rem
   checker can verify, kind by kind" and "How to run it". Verified by offline unit tests on Linux
   (`tests/test_verify_version.py`); no native receipt, and the route's status is unchanged.
 
+- Re-exported T6 knowledge, carrying two new crash-signature rows and one corrected regex.
+  `sound-bank-failed-to-load` (class `asset-missing`) matches
+  `ERROR: sound bank failed to load <name>.all. You have a build problem.` and is the first row in
+  the table whose cause was never found: the evidence rotated away before the diagnosis ran, and the
+  two obvious explanations — a bank missing from the mod folder, a bank under the wrong name — were
+  checked and ruled out first. Its cause column is an observation, and `docs/knowledge/crashes.md`
+  says so under the table rather than letting the row imply a mechanism. `csc-main-only` (class
+  `shape-marker`) is the row the previous change said would land with the next export; this is that
+  export, and the page now reads that way. `client-script-pass-died` stays documented and unshipped,
+  because a pairing with an absent line is not something a line matcher can hold; the generator skips
+  it by name instead of deriving a row from its wording. `too-early-to-loadmod` carried the regex
+  `too early to loadmod!` and matched no real line, because the engine prints
+  `Too early to loadmod!`; widened to `[Tt]oo early to loadmod!`. All six exported files are
+  generator output with a fresh `exported_by`/`exported_at` marker and nothing here was hand-edited
+  (`tests/test_knowledge_export_contract.py`). Verified on Linux.
 - A module can say it has a known bug, and say when a fix landed. `evidence.json` takes a ninth row
   type, `known-issue`: required `issue` (one line), `seen_by` (the person or agent who saw it),
   `scope`, and `at` — required here, where it is optional on the other eight, because a bug with no
@@ -145,6 +160,19 @@ Every entry states what shipped, on which platform it was verified, and what rem
   script and `declared_not_observed` when it is not, `entry` agrees on the entry field alone, `none` is
   `observed_not_declared` when the module prints anyway, and an absent field is `not_counted` with the other
   spelling it saw, or `observed_not_declared` with `--propose` filling `self`.
+- An adapter recipe's `soundbank` takes `exclude_aliases`: 1 to 256 alias names the cut hands to the
+  bank module that owns them. `dev/adapters.load_recipe` credited a member with every `Name` in the
+  alias table its recipe points at, so a weapon that shares 6 of its 18 rows with a bank module was
+  attributed rows its package no longer carries and `module plan` refused the pack on each of them as
+  a `service` collision — the one-owner shape the refusal advises only worked for a member whose whole
+  bank was the shared alias. The names are now subtracted from the member's aliases, recorded as
+  `excluded_aliases` on the plan row and on the plan's `adapters[]` entry, and checked against the
+  alias table wherever the prepared inputs are on this machine: a name the table does not carry is
+  refused as a stale list (`input_invalid`), as is a malformed or empty list. Nothing is subtracted
+  from what the builder writes — the workspace builder that cuts the bank must drop the same rows, and
+  the readback of the package it produced is what proves it did. A recipe without the field is
+  unchanged. Offline verified on Linux; no game was loaded.
+
 - An adapter recipe's `prepared` path now resolves the same way for the planner and for the builder.
   An absolute path is unchanged; a relative one is resolved against the module directory first and
   then the workspace root when `--workspace` is given, first directory wins, and when neither is one
