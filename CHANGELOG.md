@@ -7,6 +7,22 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- `module qualify` now plans its synthesized composition with the base's asset listings, read from
+  the foundation record's `base_listings` and from the directory the link loads sit in when it holds
+  `<zone>-list.txt` beside them, and records them under `base_listings` in `qualify.json` and the
+  results table. Before this a module whose recipe loads a donor zone refused `donor-shadowing`
+  before it was ever built, for want of a listing the workspace already knew the location of. When
+  no listing exists anywhere the behaviour is unchanged and the refusal stands.
+- `module qualify` records a failed `loose-overrides` row instead of refusing on it. That check
+  counts files in this machine's global `storage/t6/images`: machine state that applies to every mod
+  folder and to the bare game with none selected, that no package contains and that no build can
+  change. A module qualified alone is judged on its package bytes, so the rows keep outcome `failed`,
+  travel under `warnings` in `qualify.json` and the results table, and are quoted in the built-alone
+  note as "loose-overrides: N loose global textures shadow base names on this machine (not a package
+  fact)". `module plan` and `module build` invoked directly are unchanged and still refuse. The
+  planner takes the caller-supplied `report_only_checks`; no command-line ignore flag was added.
+  Offline verified on Linux; no game was loaded.
+
 - The five packaged skills that had fallen behind the repository are refreshed against it. `pat-help`
   routes to the evidence ledger (`pat module state --ledger`, `docs/evidence-ledger.md`) and to the
   stitched human test plan (`pat test plan --composition`), and says that a rendering fault is the one
