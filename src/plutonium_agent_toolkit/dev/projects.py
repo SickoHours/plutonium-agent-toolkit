@@ -184,6 +184,21 @@ def load_recipe(path: Path, job: Job) -> tuple[dict, list, list, list]:
     return data, compiled, loose, loads
 
 
+def _script_checks(data, compiled) -> list[dict]:
+    """Per-script offline rows a recipe can raise on its own sources. Today that is
+    ``csc-main-body``: a T6 client script whose ``main()`` does work runs in the early client pass,
+    before the client's own rows exist. A source that cannot be read is skipped rather than judged."""
+    from . import checks as offline_checks
+    rows: list[dict] = []
+    for source, target, _ in compiled:
+        try:
+            text = Path(source).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        rows += offline_checks.csc_main_body(target.as_posix(), text, data["game"])
+    return rows
+
+
 def _plan(data, compiled, loose, loads, job: Job) -> dict:
     checks = []
     for name in (["gsc"] if compiled else []) + ["linker", "unlinker"]:
@@ -208,7 +223,16 @@ def _plan(data, compiled, loose, loads, job: Job) -> dict:
         "verification": "recipe and declared inputs validated and hashed; backend presence checked; "
                         "script targets judged against the roots this client loads from; nothing compiled",
     }
+    # The one thing a recipe's own source says about the pass its script will run in. A composition
+    # reads the same rows in its per-script loop; a project has no pack around it, so the rows are
+    # its own and a failed one refuses here, before the recipe is built from.
+    plan["script_checks"] = _script_checks(data, compiled)
     (job.root / "plan.json").write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
+    failed = [row for row in plan["script_checks"] if row["outcome"] == "failed"]
+    if failed:
+        raise Failure(INPUT_INVALID, "Offline checks failed: " + "; ".join(f'{row["id"]}: {row["detail"]}' for row in failed)[:1200],
+                      "Read plan.json's script_checks for every row; fix the script the row names and plan again.",
+                      checks=plan["script_checks"], failed=[row["id"] for row in failed])
     return plan
 
 
