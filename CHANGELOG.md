@@ -7,6 +7,17 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- The five packaged skills that had fallen behind the repository are refreshed against it. `pat-help`
+  routes to the evidence ledger (`pat module state --ledger`, `docs/evidence-ledger.md`) and to the
+  stitched human test plan (`pat test plan --composition`), and says that a rendering fault is the one
+  failure `pat-diagnose` cannot classify. `pat-diagnose` carries that rule as a guardrail: a wrong
+  texture or a repainted Pack-a-Punch skin writes no console line, so no log slice and no readback can
+  clear the base, and the global `storage/t6/images` path can repaint a stock image for the bare load
+  too. `pat-build` gains `module qualify` as the step that writes a module's own records from its
+  receipts, `pat-review` reads the six facts off the ledger rows with `null` meaning not earned rather
+  than false, and the `plutonium-agent-toolkit` entry point names the ledger beside the other reference
+  pages. Documentation only; no route, schema or behaviour changes.
+
 - New check `loose-overrides`. Plutonium reads an image's pixels from an image bank *or* from the
   global loose path `storage/t6/images`, and a loose file there wins: it applies to every mod folder
   on the machine and to the bare game with no mod selected. A loose `<name>.iwi` whose name one of
