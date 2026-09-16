@@ -282,9 +282,52 @@ class ProbePlanning(TestPlanRoute):
         self.assertTrue(plan['probe'])
         self.assertIn('test_probe',[x['id'] for x in plan['members']])
     def test_release_profile_refuses_probe_contract(self):
+        # Asking for the test plan is asking for the probe, and a release profile cannot have one.
         m,c=self.member('alpha');c['maps']['zm_transit']['preconditions']=[{'verb':'god','arg':'on','actor':'agent'}];(m/'test-contract.json').write_text(json.dumps(c))
         comp=self.composition(['alpha'],name='stock_x_pack')
         code,row=invoke(['test','plan','--composition',str(comp),'--output',self.out(),'--json']);self.assertEqual(code,1,row);self.assertEqual(row['error_code'],'input_invalid')
+        self.assertEqual(row['message'],'Test probe is forbidden in release profiles',row)
     def test_build_plan_refuses_any_test_only_member_in_release(self):
         self.module('test_probe',tags=['test-only']);comp=self.composition(['test_probe'],name='stock_x_pub')
         code,row=invoke(['module','plan',str(comp),'--output',self.out(),'--json']);self.assertEqual(code,1,row);self.assertEqual(row['error_code'],'input_invalid')
+        self.assertEqual([r['kind'] for r in row['details']['refusals']],['test_only'],row)
+
+class ProbeIsATestFact(TestPlanRoute):
+    """Needing a probe is a fact about running a member's tests, not about composing a pack.
+
+    Measured on a 55-member release composition: fourteen members declared agent probe verbs in
+    their test contracts, and ``module plan`` refused the whole pack with a ``probe`` refusal."""
+    def needy_release(self,name='stock_x_pack'):
+        m,c=self.member('alpha')
+        c['maps']['zm_transit']['preconditions']=[{'verb':'perk_give','arg':'specialty_armorvest','actor':'agent'}]
+        (m/'test-contract.json').write_text(json.dumps(c))
+        self.member('test_probe',tags=['test-only'])
+        return self.composition(['alpha'],name=name)
+    def test_release_plan_admits_no_probe_for_a_members_probe_verb(self):
+        from pathlib import Path
+        out=self.out();code,row=invoke(['module','plan',str(self.needy_release()),'--output',out,'--json'])
+        self.assertEqual(code,0,row)
+        self.assertEqual(row['result']['undecided'],[],row)
+        doc=json.loads((Path(row['result']['output'])/'plan.json').read_text())
+        self.assertEqual([m['id'] for m in doc['modules']],['alpha'],'no probe is pulled into a release pack')
+    def test_the_same_members_plan_under_a_test_name_still_admits_the_probe(self):
+        from pathlib import Path
+        out=self.out();code,row=invoke(['module','plan',str(self.needy_release('stock_x_test')),'--output',out,'--json'])
+        self.assertEqual(code,0,row)
+        doc=json.loads((Path(row['result']['output'])/'plan.json').read_text())
+        self.assertIn('test_probe',[m['id'] for m in doc['modules']])
+    def test_a_declared_probe_is_still_refused_by_a_release_profile(self):
+        # A probe the composition lists itself, with a contract of its own, is the case the removed
+        # probe refusal covered; the typed test_only refusal covers it now.
+        self.member('alpha');self.member('test_probe',tags=['test-only'])
+        comp=self.composition(['alpha','test_probe'],name='stock_x_pack')
+        code,row=invoke(['module','plan',str(comp),'--output',self.out(),'--json'])
+        self.assertEqual(code,1,row);self.assertEqual(row['error_code'],'input_invalid')
+        refusal=next(r for r in row['details']['refusals'] if r['kind']=='test_only')
+        self.assertEqual(refusal['modules'],['test_probe'])
+    def test_a_members_malformed_contract_is_still_read_in_a_release_profile(self):
+        m,_=self.member('alpha')
+        (m/'test-contract.json').write_text(json.dumps(contract(module='beta')))
+        code,row=invoke(['module','plan',str(self.composition(['alpha'],name='stock_x_pack')),'--output',self.out(),'--json'])
+        self.assertEqual(code,1,row);self.assertEqual(row['error_code'],'input_invalid')
+        self.assertEqual([r['kind'] for r in row['details']['refusals']],['probe'],row)

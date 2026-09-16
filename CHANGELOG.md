@@ -7,6 +7,19 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- A test probe is a fact about running a member's tests, not about composing a pack. Measured: a
+  55-member release composition was refused by `pat module plan` with a `probe` refusal reading
+  "Test probe is forbidden in release profiles" and no modules named, because fourteen of its
+  members declared agent probe verbs (`perk_give`, `power_on`, ...) in their test contracts; the
+  same 55 members planned clean under a `_test` name. `module plan` and `module build` now admit
+  the probe only on a `_test`/`_probe` composition. A `_pack`/`_pub` composition still reads and
+  validates every member's `tests` contract, but takes no probe need from it and pulls no probe in,
+  so a pack of members that have probe-scoped tests composes. What a release profile still refuses
+  is a test-only member itself, declared or brought along, now always with the typed `test_only`
+  refusal rather than a `probe` one. `pat test plan` is unchanged: it asks for the probe by asking
+  for the plan, so a release name still refuses there. Offline verified on Linux; no game was
+  loaded.
+
 - The `externals:` check now judges a bare call against the script's `#include` scope and against
   the argument count the export declares, and `knowledge/stock-exports.json` carries the arities to
   do it with. Two load failures this table could not see: `blast_furnace` called

@@ -942,13 +942,22 @@ Builds run a receipted `gsc check` dry run per script before linking. Compiler-r
 externals fail; successful compilation alone cannot prove runtime external resolution and that
 symbol check remains `not_counted`. Plans themselves do not run the compiler.
 
-Probe actions with an agent actor cause `test plan` and `module build` to include exactly one
-local sibling module named `test_probe`, tagged `test-only`, on `_test`/`_probe` profiles.
-The planner searches member siblings and the workspace's modules directory, refuses missing or
-ambiguous candidates, and emits a buildable composition with the probe explicitly included.
-The probe is first in dependency order. `_pack`/`_pub` compositions refuse every test-only member,
-including through nested compositions. Probe-scoped contracts permit signed `round_set +N`;
-this is a round-counter transition, not proof of N naturally completed gameplay rounds.
+Probe actions with an agent actor cause `test plan` to include exactly one local sibling module
+named `test_probe`, tagged `test-only`, on `_test`/`_probe` profiles; on a `_pack`/`_pub` profile
+`test plan` refuses, because asking for the plan is asking for the probe. The planner searches
+member siblings and the workspace's modules directory, refuses missing or ambiguous candidates,
+and emits a buildable composition with the probe explicitly included. The probe is first in
+dependency order.
+
+**A probe verb in a member's contract does not follow the member into a release pack.** `module
+plan` and `module build` read and validate every member's `tests` contract, but needing a probe is
+a fact about running that member's test plan, not about composing a pack that contains it: a
+`_pack`/`_pub` composition plans and builds unchanged with members whose contracts declare agent
+probe verbs, and pulls no probe in. Only a `_test`/`_probe` composition carries the probe into the
+package. What a release profile still refuses is a test-only member itself — declared or brought
+along through a nested composition — with the typed `test_only` refusal. Probe-scoped contracts
+permit signed `round_set +N`; this is a round-counter transition, not proof of N naturally
+completed gameplay rounds.
 
 ### A loose global texture wins over every bank, and over the bare game
 
