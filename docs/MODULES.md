@@ -1006,8 +1006,13 @@ row with the verdict.
 `clientfield-symmetry` is one pack-level check, read once per composition after every compiled
 script has been named rather than per script. It groups every clientfield the pack's own staged
 `.gsc` and `.csc` scripts register — a direct `registerclientfield("<set>", "<name>", ...)` or a helper
-that registers one, such as `maps\mp\zombies\_zm_powerups::add_zombie_powerup("<id>", ...)`,
-which registers `powerup_<id>` in set `toplayer` on whichever VM calls it — by `(set, name)`. A
+that registers one, such as `maps\mp\zombies\_zm_powerups::add_zombie_powerup(...)`, which
+registers the field its client-field-name argument names (the ninth on the server, the second on
+the client) in set `toplayer` on whichever VM passes it, and registers nothing on a VM whose call
+omits that argument, exactly as the stock helper's own `if (isdefined(client_field_name))` decides
+— by `(set, name)`. The name is never derived from the powerup id: a seven-argument
+`add_zombie_powerup` registers no clientfield, and a name argument that is not a string literal is
+one `clientfield-symmetry:unread:<script>` `not_counted` row rather than a guess. A
 name registered on exactly one VM is `failed`, naming the field, the set, the VM, the script and
 the module, because the engine compares the server's registration list with the client's and
 refuses the map with `EXE_CLIENT_FIELD_MISMATCH` at load, before a script runs: no compile, link
