@@ -9,12 +9,14 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 - `pat module verify-declaration` now reports a `/version` row, so a fix that lands is visible and
   nobody stitches a broken version by accident. The route fingerprints the module's authored bytes --
-  `module.json`, the payload the declaration names, the sources a recipe names inside the module,
-  everything under `src/`, and the test contract -- and compares that against the same fingerprint at
+  `module.json`, the payload the declaration names, the sources a recipe names, wherever they live
+  inside the module, everything under `src/`, and the test contract -- and compares that against the same fingerprint at
   the commit that introduced the newest `evidence.json` row carrying a `package_sha256` (a
-  `built-alone`, `game-tested` or `player-accepted` row). Build outputs and donor payloads are
-  outside the fingerprint by construction (`FINGERPRINT_EXCLUDE`: `evidence.json`, `docs/`, `README*`,
-  `prepared/`, `assets/`, `build-inputs.json`, `inputs.json`), so a rebuild or a re-fetched donor never
+  `built-alone`, `game-tested` or `player-accepted` row). A `.gdt`, an `.atr`, a `.str` or an accuracy
+  graph a recipe row names is an authored byte the builder hashes, so changing one owes a bump exactly
+  as a script edit does: `FINGERPRINT_EXCLUDE` (`evidence.json`, `docs/`, `README*`, `prepared/`,
+  `build-inputs.json`, `inputs.json`) applies to the `src/` walk and the fixed names only, never to a
+  path a recipe row names, so `prepared/` and `docs/` never count and a rebuild or an edited note never
   reads as a source change. Bytes that moved while `version` stayed where that commit left it are
   `declared_not_observed` with one line naming the row's package hash and the commit and asking for
   the bump, and `--strict` exits 1 on it like any other differing row; bytes that did not move, or a

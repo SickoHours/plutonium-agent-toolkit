@@ -40,11 +40,15 @@ GIT_TIMEOUT = 20
 VERSION_ROW_TYPES = ("built-alone", "game-tested", "player-accepted")
 SEMANTIC_VERSION = re.compile(r"^(\d+)\.(\d+)\.(\d+)\Z")
 # What the folder fingerprint leaves out, by module-relative path: a trailing "/" is a top-level
-# directory, a trailing "*" a name prefix, anything else an exact name. These are build outputs,
-# donor payloads and prose -- not the module's authored bytes -- so a rebuild, a re-fetched donor
-# or an edited README must never read as a source change that owes a version bump.
+# directory, a trailing "*" a name prefix, anything else an exact name. These are regenerated
+# output, recorded inputs and prose -- not the module's authored bytes -- so a rebuild or an
+# edited README must never read as a source change that owes a version bump.
+#
+# It applies to the src/ walk and the fixed names only, never to a path a recipe row names. A
+# .gdt, an .atr, a .str or an accuracy graph the module ships is an authored byte the builder
+# hashes wherever the author put it, so changing one owes a bump exactly as a script edit does.
 FINGERPRINT_EXCLUDE = ("evidence.json", "build-inputs.json", "inputs.json",
-                       "docs/", "prepared/", "assets/", "README*")
+                       "docs/", "prepared/", "README*")
 
 # The zone namespaces the base and the map already own scripts and tables in. A staged path under
 # one of them that no listing and no table calls base-owned is new, not proven new: it is listed
@@ -448,19 +452,24 @@ def _json(raw: bytes | None):
 
 
 def _fingerprint_names(declaration: dict, recipe, src: list[str], present) -> list[str]:
-    """The module-relative paths one fingerprint covers, sorted: the declaration, the payload it
-    names, the sources a recipe names inside the module, everything under ``src/`` and the test
-    contract, minus FINGERPRINT_EXCLUDE and minus whatever ``present`` says is not there."""
-    names = {"module.json", "test-contract.json"}
-    for key in ("recipe", "seed", "tests"):
-        if _inside(declaration.get(key)):
-            names.add(declaration[key])
+    """The module-relative paths one fingerprint covers, sorted, minus whatever ``present`` says
+    is not there.
+
+    Two sets, because only one of them is filtered. ``named`` is every source a recipe row names
+    inside the module: authored bytes the builder hashes, wherever the author put them, and never
+    excluded. ``walked`` is the fixed names, the payload the declaration names and the ``src/``
+    tree, and FINGERPRINT_EXCLUDE applies there.
+    """
+    named: set[str] = set()
     for key in ("scripts", "assets"):
         for row in (recipe or {}).get(key, []) if isinstance(recipe, dict) else []:
             if isinstance(row, dict) and _inside(row.get("source")):
-                names.add(row["source"])
-    names.update(src)
-    return sorted(n for n in names if not _excluded(n) and present(n))
+                named.add(row["source"])
+    walked = {"module.json", "test-contract.json", *src}
+    for key in ("recipe", "seed", "tests"):
+        if _inside(declaration.get(key)):
+            walked.add(declaration[key])
+    return sorted(n for n in named | {w for w in walked if not _excluded(w)} if present(n))
 
 
 def _pairs_digest(pairs: list[tuple[str, str]]) -> str:
@@ -499,9 +508,11 @@ def folder_fingerprint(directory: Path) -> dict:
     """The module's authored bytes as one digest.
 
     SHA-256 over the sorted list of (module-relative path, that file's SHA-256) for the files
-    ``_fingerprint_names`` selects. Returns ``{"sha256", "files"}``; when a bound is hit (more
-    than ``MAX_SOURCE_FILES`` files under ``src/``, or a file larger than ``MAX_SOURCE_BYTES``)
-    ``sha256`` is None and ``reason`` says which, because half a folder is not a fingerprint.
+    ``_fingerprint_names`` selects. The shape is ``{"sha256", "files", "reason"?}``: normally the
+    digest and the file count, and when a bound is hit (more than ``MAX_SOURCE_FILES`` files under
+    ``src/``, or a file larger than ``MAX_SOURCE_BYTES``) ``sha256`` is None and ``reason`` says
+    which one, because half a folder is not a fingerprint and the caller must say so rather than
+    compare one.
     """
     directory = Path(directory)
     declaration = _json(_bounded_read(directory / "module.json")) or {}

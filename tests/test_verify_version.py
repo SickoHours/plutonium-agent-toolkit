@@ -48,9 +48,9 @@ class VersionFixture(ModuleVerifyFixture):
             {"schema": 1, "subject": {"id": directory.name}, "rows": list(rows)}, indent=2))
         return directory
 
-    def committed(self, mid="alpha", **overrides):
+    def committed(self, mid="alpha", assets=None, **overrides):
         """A module with a source tree and a ledger, all of it in one commit."""
-        directory = self.module(mid, **overrides)
+        directory = self.module_with_assets(mid, assets) if assets else self.module(mid, **overrides)
         (directory / "src").mkdir(exist_ok=True)
         (directory / "src" / "helper.gsc").write_text("helper()\n{\n}\n")
         self.ledger(directory)
@@ -113,13 +113,26 @@ class VersionRowTests(VersionFixture):
 class FingerprintTests(VersionFixture):
     def test_build_outputs_donor_payloads_and_prose_are_not_the_modules_authored_bytes(self):
         directory = self.committed()
-        for name in ("prepared/mod.ff", "docs/NOTES.md", "README.md", "assets/donor.gdt",
+        for name in ("prepared/mod.ff", "docs/NOTES.md", "README.md",
                      "build-inputs.json", "inputs.json"):
             (directory / name).parent.mkdir(parents=True, exist_ok=True)
             (directory / name).write_text("bytes that are not this module's source\n")
         self.one(self.verify(directory), "/version", "agrees")
         (directory / "src" / "helper.gsc").write_text("helper()\n{\n    wait 1;\n}\n")
         self.one(self.verify(directory), "/version", "declared_not_observed")
+
+    def test_a_source_a_recipe_row_names_is_an_authored_byte_wherever_it_lives(self):
+        rows = [{"source": "assets/tree.atr", "target": "animtrees/zm_transit_basic.atr", "type": "rawfile"}]
+        directory = self.committed("alpha", assets=rows)
+        self.one(self.verify(directory), "/version", "agrees")
+        (directory / "assets" / "tree.atr").write_bytes(b"BYTES assets/tree.atr, corrected\n")
+        self.one(self.verify(directory), "/version", "declared_not_observed")
+
+    def test_a_file_under_assets_that_no_recipe_row_names_is_not_one(self):
+        directory = self.committed()
+        (directory / "assets").mkdir(exist_ok=True)
+        (directory / "assets" / "donor_dump.gdt").write_text("a donor payload no recipe row compiles\n")
+        self.one(self.verify(directory), "/version", "agrees")
 
     def test_the_fingerprint_is_the_same_on_two_reads_of_an_unchanged_folder(self):
         directory = self.committed()

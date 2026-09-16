@@ -1334,12 +1334,14 @@ whole report under `details.report`), and `--propose` prints the fields the obse
 fill. There is no `--output`: the route writes nothing.
 
 The `version` row needs no flag and reads the module's own history. It fingerprints the folder --
-`module.json`, the payload the declaration names, the sources a recipe names inside the module,
-everything under `src/`, and the test contract -- and compares that against the same fingerprint at
-the commit that introduced the newest `evidence.json` row carrying a `package_sha256`. Build
-outputs and donor payloads are deliberately outside it (`evidence.json`, `docs/`, `README*`,
-`prepared/`, `assets/`, `build-inputs.json`, `inputs.json`), so a rebuild or a re-fetched donor
-never reads as a source change. Bytes that moved while `version` stayed where that commit left it
+`module.json`, the payload the declaration names, the sources a recipe names, wherever they live
+inside the module, everything under `src/`, and the test contract -- and compares that against the
+same fingerprint at the commit that introduced the newest `evidence.json` row carrying a
+`package_sha256`. A `.gdt`, an `.atr`, a `.str` or an accuracy graph a recipe row names is an
+authored byte the builder hashes, so changing one owes a bump exactly as a script edit does; the
+exclusions (`evidence.json`, `docs/`, `README*`, `prepared/`, `build-inputs.json`, `inputs.json`)
+apply to the `src/` walk and the fixed names and never to a path a recipe row names, so `prepared/`
+and `docs/` never count and a rebuild or an edited note never reads as a source change. Bytes that moved while `version` stayed where that commit left it
 are `declared_not_observed` with one line saying to bump it; `--propose` moves the patch component
 of a `MAJOR.MINOR.PATCH` version, and for anything else it says in `proposal_notes` that the bump is
 the author's to make. A module with no ledger, a machine with no git, and a directory outside a

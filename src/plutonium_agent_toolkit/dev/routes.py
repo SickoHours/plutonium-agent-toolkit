@@ -92,8 +92,9 @@ PLANNED = [
                 "not_counted and the row says which evidence would decide it. --strict exits 1 with input_invalid and the report under details.report "
                 "when any row differs. --propose adds the declaration fields the observed side would fill; it never removes a declared name, and "
                 "exclusive and service stay the author's decision. The /version row fingerprints the module's authored bytes "
-                "(module.json, the payload, the sources a recipe names inside the module, src/ and the test contract; never "
-                "evidence.json, docs/, README*, prepared/, assets/, build-inputs.json or inputs.json) against the same fingerprint at "
+                "(module.json, the payload, the sources a recipe names wherever they live inside the module, src/ and the test "
+                "contract; the exclusions evidence.json, docs/, README*, prepared/, build-inputs.json and inputs.json apply to the "
+                "src/ walk and the fixed names only, never to a path a recipe row names) against the same fingerprint at "
                 "the commit that introduced the newest evidence row carrying a package_sha256, and reports declared_not_observed when "
                 "the bytes moved and version did not, not_counted without a ledger, git or a repository, and a bumped patch component "
                 "under --propose. Writes nothing."),
