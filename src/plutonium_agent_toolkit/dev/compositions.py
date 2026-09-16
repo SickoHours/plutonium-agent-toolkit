@@ -162,6 +162,17 @@ def add_parser(sub, common):
     q = actions.add_parser("inspect", help="Validate one declaration's metadata without resolving payloads or creating a job")
     q.add_argument("declaration", help="Path to module.json or composition.json")
     q.add_argument("--json", action="store_true")
+    q = actions.add_parser("verify-declaration", help="Read one module's own bytes back against its declaration: every promise beside what the files say")
+    q.add_argument("directory", help="Module directory holding module.json")
+    q.add_argument("--workspace", help="Workspace root whose modules/ hold the dependency declarations this module's edges are judged against")
+    q.add_argument("--base-listings", action="append", default=[], metavar="DIR",
+                   help="A directory of asset listings of the base's zones (<zone>-list.txt, the shape an unlinker --list prints); "
+                        "repeatable. Every rawfile and script row is a file the base carries, so a staged copy of that path overwrites it. "
+                        "With --workspace and --target, the foundation's own base_listings are read too")
+    q.add_argument("--target", metavar="KEY", help="The '<foundation>/<map>' this module is judged against, so the shipped per-map script and WeaponDef tables can say what the map already carries")
+    q.add_argument("--strict", action="store_true", help="Exit 1 when any row is declared_not_observed or observed_not_declared; what a library gate wants")
+    q.add_argument("--propose", action="store_true", help="Add the declaration fields the observed side would fill; written nowhere, and never removing a declared name")
+    q.add_argument("--json", action="store_true")
     for action, help_text in (("plan", "Resolve a composition, list collisions as decisions and hash its inputs; runs no backend"),
                               ("build", "Compile, link against seeds and loads, read back and compare every module into one mod.ff")):
         q = actions.add_parser(action, help=help_text)

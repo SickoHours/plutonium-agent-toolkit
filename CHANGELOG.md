@@ -7,6 +7,33 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- `pat module verify-declaration <module dir> --json` reads one module's own bytes back against its
+  declaration and reports every promise beside what the files say, so a library can admit someone
+  else's module on evidence rather than on trust. The route is inert: no job directory outlives the
+  call, no `--output`, no backend, no network. Each row carries the field as a JSON Pointer, what was
+  declared, what was observed, the method in words and an outcome, and the method's honest ceiling is
+  the row's own outcome: `provides.scripts`, `provides.rawfiles`, `provides.localize`,
+  `replaces.functions` and a `call`, `name` or `service` dependency kind are read in full; a project
+  recipe's weapons, its models and effects, a perk or gum id found as a string literal, an `exclusive`
+  role footprint and the `resource_contract.hud` count are `partial` by construction and never
+  `agrees`; a `runtime` dependency, `menu_route`, `tags`, `placements`, `parameters`, `bases` and
+  `maps` are `not_counted` with the reason. `replaces.files` classifies every staged target against
+  the base's own asset listings (`--base-listings`, or the foundation's `base_listings` with
+  `--workspace` and `--target`) and the shipped per-map script and WeaponDef tables, and reports
+  `stages.base_owned` with its evidence, `stages.engine_tables` (an `accuracy/` path overrides nothing
+  a pack can see, so no ownership is claimed for it) and `stages.new_in_base_namespace` regardless;
+  where neither a listing nor a table is on the machine the path is `not_counted` and the row names
+  the evidence that would decide it. `--strict` exits 1 with `input_invalid` and the whole report
+  under `details.report` when any row is `declared_not_observed` or `observed_not_declared`, which is
+  what a gate wants; `--propose` prints the declaration fields the observed side would fill, never
+  removing a declared name, and leaves `exclusive` and `service` to the author because a role and a
+  service are promises, not observations. Protocol `pat.module-verify/1`, schema
+  `schemas/module-verify-v1.schema.json`. Offline tests on Linux (`tests/test_module_verify.py`); no
+  native receipt, and the route status is `implemented`. A row measures bytes and never claims the
+  module works. The `registration` row lands here as well: `self` is `partial` when the `<id> >> registered` literal is in a server
+  script and `declared_not_observed` when it is not, `entry` agrees on the entry field alone, `none` is
+  `observed_not_declared` when the module prints anyway, and an absent field is `not_counted` with the other
+  spelling it saw, or `observed_not_declared` with `--propose` filling `self`.
 - The planner reads two of those promises and refuses on them. `ownership`: a member that stages a
   path the base or the target map already carries and does not list it under `replaces.files` is
   refused, one row per member and path, naming the path, the owner (`base` or `map`), the evidence
