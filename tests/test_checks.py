@@ -290,6 +290,44 @@ class MapGuards(unittest.TestCase):
         self.assertEqual(out[0]['detail'],'returns unless mapname is one of zm_transit, zm_moon; '
                                           'this composition targets zm_factory, so the script does nothing on it')
 
+class CscMainBody(unittest.TestCase):
+    """lc25 died in the client-script main() pass: the T6 client VM runs every loose .csc's main()
+    before any script's init() and before its own _zm tables exist, so work in main() runs too early."""
+    def csc(self,body,name='scripts/zm/wallguns.csc',extra=''):
+        return checks.csc_main_body(name,'main()\n{\n'+body+'\n}\n'+extra)
+    def test_a_client_main_that_does_work_is_refused(self):
+        out=self.csc('    qol_wallguns_in_box_client_register();')
+        self.assertEqual(out[0]['id'],'csc-main-body:scripts/zm/wallguns.csc')
+        self.assertEqual(out[0]['outcome'],'failed')
+        self.assertIn('main()',out[0]['detail']);self.assertIn('init()',out[0]['detail'])
+        self.assertIn('after its own rows',out[0]['detail'],'the remedy names the pass that is safe')
+    def test_an_empty_main_passes(self):
+        self.assertEqual(self.csc('')[0]['outcome'],'passed')
+    def test_a_main_holding_only_a_comment_passes(self):
+        out=self.csc('    // nothing here on purpose; the work is in init()\n    /* and a block */')
+        self.assertEqual(out[0]['outcome'],'passed')
+    def test_a_lone_return_is_an_empty_main(self):
+        self.assertEqual(self.csc('    return;')[0]['outcome'],'passed')
+    def test_an_absent_main_passes(self):
+        out=checks.csc_main_body('scripts/zm/tesla.csc','init()\n{\n    register();\n}\n')
+        self.assertEqual(out[0]['outcome'],'passed');self.assertIn('no main()',out[0]['detail'])
+    def test_the_shelf_shape_that_loads_passes_and_the_shape_that_crashed_fails(self):
+        tesla='main()\n{\n}\n\ninit()\n{\n    clientscripts\\mp\\zombies\\_zm_utility::include_powerup("tesla");\n}\n'
+        self.assertEqual(checks.csc_main_body('scripts/zm/tesla.csc',tesla)[0]['outcome'],'passed')
+        wallguns='main()\n{\n    register();\n}\n\nregister()\n{\n    clientscripts\\mp\\zombies\\_zm_weapons::include_weapon("m16_zm");\n}\n'
+        self.assertEqual(checks.csc_main_body('scripts/zm/wallguns.csc',wallguns)[0]['outcome'],'failed')
+    def test_a_server_script_with_a_main_body_is_not_counted(self):
+        out=checks.csc_main_body('scripts/zm/probe.gsc','main()\n{\n    thread watch();\n}\n')
+        self.assertEqual(out[0]['outcome'],'not_counted');self.assertIn('server',out[0]['detail'])
+    def test_a_target_that_names_no_vm_is_not_counted(self):
+        self.assertEqual(checks.csc_main_body('scripts/zm/x.txt','main(){ work(); }')[0]['outcome'],'not_counted')
+    def test_another_title_is_not_counted(self):
+        out=checks.csc_main_body('scripts/x.csc','main()\n{\n    work();\n}\n',game='iw5')
+        self.assertEqual(out[0]['outcome'],'not_counted')
+    def test_a_main_named_only_in_a_comment_or_a_string_is_not_read_as_the_root(self):
+        out=checks.csc_main_body('scripts/zm/a.csc','// main()\n// {\n//     work();\n// }\ninit(){}\n')
+        self.assertEqual(out[0]['outcome'],'passed')
+
 class DonorShadowing(unittest.TestCase):
     """The link log is the fact: it names the zone every rooted asset's copy came from."""
     def plan(self,**extra):

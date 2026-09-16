@@ -280,6 +280,33 @@ class DevRouteTests(DevRouteFixture):
             self.assertEqual(by_id[rid]["status"], "deferred", rid)
         self.assertEqual(row["result"]["counts"]["planned"], 0, "every in-scope route is implemented or available")
 
+    def _csc_project(self, body):
+        """A one-script recipe whose only script is a loose client root."""
+        base = self.root / "csc"
+        (base / "scripts").mkdir(parents=True, exist_ok=True)
+        (base / "scripts" / "wallguns.csc").write_text(body, encoding="utf-8")
+        recipe = {"schema": 1, "game": "t6", "mode": "zm", "name": "wallguns_test",
+                  "scripts": [{"source": "scripts/wallguns.csc", "target": "scripts/zm/wallguns.csc", "instance": "client"}],
+                  "assets": [], "loads": []}
+        (base / "project.json").write_text(json.dumps(recipe, indent=2), encoding="utf-8")
+        return base / "project.json"
+
+    def test_project_plan_refuses_a_client_script_that_works_in_main(self):
+        recipe = self._csc_project("main()\n{\n    wallguns_register();\n}\n\nwallguns_register()\n{\n}\n")
+        code, row = invoke(["project", "plan", str(recipe), "--output", self.out()])
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "input_invalid")
+        self.assertIn("csc-main-body:scripts/zm/wallguns.csc", row["details"]["failed"])
+        self.assertIn("init()", row["message"])
+
+    def test_project_plan_passes_an_empty_client_main(self):
+        recipe = self._csc_project("main()\n{\n}\n\ninit()\n{\n    level.wallguns = 1;\n}\n")
+        code, row = invoke(["project", "plan", str(recipe), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        plan = json.loads((Path(row["result"]["output"]) / "plan.json").read_text(encoding="utf-8"))
+        rows = [c for c in plan["script_checks"] if c["id"].startswith("csc-main-body:")]
+        self.assertEqual([c["outcome"] for c in rows], ["passed"])
+
 
 if __name__ == "__main__":
     unittest.main()
