@@ -7,6 +7,28 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- The planner reads two of those promises and refuses on them. `ownership`: a member that stages a
+  path the base or the target map already carries and does not list it under `replaces.files` is
+  refused, one row per member and path, naming the path, the owner (`base` or `map`), the evidence
+  and the shelf module that provides the path when `--workspace` names one. One member is enough,
+  because the overwrite does not wait for a second one. Ownership is read from facts only: the
+  base's own asset listings (the composition's `base_owned`, `--base-listings`, or a foundation's
+  `base_listings`) and the shipped per-map tables (`knowledge/map-scripts.json` and
+  `knowledge/native-weapons.json`) on the target's foundation. `MAP_OWNED_PREFIXES` is unchanged by
+  this release and never refuses a single member: a prefix is a guess about ownership -- a module's
+  *new* animation tree under `animtrees/` matches it and overwrites nothing -- and it stays what it
+  was, the last resort for the two-member `service` refusal. A withheld row (`"deliver": false`)
+  stages under `raw/` with no zone line and is not an overwrite. `exclusive`: two or more members
+  that list the same role are refused with the role, the members in composition order and the two
+  honest `resolutions` a review screen draws, `replace` (keep the newest) and `refuse`; there is no
+  owner decision, because a role is not a file. A `replacement` row's collisions now carry
+  `service` too, so a file two members both declare names the module they should both depend on,
+  and a path an `ownership` row reported is not also reported as a map-owned-table `service` row.
+  Two plan warnings join the existing ones: a declared `replaces.files` path that no listing and no
+  table says the base carries (silent when no listing is on the machine, since then the plan cannot
+  tell), and a refusal that leaned on the older `shared-service` tag asking for `service: true`.
+  Offline unit tests on Linux (`tests/test_promises_planner.py`); no native receipt, and no route
+  status changes.
 - A module can declare what it *promises*, and the declaration reader checks it. `replaces.files`
   is widened from GSC/CSC scripts to any relative zone path the base or the map already carries (a
   table, a visionset, a `weapons/<name>` file), still lowercase, forward slashes, deduplicated and
@@ -24,8 +46,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
   `module inspect` echoes `exclusive`, `service` and `dependency_kinds` only when the declaration
   names them, `plan.json` records all three per member, and the shelf lookup that names "the module
   to depend on instead" now prefers a declared `service: true` over the older `shared-service` tag,
-  which is read as the same mark for one more release. This change adds no planner refusal: two
-  members owning one role still plan. Offline unit tests on Linux
+  which is read as the same mark for one more release. That change added no planner refusal; the
+  entry above adds them. Offline unit tests on Linux
   (`tests/test_promises_vocabulary.py`); no native receipt, and no route status changes.
 - `module qualify` now plans its synthesized composition with the base's asset listings, read from
   the foundation record's `base_listings` and from the directory the link loads sit in when it holds

@@ -315,7 +315,9 @@ row's, and a message with more rows says how many follow. Kinds: `probe`, `test_
 `duplicate_id`, `missing_dependency` (with `dependency` and `by`), `conflict`,
 `unqualified_base` and `unqualified_map` (with `declared` and `wanted`), `private_payload`,
 `cycle`, `budget` (with `resource`, `total`, `bound`), `replacement` (with `collisions`),
-`parameters` (below, with `parameter`), `service` (below) and `checks` (with `failed`, the ids
+`parameters` (below, with `parameter`), `service` (below), `ownership` (with `path`, `owner`,
+`evidence` and `service`) and `exclusive` (with `role` and `resolutions`), both specified under
+"What a module promises", and `checks` (with `failed`, the ids
 of the failed check rows). A caller that brings dependencies along reads every
 `missing_dependency` row at once instead of re-planning per message.
 
