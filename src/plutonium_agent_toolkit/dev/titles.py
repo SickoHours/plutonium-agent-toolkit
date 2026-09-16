@@ -35,6 +35,7 @@ TITLES = {
         "systems": ("pc",),
         "instances": ("server", "client"),
         "script_form": "compiled",
+        "loaded_script_roots": ("scripts/zm/",),
         "zone": {"game_token": "T6", "mode": "zm", "name": "mod", "language": "english",
                  "magic": (b"TAff",), "storage_key": "plutonium_storage_t6"},
         "modes": ("zm",),
@@ -55,6 +56,7 @@ TITLES = {
         # VM: there is no client-side .csc on this title.
         "instances": ("server",),
         "script_form": "source",
+        "loaded_script_roots": ("scripts/",),
         # OAT stamps `> game,IW5` and writes the unsigned magic `IWffu100`; Plutonium IW5 loads
         # `mods/<folder>/mod.ff` selected with `fs_game mods/<folder>` or `loadmod <folder>`.
         "zone": {"game_token": "IW5", "mode": "mp", "name": "mod", "language": "english",
@@ -107,6 +109,24 @@ def script_target(title: str, name: str) -> str:
     documented alternative is overriding an engine script path such as
     ``maps/mp/gametypes/<gametype>.gsc`` (``docs/knowledge/iw5.md``)."""
     return {"t6": f"scripts/zm/{name}.gsc", "iw5": f"scripts/{name}.gsc"}[title]
+
+
+def loaded_script_roots(title: str) -> tuple[str, ...]:
+    """The package roots whose compiled scripts this title's client loads from a mod.
+
+    T6 registers a mod's scripts out of ``scripts/zm/`` and nowhere else. A load prints one
+    ``Overridden rawfile: scripts/zm/<name>.gsc from zone mod`` per script it accepts from the
+    zone, then ``Script source "scripts/zm/<name>.gsc" loaded successfully from raw`` for the
+    loose copy in the profile folder, for ``.gsc`` and ``.csc`` alike. A ``rawfile`` row at any
+    other root travels into the zone and is never registered: no ``Overridden rawfile:`` line
+    appears for it, and the first qualified call into it prints
+    ``Could not load scriptparsetree "<path>"`` and fails the load with unresolved externals.
+    IW5 autoloads the flat ``scripts/`` namespace (``script_target`` above).
+
+    This is the set a script must be *delivered under* to run, not the set it may *call into*:
+    a script under a loaded root calls the stock ``maps/...`` and ``clientscripts/...`` paths
+    the map already loads, which is what ``checks.map_script_externals`` judges."""
+    return get(title)["loaded_script_roots"]
 
 
 def script_form(title: str) -> str:

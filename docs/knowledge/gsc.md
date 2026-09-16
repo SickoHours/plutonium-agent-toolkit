@@ -65,31 +65,31 @@ calling the game's own helpers needs their includes, and the *engine* must have 
 
 ## Traps that compile and fail at load
 
-- **Unresolved external at link time aborts the map.** `COM_ERROR (6): Unresolved external "get_players"
-  with 0 parameters` then `SV_Shutdown`; the client exits and reopens its console log, so the
-  evidence is in the rotated `console_zm.log.NNN`, not the live file. An unqualified call to a
-  stock utility export needs the matching `#include` (`common_scripts\utility`, `maps\mp\_utility`,
-  `maps\mp\zombies\_zm_utility`) or a fully qualified call; `module plan` now reports these as
-  `externals:` check rows from `knowledge/stock-exports.json`. The include must be on the script's
-  own VM: a `.csc` resolves against `clientscripts\mp\_utility` and
-  `clientscripts\mp\zombies\_zm_utility`, and no stock client script includes a `maps\...` path.
-  **The link signature is the name and the argument count together, and the script's includes are
-  the whole scope.** A bare call resolves only against the script's own functions and the scripts it
-  `#include`s; nothing else the engine has loaded is reachable without a qualified path. Where two
-  stock scripts export one name at different arities the scope decides which you get, so the arities
-  are never merged: `get_players` takes no argument in `maps\mp\_utility` and one in
-  `common_scripts\utility`, and on 2026-09-15 `qol_instant_nuke` (both included) linked while
-  `qol_max_ammo` (only `maps\mp\_utility`) died at `Unresolved external "get_players" with 1
-  parameters`. Passing *fewer* arguments than the declaration lists is ordinary and safe — GSC binds
-  undefined to the rest, and 564 bare calls in the `patch_zm` decompile do it — so only an excess
-  fails. Qualifying a call to the wrong stock script is the same refusal: `register_tactical_grenade_for_level`
-  lives in `maps\mp\zombies\_zm_utility`, so `maps\mp\zombies\_zm_weapons::register_tactical_grenade_for_level`
-  does not link. A bare name no export row owns and no builtin witness covers is reported separately as
-  `externals-unknown:<script>`, `not_counted`: the toolkit cannot refuse on ignorance, but that name
-  is where an unresolved external hides, as `register_zombie_damage_callback` did for
-  `blast_furnace` before `maps\mp\zombies\_zm_spawner` was in the table.
-  (`setclientfield` with two parameters lives in `maps/mp/_utility`.) Resolve every unqualified call
+- **Unresolved external at link time aborts the map.** `COM_ERROR (6): Unresolved external "get_players" with
+  0 parameters` then `SV_Shutdown`; the client exits and reopens its console log, so the evidence is in the
+  rotated `console_zm.log.NNN`, not the live file. An unqualified call to a stock utility export needs the
+  matching `#include` (`common_scripts\utility`, `maps\mp\_utility`, `maps\mp\zombies\_zm_utility`) or a
+  fully qualified call; `module plan` now reports these as `externals:` check rows from
+  `knowledge/stock-exports.json`. The include must be on the script's own VM: a `.csc` resolves against
+  `clientscripts\mp\_utility` and `clientscripts\mp\zombies\_zm_utility`, and no stock client script includes
+  a `maps\...` path. **The link signature is the name and the argument count together, and the script's
+  includes are the whole scope.** A bare call resolves only against the script's own functions and the
+  scripts it `#include`s; nothing else the engine has loaded is reachable without a qualified path. Where two
+  stock scripts export one name at different arities the scope decides which you get, so the arities are
+  never merged: `get_players` takes no argument in `maps\mp\_utility` and one in `common_scripts\utility`,
+  and on 2026-09-15 `qol_instant_nuke` (both included) linked while `qol_max_ammo` (only `maps\mp\_utility`)
+  died at `Unresolved external "get_players" with 1 parameters`. Passing *fewer* arguments than the
+  declaration lists is ordinary and safe — GSC binds undefined to the rest, and 564 bare calls in the
+  `patch_zm` decompile do it — so only an excess fails. Qualifying a call to the wrong stock script is the
+  same refusal: `register_tactical_grenade_for_level` lives in `maps\mp\zombies\_zm_utility`, so
+  `maps\mp\zombies\_zm_weapons::register_tactical_grenade_for_level` does not link. A bare name no export row
+  owns and no builtin witness covers is reported separately as `externals-unknown:<script>`, `not_counted`:
+  the toolkit cannot refuse on ignorance, but that name is where an unresolved external hides, as
+  `register_zombie_damage_callback` did for `blast_furnace` before `maps\mp\zombies\_zm_spawner` was in the
+  table. (`setclientfield` with two parameters lives in `maps/mp/_utility`.) Resolve every unqualified call
   against the includes the engine will have, including code paths you think are unreachable.
+- **A rawfile outside `scripts/zm/` is never registered as a script.** No `Overridden rawfile:` line,
+  then `Could not load scriptparsetree "maps/mp/halo/x.gsc"` at the first call in. `script-reach:` refuses.
 - **A donor method that is not a T6 builtin.** A call that exists in Black Ops 1 or 3 may not be
   exposed by this client (`setanimknob` with four parameters was one). Compilation says nothing
   about builtin availability. Check a native T6 call site before relying on a method:

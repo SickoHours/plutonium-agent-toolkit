@@ -91,7 +91,13 @@ PLANNED = [
                 "stages.base_owned, stages.engine_tables and stages.new_in_base_namespace regardless; without either evidence each such path is "
                 "not_counted and the row says which evidence would decide it. --strict exits 1 with input_invalid and the report under details.report "
                 "when any row differs. --propose adds the declaration fields the observed side would fill; it never removes a declared name, and "
-                "exclusive and service stay the author's decision. Writes nothing."),
+                "exclusive and service stay the author's decision. The /version row fingerprints the module's authored bytes "
+                "(module.json, the payload, the sources a recipe names wherever they live inside the module, src/ and the test "
+                "contract; the exclusions evidence.json, docs/, README*, prepared/, build-inputs.json and inputs.json apply to the "
+                "src/ walk and the fixed names only, never to a path a recipe row names) against the same fingerprint at "
+                "the commit that introduced the newest evidence row carrying a package_sha256, and reports declared_not_observed when "
+                "the bytes moved and version did not, not_counted without a ledger, git or a repository, and a bumped patch component "
+                "under --propose. Writes nothing."),
     Route("module", "compose", "Write and plan a recipe from member IDs and a foundation, or publish a recipe after a successful build", "writes-output", status="implemented", owner=OWNER, notes="Use --name --base --map --foundation --member-root --module with a fresh --output. Publish with --composition --from-build --publish-to. No game actions."),
     Route("module", "plan", "Resolve a composition of declared modules (dependency order, conflicts, base and map fit, "
           "resource budget), list every collision as a decision, and hash every input without running a backend", "writes-output",
@@ -127,13 +133,18 @@ PLANNED = [
     Route("module", "qualify", "Build one module alone on one target (declaration-blind, then qualified), verify both, and write its "
           "declaration widening, docs/TEST.md section, evidence.json built-alone row and workspace binding row from those receipts",
           "writes-output", status="implemented", owner=OWNER,
-          notes="Arguments: <module dir> | --set <file>, --target <foundation>/<map>, --workspace <root>, [--member-root <dir>]..., --output <new dir>. "
+          notes="Arguments: <module dir> | --set <file>, --target <foundation>/<map>, --workspace <root>, [--member-root <dir>]..., "
+                "[--accept loads-but-wrong|not-ported]..., --output <new dir>. "
                 "One job directory; every step is a sub-receipt under it (composition, plan --allow-unqualified, build, project verify --inputs, "
                 "then the qualified plan, build and verify). The declaration is widened in a staged copy of the module and its dependency closure, "
                 "so a project-recipe module's two packages must be the same bytes; an adapter module gets the target's cut as recipe-<base>.json and a "
                 "recipes entry instead. Nothing is written to the module until every step succeeded; on failure the job directory holds the refusal "
                 "(details.refusals, kinds in dev/qualify.py REFUSAL_KINDS) and the module is untouched. A set runs in dependency order, continues past "
-                "failures and writes results.json. No parallelism inside the route; no game, network or install. Format: docs/MODULES.md."),
+                "failures and writes results.json. --accept names the unfinished port statuses this build composes knowingly, from the "
+                "member vocabulary: every member of the synthesized composition whose port_status is not finished is written as an object "
+                "with that accept, and the accepted status is recorded in qualify.json, the results row, the built-alone note and this "
+                "receipt. No declaration's port_status is changed by it. No parallelism inside the route; no game, network or install. "
+                "Format: docs/MODULES.md."),
     Route("module", "accept", "Append one person's gameplay verdict to a module's evidence.json as a player-accepted row, "
           "scoped to the base, foundation and map it was given on and pinned to the package that was installed",
           "writes-output", status="implemented", owner=OWNER,
@@ -160,7 +171,7 @@ PLANNED = [
 ]
 
 register(Route("module", "state", "Derive composition evidence state from exact artifact hashes, or report a module's six facts per scope from its evidence ledger", "inert", status="implemented", owner=OWNER,
-               notes="--composition DIR [--plan --verify --test-plan --run --verdict] derives the composition rungs by hash. --ledger <module dir|evidence.json> [--base --foundation --map --location --package --target] reads evidence.json rows and reports each of the six facts per scope (a scope is base and/or foundation, a map set and optionally one survival location that never collapses into its map) and per {base, map, location} target; --target <foundation>/<map>/<mode>[/<location>] supplies foundation, map and location at once (docs/target-sets.md); a fact with no row of the matching type is null (unknown), and accepted-in-pack rows never feed a fact. known_issues lists the known-issue rows split into open and closed, a row being closed when its 40-hex closes_with commit is an ancestor of the module directory's current git head (read-only rev-parse and merge-base; a fix this checkout cannot place leaves the row open with ancestry unknown). Format: docs/evidence-ledger.md."))
+               notes="--composition DIR [--plan --verify --test-plan --run --verdict] derives the composition rungs by hash. --ledger <module dir|evidence.json> [--base --foundation --map --location --package --target] reads evidence.json rows and reports each of the six facts per scope (a scope is base and/or foundation, a map set and optionally one survival location that never collapses into its map) and per {base, map, location} target; --target <foundation>/<map>/<mode>[/<location>] supplies foundation, map and location at once (docs/target-sets.md); a fact with no row of the matching type is null (unknown), and accepted-in-pack rows never feed a fact. A shipped row (the game ships this here, the provenance of distribution stock content) feeds none of them either and is reported separately as shipped, per scope and per target, where no row means false rather than unknown. known_issues lists the known-issue rows split into open and closed, a row being closed when its 40-hex closes_with commit is an ancestor of the module directory's current git head (read-only rev-parse and merge-base; a fix this checkout cannot place leaves the row open with ancestry unknown). Format: docs/evidence-ledger.md."))
 register(Route("module", "ledger-add", "Append validated rows to a module's evidence ledger: every row through the same validator module inspect applies, append-only and all-or-nothing", "writes-record", status="implemented", owner=OWNER,
                notes="Arguments: <module dir|evidence.json> --row <row.json> [--row ...] --json. Each row file holds one row object or a list of them, appended in the order given. "
                      "evidence.json is created with the module.json id as its subject when absent, and a ledger whose subject is a different id is refused. Every row is validated in the "

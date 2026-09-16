@@ -486,3 +486,115 @@ class QualifyLooseOverrideTests(QualifyFixture):
                             "--output", self.out()])
         self.assertEqual(code, 1, row)
         self.assertIn("loose-overrides:camo_zombies_nml", row["message"])
+
+
+class QualifyPortStatusTests(QualifyFixture):
+    """An unfinished port is composed knowingly or not at all. `qualify` writes the composition on
+    the caller's behalf, so `--accept` is the only place the caller can name the status that a
+    hand-written composition names under a member's own `accept`."""
+
+    def module_row(self, row, index=0):
+        return row.get("result", row.get("details", {}))["modules"][index]
+
+    def composition_of(self, row, index=0):
+        entry = self.module_row(row, index)
+        return json.loads((self.root / json.loads(
+            (self.root / entry["job"] / "qualify.json").read_text())["composition"]).read_text())
+
+    def test_a_loads_but_wrong_module_is_refused_with_the_planners_port_status_row(self):
+        self.foundation()
+        directory = self.module("alpha", bases=["stock"], maps=["zm_transit"], port_status="loads-but-wrong")
+        before = self.read(directory / "module.json")
+        code, row = self.qualify(str(directory))
+        self.assertEqual(code, 1, row)
+        refusal = self.module_row(row)["refusal"]
+        self.assertEqual(refusal["kind"], "plan-refused")
+        inner = [r for r in refusal["refusals"] if r["kind"] == "port_status"]
+        self.assertEqual(len(inner), 1, refusal)
+        self.assertEqual(inner[0]["modules"], ["alpha"])
+        self.assertIn("is loads-but-wrong and this composition does not accept it", inner[0]["message"])
+        # Every member of the synthesized composition is the plain path it has always been.
+        self.assertTrue(all(isinstance(m, str) for m in self.composition_of(row)["modules"]))
+        self.assertEqual(self.read(directory / "module.json"), before)
+
+    def test_accepting_the_status_qualifies_it_and_the_records_say_what_was_accepted(self):
+        self.foundation()
+        self.bindings("alpha")
+        directory = self.module("alpha", bases=["stock"], maps=["zm_transit"], port_status="loads-but-wrong")
+        code, row = self.qualify(str(directory), "--accept", "loads-but-wrong")
+        self.assertEqual(code, 0, row)
+        self.assertEqual(row["result"]["accept"], ["loads-but-wrong"])
+        entry = self.module_row(row)
+        self.assertEqual(entry["outcome"], "qualified")
+        self.assertEqual(entry["accept"], ["loads-but-wrong"])
+        self.assertEqual(entry["port_status"], "loads-but-wrong")
+        self.assertEqual(entry["accepted_members"], [{"id": "alpha", "port_status": "loads-but-wrong"}])
+
+        # The member is an object naming the acceptance, which is what the planner reads.
+        member = self.composition_of(row)["modules"][0]
+        self.assertEqual(member["accept"], ["loads-but-wrong"])
+        self.assertTrue(member["path"].endswith("alpha"), member)
+        qualified = json.loads((self.root / entry["job"] / "qualify.json").read_text())
+        self.assertEqual(qualified["accept"], ["loads-but-wrong"])
+
+        # The declaration is widened by the target and says exactly what it said about the port.
+        widened = json.loads((directory / "module.json").read_text())
+        self.assertEqual(widened["port_status"], "loads-but-wrong")
+        self.assertEqual(widened["bases"], ["stock", "b2"])
+
+        note = next(r for r in json.loads((directory / "evidence.json").read_text())["rows"]
+                    if r["type"] == "built-alone")["note"]
+        self.assertIn("port_status loads-but-wrong accepted for this build; the row says the package "
+                      "builds, not that the port is finished.", note)
+        self.assertIn("--accept loads-but-wrong", (directory / "docs" / "TEST.md").read_text())
+
+    def test_accepting_another_status_does_not_admit_this_one(self):
+        self.foundation()
+        directory = self.module("alpha", bases=["stock"], maps=["zm_transit"], port_status="loads-but-wrong")
+        code, row = self.qualify(str(directory), "--accept", "not-ported")
+        self.assertEqual(code, 1, row)
+        refusal = self.module_row(row)["refusal"]
+        self.assertEqual([r["kind"] for r in refusal["refusals"]], ["port_status"])
+        # The member was written with what the caller named, and it was not this member's status.
+        self.assertEqual(self.composition_of(row)["modules"][0]["accept"], ["not-ported"])
+        self.assertEqual(json.loads((directory / "module.json").read_text())["bases"], ["stock"])
+
+    def test_a_word_that_is_not_a_takeable_status_is_refused_at_the_argument(self):
+        self.foundation()
+        directory = self.module("alpha", bases=["stock"], maps=["zm_transit"], port_status="loads-but-wrong")
+        code, row = self.qualify(str(directory), "--accept", "finished")
+        self.assertEqual(code, 2, row)
+        self.assertEqual(row["error_code"], "invalid_arguments")
+        self.assertIn("--accept", row["message"])
+        code, row = self.qualify(str(directory), "--accept", "mostly-works")
+        self.assertEqual(code, 2, row)
+        self.assertEqual(row["error_code"], "invalid_arguments")
+        # The bounds are a member's own: 1 to 2 distinct statuses, so the same word twice is not a list.
+        code, row = self.qualify(str(directory), "--accept", "not-ported", "--accept", "not-ported")
+        self.assertEqual(row["error_code"], "input_invalid")
+        self.assertIn("distinct statuses", row["message"])
+        self.assertEqual(json.loads((directory / "module.json").read_text())["bases"], ["stock"])
+
+    def test_a_dependency_of_an_unfinished_port_is_accepted_the_same_way(self):
+        self.foundation()
+        self.bindings("alpha")
+        dep = self.module("dep", bases=["b2"], maps=["*"], port_status="loads-but-wrong")
+        directory = self.module("alpha", bases=["stock"], maps=["zm_transit"], dependencies=["dep"])
+        code, row = self.qualify(str(directory))
+        self.assertEqual(code, 1, row)
+        self.assertEqual([r["modules"] for r in self.module_row(row)["refusal"]["refusals"]
+                          if r["kind"] == "port_status"], [["dep"]])
+
+        code, row = self.qualify(str(directory), "--accept", "loads-but-wrong")
+        self.assertEqual(code, 0, row)
+        entry = self.module_row(row)
+        self.assertEqual(entry["port_status"], "finished")
+        self.assertEqual(entry["accepted_members"], [{"id": "dep", "port_status": "loads-but-wrong"}])
+        members = {Path(m["path"] if isinstance(m, dict) else m).name: m for m in self.composition_of(row)["modules"]}
+        self.assertEqual(members["dep"]["accept"], ["loads-but-wrong"])
+        self.assertIsInstance(members["alpha"], str, "a finished member stays the plain path")
+        note = next(r for r in json.loads((directory / "evidence.json").read_text())["rows"]
+                    if r["type"] == "built-alone")["note"]
+        self.assertIn("Accepted in the closure: dep (loads-but-wrong).", note)
+        self.assertNotIn("port_status finished", note)
+        self.assertEqual(json.loads((dep / "module.json").read_text())["port_status"], "loads-but-wrong")

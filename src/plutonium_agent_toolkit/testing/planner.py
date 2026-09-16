@@ -164,11 +164,20 @@ def execute(args,job):
             'verification':'Contracts stitched offline; no game action, capture or player acceptance'}
 
 
-def prepare_probe(composition,modules,job):
+def prepare_probe(composition,modules,job,*,admit=True):
     """Add a declared local test probe before both test planning and package building.
 
     Returns ``{"active": bool, "added": declaration or None}`` so the caller can tell whether the
-    probe was newly admitted and must be written into an emitted composition."""
+    probe was newly admitted and must be written into an emitted composition.
+
+    ``admit`` is the caller's reading of the profile. ``test plan`` leaves it at True and asks for
+    the probe by asking for the plan, so a release name refuses below. A pack build passes
+    ``admit=False`` for a release profile: every member contract is still validated, so a malformed
+    ``tests`` file refuses either way, but a member's probe verbs are not read as a need. Needing
+    the probe is a fact about running that member's test plan, not about composing a pack, so a
+    release plan pulls no probe in and refuses for no probe verb. A test-only member that is
+    declared or brought along is still refused, by ``compositions.resolve`` with its typed
+    ``test_only`` refusal."""
     needed=False
     for i,m in enumerate(modules):
         if not m.get('tests'):continue
@@ -182,9 +191,12 @@ def prepare_probe(composition,modules,job):
         for row in [p for map_row in contract['maps'].values() for p in map_row.get('preconditions',[])]+contract['steps']:
             a=row.get('action',row)
             if a.get('verb') in tc.PROBE_VERBS and row.get('actor','agent')=='agent':needed=True
+    if not admit:return {'active':False,'added':None}
     existing=next((m for m in modules if m['id']=='test_probe'),None)
     if needed or existing:
-        if not composition['name'].endswith(('_test','_probe')):raise Failure(INPUT_INVALID,'Test probe is forbidden in release profiles',field='/modules')
+        # The default caller is ``test plan``, which asks for the probe by asking for the plan; a
+        # release profile cannot have one, so the name is the refusal.
+        if not comp.is_test_profile(composition['name']):raise Failure(INPUT_INVALID,'Test probe is forbidden in release profiles',field='/modules')
         added=None
         if not existing:
             candidates={m['directory'].parent/'test_probe' for m in modules}
