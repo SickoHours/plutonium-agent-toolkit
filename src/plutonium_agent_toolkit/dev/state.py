@@ -5,6 +5,10 @@ from pathlib import Path
 from ..core.errors import Failure, INPUT_INVALID, INPUT_MISSING
 from .compositions import _read_inspection
 
+# The derived-state result this route returns on stdout. `module state --ledger` is the other
+# half of this route and answers with the ledger's own protocol instead.
+PROTOCOL='pat.module-state/1'
+
 def read(path):
     p=Path(path)
     if not p.is_file() or p.is_symlink() or p.stat().st_size>16*1024**2:raise ValueError('Missing or oversized evidence: '+str(p))
@@ -41,7 +45,7 @@ def _plan_modules(plan):
     return modules
 
 def derive(args):
-    result={'state':None,'evidence':{},'reasons':[]}
+    result={'protocol':PROTOCOL,'state':None,'evidence':{},'reasons':[]}
     root=Path(args.composition);root=root.parent if root.is_file() else root
     plan_path=Path(args.plan) if args.plan else root/'plan.json'
     try:

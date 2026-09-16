@@ -267,6 +267,9 @@ def add_parser(sub, common):
 # ----- inert declaration inspection ------------------------------------------------------
 
 INSPECT_PROTOCOL = "pat.module-inspect/1"
+# The plan summary `module plan` returns on stdout. plan.json on disk is the job's own artifact
+# and keeps its schema_version; this names the result a reader parses.
+PLAN_PROTOCOL = "pat.module-plan/1"
 MAX_DECLARATION_BYTES = 256 * 1024
 MAX_INSPECTION_TEXT = 2048
 MAX_INSPECTION_CODE = 200
@@ -2647,7 +2650,7 @@ def execute(args, job: Job) -> dict:
                      checks=plan["checks"],failed=[c["id"] for c in failed],undecided=undecided,
                      unqualified=resolved["unqualified"],adapt=plan["adapt"])
     if args.action == "plan":
-        return {**summary, "backends": checks, "backends_available": plan["backends_available"],
+        return {"protocol": PLAN_PROTOCOL, **summary, "backends": checks, "backends_available": plan["backends_available"],
                 "input_files": plan["input_files"], "verification": plan["verification"]}
     if undecided:
         raise Failure(INPUT_INVALID, f"{len(undecided)} collision(s) have no recorded decision; nothing was built",

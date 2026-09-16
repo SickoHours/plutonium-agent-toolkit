@@ -426,8 +426,10 @@ carries no `stale` key at all, in the plan row or in the summary, and costs no g
 ## What `plan` proves and what it does not
 
 `pat module plan <composition.json> --output <new dir> --json` reads every declaration, recipe
-and seed manifest, hashes every declared input and writes `plan.json`. It refuses, before any
-backend runs, when:
+and seed manifest, hashes every declared input and writes `plan.json`. The result carries
+`protocol: "pat.module-plan/1"` as its first field, so a reader pins that literal and reports a
+mismatch instead of guessing at a shape it does not know; `plan.json` on disk is the job's own
+artifact and keeps its `schema_version`. It refuses, before any backend runs, when:
 
 - a dependency is not in the composition, a conflict is, or the dependency graph has a cycle;
 - a module does not declare the composition's base or map;
@@ -838,7 +840,8 @@ whichever rung remains proven. Package bytes, the built plan when present in rec
 all receipt input hashes, exact member contracts, admitted run-plan digest and latest scoped
 verdict must match in order. Without a built plan in the receipt, the plan's member declaration
 hashes must be bound in the receipt's inputs instead. Changes revoke later claims and appear in
-`reasons`; no state file is stored or updated.
+`reasons`; no state file is stored or updated. The result carries
+`protocol: "pat.module-state/1"` as its first field.
 A plan whose current member declaration hashes no longer match claims no state at all; with
 unchanged declarations, a stale build input, a mismatched built plan or a package that no longer
 matches revokes the claim to composed with the mismatch reason, never offline verified.
@@ -846,7 +849,8 @@ A plan that is not a well-formed composition plan (wrong schema, missing name/ba
 malformed module rows, duplicate ids, or undecided collisions) claims no state at all.
 
 `pat module state --ledger <module dir|evidence.json> [--base --foundation --map --location --package --target] --json`
-is the other subject of the route: it reads a module's evidence ledger and reports each of the
+is the other subject of the route, and answers with `pat.module-ledger/1` rather than
+`pat.module-state/1`: it reads a module's evidence ledger and reports each of the
 six facts per scope from the rows, `null` where no row of the matching type exists, with the
 row numbers behind each value, and per `{base, map, location}` target under `by_target`;
 `--target <foundation>/<map>/<mode>[/<location>]` queries one target ([target-sets.md](target-sets.md)). It never reads a plan or receipt and the composition form never
