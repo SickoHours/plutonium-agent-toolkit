@@ -7,6 +7,13 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- `pat agent hosts`, `status` and `dispatch` send `x-t3-orchestration-protocol` naming the protocol
+  the client speaks. T3 Code 0.0.42 gates every orchestration read on that header
+  (`OrchestrationProtocolHeaders`, literal `"2"`) and answered `400 invalid_request` to the bare
+  shell read, so an authenticated `hosts` refused on a host whose probe said `drivable`. Observed
+  live on Linux against 0.0.42 on 2026-09-16; the fake server in `tests/test_agent_routes.py` now
+  refuses the same way on protocol 2. A protocol 1 host ignores the header. Not re-qualified against
+  a protocol 1 host in this change.
 - `clientfield-symmetry` no longer invents a powerup clientfield nobody registers. The helper row
   for `add_zombie_powerup` derived the field name `powerup_<id>` from the call's first argument
   whenever the client-field-name argument was absent, so a module whose seven-argument call shipped

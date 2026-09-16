@@ -121,6 +121,10 @@ def make_handler(fake: FakeT3):
                 return self._send(200, fake.descriptor())
             if not self._authorized():
                 return None
+            # T3 Code 0.0.42 (protocol 2) refuses an orchestration read that does not name its
+            # protocol in x-t3-orchestration-protocol; observed live on 2026-09-16.
+            if fake.protocol == 2 and self.headers.get("x-t3-orchestration-protocol") != "2":
+                return self._send(400, {"code": "invalid_request", "reason": "invalid_command", "traceId": "t"})
             if self.path == "/api/orchestration/shell" and fake.redirect:
                 self.send_response(302)
                 self.send_header("Location", "/redirected")

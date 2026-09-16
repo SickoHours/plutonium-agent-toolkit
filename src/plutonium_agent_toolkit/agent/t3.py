@@ -111,8 +111,14 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+# T3 Code 0.0.42 gates every orchestration read on this header naming the protocol the client
+# speaks (contracts: ORCHESTRATION_PROTOCOL_HEADER, a literal "2"); without it the shell route
+# answers 400 invalid_request. A protocol 1 server ignores an unknown header.
+PROTOCOL_HEADER = "x-t3-orchestration-protocol"
+
+
 def _request(origin: str, method: str, path: str, *, token: str | None = None, body: dict | None = None,
-             timeout: int = TIMEOUT) -> tuple[int, dict | list | None]:
+             timeout: int = TIMEOUT, protocol: int | None = None) -> tuple[int, dict | list | None]:
     data = None
     headers = {"Accept": "application/json"}
     if body is not None:
@@ -120,6 +126,8 @@ def _request(origin: str, method: str, path: str, *, token: str | None = None, b
         headers["Content-Type"] = "application/json"
     if token:
         headers["Authorization"] = "Bearer " + token
+    if protocol is not None:
+        headers[PROTOCOL_HEADER] = str(protocol)
     request = urllib.request.Request(origin + path, data=data, method=method, headers=headers)
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
     try:
@@ -226,7 +234,7 @@ def _turn(thread: dict) -> dict:
 
 def hosts(origin: str, bearer: str) -> dict:
     info = require_protocol(origin)
-    status, parsed = _request(origin, "GET", "/api/orchestration/shell", token=bearer)
+    status, parsed = _request(origin, "GET", "/api/orchestration/shell", token=bearer, protocol=info["orchestration_protocol"])
     if status != 200 or not isinstance(parsed, dict):
         raise _fail_http(status, parsed, "hosts")
     if not isinstance(parsed.get("projects"), list) or not isinstance(parsed.get("threads"), list):
@@ -249,7 +257,7 @@ def status(origin: str, bearer: str, thread_id: str, message_limit: int = 4) -> 
     info = require_protocol(origin)
     validate_id(thread_id, "thread id", protocol=info["orchestration_protocol"])
     path = "/api/orchestration/threads/" + urllib.parse.quote(thread_id, safe="")
-    code, parsed = _request(origin, "GET", path, token=bearer)
+    code, parsed = _request(origin, "GET", path, token=bearer, protocol=info["orchestration_protocol"])
     if code != 200 or not isinstance(parsed, dict):
         raise _fail_http(code, parsed, "status")
     if info["orchestration_protocol"] == 2:
@@ -373,7 +381,7 @@ def model_selection(instance: str, model: str, options: list[str]) -> dict:
 
 
 def _dispatch(origin: str, bearer: str, command: dict, what: str) -> dict:
-    code, parsed = _request(origin, "POST", "/api/orchestration/dispatch", token=bearer, body=command, timeout=60)
+    code, parsed = _request(origin, "POST", "/api/orchestration/dispatch", token=bearer, body=command, timeout=60, protocol=1)
     if code != 200:
         raise _fail_http(code, parsed, what)
     sequence = parsed.get("sequence") if isinstance(parsed, dict) else None

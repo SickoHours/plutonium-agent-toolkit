@@ -15,7 +15,7 @@ server; the rest read from it or from its settings on disk.
 | T3 Code build | Orchestration protocol | `pat agent` |
 | --- | --- | --- |
 | Hosts advertising protocol 1 (including previously qualified nightly builds) | 1 | HTTP reads and writes; existing native receipts apply |
-| Hosts advertising protocol 2 (observed on `0.0.40`) | 2 | HTTP reads and WebSocket writes; fake-transport tests pass, authenticated native qualification pending |
+| Hosts advertising protocol 2 (observed on `0.0.40` to `0.0.42`) | 2 | HTTP reads and WebSocket writes; every orchestration read carries `x-t3-orchestration-protocol: 2`, which 0.0.42 requires; authenticated `hosts` verified live on 0.0.42, dispatch qualification pending |
 
 V2 project and thread ids are opaque strings, including long percent-encoded graph ids.
 The client accepts up to 4096 UTF-8 bytes and URL-encodes ids when reading or linking threads.
