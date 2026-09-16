@@ -1123,6 +1123,22 @@ evidence would decide them. And a project recipe's `provides.weapons` is checked
 recipe rows and the source literals the toolkit knows how to read; a module that registers a
 weapon by building its name at run time is reported `partial`, never `agrees`.
 
+**How to run it.** The route reads one module directory and needs nothing else to start:
+
+```
+pat module verify-declaration modules/my_module --json
+pat module verify-declaration modules/my_module --workspace . --base-listings foundations/stock/listings \
+    --target stock/zm_transit --strict --json
+```
+
+Each flag adds a source of fact, and the rows say what is missing without it: `--workspace` reads
+each dependency's own declaration from `<root>/modules/*/module.json` (without it every
+`dependencies` row is `not_counted`), `--base-listings` and `--target` are the two ways a path is
+shown to be base-owned (without either, each staged path in a base namespace is `not_counted` and
+the row names the evidence that would decide it), `--strict` is the library gate (exit 1, with the
+whole report under `details.report`), and `--propose` prints the fields the observed side would
+fill. There is no `--output`: the route writes nothing.
+
 ### Refusal kinds added by this section
 
 | Kind | Fires when | Row carries |
