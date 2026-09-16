@@ -1782,12 +1782,19 @@ def execute(args, job: Job) -> dict:
             kind, asset = row.split(",", 1)
             if kind in ("script", "rawfile") and asset.lower().endswith((".gsc", ".csc")):
                 pack_scripts.add(asset)
+    registrations=[]
     for source,target,_ in compiled:
         try: text=Path(source).read_text(encoding="utf-8",errors="replace")
         except OSError: continue
         plan["checks"] += offline_checks.external_symbols(target.as_posix(),text,comp["game"])
         plan["checks"] += offline_checks.map_script_externals(target.as_posix(),text,comp["map"],foundation,comp["game"],pack_scripts)
         plan["checks"] += offline_checks.box_registrations(target.as_posix(),text,provided_weapons)
+        registrations.append((target.as_posix(),text,owner_of_script.get(target.as_posix())))
+    # A clientfield registered on one script VM and not the other is EXE_CLIENT_FIELD_MISMATCH at
+    # map load, before a script runs. No single script carries the defect and no compile, link or
+    # readback can see it: it is the two halves of the pack compared against each other, so it is
+    # read once here, after every compiled script has been named.
+    plan["checks"] += offline_checks.clientfield_symmetry(registrations)
     if args.action == "build":
         plan["checks"] += offline_checks.check_scripts(compiled,args,job,comp["game"])
     else:

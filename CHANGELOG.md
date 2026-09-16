@@ -7,6 +7,24 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- `clientfield-symmetry`: a new pack-level check in `module plan` and `module build`. It reads every
+  clientfield the composition's own compiled `.gsc` and `.csc` scripts register — a direct
+  `registerclientfield("<set>", "<name>", ...)` or a helper that registers one, with
+  `maps\mp\zombies\_zm_powerups::add_zombie_powerup` (which registers `powerup_<id>` in set
+  `toplayer` on whichever VM calls it) as the first row of the `CLIENTFIELD_HELPERS` table — and
+  groups them by `(set, name)`. A name registered on exactly one script VM fails, naming the field,
+  the set, the VM, the script and the module, with the remedy to ship the other half as a loose
+  `scripts/zm` script registering the same name with the same width and version, unconditionally. A
+  name registered on both passes; a pack that registers nothing on either VM is `not_counted`; a
+  registration under a condition that is not a plain `isdefined`/`level` guard adds a failed
+  `clientfield-symmetry:<name>:conditional` row. The engine compares the two registration lists at
+  map load and refuses the map with `EXE_CLIENT_FIELD_MISMATCH` before a script runs, so compile,
+  link and readback all pass first; two packs shipped a server-only power-up registration on
+  2026-09-16 and were refused at load. `docs/knowledge/crashes.md` now carries the loose-`.csc`
+  client-half remedy and the unconditional rule beside the existing `_zm::init` redirect. The
+  shipped `crash-signatures.json` is generator output and is unchanged; the maintainer's next export
+  carries the amended row. Offline verified on Linux; no game was loaded.
+
 - A module can declare what it *promises*, and the declaration reader checks it. `replaces.files`
   is widened from GSC/CSC scripts to any relative zone path the base or the map already carries (a
   table, a visionset, a `weapons/<name>` file), still lowercase, forward slashes, deduplicated and

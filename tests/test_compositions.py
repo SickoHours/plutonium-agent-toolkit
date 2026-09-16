@@ -894,6 +894,47 @@ class PoolAndDeliveryTests(CompositionFixture):
         package = json.loads((Path(result["result"]["output"]) / "packages" / "mod.ff").read_text())
         self.assertIn("accuracy/x.accu", package["rawfiles"], "the delivered copy is still in the zone")
 
+    def _clientfield_module(self, mid, server, client=None):
+        """A module whose server script registers a clientfield, optionally with the client half."""
+        d = self.module(mid)
+        (d / "scripts" / f"{mid}.gsc").write_text(server)
+        if client is not None:
+            (d / "scripts" / f"{mid}.csc").write_text(client)
+            recipe = json.loads((d / "project.json").read_text())
+            recipe["scripts"].append({"source": f"scripts/{mid}.csc", "target": f"scripts/zm/{mid}.csc", "instance": "client"})
+            (d / "project.json").write_text(json.dumps(recipe, indent=2))
+        return d
+
+    REGISTER = ('main()\n{\n}\n\ninit()\n{\n'
+                '    registerclientfield("toplayer", "halo_cr35_meter", 1, 2, "int");\n}\n')
+
+    def test_a_server_clientfield_with_no_client_half_refuses_the_plan(self):
+        """Two packs shipped this shape on 2026-09-16; the engine refused the map at load."""
+        self._clientfield_module("meter", self.REGISTER)
+        code, result = invoke(["module", "plan", str(self.composition(["meter"])), "--output", self.out()])
+        self.assertFalse(result["ok"])
+        self.assertIn("Offline checks failed", result["message"])
+        self.assertIn("clientfield-symmetry:halo_cr35_meter", result["details"]["failed"])
+        row = next(c for c in result["details"]["checks"] if c["id"] == "clientfield-symmetry:halo_cr35_meter")
+        self.assertEqual(row["outcome"], "failed")
+        self.assertIn("halo_cr35_meter", row["detail"]);self.assertIn("scripts/zm/meter.gsc", row["detail"])
+        self.assertIn("module meter", row["detail"])
+        self.assertIn("ship the other half as a loose scripts/zm script", row["detail"])
+
+    def test_both_halves_in_the_pack_pass_the_symmetry_check(self):
+        self._clientfield_module("meter", self.REGISTER, self.REGISTER)
+        code, result = invoke(["module", "plan", str(self.composition(["meter"])), "--output", self.out()])
+        self.assertEqual(code, 0, result)
+        rows = [c for c in result["result"]["checks"] if c["id"].startswith("clientfield-symmetry")]
+        self.assertEqual([(c["id"], c["outcome"]) for c in rows], [("clientfield-symmetry:halo_cr35_meter", "passed")])
+
+    def test_a_pack_that_registers_no_clientfield_carries_one_not_counted_row(self):
+        self.module("alpha")
+        code, result = invoke(["module", "plan", str(self.composition(["alpha"])), "--output", self.out()])
+        self.assertEqual(code, 0, result)
+        rows = [c for c in result["result"]["checks"] if c["id"].startswith("clientfield-symmetry")]
+        self.assertEqual([(c["id"], c["outcome"]) for c in rows], [("clientfield-symmetry", "not_counted")])
+
     def _client_module(self, mid, box_list, provides_weapons):
         d = self.module(mid, provides={"weapons": provides_weapons})
         (d / "scripts" / f"{mid}.csc").write_text(
