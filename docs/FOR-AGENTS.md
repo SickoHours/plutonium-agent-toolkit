@@ -102,6 +102,27 @@ Respect both in what you tell the user, and keep offline verified, installed, la
 captured and player-accepted as separate statements. A mod that compiles and links is not a mod
 that plays. Say which one you have.
 
+## Which shape a result has, and which code produced it
+
+Two fields exist so a program on the other side of `pat` never has to guess.
+
+- **`result_protocol`, on every `pat manifest` route row.** A string such as
+  `pat.module-inspect/1` when that route's success result carries a `protocol` field of its own,
+  and `null` when it carries none. Read the manifest once, pin the literal your reader was
+  written against, and when a result's `protocol` is not that literal, report the mismatch
+  instead of rendering a document you do not understand. Adding a field to a result keeps the
+  protocol string; changing or removing one is a new version. `module state` is the one route
+  with two subjects: its row names `pat.module-state/1` for the `--composition` form, and the
+  `--ledger` form answers with `pat.module-ledger/1`.
+- **`source_commit` and `dirty`, in the `pat version` result.** The 40-hex commit of the checkout
+  this `pat` is running from and whether that working tree has uncommitted changes, when the
+  toolkit is an editable install out of a git checkout; both `null` otherwise, since an installed
+  wheel has no such fact and a guess would be worse than silence. They never raise and never
+  block the route. `pat --version` is still the bare version string and is unchanged.
+
+Use them together when you report: the version alone does not say which code ran, and a matching
+protocol is what lets a downstream reader trust the rest of the document.
+
 ## Knowledge and playbooks
 
 `docs/knowledge/` holds the T6 and Plutonium facts an agent otherwise rediscovers by trial: the
