@@ -26,9 +26,8 @@ optional soundbanks: copy the build's `packages/scripts/` directory **contents**
 map-specific script sits under `maps/mp/zm_<map>.gsc` in the map's own fastfile; a loose global
 script under the storage folder's `raw/scripts/zm/` loads for every mod (shared tooling only).
 
-`examples/hello-zm` is the smallest working mod: one server script whose `main()` starts a
-thread that waits for players to connect and spawn. Its recipe maps `scripts/hello.gsc` to the
-target `scripts/zm/hello_zm.gsc`.
+`examples/hello-zm` is the smallest working mod: one server script whose `main()` starts a thread
+waiting for players to spawn; its recipe maps `scripts/hello.gsc` to `scripts/zm/hello_zm.gsc`.
 
 ## The client VM's two passes
 
