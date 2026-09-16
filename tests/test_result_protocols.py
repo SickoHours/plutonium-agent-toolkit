@@ -28,6 +28,7 @@ LITERAL = re.compile(r'"(pat\.[a-z-]+/[0-9]+)"|\'(pat\.[a-z-]+/[0-9]+)\'')
 # derived-state protocol instead.
 KNOWN = {
     "pat.module-accept/1",
+    "pat.module-changelog/1",
     "pat.module-inspect/1",
     "pat.module-ledger-add/1",
     "pat.module-ledger-proposal/1",
