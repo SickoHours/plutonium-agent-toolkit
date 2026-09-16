@@ -27,7 +27,9 @@ Every entry states what shipped, on which platform it was verified, and what rem
   literal in GSC, where a composition could not be checked against it and a reviewer could not
   see it without reading the source. **No consumer reads a parameter yet and no packaged byte
   changes**; this is the contract and its checks. `pat module inspect` validates and echoes the
-  field normalized, `schemas/module-inspect-v1.schema.json` carries it, and
+  field normalized, `schemas/module-inspect-v1.schema.json` carries it, a `parameters` refusal's
+  `field` points into the composition file that set the value (with `composition` naming it) even
+  for a nested member, and
   `docs/MODULES.md` has the declaration row, the member row and the refusal section. Offline unit
   tests on Linux; nothing about the game is claimed.
 

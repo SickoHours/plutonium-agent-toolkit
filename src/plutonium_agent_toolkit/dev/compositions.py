@@ -965,6 +965,7 @@ def load_composition(path: Path, job: Job, depth: int = 0, seen: tuple = ()) -> 
         nested = directory / "composition.json"
         if (directory / "module.json").is_file():
             member = {"kind": "module", "directory": directory, "role": role, "path": row["path"], "parameters": row["parameters"],
+                      "index": index,
                       "reference": {"name": row["name"], "commit": row["commit"]} if row["name"] is not None else None}
         elif nested.is_file() and not nested.is_symlink():
             if row["parameters"]:
@@ -1008,6 +1009,9 @@ def flatten(comp: dict, job: Job, target: tuple[str | None, str | None] | None =
             declaration = load_declaration(member["directory"], job, target)
             declaration["role"] = member["role"]
             declaration["parameters_set"] = member["parameters"]
+            # The pointer a parameters refusal carries is into the composition file that set the
+            # value, by that file's own member index, not into the flattened order.
+            declaration["parameters_field"] = f"/modules/{member['index']}/parameters"
             declaration["reference"] = member["reference"]
             declaration["via"] = comp["name"]
             modules.append(declaration)
@@ -1086,7 +1090,8 @@ def resolve(comp: dict, modules: list[dict], allow_unqualified: bool = False) ->
             refusals.append(_refusal("parameters", f"{m['id']}: parameter {name!r} {message}",
                                      "A composition sets only the parameters the member's module declares, each within its declared type and "
                                      "constraint; pat module inspect lists them with their defaults.",
-                                     modules=[m["id"]], field=f"/modules/{i}/parameters/{name}", parameter=name))
+                                     modules=[m["id"]], field=f"{m.get('parameters_field', f'/modules/{i}/parameters')}/{name}",
+                                     parameter=name, composition=m.get("via")))
     ids = [m["id"] for m in modules]
     if len(set(ids)) != len(ids):
         duplicates = sorted({i for i in ids if ids.count(i) > 1})

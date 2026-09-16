@@ -246,6 +246,20 @@ class CompositionParameters(CompositionFixture):
         self.assertEqual(row["details"]["field"], "/modules/0/parameters")
         self.assertTrue(inner.is_file())
 
+    def test_a_nested_member_s_refusal_points_into_its_own_composition(self):
+        # The outer pack lists another module first, so the inner member's flattened index is not
+        # its index in the file that set the value; the pointer names that file and its own index.
+        self.rotation()
+        self.module("plain")
+        inner = self.composition([{"path": "../../modules/rotation", "parameters": {"pace": 1}}], name="stock_inner_test")
+        outer = self.composition(["plain", {"path": "../stock_inner_test"}], name="stock_outer_test")
+        code, row = self.plan(outer)
+        self.assertEqual(code, 1, row)
+        refusal = next(r for r in row["details"]["refusals"] if r["kind"] == "parameters")
+        self.assertEqual(refusal["field"], "/modules/0/parameters/pace")
+        self.assertEqual(refusal["composition"], "stock_inner_test")
+        self.assertTrue(inner.is_file())
+
     def test_module_inspect_echoes_what_a_member_sets(self):
         self.rotation()
         comp = self.composition([{"path": "../../modules/rotation", "parameters": {"cadence": "timer"}}, "../../modules/rotation"])
