@@ -7,6 +7,29 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- A compiled script packed outside the root its client loads from is refused, not shipped.
+  `script-reach:<target>` is a new per-script check: a T6 client registers a mod's scripts out of
+  `scripts/zm/` and an IW5 client out of the flat `scripts/` namespace, and every compiled script
+  the toolkit links is a `rawfile,<target>` zone row, so a target anywhere else reaches the client
+  only as a rawfile the engine never registers -- no `Overridden rawfile:` line at load, then
+  `Could not load scriptparsetree "<path>"`, unresolved externals and `SV_Shutdown` at the first
+  qualified call into it, after a green compile and a byte-perfect readback. The row states the
+  engine fact, the console line and the retarget with the caller rewrite, and refuses in
+  `pat project plan|build` (where a module built alone is judged) and in `pat module plan|build`.
+  A stock script path the shipped map tables carry is `not_counted` instead: that is an override of
+  a script the map's own zones already load, which no receipt here settles, and retargeting it
+  would stop it being an override. The same root rule now decides the loose delivery beside the
+  package, so a script that passes the check is the script that travels, and a `.csc` under the
+  loaded root is delivered like a `.gsc`. `map-scripts` no longer counts a path the pack ships only
+  as an unregistered rawfile as carried -- a false pass that let a pack vouch for its own
+  unreachable script -- and names it with its `script-reach` row instead; a `script,` zone row a
+  seed or adapter roots is a real scriptparsetree asset and still counts. An adapter's staged
+  script outside the roots was silently dropped on compose (the harvest walks `stage/scripts`
+  only); it is now refused rather than widened to roots the engine does not register. A member
+  whose every script is unreachable gets the `script-unreachable` adapt pattern: a port, not a
+  widening. Offline unit tests on Linux (`tests/test_script_reach.py`); the engine facts are read
+  from console logs of earlier loads, and no load was run for this change.
+
 - The planner reads two of those promises and refuses on them. `ownership`: a member that stages a
   path the base or the target map already carries and does not list it under `replaces.files` is
   refused, one row per member and path, naming the path, the owner (`base` or `map`), the evidence

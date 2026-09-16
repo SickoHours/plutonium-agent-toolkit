@@ -80,6 +80,16 @@ Lives in the module's directory beside its payload. The payload is one of three 
 workspace builder cuts (below). A declaration names exactly one of `recipe` or `seed`; an
 adapter recipe is named under `recipe` and told apart by its own shape.
 
+A recipe's script targets are not free. A T6 client loads a mod's scripts from `scripts/zm/` and
+an IW5 client from the flat `scripts/` namespace (`dev/titles.py`, `loaded_script_roots`); a
+compiled script packed anywhere else reaches the client only as a `rawfile` inside `mod.ff` that
+the engine never registers as a script, so it can never run however the module is later composed.
+`pat project plan` and `pat project build` refuse such a target where a module built alone is
+judged, and `pat module plan`/`build` refuse it again for a pack, both with the retarget and the
+caller rewrite in the `script-reach:<target>` row's detail. Put a module's own scripts under the
+loaded root and keep `maps\mp\...` for the stock paths you *call into*, which is a different
+question and the one `map-scripts` answers.
+
 ```json
 {
   "schema": 1,
@@ -837,8 +847,27 @@ WAVs that another row already compiles. Withheld rows are listed under `withheld
 script namespace (`maps/`, `clientscripts/`, `common_scripts/`, `codescripts/`) against the
 compiled scripts the target map's zones carry on that foundation (`knowledge/map-scripts.json`);
 a path the map lacks fails, since it is an unresolved external at load that no compiler sees;
-a path another member of the same pack provides (a staged script target, a seed or adapter
-script root, a `provides.scripts` name) is carried by the pack and passes.
+a path another member of the same pack provides is carried by the pack and passes — but only when
+the pack ships it in a form this client opens: a target under a loaded root, or a `script,` zone row
+a seed or adapter roots, which is a real scriptparsetree asset. A path the pack carries *only* as a
+rawfile the engine never registers does not make the caller's call resolve; the row fails, names the
+path, and points at its `script-reach` row. (Counting those was a false pass: the pack vouched for a
+script nothing opens, and the caller got a green row before an `SV_Shutdown`.)
+
+`script-reach:<target>` rows judge whether the client can open a compiled script at all, from the
+root it is packed under. Every compiled script the toolkit links becomes a `rawfile,<target>` zone
+row, and a T6 client registers a mod's rawfiles as scripts only under `scripts/zm/` (IW5: the flat
+`scripts/` namespace): a load prints one `Overridden rawfile: scripts/zm/<name> from zone mod` per
+script it accepts out of the zone and none at all for a rawfile rooted elsewhere, which is carried
+into the zone and never opened. The failure surfaces only at the first qualified call into such a
+path, as `Could not load scriptparsetree "<path>"` followed by unresolved externals and
+`SV_Shutdown` — after a green compile and a byte-perfect readback, neither of which can see it.
+A target outside the root fails with the retarget and the caller rewrite in its detail; a target
+under it passes. One exception is `not_counted`: a stock script path the shipped map tables carry
+is an *override* of a script the map's own zones already load, a case no receipt here settles, and
+retargeting it would stop it being an override at all — replace such a function from a script under
+the loaded root instead. The same root rule decides which compiled scripts travel loose beside the
+package, so a script that passes the check is the script that is delivered.
 
 `map-guard:<script>` rows read the other half of "this script is on the wrong map", the half no
 zone table can see. A module ported from another map often keeps its donor's entry guard: an

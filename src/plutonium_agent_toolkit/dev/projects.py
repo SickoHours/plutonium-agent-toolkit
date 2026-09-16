@@ -25,6 +25,7 @@ from types import SimpleNamespace
 from ..core.errors import BACKEND_FAILED, INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, Failure
 from ..core.jobs import Job
 from ..core.receipts import sha256_file, verify_outputs
+from . import checks as offline_checks
 from . import fastfiles, scripts, titles
 from .backends import executable
 
@@ -190,6 +191,10 @@ def _plan(data, compiled, loose, loads, job: Job) -> dict:
             checks.append({"id": name, "argv": executable(name), "available": True})
         except Failure as exc:
             checks.append({"id": name, "available": False, "message": exc.message})
+    # A module built alone is where `pat module qualify` judges it, so the one check a lone recipe
+    # can decide is made here too: a compiled script packed outside the roots the title's client
+    # loads from is unreachable however it is later composed (dev/checks.py script_reach).
+    script_rows = [row for _, target, _ in compiled for row in offline_checks.script_reach(target.as_posix(), data["game"])]
     plan = {
         "schema_version": 1, "name": data["name"], "game": data["game"],
         "mode": data.get("mode", titles.modes(data["game"])[0]),
@@ -198,8 +203,10 @@ def _plan(data, compiled, loose, loads, job: Job) -> dict:
         "loads": [str(p) for p in loads],
         "withheld": data.get("_withheld", []),
         "backends": checks, "backends_available": all(c["available"] for c in checks),
+        "checks": script_rows,
         "input_files": len(job.inputs),
-        "verification": "recipe and declared inputs validated and hashed; backend presence checked; nothing compiled",
+        "verification": "recipe and declared inputs validated and hashed; backend presence checked; "
+                        "script targets judged against the roots this client loads from; nothing compiled",
     }
     (job.root / "plan.json").write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
     return plan
@@ -356,7 +363,16 @@ def execute(args, job: Job) -> dict:
         return _verify(args, job)
     data, compiled, loose, loads = load_recipe(Path(args.recipe), job)
     plan = _plan(data, compiled, loose, loads, job)
+    # Refusal-grade, for plan and for build alike: a failed row means the recipe would pack a
+    # script this client never opens, and building it would only record the same fact in bytes.
+    failed = [c for c in plan["checks"] if c["outcome"] == "failed"]
+    if failed:
+        raise Failure(INPUT_INVALID, "Offline checks failed: " + "; ".join(f'{c["id"]}: {c["detail"]}' for c in failed)[:1200],
+                      "Retarget the script to the root this title's client loads a mod's scripts from, "
+                      "and rewrite every caller's qualified path or #include.",
+                      plan="plan.json", checks=plan["checks"], failed=[c["id"] for c in failed])
     if args.action == "plan":
         return {"plan": "plan.json", **{k: plan[k] for k in ("name", "backends", "backends_available", "input_files", "verification")},
+                "checks": plan["checks"],
                 "scripts": len(compiled), "assets": len(loose), "loads": len(loads), "withheld": len(plan["withheld"])}
     return _build(data, compiled, loose, loads, plan, args, job)
