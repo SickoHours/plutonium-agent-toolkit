@@ -7,6 +7,29 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- New route `pat module ledger-add <module dir|evidence.json> --row <row.json> [--row ...] --json`,
+  the only way to add a row to a module's evidence ledger besides the `built-alone` row
+  `module qualify` earns. `module state --ledger` reads a ledger and `module ledger-from-registry`
+  proposes one, but nothing appended to one, so a campaign recording a run per member per load had
+  to edit `evidence.json` by hand — a row nothing validated, in a file everything downstream
+  derives facts from. Each `--row` file holds one row object or a list of them, appended in the
+  order given and validated by the rules `module inspect` applies, in the context of the whole
+  ledger (at most 1024 rows and 1 MiB, counted after the write). The route refuses, writing
+  nothing, when any row fails validation (every diagnostic carries its row index, JSON Pointer and
+  source file), when a row's normalized JSON is already in the file or repeated in the same
+  invocation (`row_duplicate`, a new error code, so a rerun loop can tell "already recorded" from
+  "malformed"), when the ledger's `subject.id` is another module's, when the ledger already on
+  disk does not validate, and when there is no `module.json` beside it to name the subject. It
+  creates the file from the declaration's id when absent, never edits or removes an existing row,
+  and keeps the file's own `ensure_ascii` so the diff is the rows added. The result reports the
+  file, the row counts before and after, the appended indexes and, per appended row, the six facts
+  the ledger now derives for the scope that row names — a `game-tested` row stating only
+  `installed` and `launched` leaves `loaded_and_playable` `null`, as it should. New effect
+  `writes-record` (one record file beside a declaration, appended in place; no job directory and
+  no receipt), because this route writes neither an output directory nor a receipt. Registered
+  `implemented`: offline unit tests on Linux, no qualification receipt yet. No game, no network,
+  no install. `docs/evidence-ledger.md`, `docs/SUPPORT.md`.
+
 - New check `loose-overrides`. Plutonium reads an image's pixels from an image bank *or* from the
   global loose path `storage/t6/images`, and a loose file there wins: it applies to every mod folder
   on the machine and to the bare game with no mod selected. A loose `<name>.iwi` whose name one of

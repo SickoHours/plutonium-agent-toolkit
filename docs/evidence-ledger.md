@@ -215,6 +215,54 @@ the declaration's id is a diagnostic. The ledger's defects never change the decl
 with exit 0 and a `ledger.validation` of `invalid`. Absence of the file is not an error and adds
 no `ledger` key. Inspection reads the file only; it follows no record pointer and verifies no hash.
 
+## Appending rows
+
+```sh
+pat module ledger-add <module directory | evidence.json> --row <row.json> [--row <row.json> ...] --json
+```
+
+appends rows to `evidence.json`. Every row the campaign records goes through this route; a row
+typed into the file by hand is a row nothing validated. Each `--row` file holds one row object or
+a list of row objects, and the files are appended in the order they are given.
+
+- **Validated like every other row.** Each row is checked by the rules `pat module inspect`
+  applies (`dev/ledger.validate`), in the context of the whole ledger: at most 1024 rows and at
+  most 1 MiB, counted after the write, not before.
+- **All-or-nothing.** One row that fails writes nothing. The refusal lists every diagnostic with
+  its row index in the resulting file and its JSON Pointer, and names the `--row` file it came
+  from. A ledger that already holds a row that does not validate is refused too: a new fact under
+  a malformed one is a fact nothing can derive from. Fix the file first.
+- **Append-only.** No existing row is edited, reordered or removed. A row whose normalized JSON
+  the file already holds is refused with `row_duplicate` and its index, rather than written a
+  second time, so a campaign that reruns its loop records each run once. A row that states a
+  further fact (the same run, now with `loaded_and_playable`) is a new row and is appended. A row
+  that turned out to be wrong is still corrected by a row that says so, never by an edit.
+- **Created when absent**, as `{"schema": 1, "subject": {"id": <the module.json id>}, "rows": []}`.
+  Only the `id` is read from the declaration. A ledger whose `subject.id` is another module's is
+  refused.
+- **The diff is the rows added.** The file keeps its own `ensure_ascii`: one that escapes
+  non-ASCII keeps escaping and one that writes UTF-8 keeps writing it, so nothing re-escapes an
+  accent in a row that did not change. Indent is two spaces, the shape every record here uses.
+
+The result names the file, the row counts before and after, the appended indexes, `validation`,
+and for each appended row the six facts the ledger now derives for the scope that row names, one
+entry per map in it — the whole ledger's answer for that scope, not the row's own claim:
+
+```json
+{"protocol": "pat.module-ledger-add/1", "ledger": "modules/rw-icr/evidence.json", "created": false,
+ "subject": "rw_icr", "sha256": "<64 hex>", "rows_before": 10, "rows_after": 11, "appended": [10],
+ "validation": "valid", "diagnostics": [],
+ "rows": [{"row": 10, "type": "game-tested", "source": "run-41.json",
+           "scopes": [{"scope": {"base": "stock", "foundation": "bo2-stock", "map": "zm_transit", "location": null},
+                       "facts": {"installed": {"value": true, "rows": [10]},
+                                 "loaded_and_playable": {"value": null, "rows": []}, "...": {}}}]}]}
+```
+
+A `game-tested` row that states only `installed` and `launched` leaves `loaded_and_playable` and
+`captured` `null` there, because a fact the run did not observe is left out of the row and no
+fact is inferred from another. The route reads and writes that one file: no game, no network, no
+install, no receipt directory.
+
 ## Populating a ledger from a workspace
 
 ```sh
