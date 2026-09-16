@@ -102,6 +102,33 @@ ROLE_FOOTPRINTS = {
                  "source": re.compile(r"level\.[a-z0-9_]*(?:perk_art|perk_shader)[a-z0-9_]*", re.I)},
 }
 
+# How a player reaches a feature, in bytes, in one place so it is read and extended as data. Every
+# word is `partial` at best: a signature is a footprint, and that the path runs is the load's proof.
+# `machine` also needs the declaration's own `placements` row -- a vending call with nothing placed
+# reaches nobody -- and `menu` is the declaration's route with no other footprint beside it.
+REACH_FOOTPRINTS = {
+    "wall-or-box": {"how": "an availability-table registration literal in source",
+                    "source": re.compile(r"include_zombie_weapon|add_zombie_weapon|addzombieboxweapon|include_weapon\(", re.I)},
+    "machine": {"how": "a machine registration in source and a placements row naming the site kind",
+                "source": re.compile(r"vending|perk_machine|register_perk_machine|zombie_vending|machine_trigger", re.I),
+                "needs_placements": True},
+    "granted": {"how": "a give call on player spawn or connect",
+                "source": compositions.GIVE_ON_SPAWN},
+    "drop": {"how": "a power-up registration in source",
+             "source": re.compile(r"add_zombie_powerup|register_powerup|powerup_runtime::register", re.I)},
+    "passive": {"how": "a replaceFunc, a level variable or a dvar set",
+                "source": re.compile(r"replacefunc|level\.[a-z_]+\s*=|setdvar", re.I)},
+    "menu": {"how": "a menu_route naming the developer menu, with no other footprint",
+             "menu_route": re.compile(r"^\s*developer", re.I)},
+}
+# The words a byte alone is enough to propose. `machine` and `granted` need the placements or the
+# dependency evidence a single module cannot see, and `menu` is never proposed.
+REACH_PROPOSABLE = ("wall-or-box", "drop", "passive")
+# Whether a player can see they have it: an image or material asset row, a shader precache, or one
+# of the stock icon names a perk HUD reads.
+HUD_ICON_TYPES = ("image", "material")
+HUD_ICON_SOURCE = re.compile(r"precacheshader\(|setshader\(|perk_hud_icon|specialty_[a-z_]*icon", re.I)
+
 # One row per field this route reads nothing for, with the reason from docs/MODULES.md.
 UNREAD_FIELDS = {
     "menu_route": "nothing in this route reads a menu tree",
@@ -962,6 +989,62 @@ def verify(directory: Path, *, workspace: str | None = None, base_listings=(), t
 
     version_proposal, version_note = version_row(directory, metadata, rows, propose)
 
+    # ----- how a player reaches it, and whether they can see they have it ----------------
+    # Every footprint the module carries, not only the declared one: a weapon is wall-or-box and
+    # passive at once, and saying so is what makes a single-footprint proposal trustworthy.
+    reach_declared = metadata.get("reach")
+    found: list[str] = []
+    for word, rules in REACH_FOOTPRINTS.items():
+        if "source" not in rules or not source.matches(rules["source"]):
+            continue
+        if rules.get("needs_placements") and not metadata["placements"]:
+            continue
+        found.append(word)
+    if not found and REACH_FOOTPRINTS["menu"]["menu_route"].match(metadata["menu_route"]):
+        found.append("menu")
+    reach_how = "the byte signature per word (docs/MODULES.md)"
+    if reach_declared and reach_declared in found:
+        rows.append(_row("/reach", [reach_declared], [reach_declared], REACH_FOOTPRINTS[reach_declared]["how"], "partial",
+                         "the footprint is present; that the path runs is the load's proof"))
+    elif reach_declared:
+        rows.append(_row("/reach", [reach_declared], sorted(found), REACH_FOOTPRINTS[reach_declared]["how"],
+                         "declared_not_observed", no_source or None))
+    elif found:
+        rows.append(_row("/reach", [], sorted(found), reach_how, "observed_not_declared",
+                         "a module can carry more than one footprint (a weapon is wall-or-box and passive at once); "
+                         "the declaration says which one a player uses"))
+    else:
+        rows.append(_row("/reach", [], [], reach_how, "not_counted",
+                         no_source or "no reach footprint in this module's bytes"))
+
+    icon_rows: list[str] = []
+    if payload == "recipe" and loose is not None:
+        icon_rows = [target.as_posix() for _s, target, kind, _n in loose if kind in HUD_ICON_TYPES]
+    elif payload == "seed" and seed is not None:
+        icon_rows = [name for row in seed.get("roots", []) for kind, _, name in [row.partition(",")] if kind in HUD_ICON_TYPES]
+    elif payload == "adapter" and adapter is not None:
+        icon_rows = [name for row in adapter["embedded"] for kind, _, name in [row.partition(",")] if kind in HUD_ICON_TYPES]
+    icon = bool(icon_rows) or source.matches(HUD_ICON_SOURCE)
+    hud_declared = metadata.get("hud")
+    hud_how = "an image or material asset row, a shader precache, or a stock icon name in source"
+    if hud_declared == "icon":
+        rows.append(_row("/hud", ["icon"], ["icon"] if icon else [], hud_how,
+                         "agrees" if icon else "declared_not_observed",
+                         None if icon else "the module promises an icon and ships or names none"))
+    elif hud_declared == "none":
+        rows.append(_row("/hud", ["none"], ["icon"] if icon else [], hud_how,
+                         "observed_not_declared" if icon else "agrees",
+                         "the module draws an icon and says it draws nothing" if icon else None))
+    elif icon:
+        rows.append(_row("/hud", [], ["icon"], hud_how, "observed_not_declared"))
+    else:
+        rows.append(_row("/hud", [], [], hud_how, "not_counted",
+                         "no icon byte found; declare hud: none if it draws nothing"
+                         if metadata["system"] in compositions.PICKUP_SYSTEMS else "no icon byte found"))
+    reach_candidates = [word for word in found if word in REACH_PROPOSABLE]
+    reach_proposal = reach_candidates[0] if reach_declared is None and len(reach_candidates) == 1 else None
+    hud_proposal = "icon" if hud_declared is None and icon else None
+
     for field, reason in UNREAD_FIELDS.items():
         rows.append(_row("/" + field, [], [], "nothing in this route", "not_counted", reason))
 
@@ -981,6 +1064,10 @@ def verify(directory: Path, *, workspace: str | None = None, base_listings=(), t
             result["proposal"]["registration"] = registration_proposal
         if registration_note:
             result["proposal_notes"].append(registration_note)
+        if reach_proposal:
+            result["proposal"]["reach"] = reach_proposal
+        if hud_proposal:
+            result["proposal"]["hud"] = hud_proposal
         if version_proposal:
             result["proposal"]["version"] = version_proposal
         if version_note:

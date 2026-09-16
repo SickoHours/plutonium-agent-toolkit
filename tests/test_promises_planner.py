@@ -64,8 +64,12 @@ class PlannerFixture(CompositionFixture):
         return [r for r in result["details"]["refusals"] if r["kind"] == kind]
 
     def warnings_of(self, result):
+        """The warnings this section's rules produce. No declaration here names a `reach`, so every
+        member also draws the plan's derived "reachable unknown" row; that row is
+        tests/test_reach.py's subject."""
         output = result.get("result", {}).get("output") or Path(result["receipt"]).parent
-        return json.loads((Path(output) / "plan.json").read_text())["warnings"]
+        rows = json.loads((Path(output) / "plan.json").read_text())["warnings"]
+        return [w for w in rows if ": reachable " not in w["message"] and ": hud " not in w["message"]]
 
 
 class ExclusiveRole(PlannerFixture):

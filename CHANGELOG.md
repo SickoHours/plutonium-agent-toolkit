@@ -7,6 +7,37 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- A declaration can now say how a player reaches a feature and whether they can see they have it,
+  and `module plan` derives reachability per composition and map. `reach` is one word from
+  `wall-or-box`, `machine`, `granted`, `drop`, `passive` and `menu`; `hud` is `icon` or `none`.
+  Both are optional, so nothing already declared changes, and both are echoed by `module inspect`
+  when named and recorded on every plan row. Two of the reach words need a second field to be true
+  at all and are refused at `/reach` without it: a `passive` rule beside `registration: none` (the
+  registration line is the only thing that shows a rule with no pickup ran) and a `machine` with no
+  `placements` row naming the site kind. **Reachability is a fact about a composition on a map, not
+  about a module**, so the plan derives per member `reachable` (`true`, `false` or `null` for
+  unknown) with a one-line `reason`, on the plan row and the `--json` summary row:
+  `wall-or-box`, `drop` and `passive` are the declaration's own promise; a `machine` is reachable
+  when the target's location table has a row for the site it needs or a fallback that places one,
+  not reachable when the need is refused or the fallback places nothing, and unknown without
+  `--target`; a `granted` member is reachable when it gives its own thing on player spawn or
+  connect (read from its compiled source, masked, so a commented-out grant is not a grant) or when
+  a dependency in the composition provides the perk, gum, power-up or piece of equipment it
+  provides. `menu` is not a player feature and says so. Every row that is not `true` adds one
+  warning naming the member, the map and the reason, and a `perks`, `gums`, `powerups` or
+  `equipment` member whose `hud` is `none` or absent adds one more: a pickup a player cannot see is
+  one they will report as broken. They are warnings and never refusals -- a person may want the
+  module in the pack for a machine they will place later. `module verify-declaration` reports a
+  `/reach` row from the byte footprint per word (`partial` at best: a signature is a footprint, not
+  proof the path runs, and a module can carry several -- a weapon is `wall-or-box` and `passive` at
+  once) and a `/hud` row from an image or material asset row, a shader precache or a stock icon
+  name; `--propose` fills `reach` only when exactly one of `wall-or-box`, `drop` and `passive` is
+  found, never `machine`, `granted` or `menu`, and fills `hud: icon` from the byte while never
+  proposing `hud: none`. Designed in `docs/MODULES.md`, "Whether a player can reach it: `reach` and
+  `hud`", from two played packs where every module was honestly game-tested and nothing was
+  reachable or visible. Offline verified on Linux (`tests/test_reach.py`); no native receipt, and
+  no route's status changed.
+
 - `module plan` and `module build` now say when a pinned member's folder has moved on since the
   pin. A member written as `{"name": …, "commit": …, "path": …}` records the commit the pack was
   built from; the planner asks git in that fetched directory, read-only and without fetching,

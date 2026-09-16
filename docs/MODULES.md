@@ -463,6 +463,14 @@ per target, which members' declared `placements` needs the table satisfies, whic
 which are refused; a refused need fails the plan as a `placements:<target>` check. No provider
 module is generated. Format and rules: [target-sets.md](target-sets.md).
 
+**What `plan` proves about reaching a feature.** Every plan row (and every `--json` summary row)
+carries `reachable` (`true`, `false` or `null` for unknown) and a one-line `reason`, derived from
+the member's `reach`, this composition and the placement outcome above. Two kinds of row land in
+`warnings` and never in `refusals`: `<id>: reachable false|unknown on <map>: <reason>` for every
+member a player cannot be shown to reach, and `<id>: hud none|absent; a <system> a player cannot
+see is one they will report as broken` for a `perks`, `gums`, `powerups` or `equipment` member that
+draws nothing. Both are specified under "Whether a player can reach it", below.
+
 ### Declared parameters: what a composition configures, and the `parameters` refusal
 
 A module declares the parameters a composition may set; a composition sets them per member; the

@@ -64,6 +64,11 @@ class PinStalenessFixture(CompositionFixture):
         plan = json.loads((Path(row["result"]["output"]) / "plan.json").read_text())
         return row["result"], plan
 
+    def warnings(self, plan):
+        """The pin's own warnings. No declaration here names a `reach`, so every member also draws
+        the plan's derived "reachable unknown" row; that row is tests/test_reach.py's subject."""
+        return [w for w in plan["warnings"] if ": reachable " not in w["message"]]
+
 
 class PinStalenessTests(PinStalenessFixture):
     def test_a_pin_at_the_folder_head_is_not_stale(self):
@@ -72,7 +77,7 @@ class PinStalenessTests(PinStalenessFixture):
         self.assertIsNone(plan["modules"][0]["stale"])
         self.assertEqual(summary["modules"][0]["stale"], plan["modules"][0]["stale"],
                          "the summary row carries what the plan row carries")
-        self.assertEqual(plan["warnings"], [], "an up-to-date pin says nothing")
+        self.assertEqual(self.warnings(plan), [], "an up-to-date pin says nothing")
 
     def test_later_commits_in_the_folder_are_counted_and_warned_once(self):
         pinned = self.repository("alpha")
@@ -82,7 +87,7 @@ class PinStalenessTests(PinStalenessFixture):
         self.assertEqual(plan["modules"][0]["stale"],
                          {"pinned": pinned, "newest": newest, "commits_between": 2})
         self.assertEqual(summary["modules"][0]["stale"], plan["modules"][0]["stale"])
-        self.assertEqual(plan["warnings"],
+        self.assertEqual(self.warnings(plan),
                          [{"module": "alpha",
                            "message": f"alpha is pinned at {pinned[:12]} and its folder has "
                                       f"2 newer commit(s), newest {newest[:12]}"}])
@@ -93,7 +98,7 @@ class PinStalenessTests(PinStalenessFixture):
         summary, plan = self.plan(self.member("alpha", pinned))
         self.assertIsNone(plan["modules"][0]["stale"], "only commits touching this folder count")
         self.assertEqual(summary["modules"][0]["stale"], None)
-        self.assertEqual(plan["warnings"], [])
+        self.assertEqual(self.warnings(plan), [])
 
     def test_a_pin_this_clone_does_not_know_is_a_reason_not_a_refusal(self):
         self.repository("alpha")
@@ -102,7 +107,7 @@ class PinStalenessTests(PinStalenessFixture):
         self.assertEqual((stale["pinned"], stale["newest"], stale["commits_between"]), ("b" * 40, None, None))
         self.assertIn("not a known commit", stale["reason"])
         self.assertEqual(summary["modules"][0]["stale"], stale)
-        self.assertEqual(plan["warnings"], [], "what git cannot answer is not a warning")
+        self.assertEqual(self.warnings(plan), [], "what git cannot answer is not a warning")
 
     def test_a_member_outside_any_repository_reports_a_reason(self):
         self.module("alpha")
@@ -111,7 +116,7 @@ class PinStalenessTests(PinStalenessFixture):
         self.assertEqual((stale["newest"], stale["commits_between"]), (None, None))
         self.assertIn("not inside a git repository", stale["reason"])
         self.assertEqual(summary["modules"][0]["stale"], stale)
-        self.assertEqual(plan["warnings"], [])
+        self.assertEqual(self.warnings(plan), [])
 
     def test_a_local_path_member_carries_no_stale_key_at_all(self):
         self.repository("alpha")
@@ -134,7 +139,7 @@ class PinStalenessTests(PinStalenessFixture):
         rows = {row["id"]: row for row in plan["modules"]}
         self.assertIsNone(rows["alpha"]["stale"])
         self.assertEqual(rows["beta"]["stale"], {"pinned": pinned, "newest": newest, "commits_between": 1})
-        self.assertEqual(plan["warnings"],
+        self.assertEqual(self.warnings(plan),
                          [{"module": "beta",
                            "message": f"beta is pinned at {pinned[:12]} and its folder has "
                                       f"1 newer commit(s), newest {newest[:12]}"}])

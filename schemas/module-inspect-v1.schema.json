@@ -736,6 +736,26 @@
             "not-ported"
           ]
         },
+        "reach": {
+          "description": "Present only when the declaration names reach: how a player gets to the feature on a map. 'passive' needs a registration other than none, since nothing else shows the rule ran, and 'machine' needs a placements row naming the site kind. The plan derives per-member reachable for its map from this and the composition, as a warning and never a refusal. Format: docs/MODULES.md.",
+          "type": "string",
+          "enum": [
+            "wall-or-box",
+            "machine",
+            "granted",
+            "drop",
+            "passive",
+            "menu"
+          ]
+        },
+        "hud": {
+          "description": "Present only when the declaration names hud: 'icon' when the module ships or names the icon a player sees for a pickup-shaped feature, 'none' when it draws nothing. The plan warns on a perks, gums, powerups or equipment member whose hud is none or absent. Format: docs/MODULES.md.",
+          "type": "string",
+          "enum": [
+            "icon",
+            "none"
+          ]
+        },
         "dependency_kinds": {
           "description": "Present only when at least one dependencies entry was an object: what each dependency is for, by id. A kind of null is an entry that did not say. Format: docs/MODULES.md.",
           "type": "object",
