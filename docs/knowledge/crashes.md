@@ -22,6 +22,7 @@ and the timestamp of the failure. A crash without those is an anecdote.
 | Host OOM kill | The process vanishes; the OS log shows an OOM kill | Host memory; not a bug in the mod or the game |
 | UI Lua error | `LUI_ERROR`, a `.lua:<line>` index error on a menu transition | Often a pre-existing menu path, unrelated to the mod being tested; preserve it separately |
 | Havok Script Panic | The engine's own script VM panic | Rare; usually a corrupt or mismatched compiled script |
+| Shape marker | A routine engine line that names a shape which will fail or has failed, not a fault line by itself | The script whose shape it names; read the marker to find the suspect, then a separate condition (a missing pass, a count) to decide whether it actually failed |
 
 An OpenAssetTools core dump is a tool crash, not a game crash. One clean startup is not a
 crash-free game. A passing offline suite before a crash is normal: most failures that reach a
@@ -56,7 +57,17 @@ regression that consumes the failed artifact was added; the preflight playbooks 
 | `COM_ERROR ... Unresolved external` naming a stock script the target map does not carry (`_zm_perk_divetonuke` on Beta 2 Der Riese) | The module was cut against a map that carried the script; the target's zones do not | `map-scripts:<script>` rows in the plan refuse an include or qualified call into a path the target map lacks; port the dependency or leave the member out |
 | `BG_AnimStateDef_Parse ... referenced missing <anim>` | Animation-state entry without a compiled tree reference | Add the reference to both compiled aitypes |
 | `Could not play rumble asset '<name>' because it was not registered and loaded` | A converted donor clip kept its compiled event tail; a `rmbnt#` entry names a rumble the donor game had and T6 does not; the match ends (`SV_Shutdown`) on first play | Rewrite the event tail at conversion: drop `rmbnt#` events, resolve `sndnt#` events through the weapon's notetrack sound map or drop them; poses and frames untouched |
+| `Unable to find client function: "init" in "scripts/zm/<name>"`, then `******* Linking to default stub function instead ******` | Not a fault on its own: the client VM calls `main()` and `init()` on every loose mod `.csc` and links a no-op stub for whichever is absent. One passing load printed 32 such lines, including the server twin for about twenty `main`-less scripts that work | Read it as a *shape marker* only — a `.csc` that defines `main()` but no `init()` is doing its work in the early pass (`gsc.md`). Scope the matcher to `scripts/zm`: every healthy load also prints the same line for `"soundNotify" in "clientscripts/mp/_dogs"` |
+| The same line **with zero `CSC Executed` lines in the slice** (a healthy load prints 14, or 18 when the pack carries two client halves of its own); the crash text has an empty `last gsc error message` and a `last gsc pos` naming a per-frame monitor loop | A client `main()` that does work. It runs in the early pass, before the client's own `_zm` rows exist, and the whole client-script pass dies there before the first `CSC Executed` line. Observed: `include_weapon` called from `main()` for weapon names the target map never registers, reaching native `addzombieboxweapon` — the registration-time twin of `box-weapon-not-found`. No script error is raised, so neither crash-text field names the site | Leave `main()` empty and do the work in `init()`, and check that every weapon name the script includes exists on the target map. `csc-main-body:<target>` rows in `module plan` and `project plan` refuse the shape offline. Do not name a script from `last gsc pos` when `last gsc error message` is empty |
 | "Out of memory" dialog at map load | Preloaded sound-bank reservation plus the fastfile's virtual block | Stream large samples losslessly; keep critical one-shots loaded |
+
+Neither of the two rows above is in the shipped signature data yet. Row `csc-main-only` (class
+`shape-marker`, regex `Unable to find client function: "init" in "scripts/zm/([a-z0-9_]+)"`, fix
+"leave `main()` empty and register from `init()`") is filed in the maintainer's generator and lands
+with the next export. `client-script-pass-died` is a *pairing* — that marker plus zero
+`CSC Executed` lines in the slice — which the line-oriented matcher cannot express, so it is
+documented here only. The `Exception Address` that came with them is one observed address on one
+client build and stays a corroborating field, never the key.
 
 The rows are data too: `src/plutonium_agent_toolkit/knowledge/crash-signatures.json` holds each
 as a regex with its class, cause and fix, and `pat knowledge signature --log <slice> --json`

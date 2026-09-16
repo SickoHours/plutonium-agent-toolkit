@@ -27,6 +27,75 @@ Every entry states what shipped, on which platform it was verified, and what rem
   client-half remedy and the unconditional rule beside the existing `_zm::init` redirect. The
   shipped `crash-signatures.json` is generator output and is unchanged; the maintainer's next export
   carries the amended row. Offline verified on Linux; no game was loaded.
+- A module can say where a person finds it and whether its port works yet. `module.json` takes an
+  optional `system`, one of `pack-a-punch`, `perks`, `hud`, `weapons`, `powerups`, `box`,
+  `core-rules`, `gums`, `bosses`, `equipment`, `audio` or `map`: the player-facing system a module
+  would be shelved under, a browse word the planner never reads and the checker cannot see in bytes.
+  It is orthogonal to `exclusive`, which is what a module owns outright, and to `category`/`kind`,
+  which stay the build taxonomy. `module.json` also takes an optional `port_status`: `finished`
+  (what a declaration that does not name the field already means, so nothing declared before this
+  change is affected), `loads-but-wrong` for a package that builds and loads and behaves wrong, or
+  `not-ported` for a declaration whose port has not been made, so unfinished work stays visible in a
+  bank instead of out of it. An unknown word is refused at `/system` or `/port_status`.
+  `module inspect` echoes each field only when the declaration names it, and every `plan.json` row
+  carries both, with `null` and `finished` for a declaration that names neither. `module plan` and
+  `module build` refuse a member whose `port_status` is not `finished` with a new refusal kind
+  `port_status` (carrying `status` and a pointer to the member), collected beside the run's other
+  refusals, unless that member is written as an object naming the status under `accept`
+  (`{"path": "../mark3", "accept": ["loads-but-wrong"]}`); `accept` takes 1 to 2 distinct statuses
+  from the list minus `finished`, a member brought along as a dependency is refused the same way,
+  `accept` on a finished member is harmless, and a nested pack's members carry the `accept` their own
+  `composition.json` wrote rather than the outer pack's. `module inspect` of a composition echoes each
+  member's `accept`, empty when the member names none. Design in `docs/MODULES.md`, "Where a person
+  finds it, and whether it works yet". Verified by offline unit tests on Linux
+  (`tests/test_promises_systems.py`); no native receipt and no route status changes. Neither field is
+  derived from or checked against a module's bytes: `system` is a shelf word and `port_status` is a
+  person's verdict, and no shelf, library or contribution form that would group by `system` ships
+  here.
+- `pat module verify-declaration <module dir> --json` reads one module's own bytes back against its
+  declaration and reports every promise beside what the files say, so a library can admit someone
+  else's module on evidence rather than on trust. The route is inert: no job directory outlives the
+  call, no `--output`, no backend, no network. Each row carries the field as a JSON Pointer, what was
+  declared, what was observed, the method in words and an outcome, and the method's honest ceiling is
+  the row's own outcome: `provides.scripts`, `provides.rawfiles`, `provides.localize`,
+  `replaces.functions` and a `call`, `name` or `service` dependency kind are read in full; a project
+  recipe's weapons, its models and effects, a perk or gum id found as a string literal, an `exclusive`
+  role footprint and the `resource_contract.hud` count are `partial` by construction and never
+  `agrees`; a `runtime` dependency, `menu_route`, `tags`, `placements`, `parameters`, `bases` and
+  `maps` are `not_counted` with the reason. `replaces.files` classifies every staged target against
+  the base's own asset listings (`--base-listings`, or the foundation's `base_listings` with
+  `--workspace` and `--target`) and the shipped per-map script and WeaponDef tables, and reports
+  `stages.base_owned` with its evidence, `stages.engine_tables` (an `accuracy/` path overrides nothing
+  a pack can see, so no ownership is claimed for it) and `stages.new_in_base_namespace` regardless;
+  where neither a listing nor a table is on the machine the path is `not_counted` and the row names
+  the evidence that would decide it. `--strict` exits 1 with `input_invalid` and the whole report
+  under `details.report` when any row is `declared_not_observed` or `observed_not_declared`, which is
+  what a gate wants; `--propose` prints the declaration fields the observed side would fill, never
+  removing a declared name, and leaves `exclusive` and `service` to the author because a role and a
+  service are promises, not observations. Protocol `pat.module-verify/1`, schema
+  `schemas/module-verify-v1.schema.json`. Offline tests on Linux (`tests/test_module_verify.py`); no
+  native receipt, and the route status is `implemented`. A row measures bytes and never claims the
+  module works. The `registration` row lands here as well: `self` is `partial` when the `<id> >> registered` literal is in a server
+  script and `declared_not_observed` when it is not, `entry` agrees on the entry field alone, `none` is
+  `observed_not_declared` when the module prints anyway, and an absent field is `not_counted` with the other
+  spelling it saw, or `observed_not_declared` with `--propose` filling `self`.
+- An adapter recipe's `prepared` path now resolves the same way for the planner and for the builder.
+  An absolute path is unchanged; a relative one is resolved against the module directory first and
+  then the workspace root when `--workspace` is given, first directory wins, and when neither is one
+  the inputs are absent and the plan row names both candidates tried. The copy handed to the builder
+  states an absolute `prepared` in every case, falling back to the module-directory reading when
+  nothing resolved, so the builder never resolves a relative path against the job directory. The adapter plan row gains
+  `prepared_resolved`, `prepared_source` (`recipe`, `module-dir`, `workspace`), `prepared_candidates`
+  and `recipe_resolved`. Because the builder reads the recipe from disk by path, `module build` now
+  writes a resolved copy beside the builder's output directory —
+  `<job>/adapters/<id>.recipe.resolved.json`, the same document with `prepared` and every
+  loose-script `source` absolute — and passes that path in the builder argv; a builder resolving
+  `recipe.parent / source` is unaffected, since joining an absolute path returns it unchanged. Before
+  this the planner tested a relative `prepared` against the caller's working directory and the
+  builder ran with the job's output directory as its own, so a workspace-relative recipe planned as
+  "prepared absent" — silently dropping its alias table and clip list — and then failed the build
+  with the builder's own traceback, depending on where `pat` was run from. Offline verified on Linux;
+  no game was loaded.
 
 - The planner reads two of those promises and refuses on them. `ownership`: a member that stages a
   path the base or the target map already carries and does not list it under `replaces.files` is
@@ -84,6 +153,25 @@ Every entry states what shipped, on which platform it was verified, and what rem
   anything else, including a source with no guard at all, is `not_counted`. `adapt` gains the matching `map-guard` pattern: a
   member whose guard names another map is a port, not a widening, because declaring the target
   would not make a returning `main()` run. Offline verified on Linux; no game was loaded.
+- `csc-main-body:<target>`: a new per-script check that refuses a T6 client script whose `main()`
+  has a non-empty body, in `module plan`, `module build` and `project plan`. The client VM calls
+  both roots of every loose mod `.csc` in two passes over all of them — every script's `main()`
+  first, then every script's `init()` — so a `main()` body runs before the client's own `_zm` rows
+  exist and before any script's `init()`, and the whole client-script pass dies there with zero
+  `CSC Executed` lines, no script error, and a crash-text `last gsc pos` naming an unrelated
+  per-frame loop. The row's remedy is the shape the shelf already holds: leave `main()` empty and do
+  the work in `init()`, which the client VM calls after its own rows. An empty or absent `main()`
+  passes, since the engine links a no-op stub for an absent root and around twenty working scripts
+  rely on it; a `.gsc` is `not_counted`, because a server `main()` runs after the server's own rows
+  and may do work; another title is `not_counted`. `docs/knowledge/gsc.md` gains "The client VM's
+  two passes" with the console evidence, and `docs/knowledge/crashes.md` two signature rows,
+  `csc-main-only` (the routine stub-link line, a shape marker and not a fault on its own)
+  and `client-script-pass-died` (that line with zero `CSC Executed` lines in the slice). The shipped
+  `knowledge/crash-signatures.json` is generator output and carries neither row: `csc-main-only` is
+  filed in the maintainer's generator and lands with the next export, and `client-script-pass-died`
+  is a pairing the line-oriented matcher cannot express, so it is documented only. Offline unit tests on Linux
+  (`tests/test_checks.py`, `tests/test_compositions.py`, `tests/test_dev_routes.py`); no native
+  receipt, and no route status changes.
 - A module can declare what it *promises*, and the declaration reader checks it. `replaces.files`
   is widened from GSC/CSC scripts to any relative zone path the base or the map already carries (a
   table, a visionset, a `weapons/<name>` file), still lowercase, forward slashes, deduplicated and
