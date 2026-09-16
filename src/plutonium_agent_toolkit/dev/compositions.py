@@ -926,7 +926,20 @@ ANSI = re.compile(r"\x1b\[[0-9;]*m")  # an unlinker listing captured from a colo
 SHADOWABLE_TYPES = ("image", "material")
 
 
-def _base_owned(listings: list[Path]) -> tuple[set[str], dict[str, set[str]]]:
+LISTING_SUFFIXES = ("-list.txt", ".txt", "-list.csv", ".csv")
+
+
+def listing_zone_stem(path: Path) -> str:
+    """The zone a listing file was written for: its name without the suffix ``listing_for_load``
+    found it by. That stem is what says whether the map or the rest of the base carries a name."""
+    name = path.name
+    for suffix in LISTING_SUFFIXES:
+        if name.lower().endswith(suffix):
+            return name[: -len(suffix)]
+    return path.stem
+
+
+def _base_owned(listings: list[Path]) -> tuple[set[str], dict[str, set[str]], dict[str, str]]:
     """Asset names the base zones already carry, read from plain listings (one ``type,name``
     row per line, the shape an unlinker ``--list`` prints). A reference row (``type, ,name``)
     means the zone only points at the asset, so it is skipped: the base has no copy to win
@@ -934,13 +947,16 @@ def _base_owned(listings: list[Path]) -> tuple[set[str], dict[str, set[str]]]:
     wins and no decision is needed. Listings are read line by line and capped at 200000 rows
     and 64 MiB.
 
-    Returns ``(names, shadowable)``: every ``type,name`` casefolded, which is what collision
-    adjudication compares, and the exact-case names per ``SHADOWABLE_TYPES``, which is what the
-    zone's exclusion list is written from. The linker matches an ignored name byte for byte, so
-    the second set keeps the listing's own casing."""
+    Returns ``(names, shadowable, zones)``: every ``type,name`` casefolded, which is what
+    collision adjudication compares, the exact-case names per ``SHADOWABLE_TYPES``, which is what
+    the zone's exclusion list is written from (the linker matches an ignored name byte for byte, so
+    that set keeps the listing's own casing), and the zone stem each casefolded name was first seen
+    in, which is what an ownership refusal names the owner from."""
     names: set[str] = set()
     shadowable: dict[str, set[str]] = {kind: set() for kind in SHADOWABLE_TYPES}
+    zones: dict[str, str] = {}
     for path in listings:
+        stem = listing_zone_stem(path)
         if path.stat().st_size > 64 * 1024 * 1024:
             raise Failure(INPUT_LIMIT, f"Base listing is larger than 64 MiB: {path.name}")
         rows = 0
@@ -953,10 +969,12 @@ def _base_owned(listings: list[Path]) -> tuple[set[str], dict[str, set[str]]]:
                 if rows > 200_000:
                     raise Failure(INPUT_LIMIT, f"Base listing has more than 200000 rows: {path.name}")
                 kind, name = m.group(1), m.group(2).strip()
-                names.add(f"{kind},{name}".casefold())
+                key = f"{kind},{name}".casefold()
+                names.add(key)
+                zones.setdefault(key, stem)
                 if kind in shadowable:
                     shadowable[kind].add(name)
-    return names, shadowable
+    return names, shadowable, zones
 
 
 def zone_name_of(load: Path) -> str:
@@ -1125,9 +1143,9 @@ def load_composition(path: Path, job: Job, depth: int = 0, seen: tuple = ()) -> 
         members.append(member)
     loads = [_relative_file(text, src.parent, job, "Load") for text in comp["loads"]]
     listings = [_relative_file(text, src.parent, job, "Base listing") for text in comp["base_owned"]]
-    base_owned, base_shadowable = _base_owned(listings)
+    base_owned, base_shadowable, base_owned_zone = _base_owned(listings)
     return comp | {"members": members, "loads": loads, "base_owned": base_owned, "base_shadowable": base_shadowable,
-                   "base_listings": listings, "source": src}
+                   "base_owned_zone": base_owned_zone, "base_listings": listings, "source": src}
 
 
 def flatten(comp: dict, job: Job, target: tuple[str | None, str | None] | None = None,
@@ -1144,6 +1162,7 @@ def flatten(comp: dict, job: Job, target: tuple[str | None, str | None] | None =
     decisions: list[dict] = list(comp["decisions"])
     comp.setdefault("base_owned", set())
     comp.setdefault("base_shadowable", {kind: set() for kind in SHADOWABLE_TYPES})
+    comp.setdefault("base_owned_zone", {})
     comp.setdefault("base_listings", [])
     header: list[str] = list(comp["zone_header"])
     for member in comp["members"]:
@@ -1169,6 +1188,8 @@ def flatten(comp: dict, job: Job, target: tuple[str | None, str | None] | None =
             comp["base_owned"] |= member["composition"].get("base_owned", set())
             for kind, inner_names in (member["composition"].get("base_shadowable") or {}).items():
                 comp["base_shadowable"].setdefault(kind, set()).update(inner_names)
+            for key, stem in (member["composition"].get("base_owned_zone") or {}).items():
+                comp["base_owned_zone"].setdefault(key, stem)
             comp["base_listings"] += [p for p in member["composition"].get("base_listings", []) if p not in comp["base_listings"]]
     return modules, loads, decisions, header
 
@@ -1190,7 +1211,8 @@ def _order(modules: list[dict]) -> list[str]:
 
 
 REFUSAL_KINDS = ("probe", "test_only", "duplicate_id", "missing_dependency", "conflict", "unqualified_base", "unqualified_map",
-                 "private_payload", "cycle", "budget", "replacement", "service", "checks", "parameters")
+                 "private_payload", "cycle", "budget", "replacement", "service", "checks", "parameters",
+                 "ownership", "exclusive")
 
 
 def _refusal(kind: str, message: str, hint: str = "", modules=(), field: str | None = None, **extra) -> dict:
@@ -1268,6 +1290,29 @@ def resolve(comp: dict, modules: list[dict], allow_unqualified: bool = False) ->
             refusals.append(_refusal("private_payload", f"{m['id']} is distribution private and its seed package is not on this machine (missing: {m['seed'].get('missing')})",
                                      "Others can read what a private module provides from its manifest; building a pack with it needs the package beside the manifest.",
                                      modules=[m["id"]], missing=m["seed"].get("missing")))
+    # A role with room for exactly one owner, owned twice. `conflicts` cannot express this: it
+    # names one other module, so a role with four occupants needs six hand-kept pairs and knows
+    # nothing of a fifth occupant from someone else's repository (docs/MODULES.md, "Exclusive
+    # roles"). The two honest outcomes travel as `resolutions` so a review screen draws them:
+    # keep the newest member (the composition is its member list with one entry removed) or
+    # refuse. There is no owner decision -- a role is not a file, and "both, with one first" is
+    # the ambiguity the role exists to remove.
+    owners: dict[str, list[tuple[int, str]]] = {}
+    for i, m in enumerate(modules):
+        for role in m.get("exclusive") or []:
+            owners.setdefault(role, []).append((i, m["id"]))
+    for role, found in sorted(owners.items()):
+        if len(found) < 2:
+            continue
+        ids = [mid for _, mid in found]
+        row = _refusal("exclusive", f"two members own {role}: {', '.join(ids)}",
+                       "A pack has one owner per role. Keep one, or drop the other from the composition.",
+                       modules=ids, field=f"/modules/{found[-1][0]}/exclusive", role=role,
+                       resolutions=[{"kind": "replace", "keep": ids[-1], "drop": ids[:-1]}, {"kind": "refuse"}])
+        # `_refusal` sorts `modules`; here the order is the promise (composition order, so the
+        # last member is the most recently added one a `replace` resolution keeps).
+        row["modules"] = ids
+        refusals.append(row)
     order: list[str] = []
     try:
         # Only the members whose dependencies are present can be ordered; a missing dependency
@@ -1571,6 +1616,125 @@ def service_refusals(modules: list[dict], loaded: dict[str, tuple], undecided: l
     return rows
 
 
+OWNERSHIP_HINT = ("Declare the path under replaces.files if this module is meant to overwrite it, or drop the file "
+                  "from the recipe.")
+
+
+def _staged_targets(m: dict, loaded: dict[str, tuple]) -> list[str]:
+    """Every zone path a member stages, casefolded and deduplicated.
+
+    A recipe's compiled scripts and its delivered loose assets are staged; a withheld row
+    (``"deliver": false``) is not, because it lands under ``raw/`` with no zone line and overwrites
+    nothing. A seed is judged on the roots its pack names, since a root is what the pack claims a
+    name for and a non-root embedded row is a copy the linker took from the base. An adapter is
+    judged on its loose scripts and the rawfiles its recipe roots."""
+    targets: list[str] = []
+    if m["recipe"] is not None and m["id"] in loaded:
+        _data, compiled, loose, _loads = loaded[m["id"]]
+        targets += [target.as_posix() for _source, target, _instance in compiled]
+        targets += [target.as_posix() for _source, target, _type, _name in loose]
+    elif m["seed"] and not m["seed"].get("private"):
+        targets += [row.split(",", 1)[1] for row in m["seed"]["roots"] if row.startswith(("rawfile,", "script,"))]
+    elif m.get("adapter"):
+        targets += [script["target"] for script in m["adapter"]["scripts"]]
+        targets += [row.split(",", 1)[1] for row in m["adapter"]["embedded"] if row.startswith("rawfile,")]
+    out, seen = [], set()
+    for target in targets:
+        key = target.casefold()
+        if key not in seen:
+            seen.add(key)
+            out.append(key)
+    return out
+
+
+def _ownership_evidence(comp: dict, foundation: str) -> dict:
+    """The evidence an ownership decision reads, gathered once per plan: the base's own listings
+    with the zone each name came from, the target map's compiled scripts from
+    ``knowledge/map-scripts.json`` on this foundation, and its native WeaponDefs."""
+    from . import knowledge
+    try:
+        table = knowledge.load("map-scripts.json")["maps"].get(comp["map"]) or {}
+    except Failure:
+        table = {}
+    scripts = {path.replace(chr(92), "/").lower() for path in table.get("scripts", [])} \
+        if table.get("foundation") == foundation else set()
+    return {"owned": comp.get("base_owned") or set(), "zones": comp.get("base_owned_zone") or {},
+            "scripts": scripts, "weapons": native_weapons(comp["map"], foundation), "map": comp["map"]}
+
+
+def _base_owner_of(path: str, evidence: dict) -> tuple[str, str] | None:
+    """Who carries ``path`` (casefolded, forward slashes) and on what evidence, or None.
+
+    Two sources, both facts: the base's own asset listings (``listing``, where the zone that named
+    it decides between the map and the rest of the base) and the shipped per-map tables
+    (``table``, always the map's). ``MAP_OWNED_PREFIXES`` is deliberately not read here. A prefix
+    is a guess about ownership -- a module's *new* animation tree under ``animtrees/`` matches it
+    and overwrites nothing -- and only a fact may refuse a single member."""
+    for key in (f"rawfile,{path}", f"script,{path}"):
+        if key in evidence["owned"]:
+            return _listing_owner(evidence["zones"].get(key), evidence["map"]), "listing"
+    if path.replace(chr(92), "/") in evidence["scripts"]:
+        return "map", "table"
+    if path.startswith("weapons/"):
+        key = "weapon," + path[len("weapons/"):]
+        if key in evidence["weapons"]:
+            return "map", "table"
+        if key in evidence["owned"]:
+            return _listing_owner(evidence["zones"].get(key), evidence["map"]), "listing"
+    return None
+
+
+def _listing_owner(zone: str | None, map_id: str) -> str:
+    """A listing's zone stem says who carries the name: the map's own zones are named after the
+    map, and everything else a base loads is the base's."""
+    return "map" if zone and zone.casefold().startswith(map_id.casefold()) else "base"
+
+
+def ownership_refusals(modules: list[dict], loaded: dict[str, tuple], comp: dict, foundation: str,
+                       services: list[dict]) -> list[dict]:
+    """A member that stages a path the base or the target map already carries and does not declare
+    it under ``replaces.files`` (docs/MODULES.md, "File ownership").
+
+    One member is enough. Overwriting the base is a promise about the game whether or not a second
+    member does the same, so this refusal does not wait for a collision. Each row names the member,
+    the path, what owns it and the evidence that says so, and the shelf module that provides the
+    path when there is one, so the two honest fixes -- declare the overwrite, or depend on the
+    service and ship no copy -- are both in the row."""
+    evidence = _ownership_evidence(comp, foundation)
+    rows: list[dict] = []
+    for index, m in enumerate(modules):
+        declared = {path.casefold() for path in m.get("replaces", {}).get("files", [])}
+        for path in _staged_targets(m, loaded):
+            found = _base_owner_of(path, evidence)
+            if found is None or path in declared:
+                continue
+            owner, how = found
+            service = _service_for(services, "rawfiles", path) or _service_for(services, "scripts", path)
+            service = service if service and service["id"] != m["id"] else None
+            rows.append(_refusal("ownership",
+                                 f"{m['id']} stages {path}, which the {owner} already carries, and does not declare it "
+                                 "under replaces.files",
+                                 f"Depend on {service['id']} and ship no copy: a file two members would both overwrite "
+                                 "is owned by a service module." if service else OWNERSHIP_HINT,
+                                 modules=[m["id"]], field=f"/modules/{index}/replaces/files", path=path, owner=owner,
+                                 evidence=how, service=service["id"] if service else None))
+    return rows
+
+
+def declared_not_owned_warnings(modules: list[dict], comp: dict, foundation: str) -> list[dict]:
+    """A path a member declares under ``replaces.files`` that no listing and no shipped table says
+    the base or the map carries. A plan warning, never a refusal: the declaration can be right
+    about a zone whose listing is not on this machine. With no listing at all the plan says
+    nothing, because then it cannot tell."""
+    if not comp.get("base_listings"):
+        return []
+    evidence = _ownership_evidence(comp, foundation)
+    return [{"module": m["id"], "target": path,
+             "message": "Declared replaced file is not carried by the base's listings or the map's tables"}
+            for m in modules for path in m.get("replaces", {}).get("files", [])
+            if _base_owner_of(path.casefold(), evidence) is None]
+
+
 def _backends(compiled: list, adapters_present: bool = False, workspace: str | None = None) -> list[dict]:
     checks = []
     for name in (["gsc"] if compiled else []) + ["linker", "unlinker"]:
@@ -1666,10 +1830,15 @@ def _derive_base_listings(comp: dict, loads: list[Path], args, job: Job) -> None
         if len(known) + len(derived) > MAX_BASE_LISTINGS:
             raise Failure(INPUT_LIMIT, f"A composition reads at most {MAX_BASE_LISTINGS} base listings; "
                                        f"{len(known)} declared and {len(derived)} derived from the loads is more")
-        names, shadowable = _base_owned([job.input(path) for path in derived])
+        names, shadowable, zones = _base_owned([job.input(path) for path in derived])
         comp["base_owned"] = (comp.get("base_owned") or set()) | names
         for kind, found_names in shadowable.items():
             comp.setdefault("base_shadowable", {}).setdefault(kind, set()).update(found_names)
+        # Which zone carries a name decides whether an ownership refusal says the map or the base;
+        # a name the composition's own listings already placed keeps that placement.
+        placed = comp.setdefault("base_owned_zone", {})
+        for key, stem in zones.items():
+            placed.setdefault(key, stem)
         comp["base_listings"] = known + derived
     comp["base_loads"] = base_loads
 
@@ -1756,8 +1925,19 @@ def execute(args, job: Job) -> dict:
         raise Failure(INPUT_LIMIT, f"A composition holds at most {projects.MAX_SCRIPTS} scripts, {projects.MAX_ASSETS} assets, {projects.MAX_LOADS} loads and {MAX_MODULES} seeds")
     _derive_base_listings(comp, loads, args, job)
     decided, undecided, refused = collisions(modules, loaded, decisions, comp.get("base_owned"))
+    # The shelf is read once: a replacement, ownership or service refusal all name the module to
+    # depend on instead from the same rows.
+    shelf = shelf_services(getattr(args, "workspace", None))
     late_refusals: list[dict] = []
     if refused:
+        for row in refused:
+            if row["kind"] != "file":
+                continue
+            # A file two members both declare is owned by the service, never by either member, so
+            # the hard refusal says which module they should both depend on.
+            path = row["collision"].split(":", 1)[1]
+            owner = _service_for(shelf, "rawfiles", path) or _service_for(shelf, "scripts", path)
+            row["service"] = owner["id"] if owner and owner["id"] not in row["modules"] else None
         late_refusals.append(_refusal("replacement", "Overlapping declared replacements cannot be resolved by an owner decision",
                                       "Two members declare the same replacement target; one of them must stop replacing it.",
                                       modules=[mid for row in refused for mid in row["modules"]], collisions=refused))
@@ -1765,7 +1945,24 @@ def execute(args, job: Job) -> dict:
     # The native-WeaponDef rule is a declaration check: the shipped per-map table names what the
     # map already registers, and a composition's own base listings add to it.
     owned_weapons = (comp.get("base_owned") or set()) | native_weapons(comp["map"], foundation)
-    services = service_refusals(modules, loaded, undecided, owned_weapons, shelf_services(getattr(args, "workspace", None)))
+    services = service_refusals(modules, loaded, undecided, owned_weapons, shelf)
+    # A member that stages a base-owned path and does not declare it refuses on its own: the
+    # overwrite does not wait for a second member, so this is not a collision decision.
+    ownership = ownership_refusals(modules, loaded, comp, foundation, shelf)
+    late_refusals += ownership
+    warnings += declared_not_owned_warnings(modules, comp, foundation)
+    if ownership:
+        # One path, one report: an ownership row already names the path, its owner and the service.
+        reported = {row["path"] for row in ownership}
+        services = [row for row in services if not (row["what"] == "map-owned table" and row["collision"] in reported)]
+    # The older tag is read as the typed mark for one release; a refusal that leaned on it asks
+    # for the field.
+    named = ({row["service"] for row in ownership} | {row.get("service") for row in refused}) - {None}
+    for sid in sorted(named):
+        entry = next((row for row in shelf if row["id"] == sid), None)
+        if entry is not None and not entry["service"] and "shared-service" in entry["tags"]:
+            warnings.append({"module": sid, "message": "The shared-service tag is read as service: true for one release; "
+                                                       "declare service: true"})
     if services:
         served = {row["collision"] for row in services}
         undecided = [row for row in undecided if row["collision"] not in served]
