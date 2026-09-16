@@ -128,6 +128,8 @@ adapter recipe is named under `recipe` and told apart by its own shape.
 | `exclusive` | no | Role words from a fixed list (`hud`, `box`, `loadscreen`, `boss`, `perk-machines`, `perk-art`) this module owns outright; two members owning one role is a refusal of kind `exclusive` (below) |
 | `service` | no | `true` when the module exists to own shared things (a map table, a sound bank, a role) so others depend on it and ship no copy; the planner names it in `ownership`, `replacement` and `service` refusals. Must provide something shareable and no weapon |
 | `registration` | no | Who prints the module's one console line `<id> >> registered` at init: `self` (its own script), `entry` (the generated entry script, for an entry-managed module), or `none`. The plan derives `expected_lines` from it and `test plan` checks each line in the load phase ("The registration line", below) |
+| `system` | no | The player-facing system a person finds the module under, one of `pack-a-punch`, `perks`, `hud`, `weapons`, `powerups`, `box`, `core-rules`, `gums`, `bosses`, `equipment`, `audio`, `map`; a browse word, never a resolution rule ("Where a person finds it", below) |
+| `port_status` | no | `finished` (default), `loads-but-wrong` or `not-ported`; a member that is not `finished` is refused (kind `port_status`) unless the composition's member object names it under `accept` |
 | `provides` | no | What the module registers, by kind: `weapons`, `perks`, `gobblegums`, `powerups`, `equipment`, `localize`, `soundbanks`, `scripts`, `models`, `effects`, `rawfiles`, `aliases` (the sound alias names a bank module owns), each a list of up to 4096 names. Two modules providing the same name is a decision (below); a `rawfiles` name is a file target and is listed once, as the file collision. A seed's manifest fills this in; for the kinds the manifest derives (`weapons`, `localize`, `soundbanks`, `rawfiles`, `models`, `effects`) a declaration may narrow the manifest's list and never add to it, even when the manifest lists none of that kind; the other kinds are the declaration's |
 | `resource_contract` | no | Whole numbers the module adds to the engine's budgets: `threads`, `entities`, `hud`, `network_fields`. Missing fields count as 0. Summed across the composition and checked against the composition's `budget` |
 | `menu_route` | no | How a person reaches the feature in game, at most 200 characters; carried into the plan for the handoff |
@@ -284,7 +286,7 @@ builder the plan lists `adapter_builder` as unavailable and the build refuses be
 | `origin`, `donor` | no | The same two facts as on a module, for a pack that is one thing ("Ghosts weapons on TranZit" has origin `ghosts`); a pack of mixed origins leaves them out and the plan carries each member's own |
 | `base` | yes | The base token every module must declare |
 | `map` | yes | One concrete map id. A composition is planned for one map; plan another composition for another map |
-| `modules` | yes | 1 to 128 members. A member is a relative path (forward slashes, from the composition's directory) to a directory holding `module.json`, **or** a directory holding another `composition.json` (its modules are flattened in; it must declare the same base and map; nesting is bounded), **or** an object: `{"path": …, "role": "base"}` marks the one member the others attach to; `{"name": "<github-owner>/<id>", "commit": "<40 hex>", "path": …}` records a published module pinned at a commit, with the local directory it was fetched into; `{"path": …, "parameters": {"cadence": "timer"}}` sets that member's declared parameters (below), and a member that is a nested composition takes none. Listing order does not matter; the plan orders by dependencies, base members first |
+| `modules` | yes | 1 to 128 members. A member is a relative path (forward slashes, from the composition's directory) to a directory holding `module.json`, **or** a directory holding another `composition.json` (its modules are flattened in; it must declare the same base and map; nesting is bounded), **or** an object: `{"path": …, "role": "base"}` marks the one member the others attach to; `{"name": "<github-owner>/<id>", "commit": "<40 hex>", "path": …}` records a published module pinned at a commit, with the local directory it was fetched into; `{"path": …, "parameters": {"cadence": "timer"}}` sets that member's declared parameters (below), and a member that is a nested composition takes none; `{"path": …, "accept": ["loads-but-wrong"]}` composes a member whose `port_status` is not `finished` knowingly ("Where a person finds it", below). Listing order does not matter; the plan orders by dependencies, base members first |
 | `loads` | no | Relative paths to fastfiles the linker loads for asset lookup: the base's zones. They may live beside the pack |
 | `zone_header` | no | Linker metadata lines the base needs at the top of the zone (Zombies Declassified Beta 2 needs its `>level.ipak_read` rows); at most 32 |
 | `budget` | no | Whole-number ceilings for the summed resource contracts. Absent means the totals are reported and not enforced. A number here is a decision you made after measuring, not a guess |
@@ -316,7 +318,7 @@ row's, and a message with more rows says how many follow. Kinds: `probe`, `test_
 `duplicate_id`, `missing_dependency` (with `dependency` and `by`), `conflict`,
 `unqualified_base` and `unqualified_map` (with `declared` and `wanted`), `private_payload`,
 `cycle`, `budget` (with `resource`, `total`, `bound`), `replacement` (with `collisions`),
-`parameters` (below, with `parameter`), `service` (below) and `checks` (with `failed`, the ids
+`parameters` (below, with `parameter`), `service` (below), `port_status` (with `status`, under "What a module promises") and `checks` (with `failed`, the ids
 of the failed check rows). A caller that brings dependencies along reads every
 `missing_dependency` row at once instead of re-planning per message.
 
@@ -932,8 +934,10 @@ map, or moves a byte in a package.
 | `service` | `true` | "I exist to own shared things; depend on me and ship no copy" | Partially: the module provides at least one shareable thing and registers no weapon of its own |
 | `dependencies[]` entry as an object | `{id, kind, why?}` | "I need this module *because* I call it / name it / use what it owns / the engine needs it" | `call`, `name` and `service` fully; `runtime` is declaration-only and must say why |
 | `registration` | `self`, `entry` or `none` | "My registration prints `<id> >> registered` to the console" (or the pack's entry prints it for me, or I print nothing) | The literal in source for `self`; the build's own output for `entry`; whether the line reached the console is the load's evidence, never the checker's |
+| `system` | one of twelve system words | "A player looks for me under this system" | Nothing; a browse word, `not_counted` |
+| `port_status` | `finished`, `loads-but-wrong`, `not-ported` | "I work as intended here" or "I load and misbehave" or "I am not ported yet" | Nothing from bytes; a person's verdict, read by the planner |
 
-Five fields, one of them a widening of an existing one. Nothing else was needed for the behaviours
+Seven fields, one of them a widening of an existing one. Nothing else was needed for the behaviours
 the audit measured, and nothing else is designed here: placement, parameter consumers, versioning
 and runtime conflict detection stay where `docs/MODULES.md` already puts them.
 
@@ -1100,6 +1104,58 @@ bank the second bin was mostly one sound bank depended on by every GobbleGum, wh
 edge and always was; only the third bin is a question for the author. The planner treats every
 kind alike for ordering and presence; the kind changes what can be checked, never what is built.
 
+### Where a person finds it, and whether it works yet: `system` and `port_status`
+
+Two more one-word fields, both with a closed list, both optional, both filled from evidence later
+and never required of an existing declaration.
+
+**`system`** is the player-facing system of T6 Zombies the module belongs to: the shelf a person
+would look under, not the file type it is built from. `category` and `kind` are the toolkit's
+build taxonomy and stay; a bank organised by them puts ninety-odd modules under `scripts`, which
+is a junk drawer by a player's standard. One value per module, from:
+
+`pack-a-punch`, `perks`, `hud`, `weapons`, `powerups`, `box`, `core-rules`, `gums`, `bosses`,
+`equipment`, `audio`, `map`.
+
+A module that spans two picks the one a player would look under (a perk that also changes the
+box is `perks`). `system` is orthogonal to `exclusive`: a role is what a module owns outright and
+refuses a second owner; a system is where a person finds it and refuses nothing. A library, a
+shelf and a contribution form group by `system`; the planner ignores it. The checker cannot see
+it in bytes and says so (`not_counted`).
+
+**`port_status`** says whether a ported module does what it is meant to do on its target:
+
+| Value | Meaning |
+| --- | --- |
+| `finished` | the module behaves as intended on the targets it declares; the default when absent, so nothing already declared changes |
+| `loads-but-wrong` | the package builds and loads, and the behaviour is known to be wrong (a weapon that fires but has no sound, an effect that plays at the wrong place); the module stays in the bank so the work is visible |
+| `not-ported` | the declaration exists and the port has not been made; nothing here is expected to load |
+
+**The planner refusal.** A member whose `port_status` is not `finished` is refused with kind
+`port_status` unless the composition names it explicitly: the member is written as an object
+with `accept` listing the statuses the composition takes knowingly:
+
+```json
+"modules": [{"path": "../mark3", "accept": ["loads-but-wrong"]}]
+```
+
+```json
+{"kind": "port_status", "modules": ["mark3"], "status": "loads-but-wrong",
+ "message": "mark3 is loads-but-wrong and this composition does not accept it",
+ "hint": "Write the member as {\"path\": ..., \"accept\": [\"loads-but-wrong\"]} to compose it knowingly, or leave it out.",
+ "field": "/modules/2"}
+```
+
+One row per such member, collected with the other refusals in one run. A campaign or a shelf
+reads the same field to skip such members by default; a member brought in as a dependency is
+refused the same way, since the composition did not name it and its status has not changed.
+`accept` on a member whose status is `finished` is harmless and recorded. `accept` takes values
+from the list minus `finished`; a nested composition's members carry their own `accept`.
+
+Both fields are echoed by `module inspect` when named, recorded on every plan row, and travel on
+`expected_lines`' sibling rows nowhere else. Neither widens `bases` or `maps` or moves a byte in
+a package.
+
 ### The registration line: one console line per module
 
 A load is the last honest test and the console is its record. Today the only line a script is
@@ -1202,6 +1258,7 @@ method, in words) and an `outcome`: `agrees`, `declared_not_observed`, `observed
 | `exclusive` | the role footprint | `partial` |
 | `service` | shareable provides present, no weapon provided | full for the rule; the *intent* is declaration-only |
 | `registration` | a `println` literal beginning `<id> >> registered` in a server script (`self`); the `entry` field (`entry`) | `partial` for `self` (the literal, not the path); full for `entry` and `none` |
+| `system`, `port_status` | nothing in bytes | `not_counted`: a browse word and a person's verdict |
 | `resource_contract.hud` | count of HUD-element constructors in source, as a floor | `partial`: a floor, never the total |
 | `conflicts` | both ends declaring the same `exclusive` role | reported as `redundant` when a role already covers the pair; otherwise `not_counted` |
 | `menu_route`, `tags`, `placements`, `parameters`, `bases`, `maps` | nothing in this route | `not_counted`, with the reason (a menu tree, a location table, a receipt) |
@@ -1227,6 +1284,7 @@ weapon by building its name at run time is reported `partial`, never `agrees`.
 | --- | --- | --- |
 | `ownership` | a member stages a path a base listing or a shipped per-map table says the base or the map carries, and does not declare it under `replaces.files` | `path`, `owner` (`base` or `map`), `evidence` (`listing` or `table`), `service` (the shelf module that provides the path, with `--workspace`, or null) |
 | `exclusive` | two or more members list the same role | `role`, `modules` in composition order, `resolutions` |
+| `port_status` | a member's `port_status` is not `finished` and the composition's member object does not list it under `accept` | `status` |
 
 `replacement` rows gain `service`; `service` rows are unchanged. `REFUSAL_KINDS` lists both new
 kinds, and a caller that folds kinds it does not know into "other" keeps working: the message
