@@ -22,7 +22,7 @@ PLANNED = [
     Route("capture", "stop", "Stop and finalize the recording; probe the file and decode one frame", "captures-display",
           status="deferred", owner=OWNER, requires_windows=True),
     Route("test", "plan", "Stitch module test contracts into a deterministic composition test plan", "writes-output",
-          status="implemented", owner=OWNER),
+          status="implemented", owner=OWNER, result_protocol="pat.test-plan/1"),
     Route("test", "start", "Admit one finite plan, arm capture, launch or load and run the recipe", "changes-game",
           status="deferred", owner=OWNER, requires_windows=True),
     Route("test", "status", "Read saved run state, artifacts and recent events; not a fresh engine query", "inert",
