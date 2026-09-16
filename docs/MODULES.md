@@ -318,7 +318,9 @@ row's, and a message with more rows says how many follow. Kinds: `probe`, `test_
 `duplicate_id`, `missing_dependency` (with `dependency` and `by`), `conflict`,
 `unqualified_base` and `unqualified_map` (with `declared` and `wanted`), `private_payload`,
 `cycle`, `budget` (with `resource`, `total`, `bound`), `replacement` (with `collisions`),
-`parameters` (below, with `parameter`), `service` (below), `port_status` (with `status`, under "What a module promises") and `checks` (with `failed`, the ids
+`parameters` (below, with `parameter`), `service` (below), `ownership` (with `path`, `owner`,
+`evidence` and `service`), `exclusive` (with `role` and `resolutions`) and `port_status` (with `status`), all specified under
+"What a module promises", and `checks` (with `failed`, the ids
 of the failed check rows). A caller that brings dependencies along reads every
 `missing_dependency` row at once instead of re-planning per message.
 
@@ -959,7 +961,7 @@ Which paths are base-owned is read from evidence, never from a prefix list:
    check already reads, and it covers the map's animation tables (`animtrees/`, `animstatedefs/`),
    its AI type scripts (`aitype/`), the stock weapon scripts under `maps/` and `clientscripts/`, the
    visionsets and every other rawfile the zones carry;
-2. when no listing is on the machine, the shipped per-map tables: `knowledge/map-scripts.json`
+2. the shipped per-map tables, read whether or not a listing is on the machine: `knowledge/map-scripts.json`
    for the compiled scripts the target map's zones carry on that foundation, and
    `knowledge/native-weapons.json` for the WeaponDefs (a member staging `weapons/<name>` for a
    native name is the same overwrite; the native-WeaponDef service refusal keeps firing for a
@@ -1277,6 +1279,22 @@ without either, `replaces.files` rows are `not_counted` per path and the route s
 evidence would decide them. And a project recipe's `provides.weapons` is checked against the
 recipe rows and the source literals the toolkit knows how to read; a module that registers a
 weapon by building its name at run time is reported `partial`, never `agrees`.
+
+**How to run it.** The route reads one module directory and needs nothing else to start:
+
+```
+pat module verify-declaration modules/my_module --json
+pat module verify-declaration modules/my_module --workspace . --base-listings foundations/stock/listings \
+    --target stock/zm_transit --strict --json
+```
+
+Each flag adds a source of fact, and the rows say what is missing without it: `--workspace` reads
+each dependency's own declaration from `<root>/modules/*/module.json` (without it every
+`dependencies` row is `not_counted`), `--base-listings` and `--target` are the two ways a path is
+shown to be base-owned (without either, each staged path in a base namespace is `not_counted` and
+the row names the evidence that would decide it), `--strict` is the library gate (exit 1, with the
+whole report under `details.report`), and `--propose` prints the fields the observed side would
+fill. There is no `--output`: the route writes nothing.
 
 ### Refusal kinds added by this section
 

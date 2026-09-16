@@ -32,6 +32,55 @@ Every entry states what shipped, on which platform it was verified, and what rem
   derived from or checked against a module's bytes: `system` is a shelf word and `port_status` is a
   person's verdict, and no shelf, library or contribution form that would group by `system` ships
   here.
+- `pat module verify-declaration <module dir> --json` reads one module's own bytes back against its
+  declaration and reports every promise beside what the files say, so a library can admit someone
+  else's module on evidence rather than on trust. The route is inert: no job directory outlives the
+  call, no `--output`, no backend, no network. Each row carries the field as a JSON Pointer, what was
+  declared, what was observed, the method in words and an outcome, and the method's honest ceiling is
+  the row's own outcome: `provides.scripts`, `provides.rawfiles`, `provides.localize`,
+  `replaces.functions` and a `call`, `name` or `service` dependency kind are read in full; a project
+  recipe's weapons, its models and effects, a perk or gum id found as a string literal, an `exclusive`
+  role footprint and the `resource_contract.hud` count are `partial` by construction and never
+  `agrees`; a `runtime` dependency, `menu_route`, `tags`, `placements`, `parameters`, `bases` and
+  `maps` are `not_counted` with the reason. `replaces.files` classifies every staged target against
+  the base's own asset listings (`--base-listings`, or the foundation's `base_listings` with
+  `--workspace` and `--target`) and the shipped per-map script and WeaponDef tables, and reports
+  `stages.base_owned` with its evidence, `stages.engine_tables` (an `accuracy/` path overrides nothing
+  a pack can see, so no ownership is claimed for it) and `stages.new_in_base_namespace` regardless;
+  where neither a listing nor a table is on the machine the path is `not_counted` and the row names
+  the evidence that would decide it. `--strict` exits 1 with `input_invalid` and the whole report
+  under `details.report` when any row is `declared_not_observed` or `observed_not_declared`, which is
+  what a gate wants; `--propose` prints the declaration fields the observed side would fill, never
+  removing a declared name, and leaves `exclusive` and `service` to the author because a role and a
+  service are promises, not observations. Protocol `pat.module-verify/1`, schema
+  `schemas/module-verify-v1.schema.json`. Offline tests on Linux (`tests/test_module_verify.py`); no
+  native receipt, and the route status is `implemented`. A row measures bytes and never claims the
+  module works. The `registration` row lands here as well: `self` is `partial` when the `<id> >> registered` literal is in a server
+  script and `declared_not_observed` when it is not, `entry` agrees on the entry field alone, `none` is
+  `observed_not_declared` when the module prints anyway, and an absent field is `not_counted` with the other
+  spelling it saw, or `observed_not_declared` with `--propose` filling `self`.
+- The planner reads two of those promises and refuses on them. `ownership`: a member that stages a
+  path the base or the target map already carries and does not list it under `replaces.files` is
+  refused, one row per member and path, naming the path, the owner (`base` or `map`), the evidence
+  and the shelf module that provides the path when `--workspace` names one. One member is enough,
+  because the overwrite does not wait for a second one. Ownership is read from facts only: the
+  base's own asset listings (the composition's `base_owned`, `--base-listings`, or a foundation's
+  `base_listings`) and the shipped per-map tables (`knowledge/map-scripts.json` and
+  `knowledge/native-weapons.json`) on the target's foundation. `MAP_OWNED_PREFIXES` is unchanged by
+  this release and never refuses a single member: a prefix is a guess about ownership -- a module's
+  *new* animation tree under `animtrees/` matches it and overwrites nothing -- and it stays what it
+  was, the last resort for the two-member `service` refusal. A withheld row (`"deliver": false`)
+  stages under `raw/` with no zone line and is not an overwrite. `exclusive`: two or more members
+  that list the same role are refused with the role, the members in composition order and the two
+  honest `resolutions` a review screen draws, `replace` (keep the newest) and `refuse`; there is no
+  owner decision, because a role is not a file. A `replacement` row's collisions now carry
+  `service` too, so a file two members both declare names the module they should both depend on,
+  and a path an `ownership` row reported is not also reported as a map-owned-table `service` row.
+  Two plan warnings join the existing ones: a declared `replaces.files` path that no listing and no
+  table says the base carries (silent when no listing is on the machine, since then the plan cannot
+  tell), and a refusal that leaned on the older `shared-service` tag asking for `service: true`.
+  Offline unit tests on Linux (`tests/test_promises_planner.py`); no native receipt, and no route
+  status changes.
 - A module can declare who prints its one console line at init. `module.json` takes an optional
   `registration`: `self` when the module's own server script prints `<id> >> registered` from its
   registration path, `entry` when the module is entry-managed and the pack's generated entry script
@@ -83,8 +132,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
   `module inspect` echoes `exclusive`, `service` and `dependency_kinds` only when the declaration
   names them, `plan.json` records all three per member, and the shelf lookup that names "the module
   to depend on instead" now prefers a declared `service: true` over the older `shared-service` tag,
-  which is read as the same mark for one more release. This change adds no planner refusal: two
-  members owning one role still plan. Offline unit tests on Linux
+  which is read as the same mark for one more release. That change added no planner refusal; the
+  entry above adds them. Offline unit tests on Linux
   (`tests/test_promises_vocabulary.py`); no native receipt, and no route status changes.
 - `module qualify` now plans its synthesized composition with the base's asset listings, read from
   the foundation record's `base_listings` and from the directory the link loads sit in when it holds
