@@ -16,12 +16,14 @@
     pat project init|plan|build|verify ... --output <new dir>
     pat module inspect <module.json|composition.json> --json
     pat module state --composition <dir> [--plan --verify --test-plan --run --verdict] | --ledger <module dir> [--base --foundation --map --location --package]
+    pat module ledger-add <module dir|evidence.json> --row <row.json> [--row ...] --json   append validated rows, append-only
     pat module ledger-from-registry <workspace> <module-id> --dry-run --json   propose evidence.json rows; writes nothing
     pat target list|validate <workspace> [--targets-file PATH] --json          maps and survival locations as targets; location tables checked
     pat target inspect <workspace> <foundation>/<map>/<mode>[/<location>][@<route>] [--route R] --json
     pat module plan|build <composition.json> --output <new dir>
     pat module qualify <module dir> --target <foundation>/<map> --workspace <ws> --output <new dir>   build it alone there and write its records
     pat module qualify --set <file> --target <foundation>/<map> --workspace <ws> --output <new dir>   the same, in dependency order
+    pat module accept <module dir> --outcome accepted|rejected --base B --foundation F --map M --package <sha256> --record <path> --output <new dir>   a person's verdict, one ledger row
     pat module declare <mod.ff> --output <new dir>
     pat module fetch <owner/id@commit | https://github.com/o/r@commit> --output <new dir>
     pat registry add <file|url> | list | search [words] [--category ...] | show <owner/id>
@@ -212,7 +214,7 @@ JOB_ACTIONS = {("registry", "baseline"): "baseline", ("test", "plan"): "testing.
 
 
 def is_job(group: str, action: str) -> bool:
-    return (group in JOB_GROUPS and (group, action) not in (("module", "inspect"), ("module", "state"), ("module", "ledger-from-registry"))) or (group, action) in JOB_ACTIONS
+    return (group in JOB_GROUPS and (group, action) not in (("module", "inspect"), ("module", "state"), ("module", "ledger-add"), ("module", "ledger-from-registry"))) or (group, action) in JOB_ACTIONS
 
 
 def run_job(args, argv: list[str]) -> dict:
@@ -345,6 +347,11 @@ def run(argv: list[str]) -> dict:
                 raise Failure(INVALID_ARGUMENTS, "--location names a fenced area inside --map; give the map too")
             return success(command, ledger.report(Path(args.ledger), args.base, args.foundation, args.map, args.package, args.location, args.target))
         return success(command,state.derive(args))
+
+    if group == "module" and args.action == "ledger-add":
+        from .dev import ledger
+
+        return success(command, ledger.add_rows(Path(args.ledger), args.row))
 
     if group == "module" and args.action == "ledger-from-registry":
         from .dev import ledger

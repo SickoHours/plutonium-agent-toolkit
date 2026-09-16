@@ -269,13 +269,9 @@ def replace(path: Path, data: str) -> None:
     path.write_text(data, encoding="utf-8")
 
 
-def serialise(data, raw: str | None = None) -> str:
-    """JSON the way the file already writes it, so a record is an addition and not a reformat:
-    the ledger and the registry differ on ``ensure_ascii`` across this shelf and a diff that
-    re-escapes every accent hides the row that was added."""
-    if raw is not None and json.dumps(data, indent=2) + "\n" != raw:
-        return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
-    return json.dumps(data, indent=2) + "\n"
+# The registry files this route rewrites are written the same way the ledger's own appends are,
+# so both share one serialiser; ``module accept`` appends its row through the same helper.
+serialise = ledger.serialise
 
 
 # ----- one step -----------------------------------------------------------------------------
@@ -507,14 +503,9 @@ def write_records(row: dict, directory: Path, workspace: Path, staged: Path) -> 
         row["records"]["test_build"] = number
 
         path = directory / ledger.FILENAME
-        book = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {"schema": 1, "subject": {"id": row["id"]}, "rows": []}
-        book.setdefault("rows", []).append(ledger_row(row))
-        normalized, diagnostics = ledger.validate(book)
-        if normalized is None or diagnostics:
-            raise Failure(INPUT_INVALID, f"The built-alone row does not validate against {ledger.PROTOCOL}: {diagnostics[:4]}",
-                          "The ledger row is written through the same validator module state --ledger reads.")
-        put(path, serialise(book, path.read_text(encoding="utf-8") if path.is_file() else None))
-        row["records"]["ledger_rows"] = len(normalized["rows"])
+        text, rows_written = ledger.append_row(path, ledger_row(row), row["id"])
+        put(path, text)
+        row["records"]["ledger_rows"] = rows_written
 
         bindings = workspace / BINDINGS
         if bindings.is_file():

@@ -25,6 +25,26 @@ Every entry states what shipped, on which platform it was verified, and what rem
   with the builder's own traceback, depending on where `pat` was run from. Offline verified on Linux;
   no game was loaded.
 
+- A module can declare what it *promises*, and the declaration reader checks it. `replaces.files`
+  is widened from GSC/CSC scripts to any relative zone path the base or the map already carries (a
+  table, a visionset, a `weapons/<name>` file), still lowercase, forward slashes, deduplicated and
+  at most 64: what the field promises is ownership, not a suffix. `module.json` takes three new
+  optional fields. `exclusive` lists the role words from a fixed vocabulary (`hud`, `box`,
+  `loadscreen`, `boss`, `perk-machines`, `perk-art`) a module owns outright, for the things a pack
+  has room for exactly one owner of. `service` is `true` when the module exists to own shared
+  things so others depend on it and ship no copy; it must provide something shareable
+  (`rawfiles`, `scripts`, `soundbanks`, `aliases`) or own a role, and must register no weapon of
+  its own, because a weapon module that also ships a shared table is the problem a service solves.
+  A `dependencies` entry may be an object `{id, kind, why?}` saying what the edge is for (`call`,
+  `name`, `service` or `runtime`; a `runtime` edge must say why, since nothing in the files can
+  verify it). A plain id keeps meaning exactly what it meant and `dependencies` stays a list of ids
+  everywhere it is read, so a declaration written before this change is unchanged and valid.
+  `module inspect` echoes `exclusive`, `service` and `dependency_kinds` only when the declaration
+  names them, `plan.json` records all three per member, and the shelf lookup that names "the module
+  to depend on instead" now prefers a declared `service: true` over the older `shared-service` tag,
+  which is read as the same mark for one more release. This change adds no planner refusal: two
+  members owning one role still plan. Offline unit tests on Linux
+  (`tests/test_promises_vocabulary.py`); no native receipt, and no route status changes.
 - `module qualify` now plans its synthesized composition with the base's asset listings, read from
   the foundation record's `base_listings` and from the directory the link loads sit in when it holds
   `<zone>-list.txt` beside them, and records them under `base_listings` in `qualify.json` and the
@@ -51,6 +71,62 @@ Every entry states what shipped, on which platform it was verified, and what rem
   receipts, `pat-review` reads the six facts off the ledger rows with `null` meaning not earned rather
   than false, and the `plutonium-agent-toolkit` entry point names the ledger beside the other reference
   pages. Documentation only; no route, schema or behaviour changes.
+- `pat module accept` writes a person's gameplay verdict into a module's `evidence.json` as one
+  `player-accepted` row, scoped to the base, foundation and map it was given on and pinned to the
+  package hash that was installed while they played. Player acceptance is one of the six facts the
+  shelf keeps separate and the only one no build, readback or agent observation can produce, and
+  until now it was the only one with no route that writes it: a verdict lived in a chat message
+  and the ledger stayed silent. A pack is a composition, so a verdict on a pack is written once per
+  member module. The row is validated through the same validator `module state --ledger` reads
+  before anything reaches disk, so a refusal leaves the file byte for byte as it was; the ledger
+  stays append-only, and a second verdict is a second row rather than an edit of the first. The
+  append itself (create the header when absent, validate the whole book, keep the file's own
+  serialisation) is now one helper in `dev/ledger.py` that `module qualify` uses for its
+  `built-alone` row as well, instead of two copies of the same mechanism, and it writes through
+  the same locked, atomic writer `module ledger-add` uses: the ledger is read and replaced under
+  an advisory lock on a sibling `.evidence.json.lock`, so two verdicts recorded at the same
+  moment are two rows rather than one overwriting the other, and the replacement is a temporary
+  file, an `fsync` and a rename, so a failed write leaves the verdicts already there. The read is
+  bounded by the ledger's 1 MiB limit (`input_limit`, rather than parsing an oversized file into
+  memory), and an `evidence.json` that is not a regular file — a symlink, a FIFO, a directory —
+  is refused with `input_invalid` before anything opens it, so a module directory cannot make the
+  route write through a link to another file or block on a FIFO that never opens. Verified
+  offline on Linux; the route touches no game, network, install or build.
+  Format: `docs/evidence-ledger.md`.
+- New route `pat module ledger-add <module dir|evidence.json> --row <row.json> [--row ...] --json`,
+  the only way to add a row to a module's evidence ledger besides the `built-alone` row
+  `module qualify` earns. `module state --ledger` reads a ledger and `module ledger-from-registry`
+  proposes one, but nothing appended to one, so a campaign recording a run per member per load had
+  to edit `evidence.json` by hand — a row nothing validated, in a file everything downstream
+  derives facts from. Each `--row` file holds one row object or a list of them, appended in the
+  order given and validated by the rules `module inspect` applies, in the context of the whole
+  ledger (at most 1024 rows and 1 MiB, counted after the write). The route refuses, writing
+  nothing, when any row fails validation (every diagnostic carries its row index, JSON Pointer and
+  source file), when a row's normalized JSON is already in the file or repeated in the same
+  invocation (`row_duplicate`, a new error code, so a rerun loop can tell "already recorded" from
+  "malformed"), when the ledger's `subject.id` is another module's, when the ledger already on
+  disk does not validate, and when there is no `module.json` beside it to name the subject. It
+  creates the file from the declaration's id when absent, never edits or removes an existing row,
+  and keeps the file's own `ensure_ascii` so the diff is the rows added. The read, the validation
+  and the write happen under an advisory lock on a sibling `.evidence.json.lock`, so two workers
+  appending at once append both rows instead of the second silently dropping the first; the write
+  itself is a sibling temporary file, an `fsync` and a rename, so a full disk or an interrupt
+  leaves the rows that were already there rather than a truncated ledger; and an `evidence.json`
+  that is not a regular file (a symlink, a FIFO, a directory) is refused with `input_invalid`
+  before anything opens it, so the route never writes through a link nor blocks on a FIFO. Two
+  validation rules tightened with it: `at` must be a date that exists on the calendar
+  (`2026-99-99` had the shape and was accepted), and a string JSON accepts but UTF-8 cannot
+  encode (a lone surrogate) is refused with its pointer instead of raising in the encoder as the
+  file is written. The result reports the
+  file, the row counts before and after, the appended indexes and, per appended row, the six facts
+  the ledger now derives for the scope that row names — a `game-tested` row stating only
+  `installed` and `launched` leaves `loaded_and_playable` `null`, as it should, and a row scoped
+  to `maps: ["*"]` is answered by the rows scoped to every map, never by one map's own rows, so a
+  module built alone on `zm_transit` is not reported offline-verified everywhere. New effect
+  `writes-record` (one record file beside a declaration, appended in place; no job directory and
+  no receipt), because this route writes neither an output directory nor a receipt. Registered
+  `implemented`: offline unit tests on Linux, no qualification receipt yet. No game, no network,
+  no install. `docs/evidence-ledger.md`, `docs/SUPPORT.md`.
 
 - New check `loose-overrides`. Plutonium reads an image's pixels from an image bank *or* from the
   global loose path `storage/t6/images`, and a loose file there wins: it applies to every mod folder

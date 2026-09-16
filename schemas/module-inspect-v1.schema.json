@@ -675,6 +675,62 @@
             }
           }
         },
+        "exclusive": {
+          "description": "Present only when the declaration names exclusive: the roles this module owns outright. A pack has one owner per role. Format: docs/MODULES.md.",
+          "type": "array",
+          "maxItems": 6,
+          "items": {
+            "enum": [
+              "hud",
+              "box",
+              "loadscreen",
+              "boss",
+              "perk-machines",
+              "perk-art"
+            ]
+          }
+        },
+        "service": {
+          "description": "Present only when the declaration names service: true when the module exists to own shared things, so others depend on it and ship no copy. Format: docs/MODULES.md.",
+          "type": "boolean"
+        },
+        "dependency_kinds": {
+          "description": "Present only when at least one dependencies entry was an object: what each dependency is for, by id. A kind of null is an entry that did not say. Format: docs/MODULES.md.",
+          "type": "object",
+          "maxProperties": 64,
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "why"
+            ],
+            "properties": {
+              "kind": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "call",
+                      "name",
+                      "service",
+                      "runtime"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "why": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 400
+              }
+            }
+          }
+        },
         "parameters": {
           "description": "Present only when the declaration names parameters: what a composition may set on this module, with each parameter's type, constraint, default and meaning. Format: docs/MODULES.md.",
           "type": [

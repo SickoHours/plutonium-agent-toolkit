@@ -90,6 +90,17 @@ ORIGIN_UNVERIFIED = "unverified"
 MAX_DONOR = 400
 PROVIDES_KINDS = ("weapons", "perks", "gobblegums", "powerups", "equipment", "localize", "soundbanks", "scripts", "models", "effects",
                   "rawfiles", "aliases")
+# Roles a pack has room for exactly one owner of. A module lists a role when it owns that thing
+# outright, never when it merely touches it: a new HUD owns `hud`, a counter widget does not.
+# The list grows by a measured collision, not by anticipation (docs/MODULES.md).
+EXCLUSIVE_ROLES = ("hud", "box", "loadscreen", "boss", "perk-machines", "perk-art")
+# What a dependency is *for*. `call`, `name` and `service` leave evidence in bytes; `runtime` is a
+# relationship only the engine shows (a level variable, a notify, an order of init), so it says why.
+DEPENDENCY_KINDS = ("call", "name", "service", "runtime")
+MAX_WHY = 400
+# What a service can own for others. A weapon is not among them: a weapon module that also ships a
+# shared table is the problem a service solves, not a service.
+SHAREABLE_KINDS = ("rawfiles", "scripts", "soundbanks", "aliases")
 # Zone paths that belong to the map, never to one member: a per-map animation state table, its
 # animation tree and the AI type scripts that read them. Two members that each ship their own
 # copy are not asking for an owner; the game needs one merged copy, a service module.
@@ -127,6 +138,11 @@ def add_parser(sub, common):
     q.add_argument("--location", help="With --ledger: a survival location inside --map; without it only rows with no location match")
     q.add_argument("--target", help="With --ledger: a target key <foundation>/<map>/<mode>[/<location>] supplying foundation, map and location at once")
     q.add_argument("--json",action="store_true")
+    q = actions.add_parser("ledger-add", help="Append validated rows to a module's evidence.json; append-only and all-or-nothing")
+    q.add_argument("ledger", help="A module directory or its evidence.json; created from the module.json id when absent")
+    q.add_argument("--row", action="append", default=[], required=True, metavar="FILE",
+                   help="A JSON file holding one row object or a list of row objects; repeatable, appended in the order given")
+    q.add_argument("--json", action="store_true")
     q = actions.add_parser("ledger-from-registry", help="Propose evidence.json rows for one workspace module from the registry and its docs; prints them, writes nothing")
     q.add_argument("workspace", help="Workspace root holding modules/, registry/t6-modules.json and foundations/")
     q.add_argument("module_id", help="Directory name under modules/")
@@ -152,6 +168,8 @@ def add_parser(sub, common):
         common(q)
     from . import qualify as qualify_route
     qualify_route.add_parser(actions, common)
+    from . import accept as accept_route
+    accept_route.add_parser(actions, common)
     q = actions.add_parser("compose", help="Compose declared IDs against a foundation, or publish a successfully built recipe")
     q.add_argument("--name"); q.add_argument("--base"); q.add_argument("--map")
     q.add_argument("--game", choices=titles.names(), default=None, help="Title the recipe targets; inferred from the members when omitted")
@@ -184,7 +202,9 @@ MAX_INSPECTION_TEXT = 2048
 MAX_INSPECTION_CODE = 200
 MODULE_METADATA_FIELDS = ("id", "version", "game", "title", "category", "kind", "tags", "bases", "maps",
                           "dependencies", "conflicts", "origin", "donor", "distribution", "menu_route", "payload", "recipes",
-                          "lineage", "replaces", "entry", "placements", "parameters")
+                          "lineage", "replaces", "entry", "placements", "parameters", "exclusive", "service", "dependency_kinds")
+# Echoed only when the declaration names them, so a declaration written before a field is unchanged.
+MODULE_METADATA_OPTIONAL = ("replaces", "entry", "placements", "parameters", "recipes", "exclusive", "service", "dependency_kinds")
 COMPOSITION_METADATA_FIELDS = ("name", "title", "game", "tags", "base", "map", "origin", "donor", "members")
 
 
@@ -278,7 +298,11 @@ def inspect(path: Path) -> dict:
             fields = COMPOSITION_METADATA_FIELDS
         else:
             raise Failure(INPUT_INVALID, "Expected a module or composition declaration", field="/")
-        result.update(validation="metadata-valid", metadata={key: metadata[key] for key in fields if key not in ("replaces","entry","placements","parameters","recipes") or key in data})
+        result.update(validation="metadata-valid", metadata={key: metadata[key] for key in fields if key not in MODULE_METADATA_OPTIONAL or key in data})
+        if kind == "module" and any(isinstance(entry, dict) for entry in data.get("dependencies") or ()):
+            # What each dependency is for, echoed only when an entry said so; a list of plain ids
+            # carries no kinds and echoes none.
+            result["metadata"]["dependency_kinds"] = metadata["dependency_kinds"]
         if kind == "module" and "recipes" in data:
             # The targets the module names a cut for, not the paths: inspection resolves no payload.
             result["metadata"]["recipes"] = sorted(metadata["recipes"])
@@ -424,6 +448,82 @@ def _provides(value, owner: str) -> dict:
     return out
 
 
+def _exclusive(value, owner: str) -> list[str]:
+    """The roles this module owns outright, from a fixed vocabulary. A role has room for one owner
+    in a pack; two members that list the same one is a planner refusal, never an owner decision."""
+    if value is None:
+        return []
+    if not isinstance(value, list) or len(value) > len(EXCLUSIVE_ROLES):
+        raise Failure(INPUT_INVALID, f"{owner}: exclusive is a list of at most {len(EXCLUSIVE_ROLES)} distinct role words")
+    for index, role in enumerate(value):
+        if not isinstance(role, str) or role not in EXCLUSIVE_ROLES:
+            raise Failure(INPUT_INVALID, f"{owner}: exclusive names roles from {list(EXCLUSIVE_ROLES)}: {role!r}",
+                          "A module lists a role when it owns that thing outright, not when it merely touches it.",
+                          field=f"/{index}")
+    if len(set(value)) != len(value):
+        raise Failure(INPUT_INVALID, f"{owner}: duplicate entries under exclusive")
+    return list(value)
+
+
+def _service(value, owner: str, provides: dict, exclusive: list[str]) -> bool:
+    """``true`` marks a module that exists to own shared things, so others depend on it and ship no
+    copy. It must have something to share and register no weapon of its own; both are checked here
+    because a declaration that fails either is not a service anywhere."""
+    if value is None:
+        return False
+    if not isinstance(value, bool):
+        raise Failure(INPUT_INVALID, f"{owner}: service is true when the module exists to own shared things others depend on")
+    if value:
+        if not any(provides.get(kind) for kind in SHAREABLE_KINDS) and not exclusive:
+            raise Failure(INPUT_INVALID, f"{owner}: a service must provide something shareable (rawfiles, scripts, soundbanks, aliases) "
+                                         "or own an exclusive role",
+                          "A service is depended on instead of copied; name what it owns under provides, or drop the field.")
+        if provides.get("weapons"):
+            raise Failure(INPUT_INVALID, f"{owner}: a service registers no weapon of its own; a weapon module that ships a shared table "
+                                         "is what a service replaces",
+                          "Split the shared table into its own module and depend on it from the weapon.")
+    return value
+
+
+def _dependencies(value, owner: str) -> tuple[list[str], dict[str, dict]]:
+    """Ids, and what each dependency is *for*. An entry is a module id, or an object
+    ``{id, kind, why?}`` saying why the edge exists. The ids are the plan's fact either way: the
+    kind changes what a checker can verify, never what is built or in which order."""
+    if not isinstance(value, list) or len(value) > MAX_LIST:
+        raise Failure(INPUT_INVALID, f"{owner}: dependencies must be a list of at most {MAX_LIST} module ids")
+    ids: list[str] = []
+    kinds: dict[str, dict] = {}
+    for index, item in enumerate(value):
+        field = f"/{index}"
+        kind = why = None
+        if isinstance(item, dict):
+            _fields(item, {"id", "kind", "why"}, {"id"}, f"{owner}: dependencies[{index}]", field)
+            dep, kind, why = item["id"], item.get("kind"), item.get("why")
+        else:
+            dep = item
+        if not isinstance(dep, str) or not ID.match(dep):
+            raise Failure(INPUT_INVALID, f"{owner}: dependencies entries use lowercase letters, digits and underscore: {dep!r}",
+                          field=field + "/id" if isinstance(item, dict) else field)
+        if dep == owner:
+            raise Failure(INPUT_INVALID, f"{owner}: a module cannot list itself under dependencies",
+                          field=field + "/id" if isinstance(item, dict) else field)
+        if kind is not None and (not isinstance(kind, str) or kind not in DEPENDENCY_KINDS):
+            raise Failure(INPUT_INVALID, f"{owner}: a dependency kind is one of {list(DEPENDENCY_KINDS)}: {kind!r}",
+                          "call: this module calls a script the dependency provides. name: it names a thing the dependency registers. "
+                          "service: the dependency owns a file, table or bank this module uses. runtime: only the engine shows it.",
+                          field=field + "/kind")
+        if why is not None:
+            _at(field + "/why", _text, why, f"{owner}: dependencies[{index}].why", MAX_WHY)
+        if kind == "runtime" and why is None:
+            raise Failure(INPUT_INVALID, f"{owner}: a runtime dependency on {dep} must say why; nothing in the files can verify it",
+                          "A runtime edge is a level variable, a notify or an order of init. Name it under why.", field=field + "/why")
+        ids.append(dep)
+        kinds[dep] = {"kind": kind, "why": why}
+    if len(set(ids)) != len(ids):
+        raise Failure(INPUT_INVALID, f"{owner}: duplicate entries under dependencies")
+    return ids, kinds
+
+
 def _relative_dir(text: str, base: Path, job: Job, what: str) -> Path:
     """A directory named in a composition: relative, forward slashes, may live beside the
     composition (``../hello-zm``), never absolute, never a link, never inside the job output."""
@@ -554,8 +654,9 @@ def _replaces(value):
                 if fn.startswith('codecallback_') or fn=='gamemode_callback_setup' or fn=='main' and (path.startswith('maps/mp/zm_') or '/gametypes' in path):
                     raise Failure(INPUT_INVALID,'Cannot replace a base-owned entry point','This engine entry point is base-owned; use foundation work.',field=field)
             else:
-                _at(field,_text,v,'script path',256);v=v.lower();_at(field,_recipe_path,v)
-                if not v.endswith(('.gsc','.csc')):raise Failure(INPUT_INVALID,'Replaced files must be scripts',field=field)
+                # Any relative zone path the base or the map already carries: a script, a table,
+                # a visionset, a `weapons/<name>` file. Ownership is the promise, not the suffix.
+                _at(field,_text,v,'zone path',256);v=v.lower();_at(field,_recipe_path,v)
             if v not in normalized:normalized.append(v)
         out[key]=normalized
     return out
@@ -590,7 +691,8 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
     """Authoritative declaration checks; no filesystem or payload resolution."""
     _fields(data, {"schema", "id", "version", "game", "title", "category", "kind", "tags", "recipe", "recipes", "seed", "bases", "maps",
                             "dependencies", "conflicts", "provides", "resource_contract", "menu_route", "distribution", "source",
-                            "origin", "donor", "lineage", "tests", "replaces", "entry", "placements", "parameters"},
+                            "origin", "donor", "lineage", "tests", "replaces", "entry", "placements", "parameters",
+                            "exclusive", "service"},
                      {"schema", "id", "version", "bases", "maps"}, where)
     if data["schema"] != 1:
         raise Failure(INPUT_INVALID, f"{where}: expected schema 1", field='/schema')
@@ -656,15 +758,19 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
         _at("/tests", _text, tests, "tests", 4096)
         _at("/tests", _recipe_path, tests)
     provides = _at("/provides", _provides, data.get("provides"), mid)
+    exclusive = _at("/exclusive", _exclusive, data.get("exclusive"), mid)
+    # After provides and exclusive: what a service may claim is read from what it already declares.
+    service = _at("/service", _service, data.get("service"), mid, provides, exclusive)
+    dependencies, dependency_kinds = _at("/dependencies", _dependencies, data.get("dependencies", []), mid)
     return {"id": mid, "version": data["version"], "game": game, "title": title, "category": category, "kind": kind, "tags": list(tags),
             "payload": payload, "payload_path": payload_path, "recipes": recipes, "distribution": distribution, "tests": tests,
             "replaces":_at("/replaces",_replaces,data.get("replaces")), "entry":_at("/entry",_entry,data.get("entry")),
             "placements": _placements(data.get("placements"), mid),
             "parameters": parameters.validate_declared(data.get("parameters"), mid),
             "bases": list(bases), "maps": list(maps),
-            "dependencies": _at("/dependencies", _ids, data.get("dependencies", []), "dependencies", mid),
+            "dependencies": dependencies, "dependency_kinds": dependency_kinds,
             "conflicts": _at("/conflicts", _ids, data.get("conflicts", []), "conflicts", mid),
-            "provides": provides,
+            "provides": provides, "exclusive": exclusive, "service": service,
             "resource_contract": _at("/resource_contract", _contract, data.get("resource_contract"), f"{mid}: resource_contract"),
             "menu_route": menu_route, "source": source,
             "lineage": validate_lineage(data.get("lineage")),
@@ -1346,17 +1452,19 @@ def shelf_services(workspace: str | None) -> list[dict]:
             meta = validate_declaration_metadata(data)
         except (OSError, ValueError, Failure):
             continue
-        rows.append({"id": meta["id"], "directory": child.name, "tags": meta["tags"], "provides": meta["provides"]})
+        rows.append({"id": meta["id"], "directory": child.name, "tags": meta["tags"], "provides": meta["provides"],
+                     "service": meta["service"]})
     return rows
 
 
 def _service_for(services: list[dict], kind: str, name: str) -> dict | None:
     """The shelf module that owns ``name``: one that provides it and registers no weapon of its
     own (a weapon module shipping its own copy of a shared table is the problem, not the
-    service). A ``shared-service`` tag wins among candidates."""
+    service). A declared ``service: true`` wins among candidates; the older ``shared-service`` tag
+    is read as the same mark for one release, and loses to the typed field wherever both exist."""
     key = name.casefold()
     candidates = [row for row in services if any(n.casefold() == key for n in row["provides"].get(kind, [])) and not row["provides"].get("weapons")]
-    candidates.sort(key=lambda row: (0 if "shared-service" in row["tags"] else 1, row["id"]))
+    candidates.sort(key=lambda row: (0 if row["service"] else 1, 0 if "shared-service" in row["tags"] else 1, row["id"]))
     return candidates[0] if candidates else None
 
 
@@ -1449,6 +1557,7 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
                "declaration_sha256": job.inputs[str(m["declaration"])],
                "payload": "seed" if m["seed"] else "adapter" if m.get("adapter") else "recipe",
                "distribution": m["distribution"], "dependencies": m["dependencies"], "conflicts": m["conflicts"],
+               "dependency_kinds": m["dependency_kinds"], "exclusive": m["exclusive"], "service": m["service"],
                "bases": m["bases"], "maps": m["maps"], "provides": m["provides"], "resource_contract": m["resource_contract"],
                "menu_route": m["menu_route"], "source": m["source"], "reference": m.get("reference"),
                "origin": m["origin"], "donor": m["donor"], "replaces":m["replaces"], "entry":m["entry"], "placements": m.get("placements"),
@@ -1529,6 +1638,10 @@ def execute(args, job: Job) -> dict:
         from . import qualify
 
         return qualify.execute(args, job)
+    if args.action == "accept":
+        from . import accept
+
+        return accept.execute(args, job)
     if args.action == "compose":
         from . import compose
         return compose.execute(args, job)
