@@ -544,6 +544,7 @@ as one job:
 ```
 pat module qualify <module dir> --target <foundation>/<map> --workspace <root> --output <new dir> --json
 pat module qualify --set <file of module dirs> --target <foundation>/<map> --workspace <root> --output <new dir> --json
+pat module qualify <module dir> --target <foundation>/<map> --workspace <root> --output <new dir> --accept loads-but-wrong --json
 ```
 
 `--target` is `<foundation>/<map>`: the foundation id as the workspace's `foundations/<id>.json`
@@ -575,6 +576,21 @@ built alone keeps its `failed` rows under `warnings` in `qualify.json` and the r
 them to the built-alone note, and still qualifies. `module plan` and `module build` invoked directly
 are unchanged and still refuse on that check: there the question is whether to ship a pack on this
 machine, not whether this module builds on this target.
+
+**An unfinished port: `--accept`.** A member whose `port_status` is not `finished` is refused by
+the planner unless the composition names that status under the member's `accept` ("Where a person
+finds it", below), and this is the one route that writes the composition for the caller. `--accept
+loads-but-wrong` (or `--accept not-ported`; repeatable, 1 to 2 distinct values, the same vocabulary
+and validation a member's own `accept` takes, an unknown word refused at the argument) is how the
+caller says it. Every member of the synthesized composition whose declaration is not `finished` —
+the module and its dependency closure alike — is then written as `{"path": …, "accept":
+["loads-but-wrong"]}`; a finished member stays the plain path. The declaration's own `port_status`
+is **not** changed by qualification. The acceptance is recorded where the build is claimed:
+`qualify.json`, the results row, this route's receipt, the `docs/TEST.md` section, and the
+`built-alone` note, which reads "port_status loads-but-wrong accepted for this build; the row says
+the package builds, not that the port is finished." Without `--accept` nothing changes: the plan
+refuses at step (b) and the results row carries it as `plan-refused` with the planner's
+`port_status` row inside.
 
 The declaration is widened in the staged copy, so both builds read the same paths and the two
 packages are comparable. For a project recipe they must be the same bytes: a declaration is
