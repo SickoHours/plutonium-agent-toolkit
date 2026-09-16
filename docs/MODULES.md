@@ -258,6 +258,16 @@ strings, the loose scripts (`loose_script`, `loose_scripts` or `scripts`), roote
 collide like a seed's, and fill `provides` the way a manifest does: a declaration may narrow
 them, never add a name the recipe does not deliver. The member's `payload` is `adapter`.
 
+`soundbank.exclude_aliases` is how a member that shares only part of its bank answers the
+`service` refusal below (one alias, one bank): 1 to 256 alias names this cut hands to the bank
+module that owns them, subtracted from the aliases the member is credited with (so the shared
+rows are one bank's, not a collision) and recorded as `excluded_aliases` on the plan row and on
+the `adapters[]` entry. The names are checked against the alias table wherever the prepared
+inputs are on this machine — a name the table does not carry is a stale list and is refused —
+and the workspace builder that cuts the bank must drop the same rows, with the readback of what
+it produced (`soundbanks` in the build receipt's `adapters[]`, read back from the package rather
+than taken from the builder's word) as the proof that it did.
+
 #### Where `prepared` points
 
 `prepared` is the directory of converted inputs the builder consumes, and the planner reads two
@@ -995,13 +1005,22 @@ Builds run a receipted `gsc check` dry run per script before linking. Compiler-r
 externals fail; successful compilation alone cannot prove runtime external resolution and that
 symbol check remains `not_counted`. Plans themselves do not run the compiler.
 
-Probe actions with an agent actor cause `test plan` and `module build` to include exactly one
-local sibling module named `test_probe`, tagged `test-only`, on `_test`/`_probe` profiles.
-The planner searches member siblings and the workspace's modules directory, refuses missing or
-ambiguous candidates, and emits a buildable composition with the probe explicitly included.
-The probe is first in dependency order. `_pack`/`_pub` compositions refuse every test-only member,
-including through nested compositions. Probe-scoped contracts permit signed `round_set +N`;
-this is a round-counter transition, not proof of N naturally completed gameplay rounds.
+Probe actions with an agent actor cause `test plan` to include exactly one local sibling module
+named `test_probe`, tagged `test-only`, on `_test`/`_probe` profiles; on a `_pack`/`_pub` profile
+`test plan` refuses, because asking for the plan is asking for the probe. The planner searches
+member siblings and the workspace's modules directory, refuses missing or ambiguous candidates,
+and emits a buildable composition with the probe explicitly included. The probe is first in
+dependency order.
+
+**A probe verb in a member's contract does not follow the member into a release pack.** `module
+plan` and `module build` read and validate every member's `tests` contract, but needing a probe is
+a fact about running that member's test plan, not about composing a pack that contains it: a
+`_pack`/`_pub` composition plans and builds unchanged with members whose contracts declare agent
+probe verbs, and pulls no probe in. Only a `_test`/`_probe` composition carries the probe into the
+package. What a release profile still refuses is a test-only member itself — declared or brought
+along through a nested composition — with the typed `test_only` refusal. Probe-scoped contracts
+permit signed `round_set +N`; this is a round-counter transition, not proof of N naturally
+completed gameplay rounds.
 
 ### A loose global texture wins over every bank, and over the bare game
 

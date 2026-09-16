@@ -71,6 +71,8 @@ NAME_REF = re.compile(r"^[a-z0-9][a-z0-9-]{0,38}/[a-z0-9_]{1,64}\Z")
 RECIPE_TARGET = re.compile(r"^[a-z0-9-]{1,32}/zm_[a-z0-9_]{1,32}\Z")
 MAX_RECIPES = 32
 STAGES = ("test", "probe", "pack", "pub")
+# The half of STAGES that may carry the test probe and any other test-only member.
+TEST_STAGES = ("test", "probe")
 CONTRACT_FIELDS = ("threads", "entities", "hud", "network_fields")
 # The taxonomy people browse by. `category` is the shelf; `kind` narrows it; `tags` are free
 # lowercase words (a source game, a series, a theme). None of them affects resolution.
@@ -1362,6 +1364,14 @@ def _order(modules: list[dict]) -> list[str]:
     return order
 
 
+def is_test_profile(name: str) -> bool:
+    """Whether the composition's stage admits the test probe and other test-only members.
+
+    One rule, read by the planner's probe admission and by the release refusal in ``resolve``, so
+    the two sides of ``STAGES`` cannot drift apart."""
+    return name.endswith(tuple("_" + stage for stage in TEST_STAGES))
+
+
 REFUSAL_KINDS = ("probe", "test_only", "duplicate_id", "missing_dependency", "conflict", "unqualified_base", "unqualified_map",
                  "private_payload", "cycle", "budget", "replacement", "service", "checks", "parameters",
                  "ownership", "exclusive", "port_status")
@@ -1395,7 +1405,7 @@ def resolve(comp: dict, modules: list[dict], allow_unqualified: bool = False) ->
     one run; nothing raises here."""
     refusals: list[dict] = []
     for i,m in enumerate(modules):
-        if "test-only" in m["tags"] and comp["name"].endswith(("_pack","_pub")):
+        if "test-only" in m["tags"] and not is_test_profile(comp["name"]):
             refusals.append(_refusal("test_only", "Test-only member cannot reach a release profile", modules=[m["id"]], field=f"/modules/{i}"))
         # Defaults filled, then what the composition set over them: the configuration this member
         # is planned and built with. A name the module does not declare, or a value outside its
@@ -1654,7 +1664,8 @@ def collisions(modules: list[dict], loaded: dict[str, tuple], decisions: list[di
 
 def _aliases_of(m: dict, loaded: dict[str, tuple]) -> dict[str, list[str]]:
     """Sound alias names a member's banks carry, by bank: an adapter's alias table when its
-    prepared inputs are on this machine, a recipe's soundbank row read from its alias CSV, or
+    prepared inputs are on this machine (minus the rows ``soundbank.exclude_aliases`` hands to
+    the bank module that owns them), a recipe's soundbank row read from its alias CSV, or
     the declaration's own ``provides.aliases``. A seed manifest carries none, so a seed's bank
     is never judged here."""
     out: dict[str, list[str]] = {}
@@ -1970,7 +1981,8 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
                               "prepared_present": a["prepared_present"], "prepared_resolved": a["prepared_resolved"],
                               "prepared_source": a["prepared_source"], "prepared_candidates": a["prepared_candidates"],
                               "declared_roots": len(a["embedded"]),
-                              "loose_scripts": [s["target"] for s in a["scripts"]], "soundbank": a["soundbank"], "aliases": a["aliases"]}
+                              "loose_scripts": [s["target"] for s in a["scripts"]], "soundbank": a["soundbank"], "aliases": a["aliases"],
+                              "excluded_aliases": a["excluded_aliases"]}
         else:
             row["seed_sha256"] = m["seed"]["files"]["mod.ff"] and job.inputs[str(m["seed"]["package"].resolve())]
             row["seed_manifest_sha256"] = job.inputs[str(m["seed"]["manifest"])]
@@ -2087,8 +2099,12 @@ def execute(args, job: Job) -> dict:
     pack_foundation = offline_checks.foundation_of(comp["base"], getattr(args, "workspace", None))
     modules, loads, decisions, header = flatten(comp, job, (pack_foundation, comp["map"]), getattr(args, "workspace", None))
     from ..testing.planner import prepare_probe
+    # Composing is not running. A member whose test contract could drive a probe verb says nothing
+    # about the pack the member belongs to, so only a test profile admits the probe here; a release
+    # profile validates the same contracts and pulls nothing in. A test-only member that is
+    # declared or brought along is still refused, by ``resolve`` below.
     try:
-        prepare_probe(comp,modules,job)
+        prepare_probe(comp,modules,job,admit=is_test_profile(comp["name"]))
     except Failure as exc:
         raise refuse([_refusal("probe", exc.message, exc.hint, field=exc.details.get("field"))], "probe",
                      "Read details.refusals: the test probe this composition needs is missing or does not cover its target.")
@@ -2218,7 +2234,8 @@ def execute(args, job: Job) -> dict:
         "adapters": [{"id": m["id"], "recipe": str(m["adapter"]["recipe"]), "recipe_key": m.get("recipe_key"),
                       "foundation": m["adapter"]["foundation"], "map": m["adapter"]["map"],
                       "roots": m["adapter"]["embedded"], "soundbanks": [m["adapter"]["soundbank"]] if m["adapter"]["soundbank"] else [],
-                      "aliases": m["adapter"]["aliases"], "loose_scripts": [s["target"] for s in m["adapter"]["scripts"]],
+                      "aliases": m["adapter"]["aliases"], "excluded_aliases": m["adapter"]["excluded_aliases"],
+                      "loose_scripts": [s["target"] for s in m["adapter"]["scripts"]],
                       "prepared_present": m["adapter"]["prepared_present"],
                       "prepared_resolved": m["adapter"]["prepared_resolved"], "prepared_source": m["adapter"]["prepared_source"],
                       "prepared_candidates": m["adapter"]["prepared_candidates"],
