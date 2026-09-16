@@ -244,15 +244,17 @@ is not a new external-resolution qualification. No runtime pool occupancy is inf
 `clientfield-symmetry` is offline and registers no new route: it is one pack-level check row on
 `module plan` and `module build`, whose status is unchanged. It reads the pack's own compiled
 `.gsc` and `.csc` sources for `registerclientfield("<set>", "<name>", ...)` and for the helpers in
-`CLIENTFIELD_HELPERS` (today `add_zombie_powerup`, which registers `powerup_<id>` in set
-`toplayer` on whichever VM calls it), groups them by `(set, name)`, and refuses a name registered
+`CLIENTFIELD_HELPERS` (today `add_zombie_powerup`, which registers the field its client-field-name
+argument names in set `toplayer` on whichever VM passes one, and nothing on a VM whose call omits
+it), groups them by `(set, name)`, and refuses a name registered
 on exactly one script VM. It reads only the scripts the build stages, by the same rules
 `_build_composition` stages with (`staged_scripts`), so a member that loses a file collision
 answers for nothing and the pack's generated entry script answers like any other compiled row; and it is `not_counted` for any title but T6, the only one of the two with
-two script VMs. Tests (`tests/test_checks.py`, `tests/test_compositions.py`, 32 tests) cover a server-only and a client-only direct registration refused with the field, set, VM, script,
+two script VMs. Tests (`tests/test_checks.py`, `tests/test_compositions.py`, 33 tests) cover a server-only and a client-only direct registration refused with the field, set, VM, script,
 module and remedy; the pair passed, including across two members; the same name in two sets kept
-apart; `add_zombie_powerup` server-only refused as `powerup_<id>`; the ninth server argument
-naming the field when it is a literal; both halves passed with the shipped `isdefined` guards
+apart; a seven-argument `add_zombie_powerup` registering nothing, as the stock helper's own
+`isdefined` test decides, and a name argument that is not a literal left not_counted with its
+reason; the ninth server argument naming the field when it is a literal, refused server-only; both halves passed with the shipped `isdefined` guards
 raising no conditional row; a braced non-trivial condition and a plain `level` guard; the empty
 pack `not_counted`; a commented-out call, a non-literal name and a target with no script-VM suffix
 all unread; a literal reached past comments inside the argument list; an outer condition reported

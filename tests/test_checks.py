@@ -377,17 +377,40 @@ class ClientfieldSymmetry(unittest.TestCase):
     def powerup_client(self,pid='tesla',field='powerup_tesla'):
         return ('main()\n{\n}\n\ninit()\n{\n    if (!isdefined(level.zombie_powerups) || !isdefined(level.zombie_powerups["'+pid+'"]))\n'
                 f'        {self.CLIENT_POWERUPS}::add_zombie_powerup("{pid}", "{field}");\n'+'}\n')
-    def test_a_server_only_add_zombie_powerup_registers_powerup_of_the_id(self):
+    def test_an_add_zombie_powerup_without_a_name_argument_registers_nothing(self):
+        """Stock add_zombie_powerup wraps its registerclientfield in `if (isdefined(client_field_name))`
+        on both VMs, so the seven-argument call full_ammo, carpenter, free_perk and the point drops
+        make registers no field. Deriving `powerup_<id>` from the first argument refused a module
+        whose identical seven-argument call shipped in an accepted, played build."""
         rows=checks.clientfield_symmetry([('scripts/zm/tesla.gsc',self.powerup_server(),'powerup-tesla')])
-        self.assertEqual([r['id'] for r in rows],['clientfield-symmetry:powerup_tesla'])
-        self.assertEqual(rows[0]['outcome'],'failed')
-        self.assertIn('powerup_tesla',rows[0]['detail']);self.assertIn('toplayer',rows[0]['detail'])
-        self.assertIn('add_zombie_powerup',rows[0]['detail'])
+        self.assertEqual([(r['id'],r['outcome']) for r in rows],[('clientfield-symmetry','not_counted')])
+        self.assertNotIn('powerup_tesla',rows[0]['detail'])
+        # And it does not invent a half for a field another script really does register.
+        rows=checks.clientfield_symmetry([('scripts/zm/tesla.gsc',self.powerup_server(),'powerup-tesla'),
+                                          ('scripts/zm/meter.gsc',self.direct(),'hud-meter'),
+                                          ('scripts/zm/meter.csc',self.direct(),'hud-meter')])
+        self.assertEqual([(r['id'],r['outcome']) for r in rows],[('clientfield-symmetry:halo_cr35_meter','passed')])
     def test_the_ninth_server_argument_names_the_field_when_it_is_a_literal(self):
         """powerup-bonfire-sale registers powerup_bon_fire, not powerup_bonfire_sale."""
         rows=checks.clientfield_symmetry([('scripts/zm/bon.gsc',self.powerup_server('bonfire_sale','powerup_bon_fire'),'b')])
         self.assertEqual([r['id'] for r in rows],['clientfield-symmetry:powerup_bon_fire'])
         self.assertEqual(rows[0]['outcome'],'failed')
+        self.assertIn('powerup_bon_fire',rows[0]['detail']);self.assertIn('toplayer',rows[0]['detail'])
+        self.assertIn('add_zombie_powerup',rows[0]['detail'])
+    def test_a_name_argument_that_is_not_a_literal_is_not_counted_with_the_reason(self):
+        server=self.powerup_server('bonfire_sale','powerup_bon_fire').replace('"powerup_bon_fire"','level.field_name')
+        rows=checks.clientfield_symmetry([('scripts/zm/bon.gsc',server,'b')])
+        self.assertEqual([(r['id'],r['outcome']) for r in rows],[('clientfield-symmetry:unread:scripts/zm/bon.gsc','not_counted')])
+        for needle in ('scripts/zm/bon.gsc','module b','add_zombie_powerup','argument 9','server',
+                       'cannot read','Pass the name as a string literal'):
+            self.assertIn(needle,rows[0]['detail'],needle)
+        # The unread row rides along with a real comparison rather than replacing it.
+        rows=checks.clientfield_symmetry([('scripts/zm/bon.gsc',server,'b'),
+                                          ('scripts/zm/meter.gsc',self.direct(),'m'),
+                                          ('scripts/zm/meter.csc',self.direct(),'m')])
+        self.assertEqual([(r['id'],r['outcome']) for r in rows],
+                         [('clientfield-symmetry:unread:scripts/zm/bon.gsc','not_counted'),
+                          ('clientfield-symmetry:halo_cr35_meter','passed')])
     def test_add_zombie_powerup_on_both_vms_passes_and_the_isdefined_guards_are_not_conditions(self):
         """The shipped fix: both halves guarded by isdefined only, so no `:conditional` row."""
         rows=checks.clientfield_symmetry([('scripts/zm/bon.gsc',self.powerup_server('bonfire_sale','powerup_bon_fire'),'b'),
@@ -461,9 +484,9 @@ class ClientfieldSymmetry(unittest.TestCase):
                   '        , 1, 2, "int");\n}\n')
         rows=checks.clientfield_symmetry([('scripts/zm/meter.gsc',trailing,'m')])
         self.assertEqual([r['id'] for r in rows],['clientfield-symmetry:meter'])
-    def test_a_comment_around_a_powerup_id_is_read_the_same_way(self):
-        text=('main()\n{\n}\n\ninit()\n{\n    '+self.POWERUPS+'::add_zombie_powerup(/* id */ "tesla", "m", &"S", '
-              +self.POWERUPS+'::f, 1, 0, 0);\n}\n')
+    def test_a_comment_around_a_powerup_name_is_read_the_same_way(self):
+        text=('main()\n{\n}\n\ninit()\n{\n    '+self.POWERUPS+'::add_zombie_powerup("tesla", "m", &"S", '
+              +self.POWERUPS+'::f, 1, 0, 0, undefined, /* the field */ "powerup_tesla", "t", "o");\n}\n')
         rows=checks.clientfield_symmetry([('scripts/zm/t.gsc',text,'t')])
         self.assertEqual([r['id'] for r in rows],['clientfield-symmetry:powerup_tesla'])
     def test_an_argument_that_is_not_one_plain_literal_is_still_not_read(self):
@@ -489,10 +512,11 @@ class ClientfieldSymmetry(unittest.TestCase):
         for start,end in checks.string_spans(text):
             self.assertEqual(masked[start:end].strip(),'','a string span is blank in the masked copy')
 
-    def test_the_helper_table_is_one_row_per_helper(self):
+    def test_the_helper_table_is_one_row_per_helper_and_derives_no_name(self):
         row=checks.CLIENTFIELD_HELPERS['add_zombie_powerup']
         self.assertEqual(row['set'],'toplayer')
         self.assertEqual(row['name_arg'],{'server':8,'client':1})
+        self.assertEqual(set(row),{'set','name_arg'},'a helper names its field or registers none; nothing is derived')
 class MapGuards(unittest.TestCase):
     """A ported script that still asks whether it is on its donor map does nothing on the new one,
     compiles clean and links clean: only reading the guard finds it."""

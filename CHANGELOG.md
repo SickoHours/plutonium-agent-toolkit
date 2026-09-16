@@ -7,6 +7,24 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- `clientfield-symmetry` no longer invents a powerup clientfield nobody registers. The helper row
+  for `add_zombie_powerup` derived the field name `powerup_<id>` from the call's first argument
+  whenever the client-field-name argument was absent, so a module whose seven-argument call shipped
+  in an accepted, played build was refused as `clientfield-symmetry:powerup_<id>`, a mismatch the
+  engine could not have raised. Stock `_zm_powerups::add_zombie_powerup` wraps its
+  `registerclientfield` in `if (isdefined(client_field_name))` on the server and the client script
+  does the same on its own name argument: the seven-argument call the point drops, `full_ammo`,
+  `carpenter` and `free_perk` make registers no field at all, and a powerup with a field names it
+  outright. The helper row now registers only when the name argument is present and is a string
+  literal, and the field is that literal; the argument positions (ninth on the server, second on
+  the client) and the `toplayer` set are unchanged, and `id_arg`/`id_format` are gone rather than
+  consulted as a fallback. A call with no name argument contributes nothing on that VM and cannot
+  fail a plan; one whose name argument is an expression the check cannot read adds a
+  `clientfield-symmetry:unread:<script>` `not_counted` row naming the script, the call and the
+  argument, instead of a guess. The real defect is untouched: a server call that does name a field
+  with no client half registering the same name still fails with the field, the set, the VM, the
+  script, the module and the remedy. Offline verified on Linux; no game was loaded.
+
 - A member recipe's `loads` are now reported where the pack is planned, and a zone this machine
   does not hold refuses by member and path. A module whose assets resolve against a donor zone
   names that fastfile in its own `project.json`, and `module plan`/`module build` have always

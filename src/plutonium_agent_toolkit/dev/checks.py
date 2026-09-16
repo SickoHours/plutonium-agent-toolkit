@@ -508,14 +508,17 @@ def box_registrations(name,text,provided):
     return [{'id':'box-registration:'+name,'outcome':'passed','detail':f'{name} registers only weapons a member provides: {", ".join(sorted(names))}'}]
 
 # Stock helpers that register a clientfield without the pack ever writing `registerclientfield`.
-# One row per helper: `set` is the clientfield set it registers into, `name_arg` the zero-based
-# argument that carries the field name as a literal on each VM, and `id_arg`/`id_format` render
-# the name the helper derives itself when that argument is absent or is not a literal
-# (`add_zombie_powerup("tesla", ...)` registers `powerup_tesla`). The qualified path in front of
-# the call does not change what it registers, so only the call name is keyed. The next helper is
-# one row.
-CLIENTFIELD_HELPERS={'add_zombie_powerup':{'set':'toplayer','name_arg':{'server':8,'client':1},
-                                           'id_arg':0,'id_format':'powerup_{}'}}
+# One row per helper: `set` is the clientfield set it registers into and `name_arg` the zero-based
+# argument that carries the field name on each VM. The helper registers a field only when that
+# argument is passed: stock `_zm_powerups::add_zombie_powerup` wraps its `registerclientfield` in
+# `if (isdefined(client_field_name))` on the server and does the same on the client, so the
+# seven-argument call every point drop, full_ammo, carpenter and free_perk makes registers
+# nothing, while a powerup with a field names it outright (`add_zombie_powerup("tesla", ..., "t",
+# "powerup_tesla", ...)`). The name is that literal and is never derived from the id: deriving one
+# invented a registration the engine never makes and refused a played build. The qualified path in
+# front of the call does not change what it registers, so only the call name is keyed. The next
+# helper is one row.
+CLIENTFIELD_HELPERS={'add_zombie_powerup':{'set':'toplayer','name_arg':{'server':8,'client':1}}}
 
 REGISTER_CALL=re.compile(r'\b(registerclientfield|'+'|'.join(sorted(CLIENTFIELD_HELPERS))+r')\s*\(',re.I)
 IF_HEADER=re.compile(r'\bif\s*\(',re.I)
@@ -632,12 +635,16 @@ def _condition_of(masked,offset):
     return None
 
 def _registrations(name,text):
-    """Every clientfield this script registers: ``(set, field, condition)``, where ``condition`` is
-    the non-trivial `if` the registration sits under, or None. A call whose set or name is not a
-    string literal is not read: the check refuses what it can prove, not what it guesses."""
+    """``(rows, unread)`` for one script. ``rows`` is every clientfield it registers,
+    ``(set, field, condition, call)``, where ``condition`` is the non-trivial `if` the registration
+    sits under, or None. A call whose set or name is not a string literal is not read: the check
+    refuses what it can prove, not what it guesses. ``unread`` names the helper calls that do carry
+    a name argument the check could not read, ``(call, position)``, so the pack is told which
+    registration went uncompared instead of being judged on a guessed name. A helper call with no
+    name argument at all registers nothing on this VM and appears in neither list."""
     vm=_script_vm(name)
-    if vm is None:return []
-    masked=mask_noncode(text);strings=string_spans(text);rows=[]
+    if vm is None:return [],[]
+    masked=mask_noncode(text);strings=string_spans(text);rows=[];unread=[]
     def literal(args,index):
         return _literal(masked,text,args[index],strings) if index is not None and index<len(args) else None
     for match in REGISTER_CALL.finditer(masked):
@@ -648,13 +655,15 @@ def _registrations(name,text):
             field_set=literal(args,0);field=literal(args,1)
         else:
             helper=CLIENTFIELD_HELPERS[call];field_set=helper['set']
-            field=literal(args,helper['name_arg'].get(vm))
-            if field is None:
-                ident=literal(args,helper['id_arg'])
-                field=helper['id_format'].format(ident) if ident else None
+            index=helper['name_arg'].get(vm)
+            # No name argument on this VM: the stock helper's `if (isdefined(...))` skips its
+            # registerclientfield, so the call registers nothing here and pairs with nothing.
+            if index is None or index>=len(args):continue
+            field=literal(args,index)
+            if field is None:unread.append((call,index));continue
         if not field_set or not field:continue
         rows.append((field_set,field,_condition_of(masked,match.start()),call))
-    return rows
+    return rows,unread
 
 REMEDY=('ship the other half as a loose scripts/zm script (a .csc for a server registration, a '
         '.gsc for a client one) that registers the same name with the same width and version, '
@@ -668,10 +677,13 @@ def clientfield_symmetry(sources,game='t6'):
     pack's two halves together, so it is read once per composition rather than per script.
 
     ``sources`` is ``(target, text, module)`` per compiled `.gsc` and `.csc`. Every direct
-    `registerclientfield("<set>", "<name>", ...)` and every ``CLIENTFIELD_HELPERS`` call is
-    grouped by ``(set, name)``: a pair on both VMs passes, a name on exactly one VM fails naming
-    the field, the set, the VM, the script and the module, and a pack that registers nothing on
-    either VM is not_counted. Registrations the stock map already makes on both VMs are outside
+    `registerclientfield("<set>", "<name>", ...)` and every ``CLIENTFIELD_HELPERS`` call that
+    passes its field name as a string literal is grouped by ``(set, name)``: a pair on both VMs
+    passes, a name on exactly one VM fails naming the field, the set, the VM, the script and the
+    module, and a pack that registers nothing on either VM is not_counted. A helper call that
+    passes no name argument on this VM registers nothing there, exactly as the stock helper's own
+    `isdefined` test decides; one whose name argument cannot be read adds a not_counted row rather
+    than a guessed name. Registrations the stock map already makes on both VMs are outside
     the pack and are never read here; only what the pack's own scripts register is compared.
 
     A registration under a condition is still a registration, so it counts for the pairing, and a
@@ -682,17 +694,24 @@ def clientfield_symmetry(sources,game='t6'):
         return [{'id':'clientfield-symmetry','outcome':'not_counted',
                  'detail':f'clientfield registrations are a T6 two-VM property; {game} runs one script VM and its '
                           f'registrations are not judged here'}]
-    found={};conditions={}
+    found={};conditions={};unread_rows=[]
     for name,text,module in sources:
-        for field_set,field,condition,call in _registrations(name,text):
+        registrations,unread=_registrations(name,text)
+        for field_set,field,condition,call in registrations:
             vm=_script_vm(name)
             found.setdefault((field_set,field),{}).setdefault(vm,[]).append((name,module,call))
             if condition:conditions.setdefault((field_set,field),[]).append((vm,name,module,condition))
+        for call,index in unread:
+            unread_rows.append({'id':'clientfield-symmetry:unread:'+name,'outcome':'not_counted',
+                                'detail':f'{_owner(name,module)} calls {call} with argument {index+1}, the clientfield '
+                                         f'name, as an expression this check cannot read, so whatever that call '
+                                         f'registers on the {_script_vm(name)} VM is left out of the comparison with '
+                                         f'the other VM. Pass the name as a string literal to have it checked'})
     if not found:
-        return [{'id':'clientfield-symmetry','outcome':'not_counted',
+        return unread_rows or [{'id':'clientfield-symmetry','outcome':'not_counted',
                  'detail':'No clientfield registration read: no compiled script in this pack calls registerclientfield '
                           'or a helper that registers a field, so there is nothing to compare across the two VMs'}]
-    rows=[]
+    rows=list(unread_rows)
     for key in sorted(found):
         field_set,field=key;vms=found[key]
         if 'server' in vms and 'client' in vms:
