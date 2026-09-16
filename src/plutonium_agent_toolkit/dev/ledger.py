@@ -502,6 +502,52 @@ def write_ledger(path: Path, text: str) -> str:
     return str(path)
 
 
+def serialise(data, raw: str | None = None) -> str:
+    """JSON the way the file already writes it, so a record is an addition and not a reformat:
+    the ledger and the registry differ on ``ensure_ascii`` across this shelf and a diff that
+    re-escapes every accent hides the row that was added."""
+    if raw is not None and json.dumps(data, indent=2) + "\n" != raw:
+        return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    return json.dumps(data, indent=2) + "\n"
+
+
+def append_row(path: Path, row: dict, subject_id: str) -> tuple[str, int]:
+    """The ledger at ``path`` with ``row`` appended, as the exact text to write.
+
+    The header is created when the file is absent, the whole book goes through ``validate``
+    before any of it reaches disk, and the file's own ``ensure_ascii`` is kept. Nothing is
+    written here: the caller holds ``lock`` and writes the returned text with ``write_ledger``,
+    so a route that writes several files together keeps its own all-or-nothing rollback, and a
+    route that writes one file refuses with the file untouched. Returns the text and the number
+    of rows it holds.
+
+    The read is the bounded ``read``: an ``evidence.json`` past ``MAX_BYTES`` is refused with
+    ``input_limit`` rather than parsed into memory. What counts as a ledger already on disk is
+    ``regular``: a symlink or a FIFO in that name is refused here, instead of being taken for an
+    absent ledger and then written through by the caller.
+    """
+    path = Path(path)
+    if not regular(path):
+        raw, book = None, {"schema": 1, "subject": {"id": subject_id}, "rows": []}
+    else:
+        data, book = read(path)
+        raw = data.decode("utf-8")
+        if not isinstance(book, dict) or not isinstance(book.get("rows"), list):
+            raise Failure(INPUT_INVALID, f"Ledger has no rows list to append to: {path}", field="/rows")
+        subject = book.get("subject")
+        if isinstance(subject, dict) and subject.get("id") is not None and subject["id"] != subject_id:
+            raise Failure(INPUT_INVALID,
+                          f"Ledger subject is {subject['id']!r}, not this module's id {subject_id!r}: {path}",
+                          "A module's ledger holds rows about that module only.", field="/subject/id")
+    book["rows"] = [*book["rows"], row]
+    normalized, diagnostics = validate(book)
+    if normalized is None or diagnostics:
+        raise Failure(INPUT_INVALID, f"The row does not validate against {PROTOCOL}: {diagnostics[:4]}",
+                      "A ledger row is written through the same validator module state --ledger reads.",
+                      field=(diagnostics[0].get("field") if diagnostics else "/"))
+    return serialise(book, raw), len(normalized["rows"])
+
+
 # ----- derivation ------------------------------------------------------------------------
 
 def row_facts(row: dict) -> dict:
@@ -800,8 +846,7 @@ def _append_locked(path: Path, subject: str, row_files: list) -> dict:
     # The rows are written as they were given, not as the validator normalized them: the shorthand
     # the author wrote (a single ``map``) is valid and re-reads identically, and every other record
     # this shelf writes keeps the author's shape too.
-    from .qualify import serialise  # deferred: qualify imports this module for the row it writes
-
+    #
     # ``serialise`` picks ``ensure_ascii`` by asking whether the escaped dump is the file's own
     # bytes. An appended row always changes those bytes, so the question is asked of the rows that
     # were already on disk: a file that escapes keeps escaping, one that does not keeps its UTF-8,

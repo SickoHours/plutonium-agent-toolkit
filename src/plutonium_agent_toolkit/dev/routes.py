@@ -77,7 +77,7 @@ PLANNED = [
           status="implemented", owner=OWNER),
     Route("module", "inspect", "Validate one module or composition declaration without resolving payloads", "inert",
           status="implemented", owner=OWNER,
-          notes="Argument: <module.json|composition.json> --json. Protocol pat.module-inspect/1; declaration-only, at most 256 KiB, no final-component symlinks, job, payload reads or network; symlinked ancestors allowed. Schema: schemas/module-inspect-v1.schema.json. A module's replacement declarations are validated here: replaces.functions is a list of script/path::function targets (at most 256; engine entry points are base-owned and refused), replaces.files is a list of replaced script paths ending .gsc or .csc (at most 64), and entry.replace/entry.register each name the path::function a generated entry's main/init calls. An entry-managed module must not define main or init; metadata echoes replaces and entry when the declaration names them."),
+          notes="Argument: <module.json|composition.json> --json. Protocol pat.module-inspect/1; declaration-only, at most 256 KiB, no final-component symlinks, job, payload reads or network; symlinked ancestors allowed. Schema: schemas/module-inspect-v1.schema.json. A module's replacement declarations are validated here: replaces.functions is a list of script/path::function targets (at most 256; engine entry points are base-owned and refused), replaces.files is a list of relative zone paths the base or the map already carries, a script, a table, a visionset or a weapons/<name> file (at most 64), and entry.replace/entry.register each name the path::function a generated entry's main/init calls. An entry-managed module must not define main or init; metadata echoes replaces and entry when the declaration names them. A declaration may also name exclusive (role words from a fixed list this module owns outright), service (true when it exists to own shared things others depend on) and a dependencies entry as {id, kind, why} naming what the edge is for; replaces.files now accepts any relative base-owned zone path (a table, a visionset, a weapons/<name> file), not only a .gsc or .csc script, and metadata echoes exclusive, service and dependency_kinds when the declaration names them. A declaration may also name registration (self, entry or none: who prints the module's one console line <id> >> registered at init; entry needs an entry field, since the generated entry script prints the line after calling entry.register), echoed when the declaration names it."),
     Route("module", "compose", "Write and plan a recipe from member IDs and a foundation, or publish a recipe after a successful build", "writes-output", status="implemented", owner=OWNER, notes="Use --name --base --map --foundation --member-root --module with a fresh --output. Publish with --composition --from-build --publish-to. No game actions."),
     Route("module", "plan", "Resolve a composition of declared modules (dependency order, conflicts, base and map fit, "
           "resource budget), list every collision as a decision, and hash every input without running a backend", "writes-output",
@@ -120,6 +120,17 @@ PLANNED = [
                 "recipes entry instead. Nothing is written to the module until every step succeeded; on failure the job directory holds the refusal "
                 "(details.refusals, kinds in dev/qualify.py REFUSAL_KINDS) and the module is untouched. A set runs in dependency order, continues past "
                 "failures and writes results.json. No parallelism inside the route; no game, network or install. Format: docs/MODULES.md."),
+    Route("module", "accept", "Append one person's gameplay verdict to a module's evidence.json as a player-accepted row, "
+          "scoped to the base, foundation and map it was given on and pinned to the package that was installed",
+          "writes-output", status="implemented", owner=OWNER,
+          notes="Arguments: <module dir> --outcome accepted|rejected --base <token> --foundation <id> --map <id> --package <sha256> "
+                "--record <workspace-relative path> [--record-sha256 <hex>] [--reporter TEXT] [--quote TEXT] [--not-covered TEXT]... "
+                "[--note TEXT] [--at ISO] [--workspace <root>] --output <new dir>. Records a verdict a person gave; it forms none and "
+                "infers none. The row is validated through the same validator module state --ledger reads before the file is written, so "
+                "a refusal leaves evidence.json byte for byte as it was; the ledger is append-only, and a second verdict is a second row. "
+                "One member module per call: a verdict on a pack is written once per member. --workspace only reports whether the cited "
+                "record resolves; a record it cannot find is reported, not refused. No game, network, install or build. "
+                "Format: docs/evidence-ledger.md."),
     Route("module", "build", "Compile every module's scripts, stage every asset, link one mod.ff, read it back and compare every rawfile",
           "writes-output", status="available", owner=OWNER,
           notes="Use --allow-unqualified to report base/map mismatches without refusing. Same backends and readback as project build; the composition's fit and budget come from declarations, not from the game."),

@@ -339,6 +339,21 @@ class AdaptOutcomeTests(QualifyFixture):
         self.assertEqual([r["module"] for r in row["details"]["adapt"]], ["alpha"])
         self.assertEqual(row["details"]["unqualified"][0]["id"], "alpha")
 
+    def test_a_member_guarded_on_its_donor_map_is_a_port_not_a_widening(self):
+        # The guard names the map the module was written for; widening the declaration would not
+        # make it run on the target, so the work order says port, and the pattern says why.
+        self.foundation()
+        directory = self.module("alpha", bases=["stock"], maps=["zm_transit"],
+                                provides={"scripts": ["scripts/zm/alpha.gsc"]})
+        (directory / "scripts" / "alpha.gsc").write_text(
+            'main()\n{\n    if ( getdvar( "mapname" ) != "zm_transit" )\n        return;\n    level thread alpha();\n}\n\nalpha()\n{\n    wait 1;\n}\n')
+        comp = self.composition(["alpha"], name="b2_example_test", base="b2", map_id="zm_factory")
+        code, row = invoke(["module", "plan", str(comp), "--allow-unqualified", "--workspace", str(self.root), "--output", self.out()])
+        self.assertEqual(code, 1, row)  # a failed map-guard row refuses like every failed check
+        adapt = {r["module"]: r for r in row["details"]["adapt"]}
+        self.assertEqual(adapt["alpha"]["pattern"], "map-guard")
+        self.assertIn("zm_transit", adapt["alpha"]["detail"])
+
     def test_an_adapter_cut_for_another_target_is_named_as_its_own_pattern(self):
         self.foundation()
         self.adapter("gum_a", bases=["stock"], maps=["zm_transit"])
