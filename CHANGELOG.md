@@ -18,12 +18,21 @@ Every entry states what shipped, on which platform it was verified, and what rem
   `pat project plan|build` (where a module built alone is judged) and in `pat module plan|build`.
   A stock script path the shipped map tables carry is `not_counted` instead: that is an override of
   a script the map's own zones already load, which no receipt here settles, and retargeting it
-  would stop it being an override. The same root rule now decides the loose delivery beside the
-  package, so a script that passes the check is the script that travels, and a `.csc` under the
-  loaded root is delivered like a `.gsc`. `map-scripts` no longer counts a path the pack ships only
-  as an unregistered rawfile as carried -- a false pass that let a pack vouch for its own
-  unreachable script -- and names it with its `script-reach` row instead; a `script,` zone row a
-  seed or adapter roots is a real scriptparsetree asset and still counts. An adapter's staged
+  would stop it being an override. The loose delivery beside the package narrowed with it: that
+  filter was `scripts/` and is now the title's loaded roots (`scripts/zm/` on T6), so a script that
+  passes the check is the script that travels, and a `.csc` under the loaded root is delivered like
+  a `.gsc`. Nothing leaves that delivery unsaid. A compiled target and a recipe's own `rawfile`
+  asset row whose target is a script are both judged on the root and refused, in `pat project
+  plan|build` and `pat module plan|build` alike, where the recipe that names the path can be
+  changed. A `rawfile` row already inside a member's own package -- a seed's `mod.ff`, an adapter's
+  `rawfiles` -- is not refused, because this pack roots no target for it and there is nothing to
+  retarget; it gets a `not_counted` `script-reach:<path>` row stating that it is carried, never
+  registered and not delivered loose, which nothing else said (the receipt's `loose_scripts` only
+  omitted it, and `map-scripts` judges the stock namespaces alone).
+  `map-scripts` no longer counts a path the pack ships only as an unregistered rawfile as carried
+  -- a false pass that let a pack vouch for its own unreachable script -- and names it with its
+  `script-reach` row instead; a `script,` zone row a seed or adapter roots is a real
+  scriptparsetree asset and still counts. An adapter's staged
   script outside the roots was silently dropped on compose (the harvest walks `stage/scripts`
   only); it is now refused rather than widened to roots the engine does not register. A member
   whose every script is unreachable gets the `script-unreachable` adapt pattern: a port, not a

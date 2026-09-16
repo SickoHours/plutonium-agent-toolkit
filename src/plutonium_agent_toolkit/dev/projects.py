@@ -208,8 +208,12 @@ def _plan(data, compiled, loose, loads, job: Job) -> dict:
             checks.append({"id": name, "available": False, "message": exc.message})
     # A module built alone is where `pat module qualify` judges it, so the one check a lone recipe
     # can decide is made here too: a compiled script packed outside the roots the title's client
-    # loads from is unreachable however it is later composed (dev/checks.py script_reach).
+    # loads from is unreachable however it is later composed (dev/checks.py script_reach). A
+    # `rawfile` asset row whose target is a script is the same case -- the recipe roots the path
+    # itself -- so it is judged on the same root and not only when a pack composes it.
     script_rows = [row for _, target, _ in compiled for row in offline_checks.script_reach(target.as_posix(), data["game"])]
+    script_rows += [row for _, target, kind, _ in loose if kind == "rawfile" and target.suffix.lower() in (".gsc", ".csc")
+                    for row in offline_checks.script_reach(target.as_posix(), data["game"])]
     plan = {
         "schema_version": 1, "name": data["name"], "game": data["game"],
         "mode": data.get("mode", titles.modes(data["game"])[0]),

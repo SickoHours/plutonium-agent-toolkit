@@ -899,6 +899,16 @@ retargeting it would stop it being an override at all — replace such a functio
 the loaded root instead. The same root rule decides which compiled scripts travel loose beside the
 package, so a script that passes the check is the script that is delivered.
 
+A recipe's own `rawfile` asset row whose target is a `.gsc` or `.csc` is judged on the same root:
+the pack roots that path itself, and the loose delivery copies it only from a loaded root, so
+outside them it is neither registered nor delivered. It fails like a compiled target, where the
+recipe naming it can be changed. A `rawfile` row already inside a *member's own package* — a seed's
+`mod.ff`, an adapter's `rawfiles`, its embedded loose scripts — is `not_counted` instead: this pack
+roots no target for it, so there is nothing here to retarget. The row exists so the drop is named
+rather than silent, because nothing else names it — the build receipt's `loose_scripts` only omits
+the path, and `map-scripts` judges the stock namespaces alone. If the pack needs that script, add
+it under the loaded root in a module of the pack.
+
 `map-guard:<script>` rows read the other half of "this script is on the wrong map", the half no
 zone table can see. A module ported from another map often keeps its donor's entry guard: an
 `if ( getdvar( "mapname" ) != "zm_transit" ) return;` as the first statement of `main()` or `init()`,

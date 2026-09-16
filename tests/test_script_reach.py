@@ -145,6 +145,82 @@ class PackReach(CompositionFixture):
         self.assertEqual(row["outcome"], "passed", row)
 
 
+class ScriptsRootNarrowing(CompositionFixture):
+    """The loose delivery beside the package used to copy everything under ``scripts/`` and now
+    copies only what is under the title's loaded roots. The two paths a ``scripts/foo.gsc`` can
+    reach that filter by are a compiled script target and a ``rawfile`` asset row; neither may
+    stop travelling without a row saying so, and the roots are not widened back."""
+
+    def test_a_compiled_script_at_scripts_foo_is_refused_before_delivery(self):
+        self.module("alpha", script_target="scripts/foo.gsc")
+        for action in ("plan", "build"):
+            code, row = invoke(["module", action, str(self.composition(["alpha"])), "--output", self.out(), "--json"])
+            self.assertEqual(code, 1, row)
+            self.assertIn("script-reach:scripts/foo.gsc", row["details"]["failed"])
+        # The remedy names the loaded root's path, not the packed one, and rewrites the callers.
+        detail = checks.script_reach("scripts/foo.gsc")[0]["detail"]
+        self.assertIn("Retarget to scripts/zm/foo.gsc", detail)
+        self.assertIn(r"scripts\foo:: becomes scripts\zm\foo::", detail)
+
+    def test_a_rawfile_asset_row_at_scripts_foo_is_refused_where_the_recipe_can_be_changed(self):
+        """A recipe's own ``rawfile`` row is the other thing in the delivery loop. It is rooted by
+        this pack, so the refusal is the honest answer: the path can be changed here."""
+        self.module_with_assets("beta", [{"source": "raw/foo.gsc", "target": "scripts/foo.gsc", "type": "rawfile"}])
+        code, row = invoke(["module", "plan", str(self.composition(["beta"])), "--output", self.out(), "--json"])
+        self.assertEqual(code, 1, row)
+        self.assertIn("script-reach:scripts/foo.gsc", row["details"]["failed"])
+        # And alone, where `pat module qualify` judges a module: same row, same root.
+        d = self.root / "modules" / "beta"
+        code, row = invoke(["project", "plan", str(d / "project.json"), "--output", self.out(), "--json"])
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["details"]["failed"], ["script-reach:scripts/foo.gsc"])
+
+    def test_a_rawfile_row_under_the_loaded_root_still_travels_loose(self):
+        self.module_with_assets("beta", [{"source": "raw/foo.gsc", "target": "scripts/zm/foo.gsc", "type": "rawfile"}])
+        code, row = invoke(["module", "build", str(self.composition(["beta"])), "--output", self.out(), "--json"])
+        self.assertEqual(code, 0, row)
+        self.assertEqual(sorted(row["result"]["loose_scripts"]), ["scripts/zm/beta.gsc", "scripts/zm/foo.gsc"])
+
+
+class CarriedNotDelivered(AdapterFixture):
+    """A ``rawfile,scripts/foo.gsc`` row already inside a member's own package. This pack does not
+    root it, so there is nothing to retarget and it is not refused -- but it is not delivered loose
+    either, and that is now a row on the plan instead of an absence from ``loose_scripts``."""
+
+    def test_an_embedded_rawfile_script_is_not_delivered_loose_and_is_named_in_a_row(self):
+        self.adapter("civil", rawfiles=["scripts/foo.gsc"])
+        out = self.out()
+        code, row = invoke(["module", "build", str(self.composition(["civil"], name="stock_adapter_test")),
+                            "--output", out, "--json"])
+        self.assertEqual(code, 0, row)
+        # Not delivered: only the adapter's own staged script, which is under the loaded root.
+        self.assertEqual(row["result"]["loose_scripts"], ["scripts/zm/halo_civil.gsc"])
+        plan = json.loads((Path(row["result"]["output"]) / "plan.json").read_text())
+        carried = [c for c in plan["checks"] if c["id"] == "script-reach:scripts/foo.gsc"]
+        self.assertEqual([c["outcome"] for c in carried], ["not_counted"], plan["checks"])
+        detail = carried[0]["detail"]
+        self.assertIn("scripts/foo.gsc", detail)
+        self.assertIn("does not travel loose beside the package", detail)
+        self.assertIn("scripts/zm/", detail)
+        self.assertIn("no target to retarget", detail)
+        # The row is the only thing that names this drop: `map-scripts` judges the stock namespaces
+        # only, so a caller into a `scripts/...` path of this kind raises no row of its own.
+        caller = checks.map_script_externals("scripts/zm/alpha.gsc", "main()\n{\n    scripts\\foo::init();\n}\n",
+                                             "zm_transit", "bo2-stock", "t6", set(), {"scripts/foo.gsc"})[0]
+        self.assertEqual(caller["outcome"], "not_counted", "scripts/ is not a stock namespace map-scripts judges")
+        # And the roots are not widened to reach it: it is still absent from the loose delivery.
+        self.assertNotIn("scripts/foo.gsc", row["result"]["loose_scripts"])
+
+    def test_an_embedded_rawfile_script_under_the_loaded_root_is_not_named_unreachable(self):
+        self.adapter("civil", rawfiles=["scripts/zm/civil_extra.gsc"])
+        code, row = invoke(["module", "plan", str(self.composition(["civil"], name="stock_adapter_test")),
+                            "--output", self.out(), "--json"])
+        self.assertEqual(code, 0, row)
+        plan = json.loads((Path(row["result"]["output"]) / "plan.json").read_text())
+        self.assertEqual([c["id"] for c in plan["checks"] if c["id"].startswith("script-reach:")
+                          and "civil_extra" in c["id"]], [])
+
+
 class LooseDelivery(CompositionFixture):
     def test_only_a_script_under_a_loaded_root_travels_loose_beside_the_package(self):
         a = self.module("alpha")

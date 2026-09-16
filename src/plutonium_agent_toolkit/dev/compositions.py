@@ -2165,6 +2165,12 @@ def execute(args, job: Job) -> dict:
                 elif asset not in pack_scripts:
                     unreachable_scripts.add(asset)
     plan["checks"] += [row for _,target,_ in compiled for row in offline_checks.script_reach(target.as_posix(),comp["game"])]
+    # A recipe's own `rawfile` asset row whose target is a script is the same case as a compiled
+    # one: the pack roots the path itself, and the loose delivery below copies it only from a loaded
+    # root, so outside them it is neither registered nor delivered. Judged and refused here, where
+    # the recipe that names it can be changed, instead of dropped without a row.
+    plan["checks"] += [row for _,target,kind,_ in loose if kind == "rawfile" and target.suffix.lower() in (".gsc", ".csc")
+                       for row in offline_checks.script_reach(target.as_posix(),comp["game"])]
     # An adapter stages its own loose scripts, and the compose harvest copies only the ones under
     # `scripts/`. A staged script outside the loaded roots is therefore dropped from the pack
     # entirely -- no loose copy, no zone row, an empty `loose_scripts` on the receipt. The drop is
@@ -2173,6 +2179,14 @@ def execute(args, job: Job) -> dict:
     for m in adapter_modules:
         for row in m["adapter"]["scripts"]:
             plan["checks"] += offline_checks.script_reach(row["target"],comp["game"])
+    # The rest of `unreachable_scripts` is what this pack carries without rooting: a `rawfile` row
+    # inside a member's own package, or a `provides.scripts` name no payload produces. Nothing here
+    # can retarget those, so they are named rather than refused -- one row each, so a script that is
+    # shipped and never opened is a row on the plan and not a silent gap in `loose_scripts`.
+    named = {c["id"] for c in plan["checks"]}
+    for path in sorted(unreachable_scripts):
+        if "script-reach:" + path not in named:
+            plan["checks"] += offline_checks.carried_script_reach(path,comp["game"])
     for source,target,_ in compiled:
         try: text=Path(source).read_text(encoding="utf-8",errors="replace")
         except OSError: continue
@@ -2588,8 +2602,10 @@ def _build_composition(comp: dict, plan: dict, compiled, loose, seed_modules, lo
     # Compiled scripts also travel loose beside the package: on this base the engine executes
     # scripts/zm/*.gsc from the profile folder (`loaded successfully from raw`) and does not run
     # the rawfile copies inside mod.ff. Every accepted stock profile ships them this way. The
-    # roots are the title's loaded roots, the same set `script-reach` refuses a target outside,
-    # so a script that passed the check is the script that travels (dev/titles.py).
+    # filter was `scripts/` and is now the title's loaded roots (`scripts/zm/` on T6), the same
+    # set `script-reach` refuses a target outside, so a script that passed the check is the script
+    # that travels (dev/titles.py). The narrowing drops nothing without a row: every rawfile here
+    # is a compiled target or a recipe asset row, and both are judged above.
     loose_scripts = []
     for rel in rawfiles:
         if rel.suffix.lower() in (".gsc", ".csc") and offline_checks.loads_script(rel.as_posix(), game):

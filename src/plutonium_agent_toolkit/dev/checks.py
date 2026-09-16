@@ -565,6 +565,27 @@ def script_reach(name,game='t6'):
                       f'Retarget to {retarget} and rewrite every caller\'s qualified path ({old}:: becomes '
                       f'{new_call}::) or #include; a {path.parts[0]}/... path inside mod.ff is never registered'}]
 
+def carried_script_reach(name,game='t6'):
+    """The same reach question for a script the pack carries but roots no target for: a ``rawfile``
+    row already embedded in a member's own package (a seed's ``mod.ff``, an adapter's ``rawfiles``
+    or its embedded loose scripts), or a ``provides.scripts`` name no payload produces. The engine
+    fact is ``script_reach``'s: outside the loaded roots nothing registers it, and the loose
+    delivery beside the package does not copy it either, so it is shipped and never opened.
+
+    ``not_counted``, not refused: the row is inside bytes this pack only loads, so there is no
+    target here to retarget. Its purpose is that the drop is named. Nothing else names it -- the
+    receipt's ``loose_scripts`` just omits it, and ``map_script_externals`` judges only the stock
+    namespaces, so a caller into a ``scripts/...`` path of this kind raises no row of its own."""
+    roots=titles.loaded_script_roots(game)
+    return [{'id':'script-reach:'+name,'outcome':'not_counted','roots':list(roots),
+             'detail':f'This pack carries {name} only as a rawfile outside {", ".join(roots)}, the roots this '
+                      f'client loads a mod\'s scripts from: the engine never registers it as a script, and it does '
+                      f'not travel loose beside the package either, so it is shipped and never opened. Nothing here '
+                      f'roots that path -- it is inside a member\'s own package -- so there is no target to retarget '
+                      f'and this row refuses nothing; if the pack needs that script, add it under {roots[0]} in a '
+                      f'module of this pack'}]
+
+
 INCLUDE_PATH=re.compile(r'^\s*#include\s+([^;]+);',re.M|re.I)
 QUALIFIED=re.compile(r'([A-Za-z_][A-Za-z0-9_\\/]*[\\/][A-Za-z0-9_\\/]+)::[A-Za-z_]')
 
