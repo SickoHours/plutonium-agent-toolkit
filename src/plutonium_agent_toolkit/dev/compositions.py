@@ -127,6 +127,11 @@ def add_parser(sub, common):
     q.add_argument("--location", help="With --ledger: a survival location inside --map; without it only rows with no location match")
     q.add_argument("--target", help="With --ledger: a target key <foundation>/<map>/<mode>[/<location>] supplying foundation, map and location at once")
     q.add_argument("--json",action="store_true")
+    q = actions.add_parser("ledger-add", help="Append validated rows to a module's evidence.json; append-only and all-or-nothing")
+    q.add_argument("ledger", help="A module directory or its evidence.json; created from the module.json id when absent")
+    q.add_argument("--row", action="append", default=[], required=True, metavar="FILE",
+                   help="A JSON file holding one row object or a list of row objects; repeatable, appended in the order given")
+    q.add_argument("--json", action="store_true")
     q = actions.add_parser("ledger-from-registry", help="Propose evidence.json rows for one workspace module from the registry and its docs; prints them, writes nothing")
     q.add_argument("workspace", help="Workspace root holding modules/, registry/t6-modules.json and foundations/")
     q.add_argument("module_id", help="Directory name under modules/")

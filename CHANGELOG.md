@@ -33,6 +33,40 @@ Every entry states what shipped, on which platform it was verified, and what rem
   receipts, `pat-review` reads the six facts off the ledger rows with `null` meaning not earned rather
   than false, and the `plutonium-agent-toolkit` entry point names the ledger beside the other reference
   pages. Documentation only; no route, schema or behaviour changes.
+- New route `pat module ledger-add <module dir|evidence.json> --row <row.json> [--row ...] --json`,
+  the only way to add a row to a module's evidence ledger besides the `built-alone` row
+  `module qualify` earns. `module state --ledger` reads a ledger and `module ledger-from-registry`
+  proposes one, but nothing appended to one, so a campaign recording a run per member per load had
+  to edit `evidence.json` by hand — a row nothing validated, in a file everything downstream
+  derives facts from. Each `--row` file holds one row object or a list of them, appended in the
+  order given and validated by the rules `module inspect` applies, in the context of the whole
+  ledger (at most 1024 rows and 1 MiB, counted after the write). The route refuses, writing
+  nothing, when any row fails validation (every diagnostic carries its row index, JSON Pointer and
+  source file), when a row's normalized JSON is already in the file or repeated in the same
+  invocation (`row_duplicate`, a new error code, so a rerun loop can tell "already recorded" from
+  "malformed"), when the ledger's `subject.id` is another module's, when the ledger already on
+  disk does not validate, and when there is no `module.json` beside it to name the subject. It
+  creates the file from the declaration's id when absent, never edits or removes an existing row,
+  and keeps the file's own `ensure_ascii` so the diff is the rows added. The read, the validation
+  and the write happen under an advisory lock on a sibling `.evidence.json.lock`, so two workers
+  appending at once append both rows instead of the second silently dropping the first; the write
+  itself is a sibling temporary file, an `fsync` and a rename, so a full disk or an interrupt
+  leaves the rows that were already there rather than a truncated ledger; and an `evidence.json`
+  that is not a regular file (a symlink, a FIFO, a directory) is refused with `input_invalid`
+  before anything opens it, so the route never writes through a link nor blocks on a FIFO. Two
+  validation rules tightened with it: `at` must be a date that exists on the calendar
+  (`2026-99-99` had the shape and was accepted), and a string JSON accepts but UTF-8 cannot
+  encode (a lone surrogate) is refused with its pointer instead of raising in the encoder as the
+  file is written. The result reports the
+  file, the row counts before and after, the appended indexes and, per appended row, the six facts
+  the ledger now derives for the scope that row names — a `game-tested` row stating only
+  `installed` and `launched` leaves `loaded_and_playable` `null`, as it should, and a row scoped
+  to `maps: ["*"]` is answered by the rows scoped to every map, never by one map's own rows, so a
+  module built alone on `zm_transit` is not reported offline-verified everywhere. New effect
+  `writes-record` (one record file beside a declaration, appended in place; no job directory and
+  no receipt), because this route writes neither an output directory nor a receipt. Registered
+  `implemented`: offline unit tests on Linux, no qualification receipt yet. No game, no network,
+  no install. `docs/evidence-ledger.md`, `docs/SUPPORT.md`.
 
 - New check `loose-overrides`. Plutonium reads an image's pixels from an image bank *or* from the
   global loose path `storage/t6/images`, and a loose file there wins: it applies to every mod folder

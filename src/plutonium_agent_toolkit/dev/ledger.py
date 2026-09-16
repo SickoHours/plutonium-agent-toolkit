@@ -11,21 +11,37 @@ composition the module was part of (``accepted-in-pack``) never feed the facts: 
 inferred from a pack that used a module. The format is specified in ``docs/evidence-ledger.md``.
 
 ``validate`` checks a ledger and collects one diagnostic per bad row; ``facts`` derives the
-per-scope facts from valid rows; ``propose`` drafts a ledger for one workspace module from the
-workspace registry and the module's docs without writing anything.
+per-scope facts from valid rows; ``add_rows`` appends rows through that same validator, and
+``propose`` drafts a ledger for one workspace module from the workspace registry and the
+module's docs without writing anything.
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
+import os
 import re
+import stat
+from datetime import datetime
 from pathlib import Path, PureWindowsPath
 
-from ..core.errors import INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, INVALID_ARGUMENTS, Failure
+try:                                    # POSIX: the advisory lock two appends serialise on
+    import fcntl
+except ImportError:                     # pragma: no cover - Windows has no fcntl
+    fcntl = None
+try:                                    # Windows: the same lock through the C runtime
+    import msvcrt
+except ImportError:                     # pragma: no cover - POSIX has no msvcrt
+    msvcrt = None
+
+from ..core.errors import (BUSY, INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, INVALID_ARGUMENTS,
+                           OPERATION_FAILED, ROW_DUPLICATE, Failure)
 from .compositions import BASE, MAP, _fields, _pointer
 
 PROTOCOL = "pat.module-ledger/1"
 PROPOSAL_PROTOCOL = "pat.module-ledger-proposal/1"
+ADD_PROTOCOL = "pat.module-ledger-add/1"
 FILENAME = "evidence.json"
 TYPES = ("lineage", "authored", "accepted-in-pack", "extracted-from-release", "built-alone",
          "agent-reviewed", "game-tested", "player-accepted")
@@ -36,6 +52,11 @@ MAX_ROWS = 1024
 MAX_DIAGNOSTICS = 32
 MAX_TEXT = 2000
 MAX_LIST = 64
+MAX_ROW_FILES = 64
+MAX_ROW_BYTES = 256 * 1024
+# Windows only: msvcrt.locking blocks for about ten seconds per attempt, so this is a minute of
+# waiting for whichever process holds the ledger before the append reports busy. flock waits.
+LOCK_ATTEMPTS = 6
 SHA256 = re.compile(r"^[0-9a-f]{64}\Z")
 COMMIT = re.compile(r"^[0-9a-f]{7,40}\Z")
 FOUNDATION = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}\Z")
@@ -83,8 +104,14 @@ def _bool(value, what: str, field: str) -> bool:
 
 
 def _date(value, field: str) -> str:
+    """The shape, then the calendar. ``2026-99-99`` matches the digit shape and is not a day that
+    happened; a row dated one is a row nothing can place in a history."""
     if not isinstance(value, str) or not DATE.match(value):
         raise Failure(INPUT_INVALID, "at is an ISO date (YYYY-MM-DD) or date-time", field=field)
+    try:
+        datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise Failure(INPUT_INVALID, f"at is a date that exists on the calendar: {value!r}", field=field) from exc
     return value
 
 
@@ -176,8 +203,36 @@ def _parent(value, field: str) -> dict:
     return result
 
 
+def _encodable(value, field: str) -> None:
+    """Every string in the row survives a UTF-8 encode, keys included.
+
+    ``"\\ud800"`` in a row file parses as JSON, is a perfectly ordinary Python string, and passes
+    every shape check here -- and then the encoder refuses it when the ledger is written. A row
+    that validates but cannot be written is a crash instead of a diagnostic, so the encode is
+    part of validation and the refusal carries the pointer of the field that holds it.
+    """
+    stack = [(value, field)]
+    while stack:
+        item, where = stack.pop()
+        if isinstance(item, str):
+            try:
+                item.encode("utf-8")
+            except UnicodeEncodeError as exc:
+                raise Failure(INPUT_INVALID,
+                              "text holds a character that is not valid UTF-8 (a lone surrogate)",
+                              field=where) from exc
+        elif isinstance(item, dict):
+            for key, sub in item.items():
+                stack.append((key, where))
+                stack.append((sub, f"{where}/{key}" if isinstance(key, str) else where))
+        elif isinstance(item, list):
+            for index, sub in enumerate(item):
+                stack.append((sub, f"{where}/{index}"))
+
+
 def validate_row(row, field: str) -> dict:
     """One row, normalized. Raises the first defect with its JSON Pointer."""
+    _encodable(row, field)
     if not isinstance(row, dict):
         raise Failure(INPUT_INVALID, "a ledger row is an object", field=field)
     kind = row.get("type")
@@ -316,6 +371,137 @@ def inspect(path: Path, expected_id: str | None = None) -> dict:
     return result
 
 
+# ----- writing -----------------------------------------------------------------------------
+
+def regular(path: Path) -> bool:
+    """Whether a ledger is already on disk here, refusing a path that is not a regular file.
+
+    A module directory holding ``evidence.json -> ~/.bashrc`` must not make this shelf write
+    through the link, and a FIFO in that name must not make it block forever on an open that
+    never returns. The check is one ``lstat``: nothing opens the path to find out what it is, so
+    a FIFO is refused rather than waited on, and the symlink itself is what is inspected. A
+    missing file is not a defect; it is the ledger this route is about to create.
+    """
+    try:
+        mode = path.lstat().st_mode
+    except FileNotFoundError:
+        return False
+    except OSError as exc:
+        raise Failure(INPUT_INVALID, f"Cannot read what the ledger path is: {path} ({exc})",
+                      ledger=str(path)) from exc
+    if not stat.S_ISREG(mode):
+        raise Failure(INPUT_INVALID, f"The ledger path is not a regular file: {path}",
+                      "A ledger is a plain file beside module.json. A symlink, a FIFO or a directory "
+                      "in its place is refused, never written through.", ledger=str(path))
+    return True
+
+
+def lock_path(path: Path) -> Path:
+    """The sibling file the ledger's lock is taken on, never the ledger itself: the lock has to
+    outlive the ``os.replace`` that swaps a new ledger in, and a lock held on a replaced file is
+    a lock on nothing."""
+    return path.parent / f".{path.name}.lock"
+
+
+def _acquire(fd: int, target: Path) -> bool:
+    if fcntl is not None:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        return True
+    if msvcrt is not None:              # pragma: no cover - exercised on Windows only
+        for _ in range(LOCK_ATTEMPTS):
+            os.lseek(fd, 0, os.SEEK_SET)
+            try:
+                msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
+                return True
+            except OSError:
+                continue
+        raise Failure(BUSY, f"Another process is holding the ledger lock: {target}",
+                      "Wait for the append that holds it to finish, then run this again.",
+                      lock=str(target))
+    return False                        # pragma: no cover - a host with neither module
+
+
+def _release(fd: int, held: bool) -> None:
+    if not held:
+        return                          # pragma: no cover - a host with neither module
+    if fcntl is not None:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+    elif msvcrt is not None:            # pragma: no cover - exercised on Windows only
+        os.lseek(fd, 0, os.SEEK_SET)
+        with contextlib.suppress(OSError):
+            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+
+
+@contextlib.contextmanager
+def lock(path: Path):
+    """An advisory exclusive lock on one ledger, held from the read through the replace.
+
+    Two invocations appending to the same ``evidence.json`` must not both read the same book and
+    then each write their own: the second write would drop the first row while both commands
+    reported success, and a ledger that loses a row is a provenance record that lies. Holding
+    this across the whole read-validate-append-write makes the second invocation wait for the
+    first and then read the row it wrote.
+
+    It is advisory and it is this shelf's: it serialises `pat`'s own writers on every host with
+    ``fcntl`` or ``msvcrt``, and it does not stop a text editor. On a host with neither the lock
+    is a no-op and the write is still all-or-nothing; only the ordering of two racing appends is
+    unprotected there.
+    """
+    target = lock_path(path)
+    try:
+        fd = os.open(target, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    except OSError as exc:
+        raise Failure(INPUT_INVALID, f"Cannot open the ledger lock beside it: {target} ({exc})",
+                      "The ledger's directory has to be writable to append a row to it.",
+                      lock=str(target)) from exc
+    held = False
+    try:
+        held = _acquire(fd, target)
+        yield target
+    finally:
+        _release(fd, held)
+        os.close(fd)
+
+
+def write_ledger(path: Path, text: str) -> str:
+    """Write the whole ledger, or leave the one on disk exactly as it was.
+
+    ``write_text`` truncates the file it is about to fill, so a full disk or an interrupt between
+    the two leaves the evidence ledger empty or half written -- the rows destroyed are the ones
+    nothing can derive a fact from again. Here the text goes to a sibling temporary file in the
+    ledger's own directory (so the replace is a rename within one filesystem), is flushed and
+    ``fsync``ed, and only a complete file is ``os.replace``d onto the ledger. A reader sees the
+    book that was there or the book that was written, never a truncated one. Any failure removes
+    the temporary file and leaves the original byte for byte.
+
+    The caller holds ``lock`` around the read this text was computed from and this write.
+    """
+    path = Path(path)
+    # A new file is created the way any other file here is (the umask decides); a ledger that is
+    # already there keeps the permissions it already had, because a rename is not a chance to
+    # change them.
+    mode = stat.S_IMODE(path.lstat().st_mode) if regular(path) else None
+    temp = path.parent / f".{path.name}.{os.getpid()}.tmp"
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        with os.fdopen(os.open(temp, flags, 0o666), "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        if mode is not None:
+            os.chmod(temp, mode)
+        os.replace(temp, path)
+    except BaseException as exc:
+        with contextlib.suppress(OSError):
+            temp.unlink()
+        if isinstance(exc, OSError):
+            raise Failure(OPERATION_FAILED, f"Could not write the ledger: {path} ({exc})",
+                          "The ledger on disk was not changed and the temporary file was removed.",
+                          ledger=str(path)) from exc
+        raise
+    return str(path)
+
+
 # ----- derivation ------------------------------------------------------------------------
 
 def row_facts(row: dict) -> dict:
@@ -438,6 +624,200 @@ def report(path: Path, base=None, foundation=None, map_id=None, package=None, lo
         result["reasons"] = [f"{len(diagnostics)} row(s) were not counted; see diagnostics"] if diagnostics else []
     return result
 
+
+# ----- appending -----------------------------------------------------------------------------
+
+def _normal_form(row: dict) -> str:
+    """One validated row as the bytes two rows are the same row by: keys sorted, no spacing.
+    ``validate_row`` has already turned ``map`` into ``maps`` and dropped nothing, so two rows
+    written in different shorthands compare equal here."""
+    return json.dumps(row, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _declared_id(directory: Path) -> str:
+    """The ``id`` of the ``module.json`` beside the ledger, which is the ledger's subject.
+
+    Only the id is read: a declaration defect that has nothing to do with provenance must not
+    stop a run from being recorded, and ``module inspect`` is the route that judges declarations.
+    """
+    declaration = directory / "module.json"
+    if declaration.is_symlink() or not declaration.is_file():
+        raise Failure(INPUT_MISSING, f"No module.json beside the ledger: {declaration}",
+                      "A ledger's subject is the id declared beside it; point this route at a module directory.")
+    if declaration.stat().st_size > MAX_BYTES:
+        raise Failure(INPUT_LIMIT, f"Declaration exceeds {MAX_BYTES} bytes: {declaration}")
+    try:
+        data = json.loads(declaration.read_bytes().decode("utf-8"))
+    except (OSError, ValueError, RecursionError) as exc:
+        raise Failure(INPUT_INVALID, f"Declaration is not valid JSON: {declaration}", field="/") from exc
+    module_id = data.get("id") if isinstance(data, dict) else None
+    if not isinstance(module_id, str) or not re.fullmatch(r"[a-z0-9_]{1,64}", module_id):
+        raise Failure(INPUT_INVALID, f"Declaration has no module id to be the ledger's subject: {declaration}",
+                      "Run pat module inspect on the declaration first.", field="/id")
+    return module_id
+
+
+def _read_row_file(path: Path) -> list:
+    """One ``--row`` file: a row object, or a list of row objects, in the order they were given."""
+    if path.is_symlink() or not path.is_file():
+        raise Failure(INPUT_MISSING, f"Row file is missing or is a link: {path}")
+    if path.stat().st_size > MAX_ROW_BYTES:
+        raise Failure(INPUT_LIMIT, f"Row file exceeds {MAX_ROW_BYTES} bytes: {path}")
+    try:
+        data = json.loads(path.read_bytes().decode("utf-8"))
+    except (OSError, ValueError, RecursionError) as exc:
+        raise Failure(INPUT_INVALID, f"Row file is not valid JSON: {path}", field="/") from exc
+    rows = data if isinstance(data, list) else [data]
+    if not rows or len(rows) > MAX_ROWS:
+        raise Failure(INPUT_INVALID, f"A row file holds one row object or a list of at most {MAX_ROWS}: {path}", field="/")
+    return rows
+
+
+def _row_index(pointer: str, fallback: int) -> int:
+    parts = pointer.split("/")
+    if len(parts) > 2 and parts[1] == "rows" and parts[2].isdigit():
+        return int(parts[2])
+    return fallback
+
+
+def _appended_facts(ledger: dict, index: int, source: str) -> dict:
+    """The six facts the ledger now derives for the scope the appended row names, one entry per
+    map in that scope. A ``lineage`` row has no scope and feeds no fact, so it names none."""
+    row = ledger["rows"][index]
+    entry = {"row": index, "type": row["type"], "source": source, "scopes": []}
+    if row["type"] == "lineage":
+        return entry
+    scope = row["scope"]
+    for map_id in scope["maps"]:
+        # ``*`` is passed through as the query, not dropped: ``matches`` reads it as "the rows
+        # that speak for every map", so a row scoped to every map answers from the rows that
+        # are themselves scoped to every map. Querying with no map instead would collect the
+        # map-specific rows too, and one map's built-alone row would report this row
+        # offline-verified everywhere, on maps nothing was ever built for.
+        derived = facts(ledger, scope.get("base"), scope.get("foundation"),
+                        map_id, None, scope.get("location"))
+        entry["scopes"].append({"scope": {"base": scope.get("base"), "foundation": scope.get("foundation"),
+                                          "map": map_id, "location": scope.get("location")},
+                                "facts": derived["facts"]})
+    return entry
+
+
+def add_rows(path, row_files: list) -> dict:
+    """``module ledger-add``: append rows to a module's ``evidence.json`` through the validator.
+
+    Append-only: an existing row is never edited or removed, and a row whose normal form a row
+    in the file already has is refused with ``row_duplicate`` rather than written twice, so a
+    campaign that reruns its loop records each run once. All-or-nothing: every row is validated
+    in the context of the whole ledger (the row count and the file size are the limits after the
+    write, not before), and one bad row leaves the file untouched and reports every diagnostic
+    with its row index and JSON Pointer. The file's own ``ensure_ascii`` and indent survive, the
+    way ``dev/qualify.py`` writes the ``built-alone`` row it earns, so the diff is the rows added.
+
+    An existing ledger that does not validate is refused, not appended to: a row added under a
+    malformed one would be a fact recorded in a file nothing can derive from.
+
+    The read, the validation and the write happen under this ledger's own ``lock``, so two
+    campaign workers appending at once append both rows instead of one overwriting the other, and
+    the write itself is ``write_ledger``: a temporary file, an ``fsync`` and a rename, so a
+    failure leaves the rows that were already there.
+    """
+    path = Path(path)
+    directory = path if path.is_dir() else path.parent
+    if path.is_dir():
+        path = path / FILENAME
+    elif path.name != FILENAME:
+        raise Failure(INVALID_ARGUMENTS, f"The ledger is a module directory or its {FILENAME}: {path}")
+    if not row_files:
+        raise Failure(INVALID_ARGUMENTS, "Give at least one --row <row.json>")
+    if len(row_files) > MAX_ROW_FILES:
+        raise Failure(INPUT_LIMIT, f"At most {MAX_ROW_FILES} --row files in one invocation; {len(row_files)} were given")
+    subject = _declared_id(directory)
+
+    with lock(path):
+        return _append_locked(path, subject, row_files)
+
+
+def _append_locked(path: Path, subject: str, row_files: list) -> dict:
+    """The read, the validation and the write, with the ledger's lock held around all three.
+
+    Nothing between reading the book and replacing it may be done on a book another invocation
+    has since replaced: that is how a row is lost while both commands report success.
+    """
+    created = not regular(path)
+    if created:
+        previous, book = None, {"schema": 1, "subject": {"id": subject}, "rows": []}
+    else:
+        raw, book = read(path)
+        previous = raw.decode("utf-8")
+    existing, diagnostics = validate(book)
+    if existing is None or diagnostics:
+        raise Failure(INPUT_INVALID, f"The ledger already on disk does not validate; no row was appended: {path}",
+                      "Fix the rows it already holds first; pat module state --ledger lists them.",
+                      ledger=str(path), diagnostics=(diagnostics or [])[:MAX_DIAGNOSTICS])
+    if existing["subject"]["id"] != subject:
+        raise Failure(INPUT_INVALID,
+                      f"Ledger subject {existing['subject']['id']!r} is not the declaration's id {subject!r}: {path}",
+                      "A ledger belongs to the module.json beside it; this row belongs in that module's ledger.",
+                      ledger=str(path), subject=existing["subject"]["id"], declared=subject)
+
+    rows_before = len(book["rows"])
+    candidates, sources = [], []
+    for name in row_files:
+        for row in _read_row_file(Path(name)):
+            candidates.append(row)
+            sources.append(str(name))
+    total = rows_before + len(candidates)
+    if total > MAX_ROWS:
+        raise Failure(INPUT_LIMIT, f"The ledger would hold {total} rows; a ledger holds at most {MAX_ROWS}",
+                      ledger=str(path), rows_before=rows_before, rows_given=len(candidates))
+
+    escapes = previous is None or json.dumps(book, indent=2) + "\n" == previous
+    book["rows"] = list(book["rows"]) + candidates
+    normalized, diagnostics = validate(book)
+    if diagnostics:
+        for row in diagnostics:
+            index = _row_index(row["field"], rows_before)
+            row["row"] = index
+            row["source"] = sources[index - rows_before] if rows_before <= index < total else "already in the ledger"
+        raise Failure(INPUT_INVALID,
+                      f"{len(diagnostics)} of the {len(candidates)} row(s) given do not validate; nothing was written to {path}",
+                      "Every row is checked the way pat module inspect checks the ledger; fix each pointer and run it again.",
+                      ledger=str(path), rows_before=rows_before, diagnostics=diagnostics[:MAX_DIAGNOSTICS])
+
+    seen = {}
+    for index, row in enumerate(normalized["rows"][:rows_before]):
+        seen.setdefault(_normal_form(row), index)
+    for offset, row in enumerate(normalized["rows"][rows_before:]):
+        form = _normal_form(row)
+        if form in seen:
+            index = rows_before + offset
+            raise Failure(ROW_DUPLICATE,
+                          f"Row {offset} of {sources[offset]} is already row {seen[form]} of {path}; nothing was written",
+                          "A ledger is append-only: a repeated fact is the row already there. Record a new fact as a new row.",
+                          ledger=str(path), row=index, source=sources[offset], duplicate_of=seen[form])
+        seen[form] = rows_before + offset
+
+    # The rows are written as they were given, not as the validator normalized them: the shorthand
+    # the author wrote (a single ``map``) is valid and re-reads identically, and every other record
+    # this shelf writes keeps the author's shape too.
+    from .qualify import serialise  # deferred: qualify imports this module for the row it writes
+
+    # ``serialise`` picks ``ensure_ascii`` by asking whether the escaped dump is the file's own
+    # bytes. An appended row always changes those bytes, so the question is asked of the rows that
+    # were already on disk: a file that escapes keeps escaping, one that does not keeps its UTF-8,
+    # and the diff is the rows added either way. Indent is two spaces, as every record here is.
+    text = serialise(book) if escapes else serialise(book, previous)
+    if len(text.encode("utf-8")) > MAX_BYTES:
+        raise Failure(INPUT_LIMIT, f"The ledger would exceed {MAX_BYTES} bytes; nothing was written to {path}",
+                      ledger=str(path), bytes=len(text.encode("utf-8")))
+    write_ledger(path, text)
+
+    appended = list(range(rows_before, total))
+    return {"protocol": ADD_PROTOCOL, "ledger": str(path), "created": created, "subject": subject,
+            "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+            "rows_before": rows_before, "rows_after": total, "appended": appended,
+            "validation": "valid", "diagnostics": [],
+            "rows": [_appended_facts(normalized, index, sources[index - rows_before]) for index in appended]}
 
 # ----- migration proposal ------------------------------------------------------------------
 
