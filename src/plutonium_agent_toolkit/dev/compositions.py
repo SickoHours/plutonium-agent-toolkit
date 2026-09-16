@@ -2102,17 +2102,30 @@ def _machine_reach(mid: str, placements: list[dict]) -> tuple[bool | None, str]:
 
 def _granted_reach(m: dict, by_id: dict[str, dict], texts: list[str]) -> tuple[bool | None, str]:
     """A grant is reachable when something in the composition performs it: the module itself on
-    spawn, or a dependency that is here and provides what this module provides."""
+    spawn, or a dependency that is here and provides what this module provides.
+
+    When nothing does, the reason names the nearest thing to a grantor there was: a dependency that
+    is here and hands nothing over first, then one that is not here at all. A module that names no
+    perk, gum, power-up or piece of equipment has no candidate to name, because there is nothing for
+    a grantor to provide."""
     if gives_on_spawn(texts):
         return True, "the module gives it on player spawn"
-    mine = {name for kind in GRANTED_KINDS for name in (m["provides"].get(kind) or [])}
+    mine = sorted({name for kind in GRANTED_KINDS for name in (m["provides"].get(kind) or [])})
+    present: list[str] = []
     for dep in m["dependencies"]:
         other = by_id.get(dep)
         if other is None:
             continue
-        shared = sorted(mine & {name for kind in GRANTED_KINDS for name in (other["provides"].get(kind) or [])})
+        shared = sorted(set(mine) & {name for kind in GRANTED_KINDS for name in (other["provides"].get(kind) or [])})
         if shared:
             return True, f"{dep} is in the composition and provides {', '.join(shared)}"
+        present.append(dep)
+    if mine:
+        if present:
+            return False, f"{present[0]} is in the composition but provides none of {', '.join(mine)}"
+        missing = [dep for dep in m["dependencies"] if dep not in by_id]
+        if missing:
+            return False, f"{missing[0]} is not in the composition"
     return False, "no member grants it and it does not grant itself on spawn"
 
 

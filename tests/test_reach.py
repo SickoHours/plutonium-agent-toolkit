@@ -15,7 +15,7 @@ from pathlib import Path
 
 from plutonium_agent_toolkit.core.errors import Failure
 from plutonium_agent_toolkit.dev import targets
-from plutonium_agent_toolkit.dev.compositions import (HUD, PICKUP_SYSTEMS, REACH,
+from plutonium_agent_toolkit.dev.compositions import (HUD, PICKUP_SYSTEMS, REACH, reach_rows,
                                                       validate_declaration_metadata)
 from tests.test_compositions import CompositionFixture, declaration
 from tests.test_dev_routes import invoke
@@ -207,6 +207,7 @@ class Reachability(PlanFixture):
                          "the grantor declares no reach of its own and is warned for that, not the grantee")
 
     def test_a_grant_with_nothing_to_grant_it_is_not_reachable(self):
+        """No dependency at all: there is no candidate grantor for the reason to name."""
         self.module("grantee", reach="granted", provides={"perks": ["halo_speed"]})
         _summary, plan = self.plan(self.composition(["grantee"]))
         self.assertIs(self.row(plan, "grantee")["reachable"], False)
@@ -215,6 +216,29 @@ class Reachability(PlanFixture):
         self.assertEqual(self.reach_warnings(plan),
                          ["grantee: reachable false on zm_transit: "
                           "no member grants it and it does not grant itself on spawn"])
+
+    def test_a_dependency_that_is_here_and_hands_nothing_over_is_the_one_named(self):
+        self.module("bystander")
+        self.module("grantee", reach="granted", provides={"perks": ["halo_speed", "halo_jump"]},
+                    dependencies=["bystander"])
+        _summary, plan = self.plan(self.composition(["grantee", "bystander"]))
+        self.assertIs(self.row(plan, "grantee")["reachable"], False)
+        self.assertEqual(self.row(plan, "grantee")["reason"],
+                         "bystander is in the composition but provides none of halo_jump, halo_speed")
+
+    def test_a_dependency_that_is_not_here_is_named_instead(self):
+        """Read through `reach_rows` directly: the planner refuses a missing dependency before a
+        plan reaches this derivation, so the branch exists for every other caller of it."""
+        grantee = {"id": "grantee", "reach": "granted", "dependencies": ["absent_grantor"],
+                   "provides": {"perks": ["halo_speed"]}}
+        self.assertEqual(reach_rows([grantee], [], {}),
+                         {"grantee": (False, "absent_grantor is not in the composition")})
+
+    def test_a_module_that_names_nothing_to_be_granted_has_no_candidate_to_name(self):
+        grantor = {"id": "grantor", "reach": None, "dependencies": [], "provides": {"perks": ["halo_speed"]}}
+        grantee = {"id": "grantee", "reach": "granted", "dependencies": ["grantor"], "provides": {}}
+        self.assertEqual(reach_rows([grantee, grantor], [], {})["grantee"],
+                         (False, "no member grants it and it does not grant itself on spawn"))
 
     def test_a_grant_the_module_performs_at_spawn_is_reachable_alone(self):
         directory = self.module("grantee", reach="granted", provides={"perks": ["halo_speed"]})
@@ -403,6 +427,20 @@ class VerifyHud(VerifyFixture):
     def test_a_shader_precache_in_source_is_the_same_byte(self):
         directory = self.source_module("alpha", 'main()\n{\n    precacheShader("specialty_armorvest_zombies");\n}\n')
         self.assertEqual(self.one(self.verify(directory), "/hud")["observed"], ["icon"])
+
+    def test_a_space_before_the_paren_is_still_a_precache(self):
+        directory = self.source_module("alpha", 'main()\n{\n    PrecacheShader ("halo_icon");\n}\n')
+        self.assertEqual(self.one(self.verify(directory), "/hud")["observed"], ["icon"])
+
+    def test_a_rule_with_no_pickup_gets_no_hud_row_at_all(self):
+        """`reach: passive` draws nothing by design: there is nothing for a player to carry, so
+        there is nothing for them to see they have, and the route asks for no icon."""
+        directory = self.module_with_assets("alpha", [self.ICON_ASSET])
+        (directory / "module.json").write_text(json.dumps(
+            declaration("alpha", reach="passive", registration="self", system="perks"), indent=2))
+        result = self.verify(directory, "--propose")
+        self.assertEqual([r for r in result["rows"] if r["field"] == "/hud"], [])
+        self.assertNotIn("hud", result["proposal"], "and nothing is proposed for a field with no row")
 
     def test_a_pickup_system_with_no_byte_is_told_what_to_declare(self):
         row = self.one(self.verify(self.module("alpha", system="perks")), "/hud")

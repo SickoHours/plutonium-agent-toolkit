@@ -127,7 +127,7 @@ REACH_PROPOSABLE = ("wall-or-box", "drop", "passive")
 # Whether a player can see they have it: an image or material asset row, a shader precache, or one
 # of the stock icon names a perk HUD reads.
 HUD_ICON_TYPES = ("image", "material")
-HUD_ICON_SOURCE = re.compile(r"precacheshader\(|setshader\(|perk_hud_icon|specialty_[a-z_]*icon", re.I)
+HUD_ICON_SOURCE = re.compile(r"(?:precacheshader|setshader)\s*\(|perk_hud_icon|specialty_[a-z_]*icon", re.I)
 
 # One row per field this route reads nothing for, with the reason from docs/MODULES.md.
 UNREAD_FIELDS = {
@@ -1027,23 +1027,27 @@ def verify(directory: Path, *, workspace: str | None = None, base_listings=(), t
     icon = bool(icon_rows) or source.matches(HUD_ICON_SOURCE)
     hud_declared = metadata.get("hud")
     hud_how = "an image or material asset row, a shader precache, or a stock icon name in source"
-    if hud_declared == "icon":
-        rows.append(_row("/hud", ["icon"], ["icon"] if icon else [], hud_how,
-                         "agrees" if icon else "declared_not_observed",
-                         None if icon else "the module promises an icon and ships or names none"))
-    elif hud_declared == "none":
-        rows.append(_row("/hud", ["none"], ["icon"] if icon else [], hud_how,
-                         "observed_not_declared" if icon else "agrees",
-                         "the module draws an icon and says it draws nothing" if icon else None))
-    elif icon:
-        rows.append(_row("/hud", [], ["icon"], hud_how, "observed_not_declared"))
-    else:
-        rows.append(_row("/hud", [], [], hud_how, "not_counted",
-                         "no icon byte found; declare hud: none if it draws nothing"
-                         if metadata["system"] in compositions.PICKUP_SYSTEMS else "no icon byte found"))
+    hud_proposal = None
+    # A rule with no pickup has no `hud` row at all: there is nothing for a player to carry, so
+    # there is nothing for them to see they have (docs/MODULES.md, "Whether a player can reach it").
+    if reach_declared != "passive":
+        if hud_declared == "icon":
+            rows.append(_row("/hud", ["icon"], ["icon"] if icon else [], hud_how,
+                             "agrees" if icon else "declared_not_observed",
+                             None if icon else "the module promises an icon and ships or names none"))
+        elif hud_declared == "none":
+            rows.append(_row("/hud", ["none"], ["icon"] if icon else [], hud_how,
+                             "observed_not_declared" if icon else "agrees",
+                             "the module draws an icon and says it draws nothing" if icon else None))
+        elif icon:
+            rows.append(_row("/hud", [], ["icon"], hud_how, "observed_not_declared"))
+        else:
+            rows.append(_row("/hud", [], [], hud_how, "not_counted",
+                             "no icon byte found; declare hud: none if it draws nothing"
+                             if metadata["system"] in compositions.PICKUP_SYSTEMS else "no icon byte found"))
+        hud_proposal = "icon" if hud_declared is None and icon else None
     reach_candidates = [word for word in found if word in REACH_PROPOSABLE]
     reach_proposal = reach_candidates[0] if reach_declared is None and len(reach_candidates) == 1 else None
-    hud_proposal = "icon" if hud_declared is None and icon else None
 
     for field, reason in UNREAD_FIELDS.items():
         rows.append(_row("/" + field, [], [], "nothing in this route", "not_counted", reason))

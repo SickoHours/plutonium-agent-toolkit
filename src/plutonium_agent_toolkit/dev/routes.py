@@ -102,7 +102,8 @@ PLANNED = [
                 "or connect, a power-up registration, a replaceFunc, level variable or dvar set, or a menu_route naming the "
                 "developer menu with no other footprint) and is partial at best, since a signature is a footprint and not "
                 "proof the path runs; the /hud row reads an image or material asset row, a shader precache or a stock icon "
-                "name. --propose fills reach only when exactly one of wall-or-box, drop and passive is found, never machine, "
+                "name, and is omitted entirely for a module whose reach is passive, since a rule with no pickup draws nothing "
+                "for a player to see. --propose fills reach only when exactly one of wall-or-box, drop and passive is found, never machine, "
                 "granted or menu, and fills hud: icon from the byte while never proposing hud: none. Writes nothing."),
     Route("module", "compose", "Write and plan a recipe from member IDs and a foundation, or publish a recipe after a successful build", "writes-output", status="implemented", owner=OWNER, notes="Use --name --base --map --foundation --member-root --module with a fresh --output. Publish with --composition --from-build --publish-to. No game actions."),
     Route("module", "plan", "Resolve a composition of declared modules (dependency order, conflicts, base and map fit, "

@@ -1439,8 +1439,8 @@ one they will report as broken. A rule with no pickup (`reach: passive`) has no 
 
 Both fields are optional, echoed by `module inspect` when named, recorded on every plan row, and
 filled from bytes by `verify-declaration --propose` where the table above says the byte is
-enough; `machine` and `granted` are proposed only with the dependency or `placements` evidence
-present, and `menu` is never proposed.
+enough; `machine`, `granted` and `menu` are never proposed: a site, a grantor and a menu route are
+the author's promises, not footprints.
 
 ### The registration line: one console line per module
 

@@ -31,7 +31,8 @@ Every entry states what shipped, on which platform it was verified, and what rem
   `/reach` row from the byte footprint per word (`partial` at best: a signature is a footprint, not
   proof the path runs, and a module can carry several -- a weapon is `wall-or-box` and `passive` at
   once) and a `/hud` row from an image or material asset row, a shader precache or a stock icon
-  name; `--propose` fills `reach` only when exactly one of `wall-or-box`, `drop` and `passive` is
+  name -- and no `/hud` row at all for a `reach: passive` rule, which draws nothing for a player to
+  see. `--propose` fills `reach` only when exactly one of `wall-or-box`, `drop` and `passive` is
   found, never `machine`, `granted` or `menu`, and fills `hud: icon` from the byte while never
   proposing `hud: none`. Designed in `docs/MODULES.md`, "Whether a player can reach it: `reach` and
   `hud`", from two played packs where every module was honestly game-tested and nothing was
