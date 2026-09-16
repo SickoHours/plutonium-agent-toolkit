@@ -316,7 +316,9 @@ row's, and a message with more rows says how many follow. Kinds: `probe`, `test_
 `duplicate_id`, `missing_dependency` (with `dependency` and `by`), `conflict`,
 `unqualified_base` and `unqualified_map` (with `declared` and `wanted`), `private_payload`,
 `cycle`, `budget` (with `resource`, `total`, `bound`), `replacement` (with `collisions`),
-`parameters` (below, with `parameter`), `service` (below) and `checks` (with `failed`, the ids
+`parameters` (below, with `parameter`), `service` (below), `ownership` (with `path`, `owner`,
+`evidence` and `service`) and `exclusive` (with `role` and `resolutions`), both specified under
+"What a module promises", and `checks` (with `failed`, the ids
 of the failed check rows). A caller that brings dependencies along reads every
 `missing_dependency` row at once instead of re-planning per message.
 
@@ -969,7 +971,7 @@ Which paths are base-owned is read from evidence, never from a prefix list:
    check already reads, and it covers the map's animation tables (`animtrees/`, `animstatedefs/`),
    its AI type scripts (`aitype/`), the stock weapon scripts under `maps/` and `clientscripts/`, the
    visionsets and every other rawfile the zones carry;
-2. when no listing is on the machine, the shipped per-map tables: `knowledge/map-scripts.json`
+2. the shipped per-map tables, read whether or not a listing is on the machine: `knowledge/map-scripts.json`
    for the compiled scripts the target map's zones carry on that foundation, and
    `knowledge/native-weapons.json` for the WeaponDefs (a member staging `weapons/<name>` for a
    native name is the same overwrite; the native-WeaponDef service refusal keeps firing for a
