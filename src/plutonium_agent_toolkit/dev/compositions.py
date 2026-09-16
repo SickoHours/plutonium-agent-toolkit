@@ -94,6 +94,11 @@ PROVIDES_KINDS = ("weapons", "perks", "gobblegums", "powerups", "equipment", "lo
 # outright, never when it merely touches it: a new HUD owns `hud`, a counter widget does not.
 # The list grows by a measured collision, not by anticipation (docs/MODULES.md).
 EXCLUSIVE_ROLES = ("hud", "box", "loadscreen", "boss", "perk-machines", "perk-art")
+# Who prints the module's one console line at init, so a load says which members registered instead
+# of only that the pack's entry script ran: the module's own script, the generated entry on its
+# behalf, or nobody (docs/MODULES.md, "The registration line").
+REGISTRATION_KINDS = ("self", "entry", "none")
+REGISTRATION_SUFFIX = " >> registered"
 # What a dependency is *for*. `call`, `name` and `service` leave evidence in bytes; `runtime` is a
 # relationship only the engine shows (a level variable, a notify, an order of init), so it says why.
 DEPENDENCY_KINDS = ("call", "name", "service", "runtime")
@@ -122,6 +127,12 @@ MAX_LIST = 64
 MAX_TAGS = 16
 MAX_CONTRACT = 100_000
 MAX_NESTING = 4
+
+
+def registration_line(mid: str) -> str:
+    """The exact line a registered module leaves in the console. One shape, derived from the id,
+    so a plan, a test plan and a checker all read it from here and none of them spells it out."""
+    return mid + REGISTRATION_SUFFIX
 
 
 def add_parser(sub, common):
@@ -202,9 +213,11 @@ MAX_INSPECTION_TEXT = 2048
 MAX_INSPECTION_CODE = 200
 MODULE_METADATA_FIELDS = ("id", "version", "game", "title", "category", "kind", "tags", "bases", "maps",
                           "dependencies", "conflicts", "origin", "donor", "distribution", "menu_route", "payload", "recipes",
-                          "lineage", "replaces", "entry", "placements", "parameters", "exclusive", "service", "dependency_kinds")
+                          "lineage", "replaces", "entry", "placements", "parameters", "exclusive", "service", "registration",
+                          "dependency_kinds")
 # Echoed only when the declaration names them, so a declaration written before a field is unchanged.
-MODULE_METADATA_OPTIONAL = ("replaces", "entry", "placements", "parameters", "recipes", "exclusive", "service", "dependency_kinds")
+MODULE_METADATA_OPTIONAL = ("replaces", "entry", "placements", "parameters", "recipes", "exclusive", "service", "registration",
+                            "dependency_kinds")
 COMPOSITION_METADATA_FIELDS = ("name", "title", "game", "tags", "base", "map", "origin", "donor", "members")
 
 
@@ -485,6 +498,24 @@ def _service(value, owner: str, provides: dict, exclusive: list[str]) -> bool:
     return value
 
 
+def _registration(value, owner: str, entry) -> str | None:
+    """Who prints the module's ``<id> >> registered`` line at init. Absent means the declaration
+    does not say, which is what every declaration written before this field means; it is not a
+    claim that the module prints nothing. ``entry`` is the pack's generated entry script printing
+    the line on the module's behalf, so it needs an entry to print it from."""
+    if value is None:
+        return None
+    if not isinstance(value, str) or value not in REGISTRATION_KINDS:
+        raise Failure(INPUT_INVALID, f"{owner}: registration is one of self, entry or none",
+                      "self is the module's own script, entry the pack's generated entry script on its behalf, "
+                      "none a module with nothing that runs at init.")
+    if value == "entry" and entry is None:
+        raise Failure(INPUT_INVALID, f"{owner}: registration entry needs an entry field; the generated entry script "
+                                     "prints the line after calling entry.register",
+                      "Declare entry.replace and entry.register, or say self and print the line from the module's own script.")
+    return value
+
+
 def _dependencies(value, owner: str) -> tuple[list[str], dict[str, dict]]:
     """Ids, and what each dependency is *for*. An entry is a module id, or an object
     ``{id, kind, why?}`` saying why the edge exists. The ids are the plan's fact either way: the
@@ -692,7 +723,7 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
     _fields(data, {"schema", "id", "version", "game", "title", "category", "kind", "tags", "recipe", "recipes", "seed", "bases", "maps",
                             "dependencies", "conflicts", "provides", "resource_contract", "menu_route", "distribution", "source",
                             "origin", "donor", "lineage", "tests", "replaces", "entry", "placements", "parameters",
-                            "exclusive", "service"},
+                            "exclusive", "service", "registration"},
                      {"schema", "id", "version", "bases", "maps"}, where)
     if data["schema"] != 1:
         raise Failure(INPUT_INVALID, f"{where}: expected schema 1", field='/schema')
@@ -762,6 +793,7 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
     # After provides and exclusive: what a service may claim is read from what it already declares.
     service = _at("/service", _service, data.get("service"), mid, provides, exclusive)
     dependencies, dependency_kinds = _at("/dependencies", _dependencies, data.get("dependencies", []), mid)
+    registration = _at("/registration", _registration, data.get("registration"), mid, data.get("entry"))
     return {"id": mid, "version": data["version"], "game": game, "title": title, "category": category, "kind": kind, "tags": list(tags),
             "payload": payload, "payload_path": payload_path, "recipes": recipes, "distribution": distribution, "tests": tests,
             "replaces":_at("/replaces",_replaces,data.get("replaces")), "entry":_at("/entry",_entry,data.get("entry")),
@@ -770,7 +802,7 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
             "bases": list(bases), "maps": list(maps),
             "dependencies": dependencies, "dependency_kinds": dependency_kinds,
             "conflicts": _at("/conflicts", _ids, data.get("conflicts", []), "conflicts", mid),
-            "provides": provides, "exclusive": exclusive, "service": service,
+            "provides": provides, "exclusive": exclusive, "service": service, "registration": registration,
             "resource_contract": _at("/resource_contract", _contract, data.get("resource_contract"), f"{mid}: resource_contract"),
             "menu_route": menu_route, "source": source,
             "lineage": validate_lineage(data.get("lineage")),
@@ -893,7 +925,20 @@ ANSI = re.compile(r"\x1b\[[0-9;]*m")  # an unlinker listing captured from a colo
 SHADOWABLE_TYPES = ("image", "material")
 
 
-def _base_owned(listings: list[Path]) -> tuple[set[str], dict[str, set[str]]]:
+LISTING_SUFFIXES = ("-list.txt", ".txt", "-list.csv", ".csv")
+
+
+def listing_zone_stem(path: Path) -> str:
+    """The zone a listing file was written for: its name without the suffix ``listing_for_load``
+    found it by. That stem is what says whether the map or the rest of the base carries a name."""
+    name = path.name
+    for suffix in LISTING_SUFFIXES:
+        if name.lower().endswith(suffix):
+            return name[: -len(suffix)]
+    return path.stem
+
+
+def _base_owned(listings: list[Path]) -> tuple[set[str], dict[str, set[str]], dict[str, str]]:
     """Asset names the base zones already carry, read from plain listings (one ``type,name``
     row per line, the shape an unlinker ``--list`` prints). A reference row (``type, ,name``)
     means the zone only points at the asset, so it is skipped: the base has no copy to win
@@ -901,13 +946,16 @@ def _base_owned(listings: list[Path]) -> tuple[set[str], dict[str, set[str]]]:
     wins and no decision is needed. Listings are read line by line and capped at 200000 rows
     and 64 MiB.
 
-    Returns ``(names, shadowable)``: every ``type,name`` casefolded, which is what collision
-    adjudication compares, and the exact-case names per ``SHADOWABLE_TYPES``, which is what the
-    zone's exclusion list is written from. The linker matches an ignored name byte for byte, so
-    the second set keeps the listing's own casing."""
+    Returns ``(names, shadowable, zones)``: every ``type,name`` casefolded, which is what
+    collision adjudication compares, the exact-case names per ``SHADOWABLE_TYPES``, which is what
+    the zone's exclusion list is written from (the linker matches an ignored name byte for byte, so
+    that set keeps the listing's own casing), and the zone stem each casefolded name was first seen
+    in, which is what an ownership refusal names the owner from."""
     names: set[str] = set()
     shadowable: dict[str, set[str]] = {kind: set() for kind in SHADOWABLE_TYPES}
+    zones: dict[str, str] = {}
     for path in listings:
+        stem = listing_zone_stem(path)
         if path.stat().st_size > 64 * 1024 * 1024:
             raise Failure(INPUT_LIMIT, f"Base listing is larger than 64 MiB: {path.name}")
         rows = 0
@@ -920,10 +968,12 @@ def _base_owned(listings: list[Path]) -> tuple[set[str], dict[str, set[str]]]:
                 if rows > 200_000:
                     raise Failure(INPUT_LIMIT, f"Base listing has more than 200000 rows: {path.name}")
                 kind, name = m.group(1), m.group(2).strip()
-                names.add(f"{kind},{name}".casefold())
+                key = f"{kind},{name}".casefold()
+                names.add(key)
+                zones.setdefault(key, stem)
                 if kind in shadowable:
                     shadowable[kind].add(name)
-    return names, shadowable
+    return names, shadowable, zones
 
 
 def zone_name_of(load: Path) -> str:
@@ -1092,9 +1142,9 @@ def load_composition(path: Path, job: Job, depth: int = 0, seen: tuple = ()) -> 
         members.append(member)
     loads = [_relative_file(text, src.parent, job, "Load") for text in comp["loads"]]
     listings = [_relative_file(text, src.parent, job, "Base listing") for text in comp["base_owned"]]
-    base_owned, base_shadowable = _base_owned(listings)
+    base_owned, base_shadowable, base_owned_zone = _base_owned(listings)
     return comp | {"members": members, "loads": loads, "base_owned": base_owned, "base_shadowable": base_shadowable,
-                   "base_listings": listings, "source": src}
+                   "base_owned_zone": base_owned_zone, "base_listings": listings, "source": src}
 
 
 def flatten(comp: dict, job: Job, target: tuple[str | None, str | None] | None = None) -> tuple[list[dict], list[Path], list[dict], list[str]]:
@@ -1108,6 +1158,7 @@ def flatten(comp: dict, job: Job, target: tuple[str | None, str | None] | None =
     decisions: list[dict] = list(comp["decisions"])
     comp.setdefault("base_owned", set())
     comp.setdefault("base_shadowable", {kind: set() for kind in SHADOWABLE_TYPES})
+    comp.setdefault("base_owned_zone", {})
     comp.setdefault("base_listings", [])
     header: list[str] = list(comp["zone_header"])
     for member in comp["members"]:
@@ -1133,6 +1184,8 @@ def flatten(comp: dict, job: Job, target: tuple[str | None, str | None] | None =
             comp["base_owned"] |= member["composition"].get("base_owned", set())
             for kind, inner_names in (member["composition"].get("base_shadowable") or {}).items():
                 comp["base_shadowable"].setdefault(kind, set()).update(inner_names)
+            for key, stem in (member["composition"].get("base_owned_zone") or {}).items():
+                comp["base_owned_zone"].setdefault(key, stem)
             comp["base_listings"] += [p for p in member["composition"].get("base_listings", []) if p not in comp["base_listings"]]
     return modules, loads, decisions, header
 
@@ -1154,7 +1207,8 @@ def _order(modules: list[dict]) -> list[str]:
 
 
 REFUSAL_KINDS = ("probe", "test_only", "duplicate_id", "missing_dependency", "conflict", "unqualified_base", "unqualified_map",
-                 "private_payload", "cycle", "budget", "replacement", "service", "checks", "parameters")
+                 "private_payload", "cycle", "budget", "replacement", "service", "checks", "parameters",
+                 "ownership", "exclusive")
 
 
 def _refusal(kind: str, message: str, hint: str = "", modules=(), field: str | None = None, **extra) -> dict:
@@ -1232,6 +1286,29 @@ def resolve(comp: dict, modules: list[dict], allow_unqualified: bool = False) ->
             refusals.append(_refusal("private_payload", f"{m['id']} is distribution private and its seed package is not on this machine (missing: {m['seed'].get('missing')})",
                                      "Others can read what a private module provides from its manifest; building a pack with it needs the package beside the manifest.",
                                      modules=[m["id"]], missing=m["seed"].get("missing")))
+    # A role with room for exactly one owner, owned twice. `conflicts` cannot express this: it
+    # names one other module, so a role with four occupants needs six hand-kept pairs and knows
+    # nothing of a fifth occupant from someone else's repository (docs/MODULES.md, "Exclusive
+    # roles"). The two honest outcomes travel as `resolutions` so a review screen draws them:
+    # keep the newest member (the composition is its member list with one entry removed) or
+    # refuse. There is no owner decision -- a role is not a file, and "both, with one first" is
+    # the ambiguity the role exists to remove.
+    owners: dict[str, list[tuple[int, str]]] = {}
+    for i, m in enumerate(modules):
+        for role in m.get("exclusive") or []:
+            owners.setdefault(role, []).append((i, m["id"]))
+    for role, found in sorted(owners.items()):
+        if len(found) < 2:
+            continue
+        ids = [mid for _, mid in found]
+        row = _refusal("exclusive", f"two members own {role}: {', '.join(ids)}",
+                       "A pack has one owner per role. Keep one, or drop the other from the composition.",
+                       modules=ids, field=f"/modules/{found[-1][0]}/exclusive", role=role,
+                       resolutions=[{"kind": "replace", "keep": ids[-1], "drop": ids[:-1]}, {"kind": "refuse"}])
+        # `_refusal` sorts `modules`; here the order is the promise (composition order, so the
+        # last member is the most recently added one a `replace` resolution keeps).
+        row["modules"] = ids
+        refusals.append(row)
     order: list[str] = []
     try:
         # Only the members whose dependencies are present can be ordered; a missing dependency
@@ -1260,7 +1337,7 @@ def resolve(comp: dict, modules: list[dict], allow_unqualified: bool = False) ->
 # it can tell. ``unknown`` is the honest answer for everything a plan cannot see (a missing effect
 # root, a donor asset the target zones lack); only a build finds those, and `module qualify` types
 # them from its own receipts.
-ADAPT_PATTERNS = ("map-scripts", "dependency-unqualified", "adapter-recipe-single-target-without-recipes", "unknown")
+ADAPT_PATTERNS = ("map-scripts", "map-guard", "dependency-unqualified", "adapter-recipe-single-target-without-recipes", "unknown")
 
 
 def adapt_rows(comp: dict, modules: list[dict], unqualified: list[dict], foundation: str | None, checks=()) -> list[dict]:
@@ -1269,7 +1346,9 @@ def adapt_rows(comp: dict, modules: list[dict], unqualified: list[dict], foundat
     Read-only: nothing is widened, built or written here. Each row names the module, the target
     as ``<foundation>/<map>``, the command that would earn the widening, and the pattern the plan
     could see. The patterns a plan can decide are a script the target map does not carry
-    (``map-scripts``, from a failed check this member owns), a dependency that is itself
+    (``map-scripts``, from a failed check this member owns), a script whose entry guard names
+    another map (``map-guard``: the member is a port, not a widening, because declaring the
+    target would not make a returning ``main()`` run), a dependency that is itself
     undeclared (``dependency-unqualified``), and an adapter whose recipe is a cut for another
     target with no ``recipes`` entry for this one
     (``adapter-recipe-single-target-without-recipes``); everything else is ``unknown``."""
@@ -1280,6 +1359,8 @@ def adapt_rows(comp: dict, modules: list[dict], unqualified: list[dict], foundat
     target = f"{foundation or comp['base']}/{comp['map']}"
     failed_scripts = {c["id"][len("map-scripts:"):]: c for c in checks
                       if c.get("outcome") == "failed" and str(c.get("id", "")).startswith("map-scripts:")}
+    failed_guards = {c["id"][len("map-guard:"):]: c for c in checks
+                     if c.get("outcome") == "failed" and str(c.get("id", "")).startswith("map-guard:")}
     rows = []
     for row in unqualified:
         m = by_id.get(row["id"])
@@ -1287,9 +1368,13 @@ def adapt_rows(comp: dict, modules: list[dict], unqualified: list[dict], foundat
             continue
         pattern, detail = "unknown", None
         owned = sorted(name for name in failed_scripts if name in set(m.get("provides", {}).get("scripts", [])))
+        guarded = sorted(name for name in failed_guards if name in set(m.get("provides", {}).get("scripts", [])))
         if owned:
             pattern = "map-scripts"
             detail = failed_scripts[owned[0]].get("detail")
+        elif guarded:
+            pattern = "map-guard"
+            detail = failed_guards[guarded[0]].get("detail")
         elif m.get("adapter") is not None and m.get("recipe_key") is None \
                 and (m["adapter"]["foundation"], m["adapter"]["map"]) != (foundation, comp["map"]):
             pattern = "adapter-recipe-single-target-without-recipes"
@@ -1527,6 +1612,125 @@ def service_refusals(modules: list[dict], loaded: dict[str, tuple], undecided: l
     return rows
 
 
+OWNERSHIP_HINT = ("Declare the path under replaces.files if this module is meant to overwrite it, or drop the file "
+                  "from the recipe.")
+
+
+def _staged_targets(m: dict, loaded: dict[str, tuple]) -> list[str]:
+    """Every zone path a member stages, casefolded and deduplicated.
+
+    A recipe's compiled scripts and its delivered loose assets are staged; a withheld row
+    (``"deliver": false``) is not, because it lands under ``raw/`` with no zone line and overwrites
+    nothing. A seed is judged on the roots its pack names, since a root is what the pack claims a
+    name for and a non-root embedded row is a copy the linker took from the base. An adapter is
+    judged on its loose scripts and the rawfiles its recipe roots."""
+    targets: list[str] = []
+    if m["recipe"] is not None and m["id"] in loaded:
+        _data, compiled, loose, _loads = loaded[m["id"]]
+        targets += [target.as_posix() for _source, target, _instance in compiled]
+        targets += [target.as_posix() for _source, target, _type, _name in loose]
+    elif m["seed"] and not m["seed"].get("private"):
+        targets += [row.split(",", 1)[1] for row in m["seed"]["roots"] if row.startswith(("rawfile,", "script,"))]
+    elif m.get("adapter"):
+        targets += [script["target"] for script in m["adapter"]["scripts"]]
+        targets += [row.split(",", 1)[1] for row in m["adapter"]["embedded"] if row.startswith("rawfile,")]
+    out, seen = [], set()
+    for target in targets:
+        key = target.casefold()
+        if key not in seen:
+            seen.add(key)
+            out.append(key)
+    return out
+
+
+def _ownership_evidence(comp: dict, foundation: str) -> dict:
+    """The evidence an ownership decision reads, gathered once per plan: the base's own listings
+    with the zone each name came from, the target map's compiled scripts from
+    ``knowledge/map-scripts.json`` on this foundation, and its native WeaponDefs."""
+    from . import knowledge
+    try:
+        table = knowledge.load("map-scripts.json")["maps"].get(comp["map"]) or {}
+    except Failure:
+        table = {}
+    scripts = {path.replace(chr(92), "/").lower() for path in table.get("scripts", [])} \
+        if table.get("foundation") == foundation else set()
+    return {"owned": comp.get("base_owned") or set(), "zones": comp.get("base_owned_zone") or {},
+            "scripts": scripts, "weapons": native_weapons(comp["map"], foundation), "map": comp["map"]}
+
+
+def _base_owner_of(path: str, evidence: dict) -> tuple[str, str] | None:
+    """Who carries ``path`` (casefolded, forward slashes) and on what evidence, or None.
+
+    Two sources, both facts: the base's own asset listings (``listing``, where the zone that named
+    it decides between the map and the rest of the base) and the shipped per-map tables
+    (``table``, always the map's). ``MAP_OWNED_PREFIXES`` is deliberately not read here. A prefix
+    is a guess about ownership -- a module's *new* animation tree under ``animtrees/`` matches it
+    and overwrites nothing -- and only a fact may refuse a single member."""
+    for key in (f"rawfile,{path}", f"script,{path}"):
+        if key in evidence["owned"]:
+            return _listing_owner(evidence["zones"].get(key), evidence["map"]), "listing"
+    if path.replace(chr(92), "/") in evidence["scripts"]:
+        return "map", "table"
+    if path.startswith("weapons/"):
+        key = "weapon," + path[len("weapons/"):]
+        if key in evidence["weapons"]:
+            return "map", "table"
+        if key in evidence["owned"]:
+            return _listing_owner(evidence["zones"].get(key), evidence["map"]), "listing"
+    return None
+
+
+def _listing_owner(zone: str | None, map_id: str) -> str:
+    """A listing's zone stem says who carries the name: the map's own zones are named after the
+    map, and everything else a base loads is the base's."""
+    return "map" if zone and zone.casefold().startswith(map_id.casefold()) else "base"
+
+
+def ownership_refusals(modules: list[dict], loaded: dict[str, tuple], comp: dict, foundation: str,
+                       services: list[dict]) -> list[dict]:
+    """A member that stages a path the base or the target map already carries and does not declare
+    it under ``replaces.files`` (docs/MODULES.md, "File ownership").
+
+    One member is enough. Overwriting the base is a promise about the game whether or not a second
+    member does the same, so this refusal does not wait for a collision. Each row names the member,
+    the path, what owns it and the evidence that says so, and the shelf module that provides the
+    path when there is one, so the two honest fixes -- declare the overwrite, or depend on the
+    service and ship no copy -- are both in the row."""
+    evidence = _ownership_evidence(comp, foundation)
+    rows: list[dict] = []
+    for index, m in enumerate(modules):
+        declared = {path.casefold() for path in m.get("replaces", {}).get("files", [])}
+        for path in _staged_targets(m, loaded):
+            found = _base_owner_of(path, evidence)
+            if found is None or path in declared:
+                continue
+            owner, how = found
+            service = _service_for(services, "rawfiles", path) or _service_for(services, "scripts", path)
+            service = service if service and service["id"] != m["id"] else None
+            rows.append(_refusal("ownership",
+                                 f"{m['id']} stages {path}, which the {owner} already carries, and does not declare it "
+                                 "under replaces.files",
+                                 f"Depend on {service['id']} and ship no copy: a file two members would both overwrite "
+                                 "is owned by a service module." if service else OWNERSHIP_HINT,
+                                 modules=[m["id"]], field=f"/modules/{index}/replaces/files", path=path, owner=owner,
+                                 evidence=how, service=service["id"] if service else None))
+    return rows
+
+
+def declared_not_owned_warnings(modules: list[dict], comp: dict, foundation: str) -> list[dict]:
+    """A path a member declares under ``replaces.files`` that no listing and no shipped table says
+    the base or the map carries. A plan warning, never a refusal: the declaration can be right
+    about a zone whose listing is not on this machine. With no listing at all the plan says
+    nothing, because then it cannot tell."""
+    if not comp.get("base_listings"):
+        return []
+    evidence = _ownership_evidence(comp, foundation)
+    return [{"module": m["id"], "target": path,
+             "message": "Declared replaced file is not carried by the base's listings or the map's tables"}
+            for m in modules for path in m.get("replaces", {}).get("files", [])
+            if _base_owner_of(path.casefold(), evidence) is None]
+
+
 def _backends(compiled: list, adapters_present: bool = False, workspace: str | None = None) -> list[dict]:
     checks = []
     for name in (["gsc"] if compiled else []) + ["linker", "unlinker"]:
@@ -1554,6 +1758,7 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
                "payload": "seed" if m["seed"] else "adapter" if m.get("adapter") else "recipe",
                "distribution": m["distribution"], "dependencies": m["dependencies"], "conflicts": m["conflicts"],
                "dependency_kinds": m["dependency_kinds"], "exclusive": m["exclusive"], "service": m["service"],
+               "registration": m["registration"],
                "bases": m["bases"], "maps": m["maps"], "provides": m["provides"], "resource_contract": m["resource_contract"],
                "menu_route": m["menu_route"], "source": m["source"], "reference": m.get("reference"),
                "origin": m["origin"], "donor": m["donor"], "replaces":m["replaces"], "entry":m["entry"], "placements": m.get("placements"),
@@ -1574,6 +1779,33 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
             row["seed_roots"] = len(m["seed"]["roots"])
         rows.append(row)
     return rows
+
+
+def package_scripts(modules, compiled):
+    """``(target, text)`` for every script that ends up in the package: the members' compiled
+    targets, and the loose scripts an adapter stage produces.
+
+    An adapter's own scripts are staged into the package at build without ever entering
+    ``compiled``, so a loop that reads ``compiled`` alone never sees them -- and a `.csc` an adapter
+    stages under ``scripts/zm`` runs in the same early client pass as any other. A source that
+    cannot be read is skipped rather than judged, so a check built on this set is never the thing
+    that turns an unreadable file into a refusal."""
+    for source, target, _ in compiled:
+        try:
+            text = Path(source).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        yield target.as_posix(), text
+    for m in modules:
+        adapter = m.get("adapter")
+        if not adapter:
+            continue
+        for row in adapter["scripts"]:
+            try:
+                text = (Path(adapter["directory"]) / row["source"]).read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            yield row["target"], text
 
 
 def _derive_base_listings(comp: dict, loads: list[Path], args, job: Job) -> None:
@@ -1619,10 +1851,15 @@ def _derive_base_listings(comp: dict, loads: list[Path], args, job: Job) -> None
         if len(known) + len(derived) > MAX_BASE_LISTINGS:
             raise Failure(INPUT_LIMIT, f"A composition reads at most {MAX_BASE_LISTINGS} base listings; "
                                        f"{len(known)} declared and {len(derived)} derived from the loads is more")
-        names, shadowable = _base_owned([job.input(path) for path in derived])
+        names, shadowable, zones = _base_owned([job.input(path) for path in derived])
         comp["base_owned"] = (comp.get("base_owned") or set()) | names
         for kind, found_names in shadowable.items():
             comp.setdefault("base_shadowable", {}).setdefault(kind, set()).update(found_names)
+        # Which zone carries a name decides whether an ownership refusal says the map or the base;
+        # a name the composition's own listings already placed keeps that placement.
+        placed = comp.setdefault("base_owned_zone", {})
+        for key, stem in zones.items():
+            placed.setdefault(key, stem)
         comp["base_listings"] = known + derived
     comp["base_loads"] = base_loads
 
@@ -1709,8 +1946,19 @@ def execute(args, job: Job) -> dict:
         raise Failure(INPUT_LIMIT, f"A composition holds at most {projects.MAX_SCRIPTS} scripts, {projects.MAX_ASSETS} assets, {projects.MAX_LOADS} loads and {MAX_MODULES} seeds")
     _derive_base_listings(comp, loads, args, job)
     decided, undecided, refused = collisions(modules, loaded, decisions, comp.get("base_owned"))
+    # The shelf is read once: a replacement, ownership or service refusal all name the module to
+    # depend on instead from the same rows.
+    shelf = shelf_services(getattr(args, "workspace", None))
     late_refusals: list[dict] = []
     if refused:
+        for row in refused:
+            if row["kind"] != "file":
+                continue
+            # A file two members both declare is owned by the service, never by either member, so
+            # the hard refusal says which module they should both depend on.
+            path = row["collision"].split(":", 1)[1]
+            owner = _service_for(shelf, "rawfiles", path) or _service_for(shelf, "scripts", path)
+            row["service"] = owner["id"] if owner and owner["id"] not in row["modules"] else None
         late_refusals.append(_refusal("replacement", "Overlapping declared replacements cannot be resolved by an owner decision",
                                       "Two members declare the same replacement target; one of them must stop replacing it.",
                                       modules=[mid for row in refused for mid in row["modules"]], collisions=refused))
@@ -1718,7 +1966,24 @@ def execute(args, job: Job) -> dict:
     # The native-WeaponDef rule is a declaration check: the shipped per-map table names what the
     # map already registers, and a composition's own base listings add to it.
     owned_weapons = (comp.get("base_owned") or set()) | native_weapons(comp["map"], foundation)
-    services = service_refusals(modules, loaded, undecided, owned_weapons, shelf_services(getattr(args, "workspace", None)))
+    services = service_refusals(modules, loaded, undecided, owned_weapons, shelf)
+    # A member that stages a base-owned path and does not declare it refuses on its own: the
+    # overwrite does not wait for a second member, so this is not a collision decision.
+    ownership = ownership_refusals(modules, loaded, comp, foundation, shelf)
+    late_refusals += ownership
+    warnings += declared_not_owned_warnings(modules, comp, foundation)
+    if ownership:
+        # One path, one report: an ownership row already names the path, its owner and the service.
+        reported = {row["path"] for row in ownership}
+        services = [row for row in services if not (row["what"] == "map-owned table" and row["collision"] in reported)]
+    # The older tag is read as the typed mark for one release; a refusal that leaned on it asks
+    # for the field.
+    named = ({row["service"] for row in ownership} | {row.get("service") for row in refused}) - {None}
+    for sid in sorted(named):
+        entry = next((row for row in shelf if row["id"] == sid), None)
+        if entry is not None and not entry["service"] and "shared-service" in entry["tags"]:
+            warnings.append({"module": sid, "message": "The shared-service tag is read as service: true for one release; "
+                                                       "declare service: true"})
     if services:
         served = {row["collision"] for row in services}
         undecided = [row for row in undecided if row["collision"] not in served]
@@ -1728,13 +1993,19 @@ def execute(args, job: Job) -> dict:
     adapter_modules = [by_id[mid] for mid in resolved["order"] if by_id[mid].get("adapter")]
     checks = _backends(compiled, bool(adapter_modules), getattr(args, "workspace", None))
     rows = _plan_rows(modules, resolved["order"], job)
+    # One row per member in plan order: the console line the declaration promises, or None where it
+    # promises none. Derived from the declaration and nothing else, so a load check, a test plan and
+    # a campaign tool read one list instead of each keeping its own (docs/MODULES.md).
+    expected_lines = [{"id": r["id"], "registration": r["registration"],
+                       "line": registration_line(r["id"]) if r["registration"] in ("self", "entry") else None}
+                      for r in rows]
     base_ids = [r["id"] for r in rows if r["role"] == "base"]
     plan = {
         "schema_version": 1, "name": comp["name"], "title": comp["title"], "tags": comp["tags"], "base": comp["base"],
         "map": comp["map"], "origin": comp["origin"], "donor": comp["donor"],
         "game": comp["game"], "mode": titles.zone(comp["game"])["mode"], "warnings":warnings,
         "base_member": base_ids[0] if base_ids else None,
-        "modules": rows, "order": resolved["order"],
+        "modules": rows, "order": resolved["order"], "expected_lines": expected_lines,
         "scripts": [{"source": str(p), "target": t.as_posix(), "instance": i, "module": owner_of_script.get(t.as_posix())} for p, t, i in compiled],
         "assets": [{"source": str(p), "target": t.as_posix(), "type": k, "name": n, "module": owner_of_script.get(t.as_posix())} for p, t, k, n in loose],
         "withheld": withheld,
@@ -1787,8 +2058,10 @@ def execute(args, job: Job) -> dict:
         except OSError: continue
         plan["checks"] += offline_checks.external_symbols(target.as_posix(),text,comp["game"])
         plan["checks"] += offline_checks.map_script_externals(target.as_posix(),text,comp["map"],foundation,comp["game"],pack_scripts)
+        plan["checks"] += offline_checks.map_guards(target.as_posix(),text,comp["map"])
         plan["checks"] += offline_checks.box_registrations(target.as_posix(),text,provided_weapons)
-        plan["checks"] += offline_checks.csc_main_body(target.as_posix(),text,comp["game"])
+    for target,text in package_scripts(modules,compiled):
+        plan["checks"] += offline_checks.csc_main_body(target,text,comp["game"])
     if args.action == "build":
         plan["checks"] += offline_checks.check_scripts(compiled,args,job,comp["game"])
     else:
@@ -1805,6 +2078,7 @@ def execute(args, job: Job) -> dict:
                "modules": [{"id": r["id"], "version": r["version"], "order": i + 1, "payload": r["payload"], "role": r["role"],
                             "parameters": r.get("parameters", {})}
                            for i, r in enumerate(rows)],
+               "expected_lines": expected_lines,
                "unqualified": resolved["unqualified"], "adapt": plan["adapt"],
         "resource_totals": resolved["resource_totals"], "budget": comp["budget"],
                "scripts": len(compiled), "assets": len(loose), "seeds": len(seed_modules), "adapters": len(adapter_modules), "loads": len(loads),
@@ -1918,7 +2192,13 @@ def entry_source(name, members):
     lines += ['#include '+path.replace('/',chr(92))+';' for path in includes]
     for root,key in (('main','replace'),('init','register')):
         lines += ['',root+'()','{']
-        lines += ['    '+m['entry'][key].replace('/',chr(92))+'();' for m in members]
+        for m in members:
+            lines.append('    '+m['entry'][key].replace('/',chr(92))+'();')
+            # A member that declared `registration: "entry"` has its one console line printed here, on
+            # its behalf and after the call that registers it, so the line means the registration ran
+            # rather than that the file loaded (docs/MODULES.md, "The registration line").
+            if key=='register' and m.get('registration')=='entry':
+                lines.append('    println("'+registration_line(m['id'])+'");')
         lines += ['}']
     return '\n'.join(lines)+'\n'
 

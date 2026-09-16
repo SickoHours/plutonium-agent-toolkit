@@ -61,12 +61,13 @@ regression that consumes the failed artifact was added; the preflight playbooks 
 | The same line **with zero `CSC Executed` lines in the slice** (a healthy load prints 14, or 18 when the pack carries two client halves of its own); the crash text has an empty `last gsc error message` and a `last gsc pos` naming a per-frame monitor loop | A client `main()` that does work. It runs in the early pass, before the client's own `_zm` rows exist, and the whole client-script pass dies there before the first `CSC Executed` line. Observed: `include_weapon` called from `main()` for weapon names the target map never registers, reaching native `addzombieboxweapon` — the registration-time twin of `box-weapon-not-found`. No script error is raised, so neither crash-text field names the site | Leave `main()` empty and do the work in `init()`, and check that every weapon name the script includes exists on the target map. `csc-main-body:<target>` rows in `module plan` and `project plan` refuse the shape offline. Do not name a script from `last gsc pos` when `last gsc error message` is empty |
 | "Out of memory" dialog at map load | Preloaded sound-bank reservation plus the fastfile's virtual block | Stream large samples losslessly; keep critical one-shots loaded |
 
-The two rows above are `csc-main-only` (class `shape-marker`, regex
-`Unable to find client function: "init" in "scripts/zm/([a-z0-9_]+)"`, fix "leave `main()` empty and
-register from `init()`") and `client-script-pass-died` (class `script-error`, the same regex plus
-the separate condition "zero `CSC Executed` lines in the slice", stated in prose because a
-line-oriented matcher cannot read a whole-slice lookahead). The `Exception Address` that came with
-them is one observed address on one client build and stays a corroborating field, never the key.
+Neither of the two rows above is in the shipped signature data yet. Row `csc-main-only` (class
+`shape-marker`, regex `Unable to find client function: "init" in "scripts/zm/([a-z0-9_]+)"`, fix
+"leave `main()` empty and register from `init()`") is filed in the maintainer's generator and lands
+with the next export. `client-script-pass-died` is a *pairing* — that marker plus zero
+`CSC Executed` lines in the slice — which the line-oriented matcher cannot express, so it is
+documented here only. The `Exception Address` that came with them is one observed address on one
+client build and stays a corroborating field, never the key.
 
 The rows are data too: `src/plutonium_agent_toolkit/knowledge/crash-signatures.json` holds each
 as a regex with its class, cause and fix, and `pat knowledge signature --log <slice> --json`

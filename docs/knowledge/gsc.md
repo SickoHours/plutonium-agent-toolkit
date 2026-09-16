@@ -51,22 +51,16 @@ So `main()` runs before the client's own `_zm` rows exist and before any other s
 **Leave a `.csc`'s `main()` empty and do the work in `init()`**, the pass the client VM calls after
 its own rows, the way the server half runs after the server's. A `.csc` that registers, includes a
 weapon or threads from `main()` reaches tables that are not built yet: the whole client-script pass
-dies there with **zero `CSC Executed` lines**, no script error, and a crash-text `last gsc pos`
-naming whatever per-frame loop the position register held rather than the fault. `module plan` and
-`project plan` raise this as a `csc-main-body:<target>` row; `crashes.md` carries both signatures.
+dies with **zero `CSC Executed` lines**, no script error, and a crash-text `last gsc pos` naming
+whatever per-frame loop the position register held rather than the fault (`crashes.md`). `module
+plan` and `project plan` raise it as a `csc-main-body:<target>` row.
 
-A missing root is **not** a fault. The engine links a no-op stub for whichever of the two is absent
-and carries on, printing
-
-```
-^3Unable to find client function: "init" in "scripts/zm/<name>"
-^3******* Linking to default stub function instead ******
-```
-
-and the server twin for an absent `main`. One passing load printed 32 such lines. Scope any matcher
-to `scripts/zm`: every healthy load also prints `Unable to find client function: "soundNotify" in
-"clientscripts/mp/_dogs"`. The line is a reliable *marker* that a mod `.csc` has the wrong shape,
-never the mechanism.
+A missing root is **not** a fault: the engine links a no-op stub for whichever is absent and carries
+on, printing `Unable to find client function: "init" in "scripts/zm/<name>"` then `******* Linking
+to default stub function instead ******`, and the server twin for an absent `main`. One passing load
+printed 32 such lines. Scope any matcher to `scripts/zm`: every healthy load also prints the same
+line for `"soundNotify" in "clientscripts/mp/_dogs"`. The line is a reliable *marker* that a mod
+`.csc` has the wrong shape, never the mechanism.
 
 ## Compiling
 
@@ -119,6 +113,23 @@ and the *engine* must have those scripts loaded too.
   or `setmodel` every frame unless a measurement justifies it.
 - A stale worker from a previous life must not erase a newer worker's fields; carry a generation
   or life identity.
+
+## A ported script still asks which map it is on
+
+A map-specific script guards its own entry: `main()` or `init()` opens with
+`if ( getdvar( "mapname" ) != "zm_transit" ) return;`, or the same test against `level.script`, or
+an `==` whose `else` returns. On its own map the guard is invisible. Ported to another map the
+script still compiles, still links, still loads and still runs — the entry point returns on the
+first line and everything after it never happens. Nothing reports this: there is no unresolved
+external, no missing asset, no console line, and `gsc check` passes, because the script is
+correct. It is simply answering a question about a map it is no longer on. The symptom in the game
+is a member that is installed and does nothing, which reads like a broken feature rather than a
+port that was never finished. A guard may name several maps at once
+(`getdvar("mapname") != "a" && getdvar("mapname") != "b"`), which is the same statement over a set.
+Read the top of `main()` and `init()` before porting anything, and change the guard to the new map,
+widen its set or drop it; `module plan` reads it for you as `map-guard:<script>`, and reads only a
+conditional that sits first and returns unconditionally, so a map test further down is still yours
+to find.
 
 ## Iterating
 

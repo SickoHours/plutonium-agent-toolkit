@@ -857,6 +857,28 @@ class PoolAndDeliveryTests(CompositionFixture):
         self.assertEqual(pool["contribution"], 602)
         self.assertEqual(pool["contributors"][0], {"id": "wavegun", "count": 601})
 
+    def test_a_member_guarded_on_another_map_refuses_naming_the_script(self):
+        # The script compiles, links and loads; its main() just returns, so the pack ships a
+        # member that does nothing. Only reading the guard finds that before the game does.
+        guarded = 'main()\n{\n    if ( getdvar( "mapname" ) != "zm_nuked" )\n        return;\n    level thread bus();\n}\n\nbus()\n{\n    wait 1;\n}\n'
+        self.module_with_assets("bus", [], script=guarded)
+        comp = self.composition(["bus"], name="stock_guard_test")
+        code, row = invoke(["module", "plan", str(comp), "--output", self.out()])
+        self.assertEqual(code, 1, row)
+        self.assertIn("map-guard:scripts/zm/bus.gsc", row["message"])
+        check = next(c for c in row["details"]["checks"] if c["id"] == "map-guard:scripts/zm/bus.gsc")
+        self.assertEqual(check["outcome"], "failed")
+        self.assertEqual(check["detail"], "returns unless mapname is zm_nuked; this composition targets zm_transit, so the script does nothing on it")
+
+    def test_a_member_guarded_on_the_target_map_passes_and_an_unguarded_one_is_not_counted(self):
+        self.module_with_assets("bus", [], script='main()\n{\n    if ( getdvar( "mapname" ) != "zm_transit" )\n        return;\n    level thread bus();\n}\n\nbus()\n{\n    wait 1;\n}\n')
+        self.module("hud")
+        code, row = invoke(["module", "plan", str(self.composition(["bus", "hud"], name="stock_guard_test")), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        by_id = {c["id"]: c for c in row["result"]["checks"]}
+        self.assertEqual(by_id["map-guard:scripts/zm/bus.gsc"]["outcome"], "passed")
+        self.assertEqual(by_id["map-guard:scripts/zm/hud.gsc"]["outcome"], "not_counted")
+
     def test_deliver_false_withholds_authoring_inputs_from_the_zone_and_the_pool(self):
         rows = [{"source": f"model_export/m{i}.glb", "target": f"model_export/m{i}.glb", "type": "rawfile", "deliver": False} for i in range(600)]
         rows.append({"source": "accuracy/x.accu", "target": "accuracy/x.accu", "type": "rawfile"})
