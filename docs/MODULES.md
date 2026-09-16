@@ -80,6 +80,19 @@ Lives in the module's directory beside its payload. The payload is one of three 
 workspace builder cuts (below). A declaration names exactly one of `recipe` or `seed`; an
 adapter recipe is named under `recipe` and told apart by its own shape.
 
+**A recipe's `loads` are the zones its assets resolve against, and they travel with the module.**
+A module whose weapon, model or material resolves against a donor zone names that fastfile once, in
+its own `project.json`, beside the assets that need it (relative paths inside the recipe's own
+directory, at most 32). `pat project plan`/`build` link a module built alone against them, and so
+does every composition that includes it: `module plan` and `module build` append each member's
+loads to the composition's own, deduplicated by resolved path, hash them as inputs like any other
+file, and give the linker one `-l` per zone. The plan says who asked for what — the member's row
+carries `recipe_loads` (resolved paths) and the plan summary carries `donor_loads`, the zones no
+base listing claims (`base_loads` is the other half). A load this machine does not hold is refused
+per member, by name and path, with kind `private_payload`: a donor fastfile is a payload nobody
+ships. `pat module qualify` needs no `loads` of its own for this — the composition it synthesizes
+names the foundation's link loads, and the module's recipe brings its donor zone with it.
+
 A recipe's script targets are not free. A T6 client loads a mod's scripts from `scripts/zm/` and
 an IW5 client from the flat `scripts/` namespace (`dev/titles.py`, `loaded_script_roots`); a
 compiled script packed anywhere else reaches the client only as a `rawfile` inside `mod.ff` that
@@ -389,7 +402,7 @@ builder the plan lists `adapter_builder` as unavailable and the build refuses be
 | `base` | yes | The base token every module must declare |
 | `map` | yes | One concrete map id. A composition is planned for one map; plan another composition for another map |
 | `modules` | yes | 1 to 128 members. A member is a relative path (forward slashes, from the composition's directory) to a directory holding `module.json`, **or** a directory holding another `composition.json` (its modules are flattened in; it must declare the same base and map; nesting is bounded), **or** an object: `{"path": …, "role": "base"}` marks the one member the others attach to; `{"name": "<github-owner>/<id>", "commit": "<40 hex>", "path": …}` records a published module pinned at a commit, with the local directory it was fetched into; `{"path": …, "parameters": {"cadence": "timer"}}` sets that member's declared parameters (below), and a member that is a nested composition takes none; `{"path": …, "accept": ["loads-but-wrong"]}` composes a member whose `port_status` is not `finished` knowingly ("Where a person finds it", below). Listing order does not matter; the plan orders by dependencies, base members first |
-| `loads` | no | Relative paths to fastfiles the linker loads for asset lookup: the base's zones. They may live beside the pack |
+| `loads` | no | Relative paths to fastfiles the linker loads for asset lookup: the base's zones. They may live beside the pack. This is the pack's own half of the set, not all of it — every member recipe's own `loads` are appended to it (below), deduplicated by resolved path, the pack's rows first and then the members' in dependency order |
 | `zone_header` | no | Linker metadata lines the base needs at the top of the zone (Zombies Declassified Beta 2 needs its `>level.ipak_read` rows); at most 32 |
 | `budget` | no | Whole-number ceilings for the summed resource contracts. Absent means the totals are reported and not enforced. A number here is a decision you made after measuring, not a guess |
 | `decisions` | no | One recorded owner per collision the plan listed (below). A decision naming a module that is not party to the collision is refused |
@@ -922,7 +935,9 @@ copied out of a donor zone, plus 30 materials.
 directory of asset listings (`<zone>-list.txt`, the shape an unlinker `--list` prints) and is
 repeatable. Every load with a listing there is one of the base's zones; every load without one is a
 donor. Nothing else has to be declared — the classification comes from the composition's own
-`loads`. A workspace can instead put the directory in `foundations/<id>.json` under `base_listings`
+`loads`, and a zone a member's recipe named is one of those loads like any other: it is a donor
+unless a listing or the foundation says it is the base's, and `donor_loads` in the plan names the
+ones that are not. A workspace can instead put the directory in `foundations/<id>.json` under `base_listings`
 and pass `--workspace`; the explicit `base_owned` field still works and merges with both.
 
 A load is also the base's when the foundation says so: with `--workspace`, a zone named in

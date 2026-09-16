@@ -2152,7 +2152,7 @@ def reach_rows(modules: list[dict], placements: list[dict], sources: dict[str, l
     return out
 
 
-def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
+def _plan_rows(modules: list[dict], order: list[str], job: Job, loaded: dict[str, tuple] | None = None) -> list[dict]:
     by_id = {m["id"]: m for m in modules}
     rows = []
     # One git read per (directory, commit) in a plan: two rows that pin the same folder ask once.
@@ -2181,6 +2181,11 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
             pass                                # No payload, so no payload hash: the base carries it.
         elif m["recipe"] is not None:
             row["recipe_sha256"] = job.inputs[str(m["recipe"].resolve())]
+            # The zones this member's assets resolve against, resolved: the composition links
+            # against them because this member is in it, so the row that names the member names
+            # them too (``docs/MODULES.md``, a recipe's ``loads``).
+            recipe = (loaded or {}).get(mid)
+            row["recipe_loads"] = [str(path) for path in recipe[3]] if recipe else []
         elif m.get("adapter") is not None:
             a = m["adapter"]
             row["recipe_sha256"] = job.inputs[str(a["recipe"].resolve())]
@@ -2335,6 +2340,16 @@ def execute(args, job: Job) -> dict:
         try:
             loaded[m["id"]] = projects.load_recipe(m["recipe"], job)
         except Failure as exc:
+            if exc.code == INPUT_MISSING and exc.details.get("load"):
+                # A zone this member's own recipe names and this machine does not hold. It is not
+                # the member's bug and not the pack's: the fastfile is a payload nobody ships, so
+                # it refuses like a private seed without its package, naming the member and the
+                # path rather than failing the whole job with one untyped message.
+                absent.append(_refusal("private_payload",
+                                       f"{m['id']} names a load its recipe needs and this machine does not hold: {exc.details['load']}",
+                                       "A recipe's loads are the zones its assets resolve against; put that fastfile beside the recipe, or drop the row.",
+                                       modules=[m["id"]], missing=[exc.details["load"]]))
+                continue
             if exc.code == INPUT_MISSING and m["distribution"] == "private":
                 # A private recipe whose sources are not on this machine is the recipe-side of
                 # a private seed without its package: plannable around, not buildable here.
@@ -2420,7 +2435,7 @@ def execute(args, job: Job) -> dict:
                                           what=row["what"], service=row["service"], **{k: v for k, v in row.items() if k in ("banks", "weapons")}))
     adapter_modules = [by_id[mid] for mid in resolved["order"] if by_id[mid].get("adapter")]
     checks = _backends(compiled, bool(adapter_modules), getattr(args, "workspace", None))
-    rows = _plan_rows(modules, resolved["order"], job)
+    rows = _plan_rows(modules, resolved["order"], job, loaded)
     # A pinned member whose folder has moved on since the pin: said once, as a warning. The pack is
     # what it was built from, so nothing here refuses; the person decides whether to fetch again.
     warnings += [{"module": r["id"],
@@ -2466,6 +2481,10 @@ def execute(args, job: Job) -> dict:
         "decisions": decided, "undecided": undecided, "base_owned_names": len(comp.get("base_owned") or ()),
         "base_listings": [str(path) for path in comp.get("base_listings") or []],
         "base_loads": [zone_name_of(path) for path in comp.get("base_loads") or []],
+        # The other half of the same classification: every zone the pack loads that the base does
+        # not own, whoever named it -- the composition itself or a member's recipe. This is the set
+        # `donor-shadowing` judges, said once where a person reads the plan.
+        "donor_loads": [zone_name_of(path) for path in loads if path not in set(comp.get("base_loads") or ())],
         "base_owned_assets": {kind: len(names) for kind, names in sorted((comp.get("base_shadowable") or {}).items())},
         "backends": checks, "backends_available": all(c["available"] for c in checks),
         "input_files": len(job.inputs),
@@ -2596,7 +2615,8 @@ def execute(args, job: Job) -> dict:
                "expected_lines": expected_lines, "stock": plan["stock"],
                "unqualified": resolved["unqualified"], "adapt": plan["adapt"],
         "resource_totals": resolved["resource_totals"], "budget": comp["budget"],
-               "scripts": len(compiled), "assets": len(loose), "seeds": len(seed_modules), "adapters": len(adapter_modules), "loads": len(loads),
+               "scripts": len(compiled), "assets": len(loose), "seeds": len(seed_modules), "adapters": len(adapter_modules),
+               "loads": len(loads), "donor_loads": plan["donor_loads"],
                "decisions": decided, "undecided": undecided, "base_owned_names": len(comp.get("base_owned") or ()),
                "footprint": plan["footprint"], "withheld": len(withheld)}
     summary["checks"] = plan["checks"]

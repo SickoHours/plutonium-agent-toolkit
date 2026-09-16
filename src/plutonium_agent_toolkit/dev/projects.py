@@ -177,7 +177,19 @@ def load_recipe(path: Path, job: Job) -> tuple[dict, list, list, list]:
             continue
         loose.append((job.input(_rel(row["source"], base)), target, asset_type, _zone_target(name).as_posix()))
     for text in load_rows:
-        loads.append(job.input(_rel(text, base)))
+        # A recipe's loads are the zones its assets resolve against, and they travel with the
+        # module into every composition that includes it. One that is not on this machine is the
+        # same absent payload a private seed has, so it is marked as a load here and the composer
+        # turns it into a per-member ``private_payload`` refusal that names the module and the path.
+        load = _rel(text, base)
+        try:
+            loads.append(job.input(load))
+        except Failure as exc:
+            if exc.code != INPUT_MISSING:
+                raise
+            raise Failure(INPUT_MISSING, f"Recipe load is missing or is not a regular file: {load}",
+                          "A recipe's loads are the fastfiles its assets resolve against; that zone is not beside the recipe on this machine.",
+                          load=str(load)) from exc
     for source, _, _ in compiled:
         job.input_tree(source.parent)
     data["_withheld"] = withheld
