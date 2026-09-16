@@ -7,6 +7,24 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- `csc-main-body:<target>`: a new per-script check that refuses a T6 client script whose `main()`
+  has a non-empty body, in `module plan`, `module build` and `project plan`. The client VM calls
+  both roots of every loose mod `.csc` in two passes over all of them — every script's `main()`
+  first, then every script's `init()` — so a `main()` body runs before the client's own `_zm` rows
+  exist and before any script's `init()`, and the whole client-script pass dies there with zero
+  `CSC Executed` lines, no script error, and a crash-text `last gsc pos` naming an unrelated
+  per-frame loop. The row's remedy is the shape the shelf already holds: leave `main()` empty and do
+  the work in `init()`, which the client VM calls after its own rows. An empty or absent `main()`
+  passes, since the engine links a no-op stub for an absent root and around twenty working scripts
+  rely on it; a `.gsc` is `not_counted`, because a server `main()` runs after the server's own rows
+  and may do work; another title is `not_counted`. `docs/knowledge/gsc.md` gains "The client VM's
+  two passes" with the console evidence, and `docs/knowledge/crashes.md` two signature rows,
+  `csc-main-only` (the routine stub-link line, a shape marker and not a fault on its own)
+  and `client-script-pass-died` (that line with zero `CSC Executed` lines in the slice). The shipped
+  `knowledge/crash-signatures.json` is generator output and does not carry the two rows yet; the
+  maintainer's next export picks them up from the doc. Offline unit tests on Linux
+  (`tests/test_checks.py`, `tests/test_compositions.py`, `tests/test_dev_routes.py`); no native
+  receipt, and no route status changes.
 - A module can declare what it *promises*, and the declaration reader checks it. `replaces.files`
   is widened from GSC/CSC scripts to any relative zone path the base or the map already carries (a
   table, a visionset, a `weapons/<name>` file), still lowercase, forward slashes, deduplicated and

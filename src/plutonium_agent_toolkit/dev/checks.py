@@ -539,6 +539,60 @@ def map_script_externals(name,text,map_id,foundation,game='t6',provided=()):
         return [{'id':'map-scripts:'+name,'outcome':'passed','detail':f'Every included or qualified stock script path is carried by {map_id} on {foundation}'}]
     return [{'id':'map-scripts:'+name,'outcome':'not_counted','detail':'No stock script path is included or called'}]
 
+# `return;` on its own is the one statement that does nothing: a main() holding it is as empty as
+# `main(){}`. Comments and string literals are already blanked by mask_noncode before this runs.
+EMPTY_BODY=re.compile(r'\s*(return\s*;\s*)?\Z')
+
+def _body_of(masked,brace):
+    """The text between the `{` at ``brace`` and its matching `}`; the rest of the source when the
+    braces never balance, which keeps an unclosed function read as code rather than as empty."""
+    depth=0
+    for i in range(brace,len(masked)):
+        if masked[i]=='{':depth+=1
+        elif masked[i]=='}':
+            depth-=1
+            if depth==0:return masked[brace+1:i]
+    return masked[brace+1:]
+
+def csc_main_body(name,text,game='t6'):
+    """One row per compiled target: does this client script do its work in `main()`?
+
+    The T6 client VM calls both roots of every loose mod `.csc`, in two passes over all of them:
+    every script's `main()` first, then every script's `init()`. `main()` therefore runs before the
+    client's own `_zm` rows exist and before any other script's `init()`. A `.csc` that registers,
+    includes a weapon or threads from `main()` reaches into tables that are not built yet, and the
+    whole client-script pass dies there: no `CSC Executed` line is printed for any script, no script
+    error is raised, and the crash text's `last gsc pos` names whatever per-frame loop the position
+    register held rather than the fault (`crashes.md`, `client-script-pass-died`). Observed
+    2026-09-16 on Beta 2 Der Riese: one module's `.csc` registered from `main()` and every load of
+    the pack died this way, while the same pack without it printed the usual 14 lines.
+
+    failed when `main()` has a non-empty body; passed when it is empty or absent -- the engine links
+    a no-op stub for an absent root and carries on, which is how most of the shelf is written, so an
+    absent `main()` is a supported shape and not a finding. not_counted for a `.gsc`, because the
+    server VM runs a loose script's `main()` after the server's own rows and a server `main()` that
+    threads is the normal shape, and for a title other than T6, whose VMs are not this pair."""
+    row=lambda outcome,detail:[{'id':'csc-main-body:'+name,'outcome':outcome,'detail':detail}]
+    if game!='t6':
+        return row('not_counted',f'The two-pass client VM is a T6 fact; {game} scripts are not judged by it')
+    vm=_script_vm(name)
+    if vm=='server':
+        return row('not_counted','A server main() runs after the server\'s own rows and may do work; only a .csc is judged here')
+    if vm is None:
+        return row('not_counted','The target suffix names no script VM, so nothing here decides which pass this file runs in')
+    found=[m for m in DEF.finditer(mask_noncode(text)) if m.group(1).lower()=='main']
+    if not found:
+        return row('passed',f'{name} defines no main(), so the client VM links a no-op stub for it and the early pass runs nothing')
+    body=_body_of(mask_noncode(text),found[0].end()-1)
+    if EMPTY_BODY.match(body):
+        return row('passed',f'{name} leaves main() empty, so nothing of its own runs in the early client pass')
+    return row('failed',
+               f'{name} does its work in main(). The client VM runs every loose .csc\'s main() in one early pass and every '
+               'init() in a second pass, so this body runs before the client\'s own _zm rows exist and before any script\'s '
+               'init(); the client-script pass dies there with zero "CSC Executed" lines and no script error. Leave main() '
+               'empty and do the work in init(), which the client VM calls after its own rows (crash signatures '
+               'csc-main-only, client-script-pass-died)')
+
 def evaluate(plan,root=None):
     limits=knowledge.load('engine-limits.json')['rows'];maps=knowledge.load('occupancy.json')['maps']
     occupancy=maps.get(plan['map'],{})

@@ -834,7 +834,16 @@ script namespace (`maps/`, `clientscripts/`, `common_scripts/`, `codescripts/`) 
 compiled scripts the target map's zones carry on that foundation (`knowledge/map-scripts.json`);
 a path the map lacks fails, since it is an unresolved external at load that no compiler sees;
 a path another member of the same pack provides (a staged script target, a seed or adapter
-script root, a `provides.scripts` name) is carried by the pack and passes. Projectile FX union requires
+script root, a `provides.scripts` name) is carried by the pack and passes.
+
+`csc-main-body:<target>` rows refuse a T6 client script that does its work in `main()`. The client
+VM runs every loose `.csc`'s `main()` in one early pass and every `init()` in a second pass, so a
+`main()` body runs before the client's own `_zm` rows exist and before any script's `init()`; the
+client-script pass dies there with zero `CSC Executed` lines and no script error
+(`knowledge/crashes.md`, `client-script-pass-died`). An empty or absent `main()` passes — the engine
+links a no-op stub for an absent root — and a `.gsc` is `not_counted`, because a server `main()`
+runs after the server's own rows and threading from it is the normal shape. `project plan` raises
+the same rows for a recipe's own scripts. Projectile FX union requires
 weapon blobs and is not inferred from weapon count. Soundbank listing is only a floor.
 Builds run a receipted `gsc check` dry run per script before linking. Compiler-reported unresolved
 externals fail; successful compilation alone cannot prove runtime external resolution and that

@@ -1788,6 +1788,7 @@ def execute(args, job: Job) -> dict:
         plan["checks"] += offline_checks.external_symbols(target.as_posix(),text,comp["game"])
         plan["checks"] += offline_checks.map_script_externals(target.as_posix(),text,comp["map"],foundation,comp["game"],pack_scripts)
         plan["checks"] += offline_checks.box_registrations(target.as_posix(),text,provided_weapons)
+        plan["checks"] += offline_checks.csc_main_body(target.as_posix(),text,comp["game"])
     if args.action == "build":
         plan["checks"] += offline_checks.check_scripts(compiled,args,job,comp["game"])
     else:

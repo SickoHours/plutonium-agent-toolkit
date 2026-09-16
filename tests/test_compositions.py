@@ -926,6 +926,44 @@ class PoolAndDeliveryTests(CompositionFixture):
         rows = [c for c in result["result"]["checks"] if c["id"].startswith("box-registration:")]
         self.assertEqual([c["outcome"] for c in rows], ["passed"])
 
+    def _client_root_module(self, mid, body):
+        d = self.module(mid)
+        (d / "scripts" / f"{mid}.csc").write_text(body)
+        recipe = json.loads((d / "project.json").read_text())
+        recipe["scripts"].append({"source": f"scripts/{mid}.csc", "target": f"scripts/zm/{mid}.csc", "instance": "client"})
+        (d / "project.json").write_text(json.dumps(recipe, indent=2))
+        return d
+
+    def test_a_client_script_that_works_in_main_is_refused_with_the_row(self):
+        """lc25: qol_wallguns_in_box.csc registered from main(), the early client pass, and the
+        client-script pass died with zero `CSC Executed` lines."""
+        self._client_root_module("wallguns", "main()\n{\n    wallguns_register();\n}\n\nwallguns_register()\n{\n}\n")
+        code, result = invoke(["module", "plan", str(self.composition(["wallguns"])), "--allow-unqualified", "--output", self.out()])
+        self.assertEqual(code, 1)
+        self.assertFalse(result["ok"])
+        self.assertIn("Offline checks failed", result["message"])
+        self.assertIn("csc-main-body:scripts/zm/wallguns.csc", result["details"]["failed"])
+        row = next(c for c in result["details"]["checks"] if c["id"] == "csc-main-body:scripts/zm/wallguns.csc")
+        self.assertEqual(row["outcome"], "failed")
+        self.assertIn("init()", row["detail"])
+
+    def test_a_client_script_with_an_empty_main_plans(self):
+        self._client_root_module("tesla", "main()\n{\n}\n\ninit()\n{\n    level.tesla = 1;\n}\n")
+        code, result = invoke(["module", "plan", str(self.composition(["tesla"])), "--allow-unqualified", "--output", self.out()])
+        self.assertEqual(code, 0, result)
+        rows = {c["id"]: c["outcome"] for c in result["result"]["checks"] if c["id"].startswith("csc-main-body:")}
+        self.assertEqual(rows["csc-main-body:scripts/zm/tesla.csc"], "passed")
+        self.assertEqual(rows["csc-main-body:scripts/zm/tesla.gsc"], "not_counted", "the module's server half is not judged")
+
+    def test_a_server_main_may_do_work_and_is_not_counted(self):
+        """Every module() fixture's server half threads from main(); that is the shape the server VM
+        supports, and the row must say so rather than refuse it."""
+        self.module("probe")
+        code, result = invoke(["module", "plan", str(self.composition(["probe"])), "--allow-unqualified", "--output", self.out()])
+        self.assertEqual(code, 0, result)
+        row = next(c for c in result["result"]["checks"] if c["id"] == "csc-main-body:scripts/zm/probe.gsc")
+        self.assertEqual(row["outcome"], "not_counted")
+
     def test_deliver_false_is_rawfile_only_and_boolean(self):
         d = self.module_with_assets("alpha", [{"source": "x.json", "target": "xmodel/x.json", "type": "xmodel", "name": "x", "deliver": False}])
         code, row = invoke(["module", "plan", str(self.composition(["alpha"])), "--output", self.out()])
