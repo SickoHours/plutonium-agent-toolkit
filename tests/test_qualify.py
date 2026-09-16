@@ -420,6 +420,32 @@ class QualifyBaseListingTests(QualifyFixture):
         qualified = json.loads((self.root / entry["job"] / "qualify.json").read_text())
         self.assertEqual(qualified["base_listings"], [str(self.load.parent)])
 
+    def test_the_modules_own_recipe_load_is_what_the_build_links_against(self):
+        """The synthesized composition names the foundation's link loads and nothing else; the
+        donor zone reaches the linker because the module's own recipe names it, and a composition
+        links against every member's loads (docs/MODULES.md, a recipe's `loads`)."""
+        self.foundation()
+        self.listing()
+        directory = self.donor_module()
+        code, row = self.qualify(str(directory))
+        self.assertEqual(code, 0, row)
+        entry = row["result"]["modules"][0]
+        self.assertEqual(entry["outcome"], "qualified")
+        qualified = json.loads((self.root / entry["job"] / "qualify.json").read_text())
+        composition = json.loads((self.root / qualified["composition"]).read_text())
+        self.assertEqual([Path(load).name for load in composition["loads"]], ["common_zm.ff"],
+                         "the route writes the foundation's link loads and nothing else")
+        for phase in ("unqualified", "qualified"):
+            receipt = json.loads((self.root / entry["receipts"][f"build-{phase}"]).read_text())
+            loaded = [a for step in receipt["steps"] for a in step["argv"] if str(a).endswith(".ff")]
+            self.assertTrue(any(a.endswith("zm_moon_patch.ff") for a in loaded), f"{phase}: {loaded}")
+            self.assertTrue(any(a.endswith("common_zm.ff") for a in loaded), f"{phase}: {loaded}")
+            plan = json.loads((self.root / Path(entry["receipts"][f"plan-{phase}"]).parent / "plan.json").read_text())
+            self.assertEqual([Path(load).name for load in plan["modules"][0]["recipe_loads"]], ["zm_moon_patch.ff"])
+            self.assertEqual((plan["donor_loads"], plan["base_loads"]), (["zm_moon_patch"], ["common_zm"]))
+            # The staged shelf is what both builds read; the module directory is never linked from.
+            self.assertNotIn(str(directory / "donor" / "zm_moon_patch.ff"), plan["loads"])
+
     def test_a_foundation_that_names_its_listings_directory_is_read_too(self):
         path = self.foundation()
         record = json.loads(path.read_text())

@@ -7,6 +7,25 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- A member recipe's `loads` are now reported where the pack is planned, and a zone this machine
+  does not hold refuses by member and path. A module whose assets resolve against a donor zone
+  names that fastfile in its own `project.json`, and `module plan`/`module build` have always
+  appended each member's loads to the composition's own and given the linker one `-l` per zone;
+  what was missing was saying so. The member's plan row now carries `recipe_loads`, the resolved
+  paths that member asked for, and the plan (and its `--json` summary) carries `donor_loads`, the
+  zones no base listing and no foundation claims as the base's — the complement of `base_loads`,
+  over every load whoever named it. The set is still deduplicated by resolved path, the
+  composition's own rows first and then the members' in dependency order, and every one is hashed
+  as an input. A recipe load that is not on this machine was a single untyped `input_missing` for
+  the whole job unless the member was `distribution: private`; it is now a per-member refusal of
+  kind `private_payload` naming the module and the path, which is what an absent payload is called
+  everywhere else. `module qualify` needs no route change to benefit: the composition it
+  synthesizes names the foundation's link loads, and the module's recipe brings its donor zone
+  with it, now covered by a test that reads both builds' link arguments. `donor-shadowing`
+  classifies a member's zone exactly as before — by listing presence, not by who named it — and a
+  test now says so. Offline verified on Linux (`tests/test_compositions.py`,
+  `tests/test_qualify.py`); no game was loaded.
+
 - `module plan` and `module build` now say when a pinned member's folder has moved on since the
   pin. A member written as `{"name": …, "commit": …, "path": …}` records the commit the pack was
   built from; the planner asks git in that fetched directory, read-only and without fetching,

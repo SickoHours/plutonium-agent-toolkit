@@ -1472,3 +1472,154 @@ class LooseOverrideTests(CompositionFixture):
         check = next(c for c in row["details"]["checks"] if c["id"] == "loose-overrides")
         self.assertEqual(check["outcome"], "not_counted")
         self.assertIn("No base listing", check["detail"])
+
+
+class RecipeLoadTests(CompositionFixture):
+    """A member's own `loads` are the pack's loads.
+
+    A module whose assets resolve against a donor zone says so in its recipe, once, where the
+    assets are. Every composition that includes that module links against that zone: the composer
+    does not repeat the row, and a pack that already loads it does not link it twice. The zone is
+    a payload nobody ships, so one that is not on this machine refuses per member, by name.
+    """
+
+    def zone(self, name, directory="zones", pulls=()):
+        d = self.root / "packs" / directory
+        d.mkdir(parents=True, exist_ok=True)
+        path = d / f"{name}.ff"
+        path.write_text(json.dumps({"zone": name, "rawfiles": {}, "assets": [], "pulls": list(pulls)}))
+        return path
+
+    def listings(self, **zones):
+        d = self.root / "packs" / "listings"
+        d.mkdir(parents=True, exist_ok=True)
+        for zone_name, rows in zones.items():
+            (d / f"{zone_name}-list.txt").write_text("".join(f"{row}\n" for row in rows))
+        return d
+
+    def donor_module(self, mid, zone="zm_moon_patch", **overrides):
+        """A module whose recipe names the zone its assets resolve against, beside the recipe."""
+        d = self.module(mid, **overrides)
+        path = d / "donor" / f"{zone}.ff"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"zone": zone, "rawfiles": {}, "assets": [], "pulls": []}))
+        recipe = json.loads((d / "project.json").read_text())
+        recipe["loads"] = [f"donor/{zone}.ff"]
+        (d / "project.json").write_text(json.dumps(recipe, indent=2))
+        return d, path
+
+    def plan(self, comp, *extra, expect=0):
+        code, row = invoke(["module", "plan", str(comp), "--output", self.out(), *extra])
+        self.assertEqual(code, expect, row)
+        result = row.get("result") or row.get("details") or {}
+        if expect != 0:
+            return row, result
+        return row, json.loads((Path(result["output"]) / "plan.json").read_text())
+
+    def loaded_argv(self, receipt):
+        """Every path the link step was told to load with `-l`, in the order it was told."""
+        rows = json.loads(Path(receipt).read_text())
+        for step in rows["steps"]:
+            argv = step["argv"]
+            if "-l" in argv:
+                return [argv[i + 1] for i, a in enumerate(argv) if a == "-l"]
+        return []
+
+    def test_a_members_recipe_load_is_planned_reported_and_linked_for_the_pack(self):
+        self.zone("common_zm")
+        self.listings(common_zm=["image, camo_gold_nml", "material, mtl_stock"])
+        d, donor = self.donor_module("alpha")
+        comp = self.composition(["alpha"], loads=["../zones/common_zm.ff"])
+        row, plan = self.plan(comp, "--base-listings", str(self.root / "packs" / "listings"))
+        self.assertEqual(plan["loads"], [str(self.root / "packs" / "zones" / "common_zm.ff"), str(donor)],
+                         "the composition's own loads first, then the member's")
+        self.assertEqual(plan["modules"][0]["recipe_loads"], [str(donor)])
+        # Hashed like every other input: the receipt re-reads it and a change after the plan fails.
+        receipt = json.loads((Path(row["result"]["output"]) / "receipt.json").read_text())
+        self.assertIn(str(donor), receipt["inputs"])
+        code, built = invoke(["module", "build", str(comp), "--output", self.out(),
+                              "--base-listings", str(self.root / "packs" / "listings")])
+        self.assertEqual(code, 0, built)
+        self.assertEqual(self.loaded_argv(Path(built["result"]["output"]) / "receipt.json"),
+                         [str(self.root / "packs" / "zones" / "common_zm.ff"), str(donor)],
+                         "the linker was given the member's zone as well as the pack's")
+
+    def test_the_same_zone_named_twice_is_linked_once(self):
+        """The pack that already loads a donor zone gains a member whose recipe names the same
+        file: one `-l`, in the position the composition's own row gave it."""
+        self.zone("common_zm")
+        self.listings(common_zm=["image, camo_gold_nml"])
+        d, donor = self.donor_module("alpha")
+        self.module("beta")
+        shared = Path("../..") / donor.relative_to(self.root)
+        comp = self.composition(["alpha", "beta"], loads=["../zones/common_zm.ff", shared.as_posix()])
+        row, plan = self.plan(comp, "--base-listings", str(self.root / "packs" / "listings"))
+        self.assertEqual(plan["loads"], [str(self.root / "packs" / "zones" / "common_zm.ff"), str(donor)])
+        self.assertEqual(plan["modules"][0]["recipe_loads"], [str(donor)])
+        self.assertEqual(plan["modules"][1]["recipe_loads"], [], "beta names none")
+        code, built = invoke(["module", "build", str(comp), "--output", self.out(),
+                              "--base-listings", str(self.root / "packs" / "listings")])
+        self.assertEqual(code, 0, built)
+        self.assertEqual(self.loaded_argv(Path(built["result"]["output"]) / "receipt.json").count(str(donor)), 1)
+
+    def test_two_members_naming_the_same_zone_link_it_once(self):
+        """The other shape of the same fact: a nested pack names the donor its own way and the
+        member's recipe names it beside the assets. Two members, one `-l`."""
+        self.zone("common_zm")
+        self.listings(common_zm=["image, camo_gold_nml"])
+        d, donor = self.donor_module("alpha")
+        self.module("beta")
+        self.composition(["beta"], name="stock_inner_pack",
+                         loads=[(Path("../..") / donor.relative_to(self.root)).as_posix()])
+        comp = self.composition([{"path": "../stock_inner_pack"}, "alpha"],
+                                name="stock_outer_test", loads=["../zones/common_zm.ff"])
+        row, plan = self.plan(comp, "--base-listings", str(self.root / "packs" / "listings"))
+        self.assertEqual(plan["loads"], [str(self.root / "packs" / "zones" / "common_zm.ff"), str(donor)])
+        self.assertEqual(sorted(m["id"] for m in plan["modules"]), ["alpha", "beta"])
+        code, built = invoke(["module", "build", str(comp), "--output", self.out(),
+                              "--base-listings", str(self.root / "packs" / "listings")])
+        self.assertEqual(code, 0, built)
+        self.assertEqual(self.loaded_argv(Path(built["result"]["output"]) / "receipt.json").count(str(donor)), 1)
+
+    def test_a_recipe_load_this_machine_does_not_hold_refuses_by_member_and_path(self):
+        d, donor = self.donor_module("alpha")
+        self.module("beta")
+        donor.unlink()
+        comp = self.composition(["alpha", "beta"])
+        row, details = self.plan(comp, expect=1)
+        self.assertEqual(row["error_code"], "input_missing")
+        refusal = details["refusals"][0]
+        self.assertEqual((refusal["kind"], refusal["modules"]), ("private_payload", ["alpha"]))
+        self.assertIn(str(donor), refusal["message"])
+        self.assertEqual(refusal["missing"], [str(donor)])
+        code, built = invoke(["module", "build", str(comp), "--output", self.out()])
+        self.assertEqual(code, 1, built)
+        self.assertEqual(built["details"]["refusals"][0]["kind"], "private_payload")
+
+    def test_donor_loads_names_the_zones_outside_the_base_and_omits_the_base_s_own(self):
+        """`donor_loads` is the complement of `base_loads`, over every load whoever named it: the
+        composition's `common_zm` has a listing and is the base's; the member's has none."""
+        self.zone("common_zm")
+        self.listings(common_zm=["image, camo_gold_nml"])
+        d, donor = self.donor_module("alpha")
+        comp = self.composition(["alpha"], loads=["../zones/common_zm.ff"])
+        row, plan = self.plan(comp, "--base-listings", str(self.root / "packs" / "listings"))
+        self.assertEqual(plan["base_loads"], ["common_zm"])
+        self.assertEqual(plan["donor_loads"], ["zm_moon_patch"])
+        self.assertEqual(row["result"]["donor_loads"], ["zm_moon_patch"], "and the plan summary says it too")
+
+    def test_donor_shadowing_judges_a_members_recipe_load_like_any_other_donor(self):
+        """The check classifies by listing presence, so a zone a member named is a donor to it:
+        with no listing the pack refuses, and the refusal names the member's zone."""
+        self.zone("common_zm")
+        d, donor = self.donor_module("alpha")
+        comp = self.composition(["alpha"], loads=["../zones/common_zm.ff"])
+        row, details = self.plan(comp, expect=1)
+        check = next(c for c in details["checks"] if c["id"] == "donor-shadowing")
+        self.assertEqual((check["outcome"], check["count"], check["names"]), ("failed", 2, ["common_zm", "zm_moon_patch"]))
+        # With the base's listing staged, the member's zone is the only donor left.
+        self.listings(common_zm=["image, camo_gold_nml"])
+        row, plan = self.plan(comp, "--base-listings", str(self.root / "packs" / "listings"))
+        check = next(c for c in row["result"]["checks"] if c["id"] == "donor-shadowing")
+        self.assertEqual(check["outcome"], "passed")
+        self.assertEqual(plan["donor_loads"], ["zm_moon_patch"])
