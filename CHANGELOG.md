@@ -83,6 +83,7 @@ Every entry states what shipped, on which platform it was verified, and what rem
   script and `declared_not_observed` when it is not, `entry` agrees on the entry field alone, `none` is
   `observed_not_declared` when the module prints anyway, and an absent field is `not_counted` with the other
   spelling it saw, or `observed_not_declared` with `--propose` filling `self`.
+<<<<<<< HEAD
 - An adapter recipe's `prepared` path now resolves the same way for the planner and for the builder.
   An absolute path is unchanged; a relative one is resolved against the module directory first and
   then the workspace root when `--workspace` is given, first directory wins, and when neither is one
@@ -101,6 +102,32 @@ Every entry states what shipped, on which platform it was verified, and what rem
   with the builder's own traceback, depending on where `pat` was run from. Offline verified on Linux;
   no game was loaded.
 
+=======
+- The `externals:` check now judges a bare call against the script's `#include` scope and against
+  the argument count the export declares, and `knowledge/stock-exports.json` carries the arities to
+  do it with. Two load failures this table could not see: `blast_furnace` called
+  `register_zombie_damage_callback` with no `#include` at all and the table had no
+  `maps/mp/zombies/_zm_spawner` row, so the symbol matched nothing and left a `not_counted` row
+  beside two unwitnessed builtins; `qol_max_ammo` included `maps\mp\_utility`, whose `get_players`
+  takes no argument, and called it with one. Both plans were accepted with 0 failed rows and both
+  loads died at `COM_ERROR (6) ... Unresolved external`. The spawner row is added (93 exports, the
+  complete list from the same `patch_zm` decompile as the other seven, which the regeneration
+  reproduces byte-for-byte), every row gains an `arity` map beside its `functions` list, and a name
+  two scripts export at different arities is judged per owner and never merged: a one-argument
+  `get_players` resolves only for a script that included `common_scripts\utility`. A declaration
+  accepts every count up to its own parameter count, because GSC passes undefined for an argument a
+  call omits — 564 bare calls in the decompile do exactly that — so only an excess is a fault.
+  Qualified `owner::name(...)` calls are judged against that owner's arities too, and one naming a
+  function its owner does not export fails pointing at the row that does: three shelf modules
+  qualify `register_tactical_grenade_for_level` to `_zm_weapons` when it is declared in
+  `_zm_utility`. Rows carry `complete`, and only a complete row is read negatively, so the partial
+  client rows still say nothing by omission. Names no row owns
+  and no builtin witness covers now leave a separate `externals-unknown:<script>` row, still
+  `not_counted` because ignorance cannot refuse a build, but under its own id rather than pooled
+  with the verdict. A read-only sweep of 407 module sources in the private workspace turns up
+  exactly the three known-broken scripts and no other row. Verified offline on Linux; nothing was
+  built, installed or played.
+>>>>>>> origin/fix/externals-stock-coverage
 - The planner reads two of those promises and refuses on them. `ownership`: a member that stages a
   path the base or the target map already carries and does not list it under `replaces.files` is
   refused, one row per member and path, naming the path, the owner (`base` or `map`), the evidence
