@@ -23,6 +23,7 @@
     pat module plan|build <composition.json> --output <new dir>
     pat module qualify <module dir> --target <foundation>/<map> --workspace <ws> --output <new dir>   build it alone there and write its records
     pat module qualify --set <file> --target <foundation>/<map> --workspace <ws> --output <new dir>   the same, in dependency order
+    pat module accept <module dir> --outcome accepted|rejected --base B --foundation F --map M --package <sha256> --record <path> --output <new dir>   a person's verdict, one ledger row
     pat module declare <mod.ff> --output <new dir>
     pat module fetch <owner/id@commit | https://github.com/o/r@commit> --output <new dir>
     pat registry add <file|url> | list | search [words] [--category ...] | show <owner/id>

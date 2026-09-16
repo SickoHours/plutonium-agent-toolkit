@@ -321,6 +321,45 @@ The worker reads the proposal and the notes, edits the rows, and writes
 `modules/<id>/evidence.json`; then `pat module inspect modules/<id>/module.json --json` confirms
 `ledger.validation` is `valid`.
 
+## Recording a person's verdict
+
+```sh
+pat module accept modules/rw_icr --outcome accepted \
+  --base stock --foundation bo2-stock --map zm_transit \
+  --package <64 hex> --record receipts/2026-09-15-verdict.json --record-sha256 <64 hex> \
+  --reporter Halo --quote "guns are good now after testing" \
+  --not-covered co-op --not-covered "other maps" --output jobs/accept-01
+```
+
+appends one `player-accepted` row to `modules/rw_icr/evidence.json` and writes nothing else. It
+is the only route that writes a fact a person gave; the other five facts come from builds, runs
+and captures, and no route infers this one from any of them.
+
+- `--outcome` is `accepted` or `rejected`, the two the row type knows. A qualification belongs in
+  `--note` or `--not-covered`, never in the outcome.
+- `--base`, `--foundation` and `--map` are the row's scope: one map per call, the target the
+  person actually played. `--package` is the `mod.ff` that was installed while they played it, so
+  a verdict never drifts onto a different build.
+- `--record` is the workspace-relative path of the record holding the verdict, and is required: a
+  row is a pointer to a record, and the record is the fact. A path that is absolute or climbs out
+  of the workspace is refused. `--record-sha256` pins its bytes so later drift is visible.
+- `--workspace` only reports whether that record resolves to a file (`record_found`). A record the
+  route cannot find is reported, not refused, because a verdict may cite a private record.
+- The ledger is created when the module has none, and the row is validated through the same
+  validator `module state --ledger` reads before anything is written: a refusal leaves
+  `evidence.json` byte for byte as it was. The read and the write happen under the same advisory
+  lock and through the same atomic writer `module ledger-add` uses, so two verdicts recorded at
+  the same moment are two rows, a failed write leaves the verdicts already there, an oversized
+  ledger is refused with `input_limit` rather than parsed, and an `evidence.json` that is not a
+  regular file is refused before anything opens it.
+- The file is append-only. A second verdict is a second row; a verdict that reverses an earlier
+  one is a `rejected` row beside it (with `supersedes` naming the package it replaces when that
+  is what happened), and the earlier row stays.
+
+A pack is a composition, and a verdict on the pack is a verdict about each member on that target,
+so the caller runs this once per member module. The route reads no composition: it records the
+module, scope and package it was given. Nothing here touches a game, a network or a build.
+
 ## What the ledger is not
 
 It is not a state file: `module state` on a composition derives its rungs from hashes and never

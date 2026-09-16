@@ -120,6 +120,17 @@ PLANNED = [
                 "recipes entry instead. Nothing is written to the module until every step succeeded; on failure the job directory holds the refusal "
                 "(details.refusals, kinds in dev/qualify.py REFUSAL_KINDS) and the module is untouched. A set runs in dependency order, continues past "
                 "failures and writes results.json. No parallelism inside the route; no game, network or install. Format: docs/MODULES.md."),
+    Route("module", "accept", "Append one person's gameplay verdict to a module's evidence.json as a player-accepted row, "
+          "scoped to the base, foundation and map it was given on and pinned to the package that was installed",
+          "writes-output", status="implemented", owner=OWNER,
+          notes="Arguments: <module dir> --outcome accepted|rejected --base <token> --foundation <id> --map <id> --package <sha256> "
+                "--record <workspace-relative path> [--record-sha256 <hex>] [--reporter TEXT] [--quote TEXT] [--not-covered TEXT]... "
+                "[--note TEXT] [--at ISO] [--workspace <root>] --output <new dir>. Records a verdict a person gave; it forms none and "
+                "infers none. The row is validated through the same validator module state --ledger reads before the file is written, so "
+                "a refusal leaves evidence.json byte for byte as it was; the ledger is append-only, and a second verdict is a second row. "
+                "One member module per call: a verdict on a pack is written once per member. --workspace only reports whether the cited "
+                "record resolves; a record it cannot find is reported, not refused. No game, network, install or build. "
+                "Format: docs/evidence-ledger.md."),
     Route("module", "build", "Compile every module's scripts, stage every asset, link one mod.ff, read it back and compare every rawfile",
           "writes-output", status="available", owner=OWNER,
           notes="Use --allow-unqualified to report base/map mismatches without refusing. Same backends and readback as project build; the composition's fit and budget come from declarations, not from the game."),
