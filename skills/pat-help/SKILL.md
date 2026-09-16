@@ -4,7 +4,7 @@ description: Which pat skill or playbook fits the situation. A router over the s
 disable-model-invocation: true
 metadata:
   version: "1.0.0"
-  updated: "2026-09-13"
+  updated: "2026-09-16"
 ---
 
 # pat help
@@ -28,6 +28,10 @@ verified, installed, launched, playable, captured, accepted. Words are defined i
    base member; a prebuilt pack becomes a seed with `pat module declare`).
 5. `docs/playbooks/package-and-install.md` puts the profile on disk without touching the game.
    Live operations after that need the user's go and a qualified host.
+6. Every fact earned becomes a row in the module's `evidence.json` beside its declaration, never a
+   flag: `docs/evidence-ledger.md` has the row types and `pat module state --ledger` derives the
+   six facts back per scope, `null` where no row speaks. `pat module qualify` writes the
+   `built-alone` row from its own receipts.
 
 ## On-ramps
 
@@ -57,7 +61,17 @@ verified, installed, launched, playable, captured, accepted. Words are defined i
   panel, a dispatch form): `pat plane serve --library <dir> --jobs <dir>` and open the printed URL.
   Every control is one of the routes above with its own receipt; `docs/CONTROL-PLANE.md`.
 - **Something broke in the game** (menu return, close, dialog): **`pat-diagnose`**. It builds a
-  red loop before theorising and ends by adding the gate that would have caught it.
+  red loop before theorising and ends by adding the gate that would have caught it. A *rendering*
+  fault is the exception: it writes no console line, so it needs a control load of the bare
+  foundation before any pack is suspected (`docs/playbooks/compose-a-pack.md`).
+- **The user asks what a module or pack has actually earned** ("is this tested?", "can I ship
+  it?"): `pat module state --ledger <module dir> --base <token> --map <id> --json` for a module's
+  own rows, `pat module state --composition` for a pack's rungs from hashes. The two never read
+  each other. `docs/evidence-ledger.md`.
+- **A pack needs a person to test it in order** ("what do I actually check?"): `pat test plan
+  --composition DIR --mode human --output <new dir> --json` stitches the members' test contracts
+  into load, members, interactions and soak phases with exact contract hashes. A plan is
+  preparation, not evidence that anything ran. `docs/MODULES.md`.
 - **The target is Modern Warfare 3 (IW5)**: `docs/knowledge/iw5.md` first (source scripts, no
   Mods menu, multiplayer only), `docs/knowledge/iw5-tools.md` for what exists beyond the pinned
   backends, then `docs/playbooks/build-an-iw5-mod.md` (`pat gsc check`, `pat project build`,

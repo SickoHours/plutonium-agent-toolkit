@@ -33,6 +33,10 @@ A row that turned out to be wrong is corrected by a row that says so (a `player-
 with `outcome: rejected`, a `built-alone` row with `offline_verified: false`), and the wrong row
 stays.
 
+Every string in a row is text that can be written: a value JSON accepts but UTF-8 cannot encode
+(a lone surrogate, `"\ud800"`) is refused with the pointer of the field that holds it, rather
+than validating and then failing in the encoder with the ledger already open for writing.
+
 ## Every row
 
 Every row has a `type`. Every row except `lineage` has a `scope`, and may have:
@@ -40,7 +44,7 @@ Every row has a `type`. Every row except `lineage` has a `scope`, and may have:
 | Field | Meaning |
 | --- | --- |
 | `scope` | Where the statement applies. See below. |
-| `at` | When: `YYYY-MM-DD` or an ISO date-time. |
+| `at` | When: `YYYY-MM-DD` or an ISO date-time. The shape and the calendar are both checked: `2026-99-99` has the shape of a date and is not a day, and a row dated one is refused. |
 | `record` | The file that supports the row: `{"path", "sha256"?, "commit"?}`. The path is forward-slash, relative to the workspace root, and never climbs out of it. The hash is the file's SHA-256 when it was recorded, so drift is visible. |
 | `package_sha256` | The `mod.ff` the row is about, when the row is about a build. Two rows about different packages never merge. |
 | `note` | Free text, at most 2000 characters. Scope qualifications go here (what a verdict covered and did not). |
@@ -215,6 +219,67 @@ the declaration's id is a diagnostic. The ledger's defects never change the decl
 with exit 0 and a `ledger.validation` of `invalid`. Absence of the file is not an error and adds
 no `ledger` key. Inspection reads the file only; it follows no record pointer and verifies no hash.
 
+## Appending rows
+
+```sh
+pat module ledger-add <module directory | evidence.json> --row <row.json> [--row <row.json> ...] --json
+```
+
+appends rows to `evidence.json`. Every row the campaign records goes through this route; a row
+typed into the file by hand is a row nothing validated. Each `--row` file holds one row object or
+a list of row objects, and the files are appended in the order they are given.
+
+- **Validated like every other row.** Each row is checked by the rules `pat module inspect`
+  applies (`dev/ledger.validate`), in the context of the whole ledger: at most 1024 rows and at
+  most 1 MiB, counted after the write, not before.
+- **All-or-nothing.** One row that fails writes nothing. The refusal lists every diagnostic with
+  its row index in the resulting file and its JSON Pointer, and names the `--row` file it came
+  from. A ledger that already holds a row that does not validate is refused too: a new fact under
+  a malformed one is a fact nothing can derive from. Fix the file first.
+- **Append-only.** No existing row is edited, reordered or removed. A row whose normalized JSON
+  the file already holds is refused with `row_duplicate` and its index, rather than written a
+  second time, so a campaign that reruns its loop records each run once. A row that states a
+  further fact (the same run, now with `loaded_and_playable`) is a new row and is appended. A row
+  that turned out to be wrong is still corrected by a row that says so, never by an edit.
+- **Created when absent**, as `{"schema": 1, "subject": {"id": <the module.json id>}, "rows": []}`.
+  Only the `id` is read from the declaration. A ledger whose `subject.id` is another module's is
+  refused.
+- **One writer at a time.** The read, the validation and the write happen under an advisory
+  lock on a sibling `.evidence.json.lock` file, so two campaign workers appending at once append
+  both rows: the second waits for the first and then reads the row the first one wrote. Without
+  it both would read the same book and the later write would drop the earlier row while both
+  commands reported success.
+- **Never a half-written ledger.** The new file is written to a sibling temporary file in the
+  same directory, flushed, `fsync`ed and then renamed onto `evidence.json`. A full disk or an
+  interrupt leaves the rows that were already there, and the temporary file is removed. An
+  `evidence.json` that is not a regular file — a symlink, a FIFO, a directory — is refused with
+  `input_invalid` before anything is opened: the route never writes through a link, and never
+  blocks on an open that does not return.
+- **The diff is the rows added.** The file keeps its own `ensure_ascii`: one that escapes
+  non-ASCII keeps escaping and one that writes UTF-8 keeps writing it, so nothing re-escapes an
+  accent in a row that did not change. Indent is two spaces, the shape every record here uses.
+
+The result names the file, the row counts before and after, the appended indexes, `validation`,
+and for each appended row the six facts the ledger now derives for the scope that row names, one
+entry per map in it — the whole ledger's answer for that scope, not the row's own claim:
+
+```json
+{"protocol": "pat.module-ledger-add/1", "ledger": "modules/rw-icr/evidence.json", "created": false,
+ "subject": "rw_icr", "sha256": "<64 hex>", "rows_before": 10, "rows_after": 11, "appended": [10],
+ "validation": "valid", "diagnostics": [],
+ "rows": [{"row": 10, "type": "game-tested", "source": "run-41.json",
+           "scopes": [{"scope": {"base": "stock", "foundation": "bo2-stock", "map": "zm_transit", "location": null},
+                       "facts": {"installed": {"value": true, "rows": [10]},
+                                 "loaded_and_playable": {"value": null, "rows": []}, "...": {}}}]}]}
+```
+
+A `game-tested` row that states only `installed` and `launched` leaves `loaded_and_playable` and
+`captured` `null` there, because a fact the run did not observe is left out of the row and no
+fact is inferred from another. A row scoped to `maps: ["*"]` reports one entry, `map: "*"`,
+answered by the rows that are themselves scoped to every map; the map-specific rows do not feed
+it, because a module built alone on one map is not a module verified on all of them. The route reads and writes that one file: no game, no network, no
+install, no receipt directory.
+
 ## Populating a ledger from a workspace
 
 ```sh
@@ -255,6 +320,45 @@ the worker must fill or check before writing. It never writes: every invocation 
 The worker reads the proposal and the notes, edits the rows, and writes
 `modules/<id>/evidence.json`; then `pat module inspect modules/<id>/module.json --json` confirms
 `ledger.validation` is `valid`.
+
+## Recording a person's verdict
+
+```sh
+pat module accept modules/rw_icr --outcome accepted \
+  --base stock --foundation bo2-stock --map zm_transit \
+  --package <64 hex> --record receipts/2026-09-15-verdict.json --record-sha256 <64 hex> \
+  --reporter Halo --quote "guns are good now after testing" \
+  --not-covered co-op --not-covered "other maps" --output jobs/accept-01
+```
+
+appends one `player-accepted` row to `modules/rw_icr/evidence.json` and writes nothing else. It
+is the only route that writes a fact a person gave; the other five facts come from builds, runs
+and captures, and no route infers this one from any of them.
+
+- `--outcome` is `accepted` or `rejected`, the two the row type knows. A qualification belongs in
+  `--note` or `--not-covered`, never in the outcome.
+- `--base`, `--foundation` and `--map` are the row's scope: one map per call, the target the
+  person actually played. `--package` is the `mod.ff` that was installed while they played it, so
+  a verdict never drifts onto a different build.
+- `--record` is the workspace-relative path of the record holding the verdict, and is required: a
+  row is a pointer to a record, and the record is the fact. A path that is absolute or climbs out
+  of the workspace is refused. `--record-sha256` pins its bytes so later drift is visible.
+- `--workspace` only reports whether that record resolves to a file (`record_found`). A record the
+  route cannot find is reported, not refused, because a verdict may cite a private record.
+- The ledger is created when the module has none, and the row is validated through the same
+  validator `module state --ledger` reads before anything is written: a refusal leaves
+  `evidence.json` byte for byte as it was. The read and the write happen under the same advisory
+  lock and through the same atomic writer `module ledger-add` uses, so two verdicts recorded at
+  the same moment are two rows, a failed write leaves the verdicts already there, an oversized
+  ledger is refused with `input_limit` rather than parsed, and an `evidence.json` that is not a
+  regular file is refused before anything opens it.
+- The file is append-only. A second verdict is a second row; a verdict that reverses an earlier
+  one is a `rejected` row beside it (with `supersedes` naming the package it replaces when that
+  is what happened), and the earlier row stays.
+
+A pack is a composition, and a verdict on the pack is a verdict about each member on that target,
+so the caller runs this once per member module. The route reads no composition: it records the
+module, scope and package it was given. Nothing here touches a game, a network or a build.
 
 ## What the ledger is not
 

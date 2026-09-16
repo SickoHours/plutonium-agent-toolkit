@@ -37,6 +37,10 @@ BUSY = "busy"
 CANCELLED = "cancelled"
 # Verification
 DECLARATION_MISMATCH = "declaration_mismatch"
+# A record the route was asked to append is already in the file it appends to. Distinct from
+# input_invalid so a campaign writing hundreds of rows can tell "already recorded" (rerun the
+# loop, nothing to do) from "this row is malformed" (fix it) without reading the message.
+ROW_DUPLICATE = "row_duplicate"
 ARTIFACT_CHANGED = "artifact_changed"
 INPUT_CHANGED = "input_changed"
 HASH_MISMATCH = "hash_mismatch"
