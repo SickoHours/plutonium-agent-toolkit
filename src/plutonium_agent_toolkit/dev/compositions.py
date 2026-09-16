@@ -99,6 +99,16 @@ EXCLUSIVE_ROLES = ("hud", "box", "loadscreen", "boss", "perk-machines", "perk-ar
 # behalf, or nobody (docs/MODULES.md, "The registration line").
 REGISTRATION_KINDS = ("self", "entry", "none")
 REGISTRATION_SUFFIX = " >> registered"
+# The player-facing system a person looks for the module under: the shelf, not the build taxonomy
+# `category` and `kind` describe. A browse word, never a resolution rule; a module that spans two
+# names the one a player would look under (docs/MODULES.md, "Where a person finds it").
+SYSTEMS = ("pack-a-punch", "perks", "hud", "weapons", "powerups", "box", "core-rules", "gums", "bosses", "equipment",
+           "audio", "map")
+# Whether a ported module does what it is meant to do on its target. `finished` is what every
+# declaration written before this field already means, so absence normalizes to it; the other two
+# keep unfinished work visible in the bank, and a composition takes such a member only by naming
+# its status under that member's `accept`.
+PORT_STATUSES = ("finished", "loads-but-wrong", "not-ported")
 # What a dependency is *for*. `call`, `name` and `service` leave evidence in bytes; `runtime` is a
 # relationship only the engine shows (a level variable, a notify, an order of init), so it says why.
 DEPENDENCY_KINDS = ("call", "name", "service", "runtime")
@@ -225,10 +235,12 @@ MAX_INSPECTION_CODE = 200
 MODULE_METADATA_FIELDS = ("id", "version", "game", "title", "category", "kind", "tags", "bases", "maps",
                           "dependencies", "conflicts", "origin", "donor", "distribution", "menu_route", "payload", "recipes",
                           "lineage", "replaces", "entry", "placements", "parameters", "exclusive", "service", "registration",
-                          "dependency_kinds")
+                          "dependency_kinds", "system", "port_status")
 # Echoed only when the declaration names them, so a declaration written before a field is unchanged.
+# `port_status` is here too: absent normalizes to "finished", and echoing that default would put a
+# claim in the metadata of a declaration that never made one.
 MODULE_METADATA_OPTIONAL = ("replaces", "entry", "placements", "parameters", "recipes", "exclusive", "service", "registration",
-                            "dependency_kinds")
+                            "dependency_kinds", "system", "port_status")
 COMPOSITION_METADATA_FIELDS = ("name", "title", "game", "tags", "base", "map", "origin", "donor", "members")
 
 
@@ -527,6 +539,32 @@ def _registration(value, owner: str, entry) -> str | None:
     return value
 
 
+def _system(value, owner: str) -> str | None:
+    """The player-facing system a person finds this module under. Orthogonal to ``exclusive``: a
+    role is what a module owns outright and refuses a second owner, a system is a shelf and
+    refuses nothing. The planner never reads it."""
+    if value is None:
+        return None
+    if not isinstance(value, str) or value not in SYSTEMS:
+        raise Failure(INPUT_INVALID, f"{owner}: system is one of {list(SYSTEMS)}",
+                      "A module that spans two systems names the one a player would look under; the build taxonomy stays in "
+                      "category and kind.")
+    return value
+
+
+def _port_status(value, owner: str) -> str:
+    """Whether the port works yet: the author's verdict, which no byte shows. Absent is
+    ``finished``, the fact every declaration written before this field states, so nothing already
+    declared changes."""
+    if value is None:
+        return "finished"
+    if not isinstance(value, str) or value not in PORT_STATUSES:
+        raise Failure(INPUT_INVALID, f"{owner}: port_status is one of {list(PORT_STATUSES)}",
+                      "finished is the default; loads-but-wrong is a package that builds and loads and behaves wrong, "
+                      "not-ported a declaration whose port has not been made.")
+    return value
+
+
 def _dependencies(value, owner: str) -> tuple[list[str], dict[str, dict]]:
     """Ids, and what each dependency is *for*. An entry is a module id, or an object
     ``{id, kind, why?}`` saying why the edge exists. The ids are the plan's fact either way: the
@@ -734,7 +772,7 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
     _fields(data, {"schema", "id", "version", "game", "title", "category", "kind", "tags", "recipe", "recipes", "seed", "bases", "maps",
                             "dependencies", "conflicts", "provides", "resource_contract", "menu_route", "distribution", "source",
                             "origin", "donor", "lineage", "tests", "replaces", "entry", "placements", "parameters",
-                            "exclusive", "service", "registration"},
+                            "exclusive", "service", "registration", "system", "port_status"},
                      {"schema", "id", "version", "bases", "maps"}, where)
     if data["schema"] != 1:
         raise Failure(INPUT_INVALID, f"{where}: expected schema 1", field='/schema')
@@ -814,6 +852,8 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
             "dependencies": dependencies, "dependency_kinds": dependency_kinds,
             "conflicts": _at("/conflicts", _ids, data.get("conflicts", []), "conflicts", mid),
             "provides": provides, "exclusive": exclusive, "service": service, "registration": registration,
+            "system": _at("/system", _system, data.get("system"), mid),
+            "port_status": _at("/port_status", _port_status, data.get("port_status"), mid),
             "resource_contract": _at("/resource_contract", _contract, data.get("resource_contract"), f"{mid}: resource_contract"),
             "menu_route": menu_route, "source": source,
             "lineage": validate_lineage(data.get("lineage")),
@@ -1032,6 +1072,22 @@ def _decisions(value, comp_name: str) -> list[dict]:
     return rows
 
 
+def _accept(value, path: str, field: str) -> list[str]:
+    """The unfinished port statuses this composition takes knowingly for one member. ``finished``
+    is not among them: a member that works needs no naming, and naming it would read as a claim
+    the composition cannot make."""
+    if value is None:
+        return []
+    takeable = [status for status in PORT_STATUSES if status != "finished"]
+    if not isinstance(value, list) or not value or len(value) > len(takeable) \
+            or not all(isinstance(status, str) and status in takeable for status in value) \
+            or len(set(value)) != len(value):
+        raise Failure(INPUT_INVALID, f"Member {path}: accept lists 1 to {len(takeable)} distinct statuses from {takeable}",
+                      "accept names the unfinished statuses this composition composes knowingly; a finished member needs none.",
+                      field=field)
+    return list(value)
+
+
 def validate_composition_metadata(data) -> dict:
     """Authoritative composition checks without opening members, loads or listings."""
     _fields(data, {"schema", "name", "game", "base", "map", "modules", "loads", "budget", "decisions", "title", "tags", "zone_header",
@@ -1065,7 +1121,7 @@ def validate_composition_metadata(data) -> dict:
     base_members = 0
     for index, entry in enumerate(entries):
         row = {"path": entry} if isinstance(entry, str) else entry
-        _fields(row, {"path", "name", "commit", "role", "parameters"}, set(), "composition member", f"/modules/{index}")
+        _fields(row, {"path", "name", "commit", "role", "parameters", "accept"}, set(), "composition member", f"/modules/{index}")
         role = row.get("role", "module")
         if role not in ("module", "base"):
             raise Failure(INPUT_INVALID, "A member's role is module or base", field=f"/modules/{index}/role")
@@ -1087,6 +1143,7 @@ def validate_composition_metadata(data) -> dict:
         if role == "base":
             base_members += 1
         members.append({"path": row["path"], "role": role, "name": row.get("name"), "commit": row.get("commit"),
+                        "accept": _accept(row.get("accept"), row["path"], f"/modules/{index}/accept"),
                         "parameters": parameters.validate_setting(row.get("parameters"), f"Member {row['path']}", f"/modules/{index}/parameters")})
     if base_members > 1:
         raise Failure(INPUT_INVALID, "A composition names at most one member with role base",
@@ -1132,7 +1189,7 @@ def load_composition(path: Path, job: Job, depth: int = 0, seen: tuple = ()) -> 
         nested = directory / "composition.json"
         if (directory / "module.json").is_file():
             member = {"kind": "module", "directory": directory, "role": role, "path": row["path"], "parameters": row["parameters"],
-                      "index": index,
+                      "index": index, "accept": row["accept"],
                       "reference": {"name": row["name"], "commit": row["commit"]} if row["name"] is not None else None}
         elif nested.is_file() and not nested.is_symlink():
             if row["parameters"]:
@@ -1180,6 +1237,11 @@ def flatten(comp: dict, job: Job, target: tuple[str | None, str | None] | None =
             # The pointer a parameters refusal carries is into the composition file that set the
             # value, by that file's own member index, not into the flattened order.
             declaration["parameters_field"] = f"/modules/{member['index']}/parameters"
+            # What this composition takes knowingly, and the pointer to the member that says so:
+            # the member in the file that listed it, by that file's own index. A nested pack's
+            # members carry the accept their own composition.json wrote, never the outer one's.
+            declaration["accept"] = member["accept"]
+            declaration["accept_field"] = f"/modules/{member['index']}"
             declaration["reference"] = member["reference"]
             declaration["via"] = comp["name"]
             modules.append(declaration)
@@ -1219,7 +1281,7 @@ def _order(modules: list[dict]) -> list[str]:
 
 REFUSAL_KINDS = ("probe", "test_only", "duplicate_id", "missing_dependency", "conflict", "unqualified_base", "unqualified_map",
                  "private_payload", "cycle", "budget", "replacement", "service", "checks", "parameters",
-                 "ownership", "exclusive")
+                 "ownership", "exclusive", "port_status")
 
 
 def _refusal(kind: str, message: str, hint: str = "", modules=(), field: str | None = None, **extra) -> dict:
@@ -1270,7 +1332,7 @@ def resolve(comp: dict, modules: list[dict], allow_unqualified: bool = False) ->
                                  "A module appears once in a pack, including through nested compositions.", modules=duplicates))
     known = set(ids)
     unqualified = []
-    for m in modules:
+    for i, m in enumerate(modules):
         for dep in m["dependencies"]:
             if dep not in known:
                 refusals.append(_refusal("missing_dependency", f"{m['id']} depends on {dep}, which is not in the composition",
@@ -1297,6 +1359,13 @@ def resolve(comp: dict, modules: list[dict], allow_unqualified: bool = False) ->
             refusals.append(_refusal("private_payload", f"{m['id']} is distribution private and its seed package is not on this machine (missing: {m['seed'].get('missing')})",
                                      "Others can read what a private module provides from its manifest; building a pack with it needs the package beside the manifest.",
                                      modules=[m["id"]], missing=m["seed"].get("missing")))
+        # A port that is not finished is composed only when the composition names its status: the
+        # member says so, not the module, so a member brought in by a dependency is refused too.
+        status = m["port_status"]
+        if status != "finished" and status not in (m.get("accept") or []):
+            refusals.append(_refusal("port_status", f"{m['id']} is {status} and this composition does not accept it",
+                                     "Write the member as {\"path\": ..., \"accept\": [\"" + status + "\"]} to compose it knowingly, or leave it out.",
+                                     modules=[m["id"]], field=m.get("accept_field", f"/modules/{i}"), status=status))
     # A role with room for exactly one owner, owned twice. `conflicts` cannot express this: it
     # names one other module, so a role with four occupants needs six hand-kept pairs and knows
     # nothing of a fifth occupant from someone else's repository (docs/MODULES.md, "Exclusive
@@ -1769,7 +1838,7 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
                "payload": "seed" if m["seed"] else "adapter" if m.get("adapter") else "recipe",
                "distribution": m["distribution"], "dependencies": m["dependencies"], "conflicts": m["conflicts"],
                "dependency_kinds": m["dependency_kinds"], "exclusive": m["exclusive"], "service": m["service"],
-               "registration": m["registration"],
+               "registration": m["registration"], "system": m["system"], "port_status": m["port_status"],
                "bases": m["bases"], "maps": m["maps"], "provides": m["provides"], "resource_contract": m["resource_contract"],
                "menu_route": m["menu_route"], "source": m["source"], "reference": m.get("reference"),
                "origin": m["origin"], "donor": m["donor"], "replaces":m["replaces"], "entry":m["entry"], "placements": m.get("placements"),

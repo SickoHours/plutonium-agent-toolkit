@@ -7,6 +7,31 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- A module can say where a person finds it and whether its port works yet. `module.json` takes an
+  optional `system`, one of `pack-a-punch`, `perks`, `hud`, `weapons`, `powerups`, `box`,
+  `core-rules`, `gums`, `bosses`, `equipment`, `audio` or `map`: the player-facing system a module
+  would be shelved under, a browse word the planner never reads and the checker cannot see in bytes.
+  It is orthogonal to `exclusive`, which is what a module owns outright, and to `category`/`kind`,
+  which stay the build taxonomy. `module.json` also takes an optional `port_status`: `finished`
+  (what a declaration that does not name the field already means, so nothing declared before this
+  change is affected), `loads-but-wrong` for a package that builds and loads and behaves wrong, or
+  `not-ported` for a declaration whose port has not been made, so unfinished work stays visible in a
+  bank instead of out of it. An unknown word is refused at `/system` or `/port_status`.
+  `module inspect` echoes each field only when the declaration names it, and every `plan.json` row
+  carries both, with `null` and `finished` for a declaration that names neither. `module plan` and
+  `module build` refuse a member whose `port_status` is not `finished` with a new refusal kind
+  `port_status` (carrying `status` and a pointer to the member), collected beside the run's other
+  refusals, unless that member is written as an object naming the status under `accept`
+  (`{"path": "../mark3", "accept": ["loads-but-wrong"]}`); `accept` takes 1 to 2 distinct statuses
+  from the list minus `finished`, a member brought along as a dependency is refused the same way,
+  `accept` on a finished member is harmless, and a nested pack's members carry the `accept` their own
+  `composition.json` wrote rather than the outer pack's. `module inspect` of a composition echoes each
+  member's `accept`, empty when the member names none. Design in `docs/MODULES.md`, "Where a person
+  finds it, and whether it works yet". Verified by offline unit tests on Linux
+  (`tests/test_promises_systems.py`); no native receipt and no route status changes. Neither field is
+  derived from or checked against a module's bytes: `system` is a shelf word and `port_status` is a
+  person's verdict, and no shelf, library or contribution form that would group by `system` ships
+  here.
 - `pat module verify-declaration <module dir> --json` reads one module's own bytes back against its
   declaration and reports every promise beside what the files say, so a library can admit someone
   else's module on evidence rather than on trust. The route is inert: no job directory outlives the
