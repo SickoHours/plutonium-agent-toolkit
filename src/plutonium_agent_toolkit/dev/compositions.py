@@ -71,6 +71,8 @@ NAME_REF = re.compile(r"^[a-z0-9][a-z0-9-]{0,38}/[a-z0-9_]{1,64}\Z")
 RECIPE_TARGET = re.compile(r"^[a-z0-9-]{1,32}/zm_[a-z0-9_]{1,32}\Z")
 MAX_RECIPES = 32
 STAGES = ("test", "probe", "pack", "pub")
+# The half of STAGES that may carry the test probe and any other test-only member.
+TEST_STAGES = ("test", "probe")
 CONTRACT_FIELDS = ("threads", "entities", "hud", "network_fields")
 # The taxonomy people browse by. `category` is the shelf; `kind` narrows it; `tags` are free
 # lowercase words (a source game, a series, a theme). None of them affects resolution.
@@ -1283,6 +1285,14 @@ def _order(modules: list[dict]) -> list[str]:
     return order
 
 
+def is_test_profile(name: str) -> bool:
+    """Whether the composition's stage admits the test probe and other test-only members.
+
+    One rule, read by the planner's probe admission and by the release refusal in ``resolve``, so
+    the two sides of ``STAGES`` cannot drift apart."""
+    return name.endswith(tuple("_" + stage for stage in TEST_STAGES))
+
+
 REFUSAL_KINDS = ("probe", "test_only", "duplicate_id", "missing_dependency", "conflict", "unqualified_base", "unqualified_map",
                  "private_payload", "cycle", "budget", "replacement", "service", "checks", "parameters",
                  "ownership", "exclusive", "port_status")
@@ -1316,7 +1326,7 @@ def resolve(comp: dict, modules: list[dict], allow_unqualified: bool = False) ->
     one run; nothing raises here."""
     refusals: list[dict] = []
     for i,m in enumerate(modules):
-        if "test-only" in m["tags"] and comp["name"].endswith(("_pack","_pub")):
+        if "test-only" in m["tags"] and not is_test_profile(comp["name"]):
             refusals.append(_refusal("test_only", "Test-only member cannot reach a release profile", modules=[m["id"]], field=f"/modules/{i}"))
         # Defaults filled, then what the composition set over them: the configuration this member
         # is planned and built with. A name the module does not declare, or a value outside its
@@ -1584,7 +1594,8 @@ def collisions(modules: list[dict], loaded: dict[str, tuple], decisions: list[di
 
 def _aliases_of(m: dict, loaded: dict[str, tuple]) -> dict[str, list[str]]:
     """Sound alias names a member's banks carry, by bank: an adapter's alias table when its
-    prepared inputs are on this machine, a recipe's soundbank row read from its alias CSV, or
+    prepared inputs are on this machine (minus the rows ``soundbank.exclude_aliases`` hands to
+    the bank module that owns them), a recipe's soundbank row read from its alias CSV, or
     the declaration's own ``provides.aliases``. A seed manifest carries none, so a seed's bank
     is never judged here."""
     out: dict[str, list[str]] = {}
@@ -1703,6 +1714,36 @@ def service_refusals(modules: list[dict], loaded: dict[str, tuple], undecided: l
                 rows.append({"kind": "service", "collision": "weapons:" + ",".join(native), "modules": [m["id"]], "what": "native WeaponDef", "weapons": native,
                              "message": f"{m['id']} registers WeaponDef(s) the base zones already carry: {', '.join(native)[:400]}; keep the native definition and declare only new names",
                              "service": None, "hint": "An imported WeaponDef that overrides the map's own crashes precache; drop it from the recipe's weapons and provides."})
+    return rows
+
+
+def staged_scripts(compiled, decided, modules) -> list:
+    """The compiled rows whose bytes actually reach the package, by the same two rules
+    ``_build_composition`` stages with, each with the module that ships it: a decided file collision
+    stages only the owner's copy, and where two rows still land on one target the first one wins. A pack-level check must read this
+    list and not ``compiled``, which holds every member's row including the losers: a discarded
+    `.csc` that registers a clientfield would otherwise answer for a client half the package never
+    carries, and the check would pass a composition the engine refuses."""
+    owner_of = {d["collision"]: d["owner"] for d in decided if d["kind"] == "file"}
+    directories = [(m["id"], str(m["directory"])) for m in modules]
+
+    def owner_for(source) -> str | None:
+        for mid, directory in directories:
+            if str(source).startswith(directory):
+                return mid
+        return None
+
+    seen: set[str] = set()
+    rows = []
+    for source, target, instance in compiled:
+        key = target.as_posix().casefold()
+        mid = owner_for(source)
+        if key in owner_of and owner_of[key] != mid:
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append((source, target, instance, mid))
     return rows
 
 
@@ -1868,7 +1909,8 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
                               "prepared_present": a["prepared_present"], "prepared_resolved": a["prepared_resolved"],
                               "prepared_source": a["prepared_source"], "prepared_candidates": a["prepared_candidates"],
                               "declared_roots": len(a["embedded"]),
-                              "loose_scripts": [s["target"] for s in a["scripts"]], "soundbank": a["soundbank"], "aliases": a["aliases"]}
+                              "loose_scripts": [s["target"] for s in a["scripts"]], "soundbank": a["soundbank"], "aliases": a["aliases"],
+                              "excluded_aliases": a["excluded_aliases"]}
         else:
             row["seed_sha256"] = m["seed"]["files"]["mod.ff"] and job.inputs[str(m["seed"]["package"].resolve())]
             row["seed_manifest_sha256"] = job.inputs[str(m["seed"]["manifest"])]
@@ -1985,8 +2027,12 @@ def execute(args, job: Job) -> dict:
     pack_foundation = offline_checks.foundation_of(comp["base"], getattr(args, "workspace", None))
     modules, loads, decisions, header = flatten(comp, job, (pack_foundation, comp["map"]), getattr(args, "workspace", None))
     from ..testing.planner import prepare_probe
+    # Composing is not running. A member whose test contract could drive a probe verb says nothing
+    # about the pack the member belongs to, so only a test profile admits the probe here; a release
+    # profile validates the same contracts and pulls nothing in. A test-only member that is
+    # declared or brought along is still refused, by ``resolve`` below.
     try:
-        prepare_probe(comp,modules,job)
+        prepare_probe(comp,modules,job,admit=is_test_profile(comp["name"]))
     except Failure as exc:
         raise refuse([_refusal("probe", exc.message, exc.hint, field=exc.details.get("field"))], "probe",
                      "Read details.refusals: the test probe this composition needs is missing or does not cover its target.")
@@ -2111,7 +2157,8 @@ def execute(args, job: Job) -> dict:
         "adapters": [{"id": m["id"], "recipe": str(m["adapter"]["recipe"]), "recipe_key": m.get("recipe_key"),
                       "foundation": m["adapter"]["foundation"], "map": m["adapter"]["map"],
                       "roots": m["adapter"]["embedded"], "soundbanks": [m["adapter"]["soundbank"]] if m["adapter"]["soundbank"] else [],
-                      "aliases": m["adapter"]["aliases"], "loose_scripts": [s["target"] for s in m["adapter"]["scripts"]],
+                      "aliases": m["adapter"]["aliases"], "excluded_aliases": m["adapter"]["excluded_aliases"],
+                      "loose_scripts": [s["target"] for s in m["adapter"]["scripts"]],
                       "prepared_present": m["adapter"]["prepared_present"],
                       "prepared_resolved": m["adapter"]["prepared_resolved"], "prepared_source": m["adapter"]["prepared_source"],
                       "prepared_candidates": m["adapter"]["prepared_candidates"],
@@ -2187,6 +2234,11 @@ def execute(args, job: Job) -> dict:
     for path in sorted(unreachable_scripts):
         if "script-reach:" + path not in named:
             plan["checks"] += offline_checks.carried_script_reach(path,comp["game"])
+    # Only the rows the build stages may answer for the pack: the loser of a file collision is
+    # dropped before the package is written, so its bytes are not a half of anything. A row is
+    # named by its (source, target) pair, which is exactly what tells the winner from the loser.
+    survivors = {(str(s), t.as_posix()): mid for s, t, _, mid in staged_scripts(compiled, decided, rows)}
+    registrations=[]
     for source,target,_ in compiled:
         try: text=Path(source).read_text(encoding="utf-8",errors="replace")
         except OSError: continue
@@ -2194,6 +2246,15 @@ def execute(args, job: Job) -> dict:
         plan["checks"] += offline_checks.map_script_externals(target.as_posix(),text,comp["map"],foundation,comp["game"],pack_scripts,unreachable_scripts)
         plan["checks"] += offline_checks.map_guards(target.as_posix(),text,comp["map"])
         plan["checks"] += offline_checks.box_registrations(target.as_posix(),text,provided_weapons)
+        key=(str(source),target.as_posix())
+        if key in survivors:
+            # The staging owner, not the last member to claim the target: on a collision they differ.
+            registrations.append((target.as_posix(),text,survivors[key] or owner_of_script.get(target.as_posix())))
+    # A clientfield registered on one script VM and not the other is EXE_CLIENT_FIELD_MISMATCH at
+    # map load, before a script runs. No single script carries the defect and no compile, link or
+    # readback can see it: it is the two halves of the pack compared against each other, so it is
+    # read once here, after every staged script has been named.
+    plan["checks"] += offline_checks.clientfield_symmetry(registrations,comp["game"])
     for target,text in package_scripts(modules,compiled):
         plan["checks"] += offline_checks.csc_main_body(target,text,comp["game"])
     if args.action == "build":

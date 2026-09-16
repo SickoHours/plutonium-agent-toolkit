@@ -216,6 +216,16 @@ strings, the loose scripts (`loose_script`, `loose_scripts` or `scripts`), roote
 collide like a seed's, and fill `provides` the way a manifest does: a declaration may narrow
 them, never add a name the recipe does not deliver. The member's `payload` is `adapter`.
 
+`soundbank.exclude_aliases` is how a member that shares only part of its bank answers the
+`service` refusal below (one alias, one bank): 1 to 256 alias names this cut hands to the bank
+module that owns them, subtracted from the aliases the member is credited with (so the shared
+rows are one bank's, not a collision) and recorded as `excluded_aliases` on the plan row and on
+the `adapters[]` entry. The names are checked against the alias table wherever the prepared
+inputs are on this machine — a name the table does not carry is a stale list and is refused —
+and the workspace builder that cuts the bank must drop the same rows, with the readback of what
+it produced (`soundbanks` in the build receipt's `adapters[]`, read back from the package rather
+than taken from the builder's word) as the proof that it did.
+
 #### Where `prepared` points
 
 `prepared` is the directory of converted inputs the builder consumes, and the planner reads two
@@ -612,7 +622,8 @@ Optional `lineage` records a T4/T5 source relationship: `[{"game":"t5","map":"zm
 
 `lineage` is also the first row type of the evidence ledger: an optional `evidence.json` beside
 `module.json` holds typed, scoped rows (`lineage`, `authored`, `accepted-in-pack`,
-`extracted-from-release`, `built-alone`, `agent-reviewed`, `game-tested`, `player-accepted`) from
+`extracted-from-release`, `built-alone`, `agent-reviewed`, `game-tested`, `player-accepted`,
+`known-issue`) from
 which the six facts are derived per scope, unknown kept unknown. `module inspect` validates it
 when present; `module state --ledger` reports it. Format: [evidence-ledger.md](evidence-ledger.md).
 
@@ -873,6 +884,46 @@ A recipe asset row may carry `"deliver": false` (rawfile rows only): the file is
 build input but never staged or rooted, for authoring inputs such as model exports and source
 WAVs that another row already compiles. Withheld rows are listed under `withheld` in the plan. The build still stages a withheld file under `raw/` at its target path with no zone line, so the linker finds the export, WAV or accuracy graph the compiled asset names; two members withholding different bytes at one path are a file collision like any other (`decisions`), and the build reports `withheld_staged`.
 
+`externals:<script>` rows resolve a script's bare calls against `knowledge/stock-exports.json`,
+which holds the export lists and declared parameter counts of the stock utility scripts per script
+VM. The script's `#include` list is the scope: a call to a stock export the script neither includes
+nor qualifies fails naming the owner, and a call carrying more arguments than any owner in scope
+declares fails naming the counts and the include that would supply a declaration taking it. Fewer
+arguments than declared is not a fault; GSC binds undefined to the rest. A qualified
+`owner::name(...)` call is judged against that owner's arities alone, and naming a function the
+owner does not export fails too, pointing at the row that does export it — the linker refuses a
+qualified miss exactly as it refuses a bare one. Only a row flagged `complete` in the table can be
+read that way; the client rows carry only proven names, so an absence there says nothing. Bare names no row owns and no
+builtin witness covers are listed separately as `externals-unknown:<script>`, `not_counted` — they
+cannot refuse a build, but they are where an unresolved external hides and they no longer share a
+row with the verdict.
+
+`clientfield-symmetry` is one pack-level check, read once per composition after every compiled
+script has been named rather than per script. It groups every clientfield the pack's own staged
+`.gsc` and `.csc` scripts register — a direct `registerclientfield("<set>", "<name>", ...)` or a helper
+that registers one, such as `maps\mp\zombies\_zm_powerups::add_zombie_powerup("<id>", ...)`,
+which registers `powerup_<id>` in set `toplayer` on whichever VM calls it — by `(set, name)`. A
+name registered on exactly one VM is `failed`, naming the field, the set, the VM, the script and
+the module, because the engine compares the server's registration list with the client's and
+refuses the map with `EXE_CLIENT_FIELD_MISMATCH` at load, before a script runs: no compile, link
+or readback can see it (crash signature `clientfield-registrations-mismatch`). The remedy in the
+row is to ship the other half as a loose `scripts/zm` script — a `.csc` for a server registration,
+a `.gsc` for a client one — that registers the same name with the same width and version,
+unconditionally. A name registered on both VMs is `passed`; a pack that registers nothing on
+either VM is `not_counted`. Registrations the stock map already makes on both VMs are outside the
+pack and are never read here, and a call whose set or name is not a string literal is not read at
+all. Only the scripts the build actually stages are read: where two members collide on one script
+target the decided owner's copy is the package's, and the loser's bytes answer for nothing — a
+discarded `.csc` cannot supply a client half the package will not carry. The pack's generated
+entry script is a compiled row like any other and is read on the same terms. The whole check is T6's:
+an `iw5` composition is one `not_counted` row, because clientfield registrations are a T6 two-VM
+property and IW5 runs one script VM. A registration inside a conditional still counts as a
+registration, and where the condition is not a plain `isdefined`/`level` guard — including an
+outer `if` reached through nested brace-less statements — a second
+`clientfield-symmetry:<name>:conditional` row fails as well: the other VM cannot read that fact, so guarding one half on state only one VM holds
+inverts the mismatch instead of curing it. `CLIENTFIELD_HELPERS` in `dev/checks.py` is the helper
+table; the next helper is one row.
+
 `map-scripts:<script>` rows check every `#include` and qualified `path::call` into a stock
 script namespace (`maps/`, `clientscripts/`, `common_scripts/`, `codescripts/`) against the
 compiled scripts the target map's zones carry on that foundation (`knowledge/map-scripts.json`);
@@ -941,13 +992,22 @@ Builds run a receipted `gsc check` dry run per script before linking. Compiler-r
 externals fail; successful compilation alone cannot prove runtime external resolution and that
 symbol check remains `not_counted`. Plans themselves do not run the compiler.
 
-Probe actions with an agent actor cause `test plan` and `module build` to include exactly one
-local sibling module named `test_probe`, tagged `test-only`, on `_test`/`_probe` profiles.
-The planner searches member siblings and the workspace's modules directory, refuses missing or
-ambiguous candidates, and emits a buildable composition with the probe explicitly included.
-The probe is first in dependency order. `_pack`/`_pub` compositions refuse every test-only member,
-including through nested compositions. Probe-scoped contracts permit signed `round_set +N`;
-this is a round-counter transition, not proof of N naturally completed gameplay rounds.
+Probe actions with an agent actor cause `test plan` to include exactly one local sibling module
+named `test_probe`, tagged `test-only`, on `_test`/`_probe` profiles; on a `_pack`/`_pub` profile
+`test plan` refuses, because asking for the plan is asking for the probe. The planner searches
+member siblings and the workspace's modules directory, refuses missing or ambiguous candidates,
+and emits a buildable composition with the probe explicitly included. The probe is first in
+dependency order.
+
+**A probe verb in a member's contract does not follow the member into a release pack.** `module
+plan` and `module build` read and validate every member's `tests` contract, but needing a probe is
+a fact about running that member's test plan, not about composing a pack that contains it: a
+`_pack`/`_pub` composition plans and builds unchanged with members whose contracts declare agent
+probe verbs, and pulls no probe in. Only a `_test`/`_probe` composition carries the probe into the
+package. What a release profile still refuses is a test-only member itself — declared or brought
+along through a nested composition — with the typed `test_only` refusal. Probe-scoped contracts
+permit signed `round_set +N`; this is a round-counter transition, not proof of N naturally
+completed gameplay rounds.
 
 ### A loose global texture wins over every bank, and over the bare game
 

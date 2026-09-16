@@ -37,6 +37,7 @@ MAX_RECIPE_BYTES = 2 * 1024 * 1024
 MAX_NAMES = 4096
 MAX_ALIAS_BYTES = 4 * 1024 * 1024
 MAX_ALIAS_ROWS = 4096
+MAX_EXCLUDED_ALIASES = 256
 SCRIPT_INSTANCES = ("server", "client")
 PROJECT_KEYS = ("schema", "game", "name")
 ADAPTER_KEYS = ("schema", "foundation", "map")
@@ -93,6 +94,21 @@ def _script_entries(data: dict, owner: str) -> list[dict]:
             raise Failure(INPUT_INVALID, f"{owner}: adapter script instance is server or client: {target}")
         out.append({"source": row["source"], "target": target, "instance": instance})
     return out
+
+
+def _excluded_aliases(value, owner: str) -> list[str]:
+    """``soundbank.exclude_aliases``: the alias rows this cut hands to the module that owns them.
+
+    The one-owner shape (``docs/MODULES.md``) only relieves a member whose whole bank is the
+    shared asset; a member that shares part of its bank gives up exactly these names, and the
+    planner must not credit it with rows its package no longer carries. Absent is none; present
+    and empty says nothing and is refused rather than read as "exclude nothing"."""
+    if value is None:
+        return []
+    if (not isinstance(value, list) or not 0 < len(value) <= MAX_EXCLUDED_ALIASES
+            or not all(isinstance(v, str) and 0 < len(v) <= 256 for v in value)):
+        raise Failure(INPUT_INVALID, f"{owner}: adapter recipe soundbank.exclude_aliases is a list of 1 to {MAX_EXCLUDED_ALIASES} alias names")
+    return list(value)
 
 
 def read_aliases(path: Path, owner: str) -> list[str]:
@@ -175,8 +191,10 @@ def resolved_recipe(adapter: dict) -> dict:
 def load_recipe(path: Path, directory: Path, job: Job, owner: str, workspace: str | None = None) -> dict:
     """Validate an adapter recipe, hash what the plan can see (the recipe, its pinned inputs
     record, every loose script source, the alias table when the prepared inputs are on this
-    machine) and derive the seed-like facts the planner needs. ``workspace`` is the second base a
-    relative ``prepared`` path may be stated against (``resolve_prepared``)."""
+    machine) and derive the seed-like facts the planner needs. The aliases are the table's
+    rows minus ``soundbank.exclude_aliases``, the rows this cut hands to the bank module that
+    owns them. ``workspace`` is the second base a relative ``prepared`` path may be stated
+    against (``resolve_prepared``)."""
     src = job.input(path, limit=MAX_RECIPE_BYTES)
     try:
         data = json.loads(src.read_text(encoding="utf-8"))
@@ -192,12 +210,14 @@ def load_recipe(path: Path, directory: Path, job: Job, owner: str, workspace: st
         weapons = [data["weapon"]]
     bank = None
     aliases_rel = None
+    excluded_aliases: list[str] = []
     if data.get("soundbank") is not None:
         sb = data["soundbank"]
         if not isinstance(sb, dict) or not isinstance(sb.get("name"), str) or not sb["name"]:
             raise Failure(INPUT_INVALID, f"{owner}: adapter recipe soundbank names a bank")
         bank = sb["name"]
         aliases_rel = sb.get("aliases") if isinstance(sb.get("aliases"), str) else None
+        excluded_aliases = _excluded_aliases(sb.get("exclude_aliases"), owner)
     localize = data.get("localize") or {}
     if not isinstance(localize, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in localize.items()) or len(localize) > MAX_NAMES:
         raise Failure(INPUT_INVALID, f"{owner}: adapter recipe localize maps references to strings")
@@ -233,6 +253,7 @@ def load_recipe(path: Path, directory: Path, job: Job, owner: str, workspace: st
     prepared_resolved, prepared_source, prepared_candidates = resolve_prepared(prepared, directory, workspace)
     prepared_present = prepared_resolved is not None
     aliases: list[str] = []
+    table_read = False
     clips: list[str] = []
     if prepared_present:
         if aliases_rel and "\\" not in aliases_rel and ".." not in Path(aliases_rel).parts:
@@ -240,6 +261,7 @@ def load_recipe(path: Path, directory: Path, job: Job, owner: str, workspace: st
             if table.is_file() and not table.is_symlink():
                 job.input(table, limit=MAX_ALIAS_BYTES)
                 aliases = read_aliases(table, owner)
+                table_read = True
         record = Path(prepared_resolved) / "prepared.json"
         if record.is_file() and not record.is_symlink():
             try:
@@ -252,6 +274,14 @@ def load_recipe(path: Path, directory: Path, job: Job, owner: str, workspace: st
                                 clips.append(clip)
             except (ValueError, OSError):
                 clips = []
+    if excluded_aliases and table_read:
+        # The table is the only place a name can be checked against, so a stale list is caught
+        # wherever the prepared tree is on this machine; off it there is nothing to check.
+        missing = sorted(set(excluded_aliases) - set(aliases))
+        if missing:
+            raise Failure(INPUT_INVALID, f"{owner}: adapter recipe soundbank.exclude_aliases names {missing}, which the alias table does not carry",
+                          "The excluded names are the rows the owning bank module took; a name the table never had is a stale list, not an exclusion.")
+        aliases = [a for a in aliases if a not in set(excluded_aliases)]
     clips = sorted(set(clips) | set(_names(data.get("extra_clips"), "extra_clips", owner)))
     embedded = ([f"weapon,{w}" for w in weapons] + ([f"soundbank,{bank}"] if bank else [])
                 + [f"localize,{k}" for k in sorted(localize)] + [f"xanim,{c}" for c in clips]
@@ -275,7 +305,8 @@ def load_recipe(path: Path, directory: Path, job: Job, owner: str, workspace: st
     provides = {k: v for k, v in provides.items() if v}
     return {"recipe": src, "directory": directory, "foundation": data["foundation"], "map": data["map"],
             "profile": data.get("profile") if isinstance(data.get("profile"), str) else None,
-            "weapons": weapons, "soundbank": bank, "aliases": aliases, "localize": dict(localize), "scripts": scripts,
+            "weapons": weapons, "soundbank": bank, "aliases": aliases, "excluded_aliases": excluded_aliases,
+            "localize": dict(localize), "scripts": scripts,
             "rawfiles": rawfiles, "native_scripts": native_scripts, "effects": effects, "clips": clips,
             "embed_loose_scripts": embed_loose, "embedded": seen, "provides": provides,
             "prepared": prepared, "prepared_present": prepared_present, "prepared_resolved": prepared_resolved,

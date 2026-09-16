@@ -389,40 +389,50 @@ def script_result(name,text,passed):
             'detail':('; '.join(errors)[:800] or ('gsc check failed' if not passed else 'gsc check passed syntax/compilation; runtime external resolution is not proven'))}
 
 CALL=re.compile(r'(?<![\w\\:.\[])([A-Za-z_][A-Za-z0-9_]*)\s*\(')
+QUALIFIED_CALL=re.compile(r'([A-Za-z_][A-Za-z0-9_\\/]*[\\/][A-Za-z0-9_\\/]+)::([A-Za-z_][A-Za-z0-9_]*)\s*\(')
 DEF=re.compile(r'^\s*([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*\{',re.M)
 INCLUDE=re.compile(r'^\s*#include\s+([^;]+);',re.M|re.I)
 KEYWORDS=frozenset(('if','while','for','foreach','switch','return','wait','waittill','waittillmatch','endon','notify','thread','spawn','array','assert'))
 
-def mask_noncode(text):
-    """Blank comments and string literals, keeping every newline, so the line-anchored scans see
-    only executable GSC. A quote inside a string is backslash-escaped; `//` or `/*` inside a
-    string is text, not a comment."""
-    output=list(text);i=0;size=len(text);state='code'
+def scan_noncode(text):
+    """Yield ``(kind, start, end)`` for every comment and string literal in ``text``, in order.
+    ``kind`` is 'line', 'block' or 'string' and the span covers the whole token, delimiters
+    included. One lexer serves both the masker below and the literal reader further down, so the
+    two can never disagree about where a string ends and a comment begins."""
+    i=0;size=len(text)
     while i<size:
         char=text[i]
-        if state=='code':
-            if char=='/' and i+1<size and text[i+1]=='/':output[i]=output[i+1]=' ';i+=2;state='line'
-            elif char=='/' and i+1<size and text[i+1]=='*':output[i]=output[i+1]=' ';i+=2;state='block'
-            elif char=='"':output[i]=' ';i+=1;state='string'
-            else:i+=1
-        elif state=='line':
-            if char=='\n':state='code';i+=1
-            else:output[i]=' ';i+=1
-        elif state=='block':
-            if char=='*' and i+1<size and text[i+1]=='/':output[i]=output[i+1]=' ';i+=2;state='code'
-            else:
-                if char!='\n':output[i]=' '
-                i+=1
-        else:
-            if char=='\\' and i+1<size:
-                if text[i]!='\n':output[i]=' '
-                if text[i+1]!='\n':output[i+1]=' '
-                i+=2
-            elif char=='"':output[i]=' ';i+=1;state='code'
-            else:
-                if char!='\n':output[i]=' '
-                i+=1
+        if char=='/' and i+1<size and text[i+1]=='/':
+            stop=text.find(chr(10),i+2);stop=size if stop<0 else stop
+            yield ('line',i,stop);i=stop;continue
+        if char=='/' and i+1<size and text[i+1]=='*':
+            stop=text.find('*/',i+2);stop=size if stop<0 else stop+2
+            yield ('block',i,stop);i=stop;continue
+        if char=='"':
+            stop=i+1
+            while stop<size:
+                if text[stop]==chr(92) and stop+1<size:stop+=2;continue
+                if text[stop]=='"':stop+=1;break
+                stop+=1
+            yield ('string',i,stop);i=stop;continue
+        i+=1
+
+def mask_noncode(text,string_fill=' '):
+    """Blank comments and string literals, keeping every newline, so the line-anchored scans see
+    only executable GSC. A quote inside a string is backslash-escaped; `//` or `/*` inside a
+    string is text, not a comment. ``string_fill`` is what a string literal collapses to: a space
+    erases it, and `0` keeps it visible as one non-identifier token, which is what argument
+    counting needs -- `f("x")` passes one argument, not none."""
+    output=list(text)
+    for kind,start,stop in scan_noncode(text):
+        fill=string_fill if kind=='string' else ' '
+        for i in range(start,stop):
+            if output[i]!=chr(10):output[i]=fill
     return ''.join(output)
+
+def string_spans(text):
+    """The ``(start, end)`` span of every string literal, quotes included."""
+    return [(start,stop) for kind,start,stop in scan_noncode(text) if kind=='string']
 
 def _script_vm(name):
     """The script VM a target path belongs to; None when the suffix does not name one, which keeps
@@ -438,6 +448,34 @@ def stock_exports(vm):
     `.gsc`; without a VM nothing is resolved."""
     if vm is None:return {}
     return {path:row['functions'] for path,row in knowledge.load('stock-exports.json')['exports'].items() if row.get('vm')==vm}
+
+def stock_arities(vm):
+    """The declared parameter counts beside :func:`stock_exports`, keyed the same way. GSC passes
+    undefined for an argument a call omits, so a declaration accepts every argument count up to its
+    own; only an excess is the `Unresolved external ... with N parameters` the linker reports."""
+    if vm is None:return {}
+    return {path:row.get('arity',{}) for path,row in knowledge.load('stock-exports.json')['exports'].items() if row.get('vm')==vm}
+
+def stock_complete(vm):
+    """The rows on ``vm`` whose export list is the whole script's. Only those can be read
+    negatively: a name a complete row does not list is a name its owner does not export, while the
+    same absence in a partial row is silence."""
+    if vm is None:return set()
+    return {path for path,row in knowledge.load('stock-exports.json')['exports'].items() if row.get('vm')==vm and row.get('complete')}
+
+def call_arguments(text,paren):
+    """The top-level argument count of the call whose `(` sits at ``paren``; None when the
+    parentheses do not close. Nested calls, arrays and commas inside them belong to one argument."""
+    depth=0;count=0;seen=False
+    for index in range(paren,len(text)):
+        char=text[index]
+        if char in '([':depth+=1
+        elif char in ')]':
+            depth-=1
+            if depth==0:return count+1 if seen else 0
+        elif char==',' and depth==1:count+=1
+        elif depth==1 and not char.isspace():seen=True
+    return None
 
 BOX_LIST=re.compile(r'strtok\(\s*"([^"]+)"\s*,\s*" "\s*\)',re.I)
 BOX_CALL=re.compile(r'\baddzombieboxweapon\s*\(',re.I)
@@ -462,41 +500,324 @@ def box_registrations(name,text,provided):
                  'detail':f'{name} registers {", ".join(missing)} in the mystery box and no member of this pack provides that weapon; the engine faults at the first box use (crash signature box-weapon-not-found). Register only weapons the pack provides'}]
     return [{'id':'box-registration:'+name,'outcome':'passed','detail':f'{name} registers only weapons a member provides: {", ".join(sorted(names))}'}]
 
+# Stock helpers that register a clientfield without the pack ever writing `registerclientfield`.
+# One row per helper: `set` is the clientfield set it registers into, `name_arg` the zero-based
+# argument that carries the field name as a literal on each VM, and `id_arg`/`id_format` render
+# the name the helper derives itself when that argument is absent or is not a literal
+# (`add_zombie_powerup("tesla", ...)` registers `powerup_tesla`). The qualified path in front of
+# the call does not change what it registers, so only the call name is keyed. The next helper is
+# one row.
+CLIENTFIELD_HELPERS={'add_zombie_powerup':{'set':'toplayer','name_arg':{'server':8,'client':1},
+                                           'id_arg':0,'id_format':'powerup_{}'}}
+
+REGISTER_CALL=re.compile(r'\b(registerclientfield|'+'|'.join(sorted(CLIENTFIELD_HELPERS))+r')\s*\(',re.I)
+IF_HEADER=re.compile(r'\bif\s*\(',re.I)
+# A guard the other VM can mirror without reading state it does not have: an isdefined() test, or
+# a bare `level` field. Anything else is a fact one VM knows and the other does not.
+TRIVIAL_GUARD=re.compile(r'^(?:isdefined\s*\(.*\)|level(?:\.[A-Za-z_][A-Za-z0-9_]*|\[[^\]]*\])+)$',re.I)
+
+def _close_paren(text,index):
+    """The index of the `)` matching the `(` at ``index``, or None. Read from masked text, where a
+    paren inside a string or comment is already blank."""
+    depth=0
+    for i in range(index,len(text)):
+        if text[i]=='(':depth+=1
+        elif text[i]==')':
+            depth-=1
+            if depth==0:return i
+    return None
+
+def _call_arguments(masked,open_index):
+    """The ``(start, end)`` offsets of each argument of the call whose `(` sits at ``open_index``.
+    Structure comes from the masked copy, where a comma or paren inside a string or comment is
+    already blank, so the offsets are safe to read back against the original text."""
+    depth=0;start=None;args=[]
+    for i in range(open_index,len(masked)):
+        char=masked[i]
+        if char in '([':
+            depth+=1
+            if depth==1:start=i+1
+        elif char in ')]':
+            depth-=1
+            if depth==0:
+                if args or masked[start:i].strip():args.append((start,i))
+                return args
+        elif char==',' and depth==1:
+            args.append((start,i));start=i+1
+    return []
+
+def _literal(masked,text,span,strings):
+    """The value of a string-literal argument, or None. An argument may carry comments around its
+    literal (`registerclientfield(/* set */ "toplayer", ...)`), and the masked copy shows a comment
+    as blanks, so the argument is a literal exactly when one string span lies inside it and
+    everything else in the masked copy is whitespace. A variable, a concatenation of two literals
+    and a localized `&"..."` all read as not-a-literal, which leaves the registration unread rather
+    than guessed at."""
+    if span is None:return None
+    start,end=span
+    inside=[(s,e) for s,e in strings if s>=start and e<=end]
+    if len(inside)!=1:return None
+    s,e=inside[0]
+    if e-s<2 or text[s]!='"' or text[e-1]!='"':return None
+    if masked[start:s].strip() or masked[e:end].strip():return None
+    return text[s+1:e-1]
+
+def _bare(term):
+    """A term with its outer parentheses and leading `!` removed, so `!(isdefined(x))` reads as
+    the isdefined test it is."""
+    term=term.strip()
+    while True:
+        if term.startswith('(') and _close_paren(term,0)==len(term)-1:term=term[1:-1].strip();continue
+        if term.startswith('!'):term=term[1:].strip();continue
+        return term
+
+def _terms(condition):
+    """Top-level `&&`/`||` terms; a term inside parentheses stays whole."""
+    rows=[];depth=0;start=0;i=0
+    while i<len(condition):
+        char=condition[i]
+        if char in '([':depth+=1
+        elif char in ')]':depth-=1
+        elif depth==0 and condition[i:i+2] in ('&&','||'):
+            rows.append(condition[start:i]);i+=2;start=i;continue
+        i+=1
+    rows.append(condition[start:])
+    return [row for row in (r.strip() for r in rows) if row]
+
+def _guards(masked,offset):
+    """Every `if` condition governing the code at ``offset``: one per enclosing braced `if` block,
+    plus a brace-less `if` whose single statement this is. Read from the masked copy, so a brace or
+    semicolon inside a string or comment is already blank. `else`, loops and switches carry no
+    condition here and leave the code unguarded, which keeps the check conservative."""
+    stack=[];pending=[];carried=None;i=0
+    while i<offset:
+        char=masked[i]
+        if char=='{':
+            # A brace-less `if` governs the next statement, and that statement may itself be the
+            # braced `if` this `{` opens. Carrying the pendings into the frame keeps the outer
+            # condition on a nested chain and drops them again when the block closes.
+            stack.append(pending+([carried] if carried else []));carried=None;pending=[];i+=1;continue
+        if char=='}':
+            if stack:stack.pop()
+            carried=None;pending=[];i+=1;continue
+        if char==';':
+            pending=[];i+=1;continue
+        header=IF_HEADER.match(masked,i)
+        if header:
+            close=_close_paren(masked,header.end()-1)
+            if close is None or close>=offset:i=header.end();continue
+            condition=' '.join(masked[header.end():close].split())
+            after=close+1
+            while after<len(masked) and masked[after].isspace():after+=1
+            if after<len(masked) and masked[after]=='{':carried=condition
+            else:pending.append(condition)
+            i=close+1;continue
+        if char=='(':
+            close=_close_paren(masked,i)
+            if close is not None and close<offset:i=close+1;continue
+        i+=1
+    return [row for frame in stack for row in frame]+pending
+
+def _condition_of(masked,offset):
+    """The first governing `if` condition that is not a plain isdefined/level guard, or None."""
+    for condition in _guards(masked,offset):
+        if any(not TRIVIAL_GUARD.match(_bare(term)) for term in _terms(condition)):return condition
+    return None
+
+def _registrations(name,text):
+    """Every clientfield this script registers: ``(set, field, condition)``, where ``condition`` is
+    the non-trivial `if` the registration sits under, or None. A call whose set or name is not a
+    string literal is not read: the check refuses what it can prove, not what it guesses."""
+    vm=_script_vm(name)
+    if vm is None:return []
+    masked=mask_noncode(text);strings=string_spans(text);rows=[]
+    def literal(args,index):
+        return _literal(masked,text,args[index],strings) if index is not None and index<len(args) else None
+    for match in REGISTER_CALL.finditer(masked):
+        call=match.group(1).lower()
+        args=_call_arguments(masked,match.end()-1)
+        if not args:continue
+        if call=='registerclientfield':
+            field_set=literal(args,0);field=literal(args,1)
+        else:
+            helper=CLIENTFIELD_HELPERS[call];field_set=helper['set']
+            field=literal(args,helper['name_arg'].get(vm))
+            if field is None:
+                ident=literal(args,helper['id_arg'])
+                field=helper['id_format'].format(ident) if ident else None
+        if not field_set or not field:continue
+        rows.append((field_set,field,_condition_of(masked,match.start()),call))
+    return rows
+
+REMEDY=('ship the other half as a loose scripts/zm script (a .csc for a server registration, a '
+        '.gsc for a client one) that registers the same name with the same width and version, '
+        'unconditionally')
+
+def clientfield_symmetry(sources,game='t6'):
+    """A clientfield the pack registers on one script VM and not on the other is
+    `EXE_CLIENT_FIELD_MISMATCH` at map load: the engine compares the server's registration list
+    with the client's and refuses the map before a script runs, so no compile, link or readback
+    sees it (crash signature `clientfield-registrations-mismatch`). This is a property of the
+    pack's two halves together, so it is read once per composition rather than per script.
+
+    ``sources`` is ``(target, text, module)`` per compiled `.gsc` and `.csc`. Every direct
+    `registerclientfield("<set>", "<name>", ...)` and every ``CLIENTFIELD_HELPERS`` call is
+    grouped by ``(set, name)``: a pair on both VMs passes, a name on exactly one VM fails naming
+    the field, the set, the VM, the script and the module, and a pack that registers nothing on
+    either VM is not_counted. Registrations the stock map already makes on both VMs are outside
+    the pack and are never read here; only what the pack's own scripts register is compared.
+
+    A registration under a condition is still a registration, so it counts for the pairing, and a
+    condition the other VM cannot evaluate adds its own failed `:conditional` row: the tesla
+    lesson is that guarding one half on state only that VM holds inverts the mismatch instead of
+    curing it."""
+    if game!='t6':
+        return [{'id':'clientfield-symmetry','outcome':'not_counted',
+                 'detail':f'clientfield registrations are a T6 two-VM property; {game} runs one script VM and its '
+                          f'registrations are not judged here'}]
+    found={};conditions={}
+    for name,text,module in sources:
+        for field_set,field,condition,call in _registrations(name,text):
+            vm=_script_vm(name)
+            found.setdefault((field_set,field),{}).setdefault(vm,[]).append((name,module,call))
+            if condition:conditions.setdefault((field_set,field),[]).append((vm,name,module,condition))
+    if not found:
+        return [{'id':'clientfield-symmetry','outcome':'not_counted',
+                 'detail':'No clientfield registration read: no compiled script in this pack calls registerclientfield '
+                          'or a helper that registers a field, so there is nothing to compare across the two VMs'}]
+    rows=[]
+    for key in sorted(found):
+        field_set,field=key;vms=found[key]
+        if 'server' in vms and 'client' in vms:
+            rows.append({'id':'clientfield-symmetry:'+field,'outcome':'passed',
+                         'detail':f'"{field}" in set {field_set} is registered on both script VMs: '
+                                  f'{_owners(vms["server"])} on the server and {_owners(vms["client"])} on the client'})
+        else:
+            vm=next(iter(vms));missing='client' if vm=='server' else 'server'
+            suffix='.csc' if missing=='client' else '.gsc'
+            rows.append({'id':'clientfield-symmetry:'+field,'outcome':'failed','field':field,'set':field_set,'vm':vm,
+                         'detail':f'"{field}" in set {field_set} is registered on the {vm} VM only, by {_owners(vms[vm])}, '
+                                  f'and by no {suffix} in this pack; the engine compares the two registration lists at map '
+                                  f'load and refuses the map with EXE_CLIENT_FIELD_MISMATCH before a script runs (crash '
+                                  f'signature clientfield-registrations-mismatch). Remedy: {REMEDY}'})
+        for vm,name,module,condition in conditions.get(key,()):
+            rows.append({'id':f'clientfield-symmetry:{field}:conditional','outcome':'failed',
+                         'detail':f'{_owner(name,module)} registers "{field}" in set {field_set} on the {vm} VM under '
+                                  f'`if ({condition})`: registered under a condition on one VM; the other VM cannot read '
+                                  f'that fact, so the registration must be unconditional'})
+    return rows
+
+def _owner(name,module):
+    return f'{name} (module {module})' if module else name
+
+def _owners(rows):
+    return ', '.join(sorted({f'{_owner(name,module)} through {call}' if call!='registerclientfield' else _owner(name,module)
+                             for name,module,call in rows}))
+
 def external_symbols(name,text,game='t6'):
-    """Unqualified calls resolved against the stock export rows of this script's own VM: failed when
-    the call needs an #include the script lacks; passed when every known call resolves on this
-    script's VM; not_counted when the title is not T6 (the tables are T6-only), when the export
-    table holds no row for this VM, when a call is neither a local function, a builtin witnessed on
-    this VM, nor a stock export of this VM, or when the target suffix does not name a VM. A builtin
-    witnessed only on the other VM stays not_counted, never passed: the witness table is an absence
-    of evidence, not proof the other VM lacks the call. Resolving across VMs would refuse a correct
-    client script for lacking a server include no stock `.csc` carries."""
+    """Unqualified calls resolved against the stock export rows of this script's own VM. The
+    script's `#include` list is the scope: a bare call resolves only against an export whose owner
+    the script included, and the call's argument count must be one a declaration in that scope
+    takes. A declaration takes every count up to its own parameter count, because GSC passes
+    undefined for an argument a call omits, so the fault is always an excess — 564 stock calls in
+    `patch_zm` pass fewer arguments than the declaration lists. A name two stock scripts export at
+    different arities is judged per owner, never merged: `get_players` is 0 parameters in
+    `maps/mp/_utility` and 1 in `common_scripts/utility`, and a one-argument call resolves only for
+    a script that included the latter (2026-09-15, `qol_instant_nuke` links, `qol_max_ammo` dies at
+    `Unresolved external "get_players" with 1 parameters`). A qualified `owner::name(...)` call is
+    judged against that owner's arities alone, and a qualified call naming a function a complete row
+    does not list fails too: the linker refuses `owner::name` for an absent name exactly as it
+    refuses a bare one.
+
+    `externals:<script>` is failed when a call needs an #include the script lacks or carries more
+    arguments than the scope takes, and passed otherwise. Bare identifiers no export row owns and
+    no builtin witness covers on this VM leave a separate `externals-unknown:<script>` row, still
+    not_counted — ignorance cannot refuse a build — but under its own id so a reader is not left
+    reading an unresolved external beside two unwitnessed builtins. not_counted on `externals:`
+    itself when the title is not T6 (the tables are T6-only) or the export table holds no row for
+    this VM. A builtin witnessed only on the other VM stays unknown, never passed: the witness
+    table is an absence of evidence, not proof the other VM lacks the call. Resolving across VMs
+    would refuse a correct client script for lacking a server include no stock `.csc` carries."""
     if game != 't6':
         return [{'id':'externals:'+name,'outcome':'not_counted',
                  'detail':f'External stock and builtin witness data is T6-only; {game} calls are not judged'}]
-    text=mask_noncode(text)
+    text=mask_noncode(text,string_fill='0')
     vm=_script_vm(name)
     exports=stock_exports(vm)
     if vm is not None and not exports:
         return [{'id':'externals:'+name,'outcome':'not_counted',
                  'detail':f'The stock export table is empty for the {vm} VM, so unqualified calls here are judged against no exports rather than against another VM'}]
-    includes={inc.strip().replace(chr(92),'/').lower() for inc in INCLUDE.findall(text)}
+    arities=stock_arities(vm)
+    includes=[inc.strip().replace(chr(92),'/').lower() for inc in INCLUDE.findall(text)]
     defined={match.lower() for match in DEF.findall(text)}
-    calls={match.lower() for match in CALL.findall(text)}
-    missing=[];unknown=[]
-    for call in sorted(calls-defined-KEYWORDS):
+    calls={}
+    for match in CALL.finditer(text):
+        count=call_arguments(text,match.end()-1)
+        if count is not None:calls.setdefault(match.group(1).lower(),set()).add(count)
+    missing=[];unknown=[];overrun=[]
+    for call in sorted(set(calls)-defined-KEYWORDS):
         owners=[path for path,names in exports.items() if call in names]
         if owners:
-            if not any(o in includes for o in owners):missing.append(f'{call} ({" or ".join(owners)})')
+            covered=[owner for owner in owners if owner in includes]
+            if not covered:missing.append(f'{call} ({" or ".join(owners)})')
+            else:overrun+=arity_faults(call,calls[call],covered,owners,arities)
             continue
         if vm is None:unknown.append(call);continue
         witness=knowledge.builtin(call,vm)
         if witness.get('verdict')=='builtin':continue
         if witness.get('also_on'):unknown.append(f'{call} (witnessed on {", ".join(witness["also_on"])} only)')
         else:unknown.append(call)
-    if missing:return [{'id':'externals:'+name,'outcome':'failed','detail':'Unqualified stock calls without #include: '+'; '.join(missing)[:800]}]
-    if unknown:return [{'id':'externals:'+name,'outcome':'not_counted','detail':'No witness on this script VM (absence of evidence, not evidence of absence): '+', '.join(unknown)[:400]}]
-    return [{'id':'externals:'+name,'outcome':'passed','detail':'Every unqualified call is local, a witnessed builtin, or covered by an #include'}]
+    complete=stock_complete(vm)
+    for match in QUALIFIED_CALL.finditer(text):
+        owner=match.group(1).replace(chr(92),'/').lower();call=match.group(2).lower()
+        count=call_arguments(text,match.end()-1)
+        if count is None or owner not in arities:continue
+        if call not in arities[owner]:
+            # The linker refuses a qualified miss exactly like a bare one; only a row that lists the
+            # whole script can say the name is absent rather than merely unproven.
+            if owner in complete:
+                elsewhere=[path for path,names in exports.items() if call in names]
+                overrun.append(f'{owner} does not export {call}'+
+                               (f'; {" or ".join(elsewhere)} does' if elsewhere else ''))
+            continue
+        overrun+=arity_faults(f'{owner}::{call}',{count},[owner],[owner],arities,key=call)
+    rows=[]
+    if missing or overrun:
+        detail='; '.join([part for part in
+            ('Unqualified stock calls without #include: '+'; '.join(missing) if missing else '',
+             'Stock calls the owner cannot resolve: '+'; '.join(sorted(set(overrun))) if overrun else '') if part])
+        rows.append({'id':'externals:'+name,'outcome':'failed','detail':detail[:800]})
+    elif unknown:
+        rows.append({'id':'externals:'+name,'outcome':'passed',
+                     'detail':'Every unqualified call an export row names an owner for is covered by an #include at an argument count it takes'})
+    else:
+        rows.append({'id':'externals:'+name,'outcome':'passed','detail':'Every unqualified call is local, a witnessed builtin, or covered by an #include'})
+    if unknown:
+        rows.append({'id':'externals-unknown:'+name,'outcome':'not_counted',
+                     'detail':', '.join(unknown)[:400]+': no table names an owner; if this is a stock helper, the call is an unresolved external at link unless the script #includes its owner'})
+    return rows
+
+def arity_faults(label,counts,covered,owners,arities,key=None):
+    """One message per argument count no declaration in scope accepts. Scope is the script's
+    includes: a name two stock scripts export at different arities resolves against the owners the
+    script included, never against the pair merged, so the fault names each owner's own count and
+    the include that would bring an owner that takes this call. A declaration accepts every count
+    up to its parameter count — GSC passes undefined for an argument a call omits — so the fault is
+    always an excess."""
+    call=key or label;faults=[]
+    def declares(owner):return sorted(arities.get(owner,{}).get(call,()))
+    for count in sorted(counts):
+        if any(value>=count for owner in covered for value in declares(owner)):continue
+        if not any(declares(owner) for owner in covered):continue
+        scoped=[owner for owner in covered if declares(owner)]
+        scope=(f'only {scoped[0]} exports it, with {", ".join(str(v) for v in declares(scoped[0]))}' if len(scoped)==1
+               else ', '.join(f'{owner} exports it with {", ".join(str(v) for v in declares(owner))}' for owner in scoped))
+        remedy=[f'{owner} exports it with {", ".join(str(v) for v in declares(owner))}, '
+                f'add #include {owner.replace("/",chr(92))}'
+                for owner in owners if owner not in covered and any(v>=count for v in declares(owner))]
+        faults.append(f'{label} called with {count} argument{"" if count==1 else "s"}; in scope '
+                      f'{scope}'+('; '+'; '.join(remedy) if remedy else ''))
+    return faults
 
 # A composition names its base by profile prefix token; the occupancy table names the foundation.
 # Without this map every pool check on a `b2` composition ran against empty occupancy and passed.
