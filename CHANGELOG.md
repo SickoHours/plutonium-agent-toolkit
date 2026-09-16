@@ -7,6 +7,20 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- `module plan` and `module build` now say when a pinned member's folder has moved on since the
+  pin. A member written as `{"name": …, "commit": …, "path": …}` records the commit the pack was
+  built from; the planner asks git in that fetched directory, read-only and without fetching,
+  whether the pin is a commit this clone knows and how many commits have touched the folder since
+  it. A folder that has moved on gives the plan row (and the `--json` summary row) `"stale":
+  {"pinned", "newest", "commits_between"}` and one warning naming the member, its pin and the
+  newest commit; a pin that is still the folder's newest commit gives `"stale": null`; and where
+  git cannot answer — no git, the directory is not inside a repository, the pin is not a known
+  commit here — `newest` and `commits_between` are `null` beside a one-line `reason` and nothing is
+  warned. A commit touching a different folder of the same repository is not this member's
+  staleness. It is a warning and never a refusal, because a pinned pack is honest about what it was
+  built from, and a member named by a local path alone carries no `stale` key and costs no git
+  call. Offline verified on Linux (`tests/test_pin_staleness.py`); no native receipt, and no route
+  status changed.
 - `pat module verify-declaration` now reports a `/version` row, so a fix that lands is visible and
   nobody stitches a broken version by accident. The route fingerprints the module's authored bytes --
   `module.json`, the payload the declaration names, the sources a recipe names, wherever they live
