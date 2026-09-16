@@ -923,10 +923,11 @@ Which paths are base-owned is read from evidence, never from a prefix list:
    `knowledge/native-weapons.json` for the WeaponDefs (a member staging `weapons/<name>` for a
    native name is the same overwrite; the native-WeaponDef service refusal keeps firing for a
    *declared* native weapon under `provides.weapons`, and `ownership` covers the staged file);
-3. `MAP_OWNED_PREFIXES` (`animstatedefs/`, `animtrees/`, `aitype/`) remains the last resort when
-   neither a listing nor a table covers the target, exactly as today. It grows by nothing. A prefix
-   is a guess about ownership and the two sources above are facts; the design replaces the guess
-   wherever a fact exists rather than making the guess longer.
+3. `MAP_OWNED_PREFIXES` (`animstatedefs/`, `animtrees/`, `aitype/`) remains what it is today: the
+   last resort for the two-member `service` refusal when neither a listing nor a table covers the
+   target. It grows by nothing and it never refuses a single member on its own: a prefix is a guess
+   about ownership (a module's *new* animation tree under `animtrees/` matches it and overwrites
+   nothing), the two sources above are facts, and only a fact refuses one member.
 
 Two consequences follow from reading ownership this way. First, `replaces.files` is widened from
 "GSC or CSC scripts only" to any relative zone path (a table, a visionset, a `weapons/<name>` file
@@ -1112,7 +1113,7 @@ weapon by building its name at run time is reported `partial`, never `agrees`.
 
 | Kind | Fires when | Row carries |
 | --- | --- | --- |
-| `ownership` | a member stages a base-owned path (listing, table, or prefix fallback) it does not declare under `replaces.files` | `path`, `owner` (`base` or `map`), `evidence` (`listing`, `table`, `prefix`), `service` (the shelf module that provides the path, with `--workspace`, or null) |
+| `ownership` | a member stages a path a base listing or a shipped per-map table says the base or the map carries, and does not declare it under `replaces.files` | `path`, `owner` (`base` or `map`), `evidence` (`listing` or `table`), `service` (the shelf module that provides the path, with `--workspace`, or null) |
 | `exclusive` | two or more members list the same role | `role`, `modules` in composition order, `resolutions` |
 
 `replacement` rows gain `service`; `service` rows are unchanged. `REFUSAL_KINDS` lists both new
