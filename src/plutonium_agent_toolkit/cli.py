@@ -214,7 +214,7 @@ JOB_ACTIONS = {("registry", "baseline"): "baseline", ("test", "plan"): "testing.
 
 
 def is_job(group: str, action: str) -> bool:
-    return (group in JOB_GROUPS and (group, action) not in (("module", "inspect"), ("module", "state"), ("module", "ledger-add"), ("module", "ledger-from-registry"))) or (group, action) in JOB_ACTIONS
+    return (group in JOB_GROUPS and (group, action) not in (("module", "inspect"), ("module", "verify-declaration"), ("module", "state"), ("module", "ledger-add"), ("module", "ledger-from-registry"))) or (group, action) in JOB_ACTIONS
 
 
 def run_job(args, argv: list[str]) -> dict:
@@ -361,6 +361,11 @@ def run(argv: list[str]) -> dict:
         from .dev import compositions
 
         return success(command, compositions.inspect(Path(args.declaration)))
+
+    if group == "module" and args.action == "verify-declaration":
+        from .dev import verify
+
+        return success(command, verify.run(args))
 
     if is_job(group, getattr(args, "action", "")):
         return run_job(args, argv)

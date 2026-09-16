@@ -2,9 +2,9 @@
 
 Provenance is a ledger, not a flag. A module's history is a list of rows, each of one type
 (``lineage``, ``authored``, ``accepted-in-pack``, ``extracted-from-release``, ``built-alone``,
-``agent-reviewed``, ``game-tested``, ``player-accepted``), each scoped to a base or foundation
-and a map set, each pointing at the record that supports it and carrying a hash where one
-exists. Rows coexist; nothing collapses them. The six facts (offline verified, installed,
+``agent-reviewed``, ``game-tested``, ``player-accepted``, ``shipped``, ``known-issue``), each scoped
+to a base or foundation and a map set, each pointing at the record that supports it and carrying a
+hash where one exists. Rows coexist; nothing collapses them. The six facts (offline verified, installed,
 launched, loaded and playable, captured, player accepted) are derived for display only, per
 scope, and a fact with no row of the matching type stays unknown (``null``). Rows about a
 composition the module was part of (``accepted-in-pack``) never feed the facts: nothing is
@@ -23,6 +23,7 @@ import json
 import os
 import re
 import stat
+import subprocess
 from datetime import datetime
 from pathlib import Path, PureWindowsPath
 
@@ -44,7 +45,7 @@ PROPOSAL_PROTOCOL = "pat.module-ledger-proposal/1"
 ADD_PROTOCOL = "pat.module-ledger-add/1"
 FILENAME = "evidence.json"
 TYPES = ("lineage", "authored", "accepted-in-pack", "extracted-from-release", "built-alone",
-         "agent-reviewed", "game-tested", "player-accepted", "shipped")
+         "agent-reviewed", "game-tested", "player-accepted", "shipped", "known-issue")
 FACTS = ("offline_verified", "installed", "launched", "loaded_and_playable", "captured", "player_accepted")
 OBSERVED = ("installed", "launched", "loaded_and_playable", "captured")
 MAX_BYTES = 1024 * 1024
@@ -57,8 +58,13 @@ MAX_ROW_BYTES = 256 * 1024
 # Windows only: msvcrt.locking blocks for about ten seconds per attempt, so this is a minute of
 # waiting for whichever process holds the ledger before the append reports busy. flock waits.
 LOCK_ATTEMPTS = 6
+# Each of the two read-only git questions a known-issue row's fix is placed by.
+GIT_TIMEOUT = 10
 SHA256 = re.compile(r"^[0-9a-f]{64}\Z")
 COMMIT = re.compile(r"^[0-9a-f]{7,40}\Z")
+# The commit a known-issue row is closed by is a whole one: an abbreviation is a prefix that
+# means one commit in the repository it was written in and may mean another, or none, here.
+CLOSES_WITH = re.compile(r"^[0-9a-f]{40}\Z")
 FOUNDATION = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}\Z")
 # A survival location: a fenced area of a stock map with its own route (Reimagined's or QoL's
 # Crazy Place, Diner, Cell Block). A row scoped to one never collapses into the parent map.
@@ -81,6 +87,9 @@ SHAPES = {
     # The game ships this on these maps. The scope is the statement, the required record is the
     # listing or decompile it was read from, and the optional citations are the lines in it.
     "shipped": ({"citations"}, {"scope", "record"}),
+    # ``at`` is required here, where it is optional everywhere else: an issue is a thing that was
+    # seen on a day, and a bug with no date cannot be read against the fix that closed it.
+    "known-issue": ({"issue", "seen_by", "closes_with", "capture"}, {"issue", "seen_by", "scope", "at"}),
 }
 OUTCOMES = {"agent-reviewed": ("passed", "failed", "noted"), "player-accepted": ("accepted", "rejected")}
 RESULTS = ("passed", "failed", "inconclusive")
@@ -326,6 +335,17 @@ def validate_row(row, field: str) -> dict:
         for key in OBSERVED:
             if key in row:
                 out[key] = _bool(row[key], key, field + "/" + key)
+    if kind == "known-issue":
+        out["issue"] = _text(row["issue"], "issue", MAX_TEXT, field + "/issue")
+        if "\n" in out["issue"] or "\r" in out["issue"]:
+            raise Failure(INPUT_INVALID, "issue is one line", field=field + "/issue")
+        out["seen_by"] = _text(row["seen_by"], "seen_by", 200, field + "/seen_by")
+        if "closes_with" in row:
+            if not isinstance(row["closes_with"], str) or not CLOSES_WITH.match(row["closes_with"]):
+                raise Failure(INPUT_INVALID, "closes_with is the 40-hex commit that closes the issue", field=field + "/closes_with")
+            out["closes_with"] = row["closes_with"]
+        if "capture" in row:
+            out["capture"] = _record(row["capture"], "capture", field + "/capture")
     return out
 
 
@@ -697,6 +717,64 @@ def query_from_target(key: str) -> dict:
     return {"foundation": parts["foundation"], "map_id": parts["map"], "location": parts["location"]}
 
 
+def _git(directory: Path, *args: str):
+    """One read-only git question in ``directory``, or ``None`` when git could not be asked.
+
+    A ledger is a file in a directory that may be no repository at all, on a host that may have
+    no git. Neither is a defect in the ledger, so neither raises here: the caller reads ``None``
+    as "unanswered" and leaves the issue open.
+    """
+    try:
+        return subprocess.run(["git", "-C", str(directory), *args], capture_output=True, timeout=GIT_TIMEOUT)
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def _landed(directory: Path, commit: str) -> bool | None:
+    """Whether ``commit`` is an ancestor of ``directory``'s current git head: whether the fix is
+    in the tree this reader is holding. ``None`` when git could not say -- no git, no repository,
+    or a commit this checkout does not know. Reads only: no write, no fetch."""
+    head = _git(directory, "rev-parse", "HEAD")
+    if head is None or head.returncode != 0:
+        return None
+    answer = _git(directory, "merge-base", "--is-ancestor", commit, "HEAD")
+    if answer is None or answer.returncode not in (0, 1):
+        return None
+    return answer.returncode == 0
+
+
+def known_issues(ledger: dict, directory: Path) -> dict:
+    """The ``known-issue`` rows split into the ones still open here and the ones a fix closed.
+
+    A row is closed when it names ``closes_with`` and that commit is an ancestor of the module
+    directory's head: the fix is in the bytes this reader has. Everything else is open -- a row
+    with no fix yet, a fix that is not in this checkout, and a fix nothing here can place. So a
+    person holding a version from before the fix sees the bug they still have, and never stitches
+    a broken version because the fix landed somewhere they are not. A row git could not answer
+    for carries ``ancestry: "unknown"``, which is why it is open.
+    """
+    opened, closed, asked = [], [], {}
+    for index, row in enumerate(ledger["rows"]):
+        if row["type"] != "known-issue":
+            continue
+        entry = {"row": index, "issue": row["issue"], "seen_by": row["seen_by"],
+                 "at": row.get("at"), "scope": row["scope"], "closes_with": row.get("closes_with")}
+        commit = row.get("closes_with")
+        if commit is None:
+            opened.append(entry)
+            continue
+        if commit not in asked:
+            asked[commit] = _landed(directory, commit)
+        if asked[commit] is None:
+            entry["ancestry"] = "unknown"
+            opened.append(entry)
+        elif asked[commit]:
+            closed.append(entry)
+        else:
+            opened.append(entry)
+    return {"open": opened, "closed": closed}
+
+
 def report(path: Path, base=None, foundation=None, map_id=None, package=None, location=None, target=None) -> dict:
     """`module state --ledger`: read, validate, derive. An invalid ledger derives nothing.
     ``target`` is a target key; it supplies foundation, map and location and refuses to
@@ -722,6 +800,9 @@ def report(path: Path, base=None, foundation=None, map_id=None, package=None, lo
     else:
         result.update(facts(ledger, base, foundation, map_id, package, location))
         result["reasons"] = [f"{len(diagnostics)} row(s) were not counted; see diagnostics"] if diagnostics else []
+    # Open issues are read against the module directory the ledger sits in, because "is this bug
+    # still in what I am holding" is a question about this checkout and no other.
+    result["known_issues"] = known_issues(ledger, path.parent) if ledger is not None else {"open": [], "closed": []}
     return result
 
 

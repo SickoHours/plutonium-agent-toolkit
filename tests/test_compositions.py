@@ -5,6 +5,7 @@ The formats are specified in docs/MODULES.md; these tests are the executable hal
 import json
 from pathlib import Path
 
+from plutonium_agent_toolkit.dev.compositions import staged_scripts
 from tests.test_dev_routes import DevRouteFixture, invoke
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,6 +55,57 @@ class CompositionFixture(DevRouteFixture):
             (d / "scripts" / f"{mid}.gsc").write_text(script)
         (d / "project.json").write_text(json.dumps(recipe, indent=2))
         return d
+
+
+class StagedScripts(CompositionFixture):
+    """What the pack's own bytes are. A pack-level check reads the rows the build stages and no
+    others: the loser of a file collision never reaches the package, and the generated entry does."""
+
+    def rows(self, compiled, decided=(), modules=()):
+        return staged_scripts(compiled, list(decided), list(modules))
+
+    def test_a_decided_collision_keeps_only_the_owners_copy(self):
+        alpha = (Path("/m/alpha/scripts/half.csc"), Path("scripts/zm/half.csc"), "client")
+        beta = (Path("/m/beta/scripts/half.csc"), Path("scripts/zm/half.csc"), "client")
+        modules = [{"id": "alpha", "directory": "/m/alpha"}, {"id": "beta", "directory": "/m/beta"}]
+        decided = [{"kind": "file", "collision": "scripts/zm/half.csc", "owner": "beta"}]
+        self.assertEqual(self.rows([alpha, beta], decided, modules), [(*beta, "beta")])
+        decided = [{"kind": "file", "collision": "scripts/zm/half.csc", "owner": "alpha"}]
+        self.assertEqual(self.rows([alpha, beta], decided, modules), [(*alpha, "alpha")])
+
+    def test_without_a_decision_the_first_row_wins_once(self):
+        alpha = (Path("/m/alpha/scripts/x.gsc"), Path("scripts/zm/x.gsc"), "server")
+        beta = (Path("/m/beta/scripts/x.gsc"), Path("scripts/zm/X.GSC"), "server")
+        modules = [{"id": "alpha", "directory": "/m/alpha"}, {"id": "beta", "directory": "/m/beta"}]
+        self.assertEqual(self.rows([alpha, beta], (), modules), [(*alpha, "alpha")],
+                         "one target is staged once, case-insensitively")
+
+    def test_the_generated_entry_is_a_staged_row_owned_by_no_member(self):
+        """Its source is the job directory, not a module's: it is the pack's own script and it is
+        staged like any other compiled row, so a check reads it with no module to name."""
+        member = (Path("/m/alpha/scripts/alpha.gsc"), Path("scripts/zm/alpha.gsc"), "server")
+        entry = (Path("/job/generated-entry/zz_stock_pack_test_entry.gsc"),
+                 Path("scripts/zm/zz_stock_pack_test_entry.gsc"), "server")
+        modules = [{"id": "alpha", "directory": "/m/alpha"}]
+        self.assertEqual(self.rows([member, entry], (), modules), [(*member, "alpha"), (*entry, None)])
+
+    def test_a_pack_with_a_generated_entry_still_reads_its_clientfields(self):
+        """End to end: the generated entry is compiled, staged and read with the members."""
+        m = self.module("alpha", entry={"replace": "scripts/zm/alpha::alpha_replace",
+                                        "register": "scripts/zm/alpha::alpha_register"}, registration="entry")
+        (m / "scripts/alpha.gsc").write_text(
+            'alpha_replace() {}\nalpha_register()\n{\n    registerclientfield("toplayer", "halo_cr35_meter", 1, 2, "int");\n}\n')
+        code, result = invoke(["module", "plan", str(self.composition(["alpha"])), "--output", self.out()])
+        self.assertFalse(result["ok"], result)
+        self.assertIn("clientfield-symmetry:halo_cr35_meter", result["details"]["failed"])
+        entry_target = "scripts/zm/zz_stock_pack_test_entry.gsc"
+        self.assertIn("externals:" + entry_target, [s["id"] for s in result["details"]["checks"]],
+                      "the generated entry is one of the compiled scripts the checks read")
+        plan = json.loads((Path(result["receipt"]).parent / "plan.json").read_text())
+        self.assertIn(entry_target, [s["target"] for s in plan["scripts"]],
+                      "and it is a script row in the plan like any member's")
+        row = next(c for c in result["details"]["checks"] if c["id"] == "clientfield-symmetry:halo_cr35_meter")
+        self.assertIn("module alpha", row["detail"])
 
 
 class CompositionTests(CompositionFixture):
@@ -916,6 +968,96 @@ class PoolAndDeliveryTests(CompositionFixture):
         package = json.loads((Path(result["result"]["output"]) / "packages" / "mod.ff").read_text())
         self.assertIn("accuracy/x.accu", package["rawfiles"], "the delivered copy is still in the zone")
 
+    def _clientfield_module(self, mid, server, client=None):
+        """A module whose server script registers a clientfield, optionally with the client half."""
+        d = self.module(mid)
+        (d / "scripts" / f"{mid}.gsc").write_text(server)
+        if client is not None:
+            (d / "scripts" / f"{mid}.csc").write_text(client)
+            recipe = json.loads((d / "project.json").read_text())
+            recipe["scripts"].append({"source": f"scripts/{mid}.csc", "target": f"scripts/zm/{mid}.csc", "instance": "client"})
+            (d / "project.json").write_text(json.dumps(recipe, indent=2))
+        return d
+
+    REGISTER = ('main()\n{\n}\n\ninit()\n{\n'
+                '    registerclientfield("toplayer", "halo_cr35_meter", 1, 2, "int");\n}\n')
+
+    def test_a_server_clientfield_with_no_client_half_refuses_the_plan(self):
+        """Two packs shipped this shape on 2026-09-16; the engine refused the map at load."""
+        self._clientfield_module("meter", self.REGISTER)
+        code, result = invoke(["module", "plan", str(self.composition(["meter"])), "--output", self.out()])
+        self.assertFalse(result["ok"])
+        self.assertIn("Offline checks failed", result["message"])
+        self.assertIn("clientfield-symmetry:halo_cr35_meter", result["details"]["failed"])
+        row = next(c for c in result["details"]["checks"] if c["id"] == "clientfield-symmetry:halo_cr35_meter")
+        self.assertEqual(row["outcome"], "failed")
+        self.assertIn("halo_cr35_meter", row["detail"]);self.assertIn("scripts/zm/meter.gsc", row["detail"])
+        self.assertIn("module meter", row["detail"])
+        self.assertIn("ship the other half as a loose scripts/zm script", row["detail"])
+
+    def test_both_halves_in_the_pack_pass_the_symmetry_check(self):
+        self._clientfield_module("meter", self.REGISTER, self.REGISTER)
+        code, result = invoke(["module", "plan", str(self.composition(["meter"])), "--output", self.out()])
+        self.assertEqual(code, 0, result)
+        rows = [c for c in result["result"]["checks"] if c["id"].startswith("clientfield-symmetry")]
+        self.assertEqual([(c["id"], c["outcome"]) for c in rows], [("clientfield-symmetry:halo_cr35_meter", "passed")])
+
+    def test_a_pack_that_registers_no_clientfield_carries_one_not_counted_row(self):
+        self.module("alpha")
+        code, result = invoke(["module", "plan", str(self.composition(["alpha"])), "--output", self.out()])
+        self.assertEqual(code, 0, result)
+        rows = [c for c in result["result"]["checks"] if c["id"].startswith("clientfield-symmetry")]
+        self.assertEqual([(c["id"], c["outcome"]) for c in rows], [("clientfield-symmetry", "not_counted")])
+
+    def _csc_member(self, mid, body, target="scripts/zm/half.csc"):
+        """A module staging a `.csc` at a shared target, so two of them collide on one file."""
+        d = self.module(mid)
+        (d / "scripts" / f"{mid}.csc").write_text(body)
+        recipe = json.loads((d / "project.json").read_text())
+        recipe["scripts"].append({"source": f"scripts/{mid}.csc", "target": target, "instance": "client"})
+        (d / "project.json").write_text(json.dumps(recipe, indent=2))
+        return d
+
+    SILENT_CSC = "main()\n{\n}\n\ninit()\n{\n    level.nothing = 1;\n}\n"
+
+    def _collision_pack(self, owner, name):
+        self._clientfield_module("meter", self.REGISTER)
+        self._csc_member("winner", self.SILENT_CSC)
+        self._csc_member("loser", self.REGISTER)
+        comp = self.composition(["meter", "winner", "loser"], name=name,
+                                decisions=[{"collision": "scripts/zm/half.csc", "owner": owner, "reason": "the tested copy"}])
+        return invoke(["module", "plan", str(comp), "--output", self.out()])
+
+    def test_a_discarded_collision_loser_cannot_answer_for_the_client_half(self):
+        """Only `winner`'s silent copy is staged, so the client half is not in the package."""
+        code, result = self._collision_pack("winner", "stock_cf_loser_test")
+        self.assertFalse(result["ok"], result)
+        self.assertIn("clientfield-symmetry:halo_cr35_meter", result["details"]["failed"])
+        row = next(c for c in result["details"]["checks"] if c["id"] == "clientfield-symmetry:halo_cr35_meter")
+        self.assertEqual(row["outcome"], "failed")
+        self.assertIn("by no .csc in this pack", row["detail"])
+        self.assertNotIn("loser", row["detail"], "the discarded copy is not evidence of anything")
+
+    def test_the_collision_winner_is_the_copy_that_answers(self):
+        code, result = self._collision_pack("loser", "stock_cf_winner_test")
+        self.assertEqual(code, 0, result)
+        rows = [c for c in result["result"]["checks"] if c["id"].startswith("clientfield-symmetry")]
+        self.assertEqual([(c["id"], c["outcome"]) for c in rows], [("clientfield-symmetry:halo_cr35_meter", "passed")])
+        self.assertIn("module loser", rows[0]["detail"], "the staging owner names the row, not the last claimant")
+
+    def test_an_iw5_pack_has_no_two_vm_clientfield_property_to_judge(self):
+        d = self.module("iw5_thing", game="iw5")
+        (d / "scripts" / "iw5_thing.gsc").write_text(self.REGISTER)
+        recipe = json.loads((d / "project.json").read_text()); recipe["game"] = "iw5"; recipe["mode"] = "mp"
+        (d / "project.json").write_text(json.dumps(recipe))
+        comp = self.composition(["iw5_thing"], name="stock_iw5field_test", base="stock", map_id="mp_alpha", game="iw5")
+        code, row = invoke(["module", "plan", str(comp), "--output", self.out()])
+        checks = (row.get("result") or row.get("details") or {}).get("checks") or []
+        rows = [c for c in checks if c["id"].startswith("clientfield-symmetry")]
+        self.assertEqual([(c["id"], c["outcome"]) for c in rows], [("clientfield-symmetry", "not_counted")], row)
+        self.assertIn("clientfield registrations are a T6 two-VM property", rows[0]["detail"])
+        self.assertNotIn("clientfield-symmetry", (row.get("details") or {}).get("failed") or [])
+
     def _client_module(self, mid, box_list, provides_weapons):
         d = self.module(mid, provides={"weapons": provides_weapons})
         (d / "scripts" / f"{mid}.csc").write_text(
@@ -935,6 +1077,42 @@ class PoolAndDeliveryTests(CompositionFixture):
         self.assertIn("humangun_zm", result["message"])
         self.assertIn("box-weapon-not-found", result["message"])
 
+    def _server_module(self, mid, body):
+        d = self.module(mid)
+        (d / "scripts" / f"{mid}.gsc").write_text(body)
+        return d
+
+    def test_a_bare_stock_call_no_include_covers_refuses_the_plan(self):
+        """blast_furnace shipped with a bare `register_zombie_damage_callback` and no #include; the
+        plan accepted it with 0 failed rows and the load died at `Unresolved external`."""
+        self._server_module("furnace", "main()\n{\n    register_zombie_damage_callback(::ammo_damage);\n}\nammo_damage()\n{\n}\n")
+        code, result = invoke(["module", "plan", str(self.composition(["furnace"])), "--allow-unqualified", "--output", self.out()])
+        self.assertFalse(result["ok"])
+        self.assertIn("Offline checks failed", result["message"])
+        self.assertIn("externals:scripts/zm/furnace.gsc", result["details"]["failed"])
+        self.assertIn("maps/mp/zombies/_zm_spawner", result["message"])
+        row = next(c for c in result["details"]["checks"] if c["id"] == "externals:scripts/zm/furnace.gsc")
+        self.assertEqual(row["outcome"], "failed")
+
+    def test_an_argument_count_no_included_owner_takes_refuses_the_plan(self):
+        """qol_max_ammo's shape: the include is present, the arity is not."""
+        self._server_module("maxammo", "#include maps\\mp\\_utility;\nmain()\n{\n    players = get_players( self.team );\n}\n")
+        code, result = invoke(["module", "plan", str(self.composition(["maxammo"])), "--allow-unqualified", "--output", self.out()])
+        self.assertFalse(result["ok"])
+        self.assertIn("externals:scripts/zm/maxammo.gsc", result["details"]["failed"])
+        self.assertIn("get_players called with 1 argument", result["message"])
+
+    def test_an_unknown_bare_name_carries_its_own_row_and_does_not_refuse(self):
+        """The unknown listing is not_counted, so it never refuses, but it is its own row."""
+        self._server_module("probe", "main()\n{\n    totally_unknown_thing();\n}\n")
+        code, result = invoke(["module", "plan", str(self.composition(["probe"])), "--allow-unqualified", "--output", self.out()])
+        self.assertEqual(code, 0, result)
+        rows = {c["id"]: c for c in result["result"]["checks"]}
+        self.assertEqual(rows["externals:scripts/zm/probe.gsc"]["outcome"], "passed")
+        unknown = rows["externals-unknown:scripts/zm/probe.gsc"]
+        self.assertEqual(unknown["outcome"], "not_counted")
+        self.assertIn("totally_unknown_thing", unknown["detail"])
+
     def test_a_client_box_registration_for_a_provided_weapon_passes(self):
         self._client_module("wave", "microwavegundw_zm", ["microwavegundw_zm", "microwavegundw_upgraded_zm"])
         code, result = invoke(["module", "plan", str(self.composition(["wave"])), "--allow-unqualified", "--output", self.out()])
@@ -947,6 +1125,44 @@ class PoolAndDeliveryTests(CompositionFixture):
         code, result = invoke(["module", "plan", str(self.composition(["wave", "thunder"])), "--allow-unqualified", "--output", self.out()])
         rows = [c for c in result["result"]["checks"] if c["id"].startswith("box-registration:")]
         self.assertEqual([c["outcome"] for c in rows], ["passed"])
+
+    def _client_root_module(self, mid, body):
+        d = self.module(mid)
+        (d / "scripts" / f"{mid}.csc").write_text(body)
+        recipe = json.loads((d / "project.json").read_text())
+        recipe["scripts"].append({"source": f"scripts/{mid}.csc", "target": f"scripts/zm/{mid}.csc", "instance": "client"})
+        (d / "project.json").write_text(json.dumps(recipe, indent=2))
+        return d
+
+    def test_a_client_script_that_works_in_main_is_refused_with_the_row(self):
+        """lc25: qol_wallguns_in_box.csc registered from main(), the early client pass, and the
+        client-script pass died with zero `CSC Executed` lines."""
+        self._client_root_module("wallguns", "main()\n{\n    wallguns_register();\n}\n\nwallguns_register()\n{\n}\n")
+        code, result = invoke(["module", "plan", str(self.composition(["wallguns"])), "--allow-unqualified", "--output", self.out()])
+        self.assertEqual(code, 1)
+        self.assertFalse(result["ok"])
+        self.assertIn("Offline checks failed", result["message"])
+        self.assertIn("csc-main-body:scripts/zm/wallguns.csc", result["details"]["failed"])
+        row = next(c for c in result["details"]["checks"] if c["id"] == "csc-main-body:scripts/zm/wallguns.csc")
+        self.assertEqual(row["outcome"], "failed")
+        self.assertIn("init()", row["detail"])
+
+    def test_a_client_script_with_an_empty_main_plans(self):
+        self._client_root_module("tesla", "main()\n{\n}\n\ninit()\n{\n    level.tesla = 1;\n}\n")
+        code, result = invoke(["module", "plan", str(self.composition(["tesla"])), "--allow-unqualified", "--output", self.out()])
+        self.assertEqual(code, 0, result)
+        rows = {c["id"]: c["outcome"] for c in result["result"]["checks"] if c["id"].startswith("csc-main-body:")}
+        self.assertEqual(rows["csc-main-body:scripts/zm/tesla.csc"], "passed")
+        self.assertEqual(rows["csc-main-body:scripts/zm/tesla.gsc"], "not_counted", "the module's server half is not judged")
+
+    def test_a_server_main_may_do_work_and_is_not_counted(self):
+        """Every module() fixture's server half threads from main(); that is the shape the server VM
+        supports, and the row must say so rather than refuse it."""
+        self.module("probe")
+        code, result = invoke(["module", "plan", str(self.composition(["probe"])), "--allow-unqualified", "--output", self.out()])
+        self.assertEqual(code, 0, result)
+        row = next(c for c in result["result"]["checks"] if c["id"] == "csc-main-body:scripts/zm/probe.gsc")
+        self.assertEqual(row["outcome"], "not_counted")
 
     def test_deliver_false_is_rawfile_only_and_boolean(self):
         d = self.module_with_assets("alpha", [{"source": "x.json", "target": "xmodel/x.json", "type": "xmodel", "name": "x", "deliver": False}])

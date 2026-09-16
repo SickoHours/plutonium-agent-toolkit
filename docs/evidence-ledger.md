@@ -5,7 +5,9 @@ bytes came from, which pack it was accepted in, which build of it alone passed r
 loaded it, who accepted it and for what. Rows coexist and nothing collapses them. The six facts
 the shelf shows (offline verified, installed, launched, loaded and playable, captured, player
 accepted) are derived from rows for display, per scope, and a fact no row states stays unknown.
-Nothing is inferred from a composition that used the module.
+Nothing is inferred from a composition that used the module. The nine row types are `lineage`,
+`authored`, `accepted-in-pack`, `extracted-from-release`, `built-alone`, `agent-reviewed`,
+`game-tested`, `player-accepted` and `known-issue`.
 
 The format was designed from the rows the workspace already writes: registry `build_revisions`
 with their receipt paths and four flags, `docs/ACCEPTED.json` verdict lists, `docs/LINEAGE.json`
@@ -189,6 +191,45 @@ per scope and per target.
  "note": "Shipped with the base on these maps. Not built, not installed, not played here."}
 ```
 
+**`known-issue`**: this module has a bug, and possibly a fix. Required `issue` (one line, at
+most 2000 characters, no newline), `seen_by` (the person or agent who saw it, at most 200
+characters), `scope`, and `at` — required here, where it is optional on every other type, because
+an issue is a thing that was seen on a day and a bug with no date cannot be read against the fix
+that closed it. Optional `closes_with` (the **40-hex** commit that closes it; an abbreviation is
+refused, because a prefix that means one commit in the repository the row was written in may mean
+another, or none, here) and `capture` (a record pointer to the recording of it). Feeds no fact:
+this row is history. It never makes a module less verified — a `built-alone` row still says the
+build passed readback — it says what is wrong with what was built.
+
+```json
+{"type": "known-issue", "issue": "Box weapon table misses the donor rifle after round 10",
+ "seen_by": "agent-7", "at": "2026-09-14",
+ "scope": {"base": "stock", "foundation": "bo2-stock", "map": "zm_transit"},
+ "closes_with": "0123456789abcdef0123456789abcdef01234567",
+ "capture": {"path": "modules/example/docs/issue-11.json", "sha256": "<64 hex>"}}
+```
+
+`pat module state --ledger` reports these rows under `known_issues`, split into `open` and
+`closed`, each entry `{row, issue, seen_by, at, scope, closes_with}`:
+
+```json
+{"known_issues": {"open": [{"row": 4, "issue": "Box weapon table misses the donor rifle after round 10",
+                            "seen_by": "agent-7", "at": "2026-09-14",
+                            "scope": {"base": "stock", "foundation": "bo2-stock", "maps": ["zm_transit"]},
+                            "closes_with": null}],
+                  "closed": []}}
+```
+
+**A row is closed when its `closes_with` commit is an ancestor of the module directory's current
+git head**, and open otherwise. The reader runs `git -C <module dir> rev-parse HEAD` and
+`git -C <module dir> merge-base --is-ancestor <closes_with> HEAD`, reads only, and writes and
+fetches nothing. So a row with no fix yet is open; a fix that is not in this checkout is open; and
+a fix this checkout cannot place — no git on the host, a directory that is no repository, a commit
+the repository does not know — is open too, with `"ancestry": "unknown"` on the entry saying why.
+Nothing here crashes on a missing git, and nothing here calls a bug fixed on someone's machine
+because it was fixed on another. That is the point: a person holding a version from before the fix
+sees the bug they still have, and never stitches a broken version by accident.
+
 ## Deriving the six facts
 
 The facts are a display over rows, computed per query, never stored:
@@ -232,7 +273,8 @@ pat module state --ledger modules/rw-icr --target bo2-stock/zm_transit/zsurvival
  "scopes": [{"scope": {"base": "stock", "foundation": "bo2-stock", "map": "zm_transit", "location": null}, "facts": {...}}],
  "by_target": [{"base": "stock", "map": "zm_transit", "location": null, "facts": {...}}],
  "shipped": {"value": false, "rows": []},
- "history": {"lineage": 7, "authored": 0, "accepted-in-pack": 0, "extracted-from-release": 0, "agent-reviewed": 1, "shipped": 0},
+ "history": {"lineage": 7, "authored": 0, "accepted-in-pack": 0, "extracted-from-release": 0, "agent-reviewed": 1, "shipped": 0, "known-issue": 2},
+ "known_issues": {"open": [{"row": 10, "issue": "...", "seen_by": "agent-7", "at": "2026-09-14", "scope": {...}, "closes_with": null}], "closed": [{"row": 5, "...": {}}]},
  "diagnostics": [], "reasons": []}
 ```
 
