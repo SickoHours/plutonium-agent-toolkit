@@ -97,8 +97,12 @@ first line and everything after it never happens. Nothing reports this: there is
 external, no missing asset, no console line, and `gsc check` passes, because the script is
 correct. It is simply answering a question about a map it is no longer on. The symptom in the game
 is a member that is installed and does nothing, which reads like a broken feature rather than a
-port that was never finished. Read the top of `main()` and `init()` before porting anything, and
-change the guard to the new map or drop it; `module plan` reads it for you as `map-guard:<script>`.
+port that was never finished. A guard may name several maps at once
+(`getdvar("mapname") != "a" && getdvar("mapname") != "b"`), which is the same statement over a set.
+Read the top of `main()` and `init()` before porting anything, and change the guard to the new map,
+widen its set or drop it; `module plan` reads it for you as `map-guard:<script>`, and reads only a
+conditional that sits first and returns unconditionally, so a map test further down is still yours
+to find.
 
 ## Iterating
 
