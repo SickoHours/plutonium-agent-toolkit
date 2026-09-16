@@ -12,6 +12,27 @@ Every entry states what shipped, on which platform it was verified, and what rem
   find weapon <name>`), the fault a client box registration raises for a weapon no loaded zone
   carries. The other five files change only their export marker; every data row re-exports
   byte-for-byte, which is what the generator-output test added in #84 asserts.
+- A module declaration can state the parameters a composition may set on it, and a composition
+  sets them per member. `module.json` takes an optional `parameters` list of up to 32 objects
+  `{name, type, default, meaning, values?, range?}`: `type` is `bool`, `int` or `string`,
+  `values` or `range` narrows it (never both, and `range` only for an `int`), the default must
+  satisfy its own constraint, and a name is unique in the module. A seed payload may declare them
+  too. A composition member takes an optional `parameters` map `{name: value}`; a name the
+  member's module does not declare, or a value outside its declared type or constraint, is a plan
+  refusal of the new kind `parameters` naming the member, the parameter and the rule, with every
+  broken setting reported in one run. A nested composition takes none. The plan row, the plan
+  result and the build receipt each carry the effective map — every declared default with what the
+  member set over it — so a build records which configuration it is. Before this, a module whose
+  behaviour is chosen by the pack that uses it had nowhere to declare the choice: it lived as a
+  literal in GSC, where a composition could not be checked against it and a reviewer could not
+  see it without reading the source. **No consumer reads a parameter yet and no packaged byte
+  changes**; this is the contract and its checks. `pat module inspect` validates and echoes the
+  field normalized, `schemas/module-inspect-v1.schema.json` carries it, a `parameters` refusal's
+  `field` points into the composition file that set the value (with `composition` naming it) even
+  for a nested member, and
+  `docs/MODULES.md` has the declaration row, the member row and the refusal section. Offline unit
+  tests on Linux; nothing about the game is claimed.
+
 - A composition never roots an image or material name its own base already carries. A pack that
   ports content from another game loads that game's zones beside the target's, and OpenAssetTools'
   Linker resolves every name a member's material closure reaches from whichever loaded zone answers
