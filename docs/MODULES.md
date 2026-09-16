@@ -112,7 +112,7 @@ adapter recipe is named under `recipe` and told apart by its own shape.
 | --- | --- | --- |
 | `schema` | yes | `1` |
 | `id` | yes | The module's identity: lowercase letters, digits, underscore, at most 64. Other modules name it under `dependencies` and `conflicts`. Two modules in one composition cannot share an id |
-| `version` | yes | A short version string. Recorded in the plan; the toolkit does not compare versions |
+| `version` | yes | A short version string. Recorded in the plan; no two modules' versions are ever compared, but `module verify-declaration` compares this module's against the version at its newest evidence row's commit and asks for a bump when the bytes moved and this did not |
 | `game` | no | The title the module targets: `t6` (default) or `iw5`. Every member of a composition targets the same game, and the recipe's `game` must match. Selects the browse taxonomy `kind` is checked against |
 | `title` | no | A display name, at most 120 characters. Defaults to the id |
 | `category` | no | The shelf a person browses. For `t6`: `weapons`, `perks`, `gobblegums`, `powerups`, `equipment`, `bosses`, `companions`, `maps`, `ui`, `core`, `scripts`, `audio`, `tooling`, `pack`. For `iw5`: `weapons`, `attachments`, `killstreaks`, `gametypes`, `perks`, `maps`, `ui`, `core`, `scripts`, `tooling`, `pack` (no `audio`: the toolkit cannot build IW5 sounds). Defaults to `module`. Used for browsing, never for resolution |
@@ -1296,6 +1296,7 @@ method, in words) and an `outcome`: `agrees`, `declared_not_observed`, `observed
 | `exclusive` | the role footprint | `partial` |
 | `service` | shareable provides present, no weapon provided | full for the rule; the *intent* is declaration-only |
 | `registration` | a `println` literal beginning `<id> >> registered` in a server script (`self`); the `entry` field (`entry`) | `partial` for `self` (the literal, not the path); full for `entry` and `none` |
+| `version` | the folder's fingerprint against the commit that introduced the newest `evidence.json` row carrying a `package_sha256` (`built-alone`, `game-tested` or `player-accepted`) | full for the bytes it covers: `declared_not_observed` when they moved and `version` did not, `agrees` when they did not move or the version did, `not_counted` without a ledger, without git or outside a repository |
 | `system`, `port_status` | nothing in bytes | `not_counted`: a browse word and a person's verdict |
 | `resource_contract.hud` | count of HUD-element constructors in source, as a floor | `partial`: a floor, never the total |
 | `conflicts` | both ends declaring the same `exclusive` role | reported as `redundant` when a role already covers the pair; otherwise `not_counted` |
@@ -1331,6 +1332,18 @@ shown to be base-owned (without either, each staged path in a base namespace is 
 the row names the evidence that would decide it), `--strict` is the library gate (exit 1, with the
 whole report under `details.report`), and `--propose` prints the fields the observed side would
 fill. There is no `--output`: the route writes nothing.
+
+The `version` row needs no flag and reads the module's own history. It fingerprints the folder --
+`module.json`, the payload the declaration names, the sources a recipe names inside the module,
+everything under `src/`, and the test contract -- and compares that against the same fingerprint at
+the commit that introduced the newest `evidence.json` row carrying a `package_sha256`. Build
+outputs and donor payloads are deliberately outside it (`evidence.json`, `docs/`, `README*`,
+`prepared/`, `assets/`, `build-inputs.json`, `inputs.json`), so a rebuild or a re-fetched donor
+never reads as a source change. Bytes that moved while `version` stayed where that commit left it
+are `declared_not_observed` with one line saying to bump it; `--propose` moves the patch component
+of a `MAJOR.MINOR.PATCH` version, and for anything else it says in `proposal_notes` that the bump is
+the author's to make. A module with no ledger, a machine with no git, and a directory outside a
+repository are each `not_counted` with the reason: the route never guesses a reference point.
 
 ### Refusal kinds added by this section
 

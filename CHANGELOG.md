@@ -7,6 +7,26 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- `pat module verify-declaration` now reports a `/version` row, so a fix that lands is visible and
+  nobody stitches a broken version by accident. The route fingerprints the module's authored bytes --
+  `module.json`, the payload the declaration names, the sources a recipe names inside the module,
+  everything under `src/`, and the test contract -- and compares that against the same fingerprint at
+  the commit that introduced the newest `evidence.json` row carrying a `package_sha256` (a
+  `built-alone`, `game-tested` or `player-accepted` row). Build outputs and donor payloads are
+  outside the fingerprint by construction (`FINGERPRINT_EXCLUDE`: `evidence.json`, `docs/`, `README*`,
+  `prepared/`, `assets/`, `build-inputs.json`, `inputs.json`), so a rebuild or a re-fetched donor never
+  reads as a source change. Bytes that moved while `version` stayed where that commit left it are
+  `declared_not_observed` with one line naming the row's package hash and the commit and asking for
+  the bump, and `--strict` exits 1 on it like any other differing row; bytes that did not move, or a
+  version that did, are `agrees`. `--propose` moves the patch component of a `MAJOR.MINOR.PATCH`
+  version and proposes nothing for any other shape, saying in `proposal_notes` that the bump is the
+  author's to make by hand. A module with no ledger, a machine with no git, a directory outside a
+  repository and a commit that cannot be read are each `not_counted` with the reason: the route never
+  guesses a reference point, and it still writes nothing and runs no backend. Every git read is
+  captured, bounded to 20 seconds and incapable of raising. Documented in `docs/MODULES.md`, "What a
+  checker can verify, kind by kind" and "How to run it". Verified by offline unit tests on Linux
+  (`tests/test_verify_version.py`); no native receipt, and the route's status is unchanged.
+
 - A module can say where a person finds it and whether its port works yet. `module.json` takes an
   optional `system`, one of `pack-a-punch`, `perks`, `hud`, `weapons`, `powerups`, `box`,
   `core-rules`, `gums`, `bosses`, `equipment`, `audio` or `map`: the player-facing system a module

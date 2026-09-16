@@ -15,14 +15,17 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import shutil
+import subprocess
 import tempfile
 from bisect import bisect_left
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from ..core.errors import INPUT_INVALID, INVALID_ARGUMENTS, Failure
 from ..core.jobs import Job
-from . import adapters, compositions, projects, targets
+from . import adapters, compositions, ledger, projects, targets
 
 PROTOCOL = "pat.module-verify/1"
 OUTCOMES = ("agrees", "declared_not_observed", "observed_not_declared", "partial", "not_counted")
@@ -30,6 +33,18 @@ OUTCOMES = ("agrees", "declared_not_observed", "observed_not_declared", "partial
 MAX_SOURCE_FILES = 256
 MAX_SOURCE_BYTES = 1024 * 1024
 MAX_LISTING_FILES = 64
+
+GIT_TIMEOUT = 20
+# The evidence rows a version bump is measured from: the ones that carry the hash of a package
+# somebody actually built, tested or played. A lineage or an authored row names no package.
+VERSION_ROW_TYPES = ("built-alone", "game-tested", "player-accepted")
+SEMANTIC_VERSION = re.compile(r"^(\d+)\.(\d+)\.(\d+)\Z")
+# What the folder fingerprint leaves out, by module-relative path: a trailing "/" is a top-level
+# directory, a trailing "*" a name prefix, anything else an exact name. These are build outputs,
+# donor payloads and prose -- not the module's authored bytes -- so a rebuild, a re-fetched donor
+# or an edited README must never read as a source change that owes a version bump.
+FINGERPRINT_EXCLUDE = ("evidence.json", "build-inputs.json", "inputs.json",
+                       "docs/", "prepared/", "assets/", "README*")
 
 # The zone namespaces the base and the map already own scripts and tables in. A staged path under
 # one of them that no listing and no table calls base-owned is new, not proven new: it is listed
@@ -399,6 +414,246 @@ def _observed_provides(payload: str, compiled, loose, seed, adapter, source: Sou
     return out
 
 
+# ----- the version, against the newest evidence row ----------------------------------------
+
+def _excluded(name: str) -> bool:
+    """True when a module-relative path is one FINGERPRINT_EXCLUDE names."""
+    for rule in FINGERPRINT_EXCLUDE:
+        if rule.endswith("/"):
+            if name.startswith(rule):
+                return True
+        elif rule.endswith("*"):
+            if name.rpartition("/")[2].startswith(rule[:-1]):
+                return True
+        elif name == rule:
+            return True
+    return False
+
+
+def _inside(value) -> bool:
+    """A forward-slash relative path that stays inside the module directory."""
+    if not isinstance(value, str) or not value or "\\" in value:
+        return False
+    path = Path(value)
+    return not (path.is_absolute() or PureWindowsPath(value).anchor or ".." in path.parts)
+
+
+def _json(raw: bytes | None):
+    if raw is None:
+        return None
+    try:
+        return json.loads(raw.decode("utf-8"))
+    except (ValueError, RecursionError, UnicodeError):
+        return None
+
+
+def _fingerprint_names(declaration: dict, recipe, src: list[str], present) -> list[str]:
+    """The module-relative paths one fingerprint covers, sorted: the declaration, the payload it
+    names, the sources a recipe names inside the module, everything under ``src/`` and the test
+    contract, minus FINGERPRINT_EXCLUDE and minus whatever ``present`` says is not there."""
+    names = {"module.json", "test-contract.json"}
+    for key in ("recipe", "seed", "tests"):
+        if _inside(declaration.get(key)):
+            names.add(declaration[key])
+    for key in ("scripts", "assets"):
+        for row in (recipe or {}).get(key, []) if isinstance(recipe, dict) else []:
+            if isinstance(row, dict) and _inside(row.get("source")):
+                names.add(row["source"])
+    names.update(src)
+    return sorted(n for n in names if not _excluded(n) and present(n))
+
+
+def _pairs_digest(pairs: list[tuple[str, str]]) -> str:
+    return hashlib.sha256("\n".join(f"{name}\x00{digest}" for name, digest in pairs).encode("utf-8")).hexdigest()
+
+
+def _bounded_read(path: Path) -> bytes | None:
+    try:
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_SOURCE_BYTES:
+            return None
+        return path.read_bytes()
+    except OSError:
+        return None
+
+
+def _src_tree(directory: Path) -> tuple[list[str], str | None]:
+    """Every file under the module's own ``src/``, module-relative; links are not followed and
+    symlinked directories are not descended into."""
+    root = directory / "src"
+    if root.is_symlink() or not root.is_dir():
+        return [], None
+    found: list[str] = []
+    for base, dirs, files in os.walk(root, followlinks=False):
+        dirs.sort()
+        for name in sorted(files):
+            path = Path(base) / name
+            if path.is_symlink() or not path.is_file():
+                continue
+            if len(found) >= MAX_SOURCE_FILES:
+                return [], f"more than {MAX_SOURCE_FILES} files under src/"
+            found.append(path.relative_to(directory).as_posix())
+    return sorted(found), None
+
+
+def folder_fingerprint(directory: Path) -> dict:
+    """The module's authored bytes as one digest.
+
+    SHA-256 over the sorted list of (module-relative path, that file's SHA-256) for the files
+    ``_fingerprint_names`` selects. Returns ``{"sha256", "files"}``; when a bound is hit (more
+    than ``MAX_SOURCE_FILES`` files under ``src/``, or a file larger than ``MAX_SOURCE_BYTES``)
+    ``sha256`` is None and ``reason`` says which, because half a folder is not a fingerprint.
+    """
+    directory = Path(directory)
+    declaration = _json(_bounded_read(directory / "module.json")) or {}
+    recipe = _json(_bounded_read(directory / declaration["recipe"])) if _inside(declaration.get("recipe")) else None
+    src, reason = _src_tree(directory)
+    if reason:
+        return {"sha256": None, "files": 0, "reason": reason}
+
+    def here(name: str) -> bool:
+        path = directory / name
+        return path.is_file() and not path.is_symlink()
+
+    pairs = []
+    for name in _fingerprint_names(declaration, recipe, src, here):
+        data = _bounded_read(directory / name)
+        if data is None:
+            return {"sha256": None, "files": 0, "reason": f"{name} could not be read within {MAX_SOURCE_BYTES} bytes"}
+        pairs.append((name, hashlib.sha256(data).hexdigest()))
+    return {"sha256": _pairs_digest(pairs), "files": len(pairs)}
+
+
+def _git(directory: Path, args: list[str]) -> bytes | None:
+    """One bounded ``git`` run, captured, never raising: None when git fails, times out or is not
+    there. Nothing here writes to the repository."""
+    try:
+        done = subprocess.run(["git", "-C", str(directory), *args], capture_output=True, timeout=GIT_TIMEOUT)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+    return done.stdout if done.returncode == 0 else None
+
+
+def _git_text(directory: Path, args: list[str]) -> str | None:
+    out = _git(directory, args)
+    return None if out is None else out.decode("utf-8", errors="replace")
+
+
+def _commit_fingerprint(directory: Path, prefix: str, commit: str) -> dict:
+    """The same fingerprint, over the module directory as one commit recorded it. Git's blob ids
+    are SHA-1 of a different preimage, so every file's content is read back and hashed here."""
+    listing = _git(directory, ["ls-tree", "-r", "-z", "--full-tree", commit,
+                               *(["--", prefix.rstrip("/")] if prefix else [])])
+    if listing is None:
+        return {"sha256": None, "files": 0, "reason": f"commit {commit[:8]} has no readable tree here"}
+    blobs: dict[str, str] = {}
+    for record in listing.decode("utf-8", errors="replace").split("\0"):
+        meta, _, path = record.partition("\t")
+        parts = meta.split()
+        # Regular files only: a symlink, a gitlink or a submodule is not a byte of this module.
+        if len(parts) != 3 or parts[1] != "blob" or parts[0] not in ("100644", "100755"):
+            continue
+        if not path.startswith(prefix):
+            continue
+        blobs[path[len(prefix):]] = parts[2]
+    declaration = _json(_git(directory, ["cat-file", "-p", blobs["module.json"]])) if "module.json" in blobs else None
+    declaration = declaration if isinstance(declaration, dict) else {}
+    recipe_path = declaration.get("recipe")
+    recipe = (_json(_git(directory, ["cat-file", "-p", blobs[recipe_path]]))
+              if _inside(recipe_path) and recipe_path in blobs else None)
+    src = sorted(n for n in blobs if n.startswith("src/"))
+    if len(src) > MAX_SOURCE_FILES:
+        return {"sha256": None, "files": 0, "reason": f"more than {MAX_SOURCE_FILES} files under src/ at {commit[:8]}"}
+    pairs = []
+    for name in _fingerprint_names(declaration, recipe, src, blobs.__contains__):
+        data = _git(directory, ["cat-file", "-p", blobs[name]])
+        if data is None or len(data) > MAX_SOURCE_BYTES:
+            return {"sha256": None, "files": 0, "reason": f"{name} at {commit[:8]} could not be read within {MAX_SOURCE_BYTES} bytes"}
+        pairs.append((name, hashlib.sha256(data).hexdigest()))
+    return {"sha256": _pairs_digest(pairs), "files": len(pairs)}
+
+
+def _newest_packaged_row(directory: Path) -> tuple[dict | None, str | None]:
+    """The newest ledger row carrying a ``package_sha256`` of a type that names a real package,
+    newest by ``at`` and, where two share one, by row order. A module with no ledger is not a
+    fault: it is a row this route could not count, with the reason."""
+    path = directory / ledger.FILENAME
+    if path.is_symlink() or not path.is_file():
+        return None, "no ledger"
+    try:
+        _raw, data = ledger.read(path)
+    except Failure as exc:
+        return None, f"the ledger could not be read: {exc.message[:200]}"
+    book, _diagnostics = ledger.validate(data)
+    rows = (book or {}).get("rows", [])
+    candidates = [(index, row) for index, row in enumerate(rows)
+                  if row.get("type") in VERSION_ROW_TYPES and row.get("package_sha256")]
+    if not candidates:
+        return None, f"no {', '.join(VERSION_ROW_TYPES)} row in the ledger carries a package_sha256"
+    return max(candidates, key=lambda pair: (pair[1].get("at", ""), pair[0]))[1], None
+
+
+def version_row(directory: Path, metadata: dict, rows: list[dict], propose: bool) -> tuple[str | None, str | None]:
+    """The declared version against the commit that introduced the newest evidence row.
+
+    A fix that lands must be visible. When the module's authored bytes have moved since the commit
+    that first carried the newest ``package_sha256`` in its ledger, and ``version`` still reads
+    what it read at that commit, the row is ``declared_not_observed`` and says to bump it. Every
+    way this cannot be decided -- no ledger, no git, no repository, no such commit -- is
+    ``not_counted`` with the reason, never a guess. Returns the proposed version and the proposal
+    note ``--propose`` should carry, either of which may be None.
+    """
+    field, declared = "/version", metadata["version"]
+    how = "the folder's fingerprint against the commit that introduced the newest evidence row carrying a package_sha256"
+
+    def not_counted(reason: str) -> tuple[None, None]:
+        rows.append(_row(field, [declared], [], how, "not_counted", reason))
+        return None, None
+
+    row, reason = _newest_packaged_row(directory)
+    if row is None:
+        return not_counted(reason)
+    package = row["package_sha256"]
+    if shutil.which("git") is None:
+        return not_counted("git is not on this machine")
+    prefix = _git_text(directory, ["rev-parse", "--show-prefix"])
+    if prefix is None:
+        return not_counted("the module directory is not inside a git repository")
+    prefix = prefix.strip()
+    # --reverse, so a ledger that was rewritten still points at the commit that first added the row.
+    log = _git_text(directory, ["log", "--format=%H", "--reverse", "-S", package, "--", ledger.FILENAME])
+    commits = (log or "").split()
+    if not commits:
+        return not_counted(f"no commit in this repository added the evidence row's package_sha256 ({package[:8]})")
+    commit, short = commits[0], commits[0][:8]
+    reference = _json(_git(directory, ["show", f"{commit}:{prefix}module.json"]))
+    if not isinstance(reference, dict) or not isinstance(reference.get("version"), str):
+        return not_counted(f"commit {short} carries no readable module.json for this directory")
+    was = reference["version"]
+    now, then = folder_fingerprint(directory), _commit_fingerprint(directory, prefix, commit)
+    if now["sha256"] is None:
+        return not_counted(f"the folder could not be fingerprinted: {now['reason']}")
+    if then["sha256"] is None:
+        return not_counted(f"the folder at {short} could not be fingerprinted: {then['reason']}")
+    if now["sha256"] == then["sha256"]:
+        rows.append(_row(field, [declared], [declared], how, "agrees",
+                         f"the folder's bytes are the bytes of commit {short}"))
+        return None, None
+    observed = [f"{was} at {short}"]
+    if declared != was:
+        rows.append(_row(field, [declared], observed, how, "agrees", f"version moved since {short}"))
+        return None, None
+    rows.append(_row(field, [declared], observed, how, "declared_not_observed",
+                     f"the folder's bytes changed since the newest evidence row ({package[:8]}, commit {short}) "
+                     "and version did not move: bump it"))
+    if not propose:
+        return None, None
+    match = SEMANTIC_VERSION.match(declared)
+    if not match:
+        return None, (f"version: {declared!r} is not MAJOR.MINOR.PATCH, so no bump is proposed; give the "
+                      "module a semantic version and move it by hand")
+    return f"{match[1]}.{match[2]}.{int(match[3]) + 1}", None
+
+
 # ----- the route ---------------------------------------------------------------------------
 
 def _target(value: str | None) -> tuple[str, str] | None:
@@ -694,6 +949,8 @@ def verify(directory: Path, *, workspace: str | None = None, base_listings=(), t
     registration_note = None if reg_declared or printed or metadata["entry"] else \
         "registration: no line in source; the edit an author would make is println(\"" + line + "\") from the registration path, then registration: self"
 
+    version_proposal, version_note = version_row(directory, metadata, rows, propose)
+
     for field, reason in UNREAD_FIELDS.items():
         rows.append(_row("/" + field, [], [], "nothing in this route", "not_counted", reason))
 
@@ -713,6 +970,10 @@ def verify(directory: Path, *, workspace: str | None = None, base_listings=(), t
             result["proposal"]["registration"] = registration_proposal
         if registration_note:
             result["proposal_notes"].append(registration_note)
+        if version_proposal:
+            result["proposal"]["version"] = version_proposal
+        if version_note:
+            result["proposal_notes"].append(version_note)
     return result
 
 
