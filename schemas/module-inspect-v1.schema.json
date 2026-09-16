@@ -462,7 +462,8 @@
           "enum": [
             "source",
             "seed",
-            "private"
+            "private",
+            "stock"
           ]
         },
         "menu_route": {
@@ -471,8 +472,13 @@
         "payload": {
           "enum": [
             "recipe",
-            "seed"
+            "seed",
+            "stock"
           ]
+        },
+        "vanilla": {
+          "description": "Present only on a distribution 'stock' declaration that carries one: what the game's own scripts show for this item, keyed by map. At most 32768 bytes of JSON; every key is one lowercase word and every value a JSON scalar, list or object. The toolkit bounds it and interprets none of it.",
+          "type": "object"
         },
         "recipes": {
           "description": "Present only when the declaration names per-target adapter recipes: the '<foundation>/<map>' targets it carries a cut for, sorted. The recipe paths themselves are not reported; inspection resolves no payload.",

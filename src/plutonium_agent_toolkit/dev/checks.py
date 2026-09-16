@@ -15,15 +15,22 @@ def get(data,key):
 
 IPAK_STARTUP_NAMES={'patch_zm','base','zm','en_base','mp','dlczm0_load_zm','dlczm0','dlczm1','dlczm2','dlczm3','dlczm4','dlc1'}
 
+def counted_members(plan):
+    """The members a pool counts. A stock member ships with the game, so whatever it names is
+    already in the map's measured occupancy: counting it again would charge the pack for the
+    base (docs/MODULES.md, "Stock content")."""
+    return [m for m in plan.get('modules',[]) if m.get('payload')!='stock']
+
 def footprint(plan):
     """Per member, what it adds to each counted pool: rawfiles (recipe scripts and delivered
     rawfile assets, or seed rawfile roots), soundbanks (provided bank names), image-bank reads
     (none per member; the composition header carries them). The generated entry counts as one
-    rawfile under the pack itself."""
+    rawfile under the pack itself. A stock member adds nothing to any of them."""
     rows={}
     by_id={m.get('id',f'module-{i}'):m for i,m in enumerate(plan.get('modules',[]))}
     for mid,m in by_id.items():
-        rows[mid]={'rawfiles':0,'soundbanks':sorted(set(m.get('provides',{}).get('soundbanks',[]))),'scripts':0}
+        banks=[] if m.get('payload')=='stock' else sorted(set(m.get('provides',{}).get('soundbanks',[])))
+        rows[mid]={'rawfiles':0,'soundbanks':banks,'scripts':0}
     for row in plan.get('scripts',[]):
         owner=row.get('module')
         if owner in rows:rows[owner]['rawfiles']+=1;rows[owner]['scripts']+=1
@@ -46,7 +53,7 @@ def pool_checks(plan,limits,occupancy):
             # localized companion (`<name>.<lang>`), which no listing shows. Every base bank is a
             # `.all`, so the measured count and each member's bank are counted twice: the floor
             # plus one companion per bank is the bound the pack is held to (docs/knowledge/engine-limits.md).
-            for m in plan['modules']:names.update(m.get('provides',{}).get('soundbanks',[]))
+            for m in counted_members(plan):names.update(m.get('provides',{}).get('soundbanks',[]))
             companions=sum(1 for n in names if n.endswith('.all'))
             contribution=len(names)+companions
             if type(base) in (int,float):base=base*2
@@ -69,8 +76,8 @@ def pool_checks(plan,limits,occupancy):
                 known={str(n) for n in present}
                 skipped=[n for n in reads if n not in known];reads=[n for n in reads if n in known]
             contribution=len(reads);top=[(1,name) for name in reads]
-        elif source=='clientfield_bits.actor.server':contribution=sum(m.get('resource_contract',{}).get('network_fields',0) for m in plan['modules'])
-        elif source=='projectile_fx_distinct' and not any(m.get('provides',{}).get('weapons') for m in plan['modules']):contribution=0
+        elif source=='clientfield_bits.actor.server':contribution=sum(m.get('resource_contract',{}).get('network_fields',0) for m in counted_members(plan))
+        elif source=='projectile_fx_distinct' and not any(m.get('provides',{}).get('weapons') for m in counted_members(plan)):contribution=0
         total=base+contribution if type(base) in (int,float) and contribution is not None else None
         outcome='not_counted';detail='No complete counting source/bound for this composition'
         if total is not None and type(bound) in (int,float):

@@ -44,7 +44,7 @@ PROPOSAL_PROTOCOL = "pat.module-ledger-proposal/1"
 ADD_PROTOCOL = "pat.module-ledger-add/1"
 FILENAME = "evidence.json"
 TYPES = ("lineage", "authored", "accepted-in-pack", "extracted-from-release", "built-alone",
-         "agent-reviewed", "game-tested", "player-accepted")
+         "agent-reviewed", "game-tested", "player-accepted", "shipped")
 FACTS = ("offline_verified", "installed", "launched", "loaded_and_playable", "captured", "player_accepted")
 OBSERVED = ("installed", "launched", "loaded_and_playable", "captured")
 MAX_BYTES = 1024 * 1024
@@ -78,6 +78,9 @@ SHAPES = {
     "agent-reviewed": ({"by", "outcome"}, {"outcome", "scope"}),
     "game-tested": ({"run", "result", "capture", *OBSERVED}, {"run", "result", "scope"}),
     "player-accepted": ({"outcome", "reporter", "quote", "not_covered", "supersedes"}, {"outcome", "record", "scope"}),
+    # The game ships this on these maps. Nothing beyond COMMON: the scope is the statement, the
+    # optional record is the listing or decompile it was read from, and the note qualifies it.
+    "shipped": (set(), {"scope"}),
 }
 OUTCOMES = {"agent-reviewed": ("passed", "failed", "noted"), "player-accepted": ("accepted", "rejected")}
 RESULTS = ("passed", "failed", "inconclusive")
@@ -552,7 +555,8 @@ def append_row(path: Path, row: dict, subject_id: str) -> tuple[str, int]:
 
 def row_facts(row: dict) -> dict:
     """What one row states about the six facts. Only rows about the module alone speak; an
-    accepted-in-pack row is history of a composition and says nothing here."""
+    accepted-in-pack row is history of a composition and says nothing here, and a `shipped` row
+    says nothing either: the game shipping something is not a build, a run or a verdict on it."""
     kind = row["type"]
     if kind == "built-alone":
         return {"offline_verified": row["offline_verified"]}
@@ -591,6 +595,17 @@ def _combine(statements: list[tuple[int, bool]]) -> dict:
     return {"value": any(v for _, v in statements), "rows": [i for i, _ in statements]}
 
 
+def _shipped(indexes) -> dict:
+    """Whether the game ships this here. Unlike the six facts there is no unknown: a `shipped`
+    row states it, or no row does and nothing claims it. A ledger is never asked to prove an
+    absence, so "no row" reads as false rather than as a question nobody answered."""
+    return {"value": bool(indexes), "rows": list(indexes)}
+
+
+def _bucket() -> dict:
+    return {fact: [] for fact in FACTS} | {"shipped": []}
+
+
 def facts(ledger: dict, base=None, foundation=None, map_id=None, package=None, location=None) -> dict:
     """Per-fact, per-scope derivation. ``facts`` is the queried scope (every row that matches
     the query keys); ``scopes`` lists each (base, foundation, map, location) the rows name with
@@ -598,6 +613,7 @@ def facts(ledger: dict, base=None, foundation=None, map_id=None, package=None, l
     is ``null``. ``history`` counts the rows that never feed a fact."""
     rows = ledger["rows"]
     queried = {fact: [] for fact in FACTS}
+    queried_shipped: list[int] = []
     per_scope: dict[tuple, dict] = {}
     history = {kind: 0 for kind in TYPES if kind not in ("built-alone", "game-tested", "player-accepted")}
     for index, row in enumerate(rows):
@@ -606,31 +622,41 @@ def facts(ledger: dict, base=None, foundation=None, map_id=None, package=None, l
             history[row["type"]] += 1
         if row["type"] == "lineage":
             continue
+        # A `shipped` row states no fact and still names a scope the shelf reports, so it opens
+        # a scope of its own instead of being dropped with the rest of the history.
+        ships = row["type"] == "shipped"
         if matches(row, base, foundation, map_id, package, location):
             for fact, value in stated.items():
                 queried[fact].append((index, value))
-        if not stated or (package is not None and row.get("package_sha256") != package):
+            if ships:
+                queried_shipped.append(index)
+        if not (stated or ships) or (package is not None and row.get("package_sha256") != package):
             continue
         scope = row["scope"]
         for m in scope["maps"]:
-            bucket = per_scope.setdefault((scope.get("base"), scope.get("foundation"), m, scope.get("location")), {fact: [] for fact in FACTS})
+            bucket = per_scope.setdefault((scope.get("base"), scope.get("foundation"), m, scope.get("location")), _bucket())
             for fact, value in stated.items():
                 bucket[fact].append((index, value))
+            if ships:
+                bucket["shipped"].append(index)
     scopes = [{"scope": {"base": key[0], "foundation": key[1], "map": key[2], "location": key[3]},
-               "facts": {fact: _combine(bucket[fact]) for fact in FACTS}}
+               "facts": {fact: _combine(bucket[fact]) for fact in FACTS},
+               "shipped": _shipped(bucket["shipped"])}
               for key, bucket in sorted(per_scope.items(), key=lambda item: tuple(str(k) for k in item[0]))]
     # The app's view: every {base, map, location} the rows name, foundations folded together,
     # a location kept apart from its parent map in its own row.
     by_target: dict[tuple, dict] = {}
     for key, bucket in per_scope.items():
-        target = by_target.setdefault((key[0], key[2], key[3]), {fact: [] for fact in FACTS})
+        target = by_target.setdefault((key[0], key[2], key[3]), _bucket())
         for fact in FACTS:
             target[fact] += bucket[fact]
+        target["shipped"] += bucket["shipped"]
     targets = [{"base": key[0], "map": key[1], "location": key[2],
-                "facts": {fact: _combine(sorted(set(bucket[fact]))) for fact in FACTS}}
+                "facts": {fact: _combine(sorted(set(bucket[fact]))) for fact in FACTS},
+                "shipped": _shipped(sorted(set(bucket["shipped"])))}
                for key, bucket in sorted(by_target.items(), key=lambda item: tuple(str(k) for k in item[0]))]
     return {"query": {"base": base, "foundation": foundation, "map": map_id, "location": location, "package": package},
-            "facts": {fact: _combine(queried[fact]) for fact in FACTS},
+            "facts": {fact: _combine(queried[fact]) for fact in FACTS}, "shipped": _shipped(queried_shipped),
             "scopes": scopes, "by_target": targets, "history": history}
 
 
