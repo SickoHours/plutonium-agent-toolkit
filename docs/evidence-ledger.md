@@ -33,6 +33,10 @@ A row that turned out to be wrong is corrected by a row that says so (a `player-
 with `outcome: rejected`, a `built-alone` row with `offline_verified: false`), and the wrong row
 stays.
 
+Every string in a row is text that can be written: a value JSON accepts but UTF-8 cannot encode
+(a lone surrogate, `"\ud800"`) is refused with the pointer of the field that holds it, rather
+than validating and then failing in the encoder with the ledger already open for writing.
+
 ## Every row
 
 Every row has a `type`. Every row except `lineage` has a `scope`, and may have:
@@ -40,7 +44,7 @@ Every row has a `type`. Every row except `lineage` has a `scope`, and may have:
 | Field | Meaning |
 | --- | --- |
 | `scope` | Where the statement applies. See below. |
-| `at` | When: `YYYY-MM-DD` or an ISO date-time. |
+| `at` | When: `YYYY-MM-DD` or an ISO date-time. The shape and the calendar are both checked: `2026-99-99` has the shape of a date and is not a day, and a row dated one is refused. |
 | `record` | The file that supports the row: `{"path", "sha256"?, "commit"?}`. The path is forward-slash, relative to the workspace root, and never climbs out of it. The hash is the file's SHA-256 when it was recorded, so drift is visible. |
 | `package_sha256` | The `mod.ff` the row is about, when the row is about a build. Two rows about different packages never merge. |
 | `note` | Free text, at most 2000 characters. Scope qualifications go here (what a verdict covered and did not). |
@@ -240,6 +244,17 @@ a list of row objects, and the files are appended in the order they are given.
 - **Created when absent**, as `{"schema": 1, "subject": {"id": <the module.json id>}, "rows": []}`.
   Only the `id` is read from the declaration. A ledger whose `subject.id` is another module's is
   refused.
+- **One writer at a time.** The read, the validation and the write happen under an advisory
+  lock on a sibling `.evidence.json.lock` file, so two campaign workers appending at once append
+  both rows: the second waits for the first and then reads the row the first one wrote. Without
+  it both would read the same book and the later write would drop the earlier row while both
+  commands reported success.
+- **Never a half-written ledger.** The new file is written to a sibling temporary file in the
+  same directory, flushed, `fsync`ed and then renamed onto `evidence.json`. A full disk or an
+  interrupt leaves the rows that were already there, and the temporary file is removed. An
+  `evidence.json` that is not a regular file — a symlink, a FIFO, a directory — is refused with
+  `input_invalid` before anything is opened: the route never writes through a link, and never
+  blocks on an open that does not return.
 - **The diff is the rows added.** The file keeps its own `ensure_ascii`: one that escapes
   non-ASCII keeps escaping and one that writes UTF-8 keeps writing it, so nothing re-escapes an
   accent in a row that did not change. Indent is two spaces, the shape every record here uses.
@@ -260,7 +275,9 @@ entry per map in it — the whole ledger's answer for that scope, not the row's 
 
 A `game-tested` row that states only `installed` and `launched` leaves `loaded_and_playable` and
 `captured` `null` there, because a fact the run did not observe is left out of the row and no
-fact is inferred from another. The route reads and writes that one file: no game, no network, no
+fact is inferred from another. A row scoped to `maps: ["*"]` reports one entry, `map: "*"`,
+answered by the rows that are themselves scoped to every map; the map-specific rows do not feed
+it, because a module built alone on one map is not a module verified on all of them. The route reads and writes that one file: no game, no network, no
 install, no receipt directory.
 
 ## Populating a ledger from a workspace

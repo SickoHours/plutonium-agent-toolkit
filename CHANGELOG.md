@@ -21,10 +21,22 @@ Every entry states what shipped, on which platform it was verified, and what rem
   "malformed"), when the ledger's `subject.id` is another module's, when the ledger already on
   disk does not validate, and when there is no `module.json` beside it to name the subject. It
   creates the file from the declaration's id when absent, never edits or removes an existing row,
-  and keeps the file's own `ensure_ascii` so the diff is the rows added. The result reports the
+  and keeps the file's own `ensure_ascii` so the diff is the rows added. The read, the validation
+  and the write happen under an advisory lock on a sibling `.evidence.json.lock`, so two workers
+  appending at once append both rows instead of the second silently dropping the first; the write
+  itself is a sibling temporary file, an `fsync` and a rename, so a full disk or an interrupt
+  leaves the rows that were already there rather than a truncated ledger; and an `evidence.json`
+  that is not a regular file (a symlink, a FIFO, a directory) is refused with `input_invalid`
+  before anything opens it, so the route never writes through a link nor blocks on a FIFO. Two
+  validation rules tightened with it: `at` must be a date that exists on the calendar
+  (`2026-99-99` had the shape and was accepted), and a string JSON accepts but UTF-8 cannot
+  encode (a lone surrogate) is refused with its pointer instead of raising in the encoder as the
+  file is written. The result reports the
   file, the row counts before and after, the appended indexes and, per appended row, the six facts
   the ledger now derives for the scope that row names — a `game-tested` row stating only
-  `installed` and `launched` leaves `loaded_and_playable` `null`, as it should. New effect
+  `installed` and `launched` leaves `loaded_and_playable` `null`, as it should, and a row scoped
+  to `maps: ["*"]` is answered by the rows scoped to every map, never by one map's own rows, so a
+  module built alone on `zm_transit` is not reported offline-verified everywhere. New effect
   `writes-record` (one record file beside a declaration, appended in place; no job directory and
   no receipt), because this route writes neither an output directory nor a receipt. Registered
   `implemented`: offline unit tests on Linux, no qualification receipt yet. No game, no network,

@@ -17,13 +17,26 @@ module's docs without writing anything.
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
+import os
 import re
+import stat
+from datetime import datetime
 from pathlib import Path, PureWindowsPath
 
-from ..core.errors import (INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, INVALID_ARGUMENTS, ROW_DUPLICATE,
-                           Failure)
+try:                                    # POSIX: the advisory lock two appends serialise on
+    import fcntl
+except ImportError:                     # pragma: no cover - Windows has no fcntl
+    fcntl = None
+try:                                    # Windows: the same lock through the C runtime
+    import msvcrt
+except ImportError:                     # pragma: no cover - POSIX has no msvcrt
+    msvcrt = None
+
+from ..core.errors import (BUSY, INPUT_INVALID, INPUT_LIMIT, INPUT_MISSING, INVALID_ARGUMENTS,
+                           OPERATION_FAILED, ROW_DUPLICATE, Failure)
 from .compositions import BASE, MAP, _fields, _pointer
 
 PROTOCOL = "pat.module-ledger/1"
@@ -41,6 +54,9 @@ MAX_TEXT = 2000
 MAX_LIST = 64
 MAX_ROW_FILES = 64
 MAX_ROW_BYTES = 256 * 1024
+# Windows only: msvcrt.locking blocks for about ten seconds per attempt, so this is a minute of
+# waiting for whichever process holds the ledger before the append reports busy. flock waits.
+LOCK_ATTEMPTS = 6
 SHA256 = re.compile(r"^[0-9a-f]{64}\Z")
 COMMIT = re.compile(r"^[0-9a-f]{7,40}\Z")
 FOUNDATION = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}\Z")
@@ -88,8 +104,14 @@ def _bool(value, what: str, field: str) -> bool:
 
 
 def _date(value, field: str) -> str:
+    """The shape, then the calendar. ``2026-99-99`` matches the digit shape and is not a day that
+    happened; a row dated one is a row nothing can place in a history."""
     if not isinstance(value, str) or not DATE.match(value):
         raise Failure(INPUT_INVALID, "at is an ISO date (YYYY-MM-DD) or date-time", field=field)
+    try:
+        datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise Failure(INPUT_INVALID, f"at is a date that exists on the calendar: {value!r}", field=field) from exc
     return value
 
 
@@ -181,8 +203,36 @@ def _parent(value, field: str) -> dict:
     return result
 
 
+def _encodable(value, field: str) -> None:
+    """Every string in the row survives a UTF-8 encode, keys included.
+
+    ``"\\ud800"`` in a row file parses as JSON, is a perfectly ordinary Python string, and passes
+    every shape check here -- and then the encoder refuses it when the ledger is written. A row
+    that validates but cannot be written is a crash instead of a diagnostic, so the encode is
+    part of validation and the refusal carries the pointer of the field that holds it.
+    """
+    stack = [(value, field)]
+    while stack:
+        item, where = stack.pop()
+        if isinstance(item, str):
+            try:
+                item.encode("utf-8")
+            except UnicodeEncodeError as exc:
+                raise Failure(INPUT_INVALID,
+                              "text holds a character that is not valid UTF-8 (a lone surrogate)",
+                              field=where) from exc
+        elif isinstance(item, dict):
+            for key, sub in item.items():
+                stack.append((key, where))
+                stack.append((sub, f"{where}/{key}" if isinstance(key, str) else where))
+        elif isinstance(item, list):
+            for index, sub in enumerate(item):
+                stack.append((sub, f"{where}/{index}"))
+
+
 def validate_row(row, field: str) -> dict:
     """One row, normalized. Raises the first defect with its JSON Pointer."""
+    _encodable(row, field)
     if not isinstance(row, dict):
         raise Failure(INPUT_INVALID, "a ledger row is an object", field=field)
     kind = row.get("type")
@@ -319,6 +369,137 @@ def inspect(path: Path, expected_id: str | None = None) -> dict:
     except Failure as exc:
         result["diagnostics"] = [{"field": exc.details.get("field", "/"), "error_code": exc.code, "message": exc.message}]
     return result
+
+
+# ----- writing -----------------------------------------------------------------------------
+
+def regular(path: Path) -> bool:
+    """Whether a ledger is already on disk here, refusing a path that is not a regular file.
+
+    A module directory holding ``evidence.json -> ~/.bashrc`` must not make this shelf write
+    through the link, and a FIFO in that name must not make it block forever on an open that
+    never returns. The check is one ``lstat``: nothing opens the path to find out what it is, so
+    a FIFO is refused rather than waited on, and the symlink itself is what is inspected. A
+    missing file is not a defect; it is the ledger this route is about to create.
+    """
+    try:
+        mode = path.lstat().st_mode
+    except FileNotFoundError:
+        return False
+    except OSError as exc:
+        raise Failure(INPUT_INVALID, f"Cannot read what the ledger path is: {path} ({exc})",
+                      ledger=str(path)) from exc
+    if not stat.S_ISREG(mode):
+        raise Failure(INPUT_INVALID, f"The ledger path is not a regular file: {path}",
+                      "A ledger is a plain file beside module.json. A symlink, a FIFO or a directory "
+                      "in its place is refused, never written through.", ledger=str(path))
+    return True
+
+
+def lock_path(path: Path) -> Path:
+    """The sibling file the ledger's lock is taken on, never the ledger itself: the lock has to
+    outlive the ``os.replace`` that swaps a new ledger in, and a lock held on a replaced file is
+    a lock on nothing."""
+    return path.parent / f".{path.name}.lock"
+
+
+def _acquire(fd: int, target: Path) -> bool:
+    if fcntl is not None:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        return True
+    if msvcrt is not None:              # pragma: no cover - exercised on Windows only
+        for _ in range(LOCK_ATTEMPTS):
+            os.lseek(fd, 0, os.SEEK_SET)
+            try:
+                msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
+                return True
+            except OSError:
+                continue
+        raise Failure(BUSY, f"Another process is holding the ledger lock: {target}",
+                      "Wait for the append that holds it to finish, then run this again.",
+                      lock=str(target))
+    return False                        # pragma: no cover - a host with neither module
+
+
+def _release(fd: int, held: bool) -> None:
+    if not held:
+        return                          # pragma: no cover - a host with neither module
+    if fcntl is not None:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+    elif msvcrt is not None:            # pragma: no cover - exercised on Windows only
+        os.lseek(fd, 0, os.SEEK_SET)
+        with contextlib.suppress(OSError):
+            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+
+
+@contextlib.contextmanager
+def lock(path: Path):
+    """An advisory exclusive lock on one ledger, held from the read through the replace.
+
+    Two invocations appending to the same ``evidence.json`` must not both read the same book and
+    then each write their own: the second write would drop the first row while both commands
+    reported success, and a ledger that loses a row is a provenance record that lies. Holding
+    this across the whole read-validate-append-write makes the second invocation wait for the
+    first and then read the row it wrote.
+
+    It is advisory and it is this shelf's: it serialises `pat`'s own writers on every host with
+    ``fcntl`` or ``msvcrt``, and it does not stop a text editor. On a host with neither the lock
+    is a no-op and the write is still all-or-nothing; only the ordering of two racing appends is
+    unprotected there.
+    """
+    target = lock_path(path)
+    try:
+        fd = os.open(target, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    except OSError as exc:
+        raise Failure(INPUT_INVALID, f"Cannot open the ledger lock beside it: {target} ({exc})",
+                      "The ledger's directory has to be writable to append a row to it.",
+                      lock=str(target)) from exc
+    held = False
+    try:
+        held = _acquire(fd, target)
+        yield target
+    finally:
+        _release(fd, held)
+        os.close(fd)
+
+
+def write_ledger(path: Path, text: str) -> str:
+    """Write the whole ledger, or leave the one on disk exactly as it was.
+
+    ``write_text`` truncates the file it is about to fill, so a full disk or an interrupt between
+    the two leaves the evidence ledger empty or half written -- the rows destroyed are the ones
+    nothing can derive a fact from again. Here the text goes to a sibling temporary file in the
+    ledger's own directory (so the replace is a rename within one filesystem), is flushed and
+    ``fsync``ed, and only a complete file is ``os.replace``d onto the ledger. A reader sees the
+    book that was there or the book that was written, never a truncated one. Any failure removes
+    the temporary file and leaves the original byte for byte.
+
+    The caller holds ``lock`` around the read this text was computed from and this write.
+    """
+    path = Path(path)
+    # A new file is created the way any other file here is (the umask decides); a ledger that is
+    # already there keeps the permissions it already had, because a rename is not a chance to
+    # change them.
+    mode = stat.S_IMODE(path.lstat().st_mode) if regular(path) else None
+    temp = path.parent / f".{path.name}.{os.getpid()}.tmp"
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        with os.fdopen(os.open(temp, flags, 0o666), "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        if mode is not None:
+            os.chmod(temp, mode)
+        os.replace(temp, path)
+    except BaseException as exc:
+        with contextlib.suppress(OSError):
+            temp.unlink()
+        if isinstance(exc, OSError):
+            raise Failure(OPERATION_FAILED, f"Could not write the ledger: {path} ({exc})",
+                          "The ledger on disk was not changed and the temporary file was removed.",
+                          ledger=str(path)) from exc
+        raise
+    return str(path)
 
 
 # ----- derivation ------------------------------------------------------------------------
@@ -508,8 +689,13 @@ def _appended_facts(ledger: dict, index: int, source: str) -> dict:
         return entry
     scope = row["scope"]
     for map_id in scope["maps"]:
+        # ``*`` is passed through as the query, not dropped: ``matches`` reads it as "the rows
+        # that speak for every map", so a row scoped to every map answers from the rows that
+        # are themselves scoped to every map. Querying with no map instead would collect the
+        # map-specific rows too, and one map's built-alone row would report this row
+        # offline-verified everywhere, on maps nothing was ever built for.
         derived = facts(ledger, scope.get("base"), scope.get("foundation"),
-                        None if map_id == "*" else map_id, None, scope.get("location"))
+                        map_id, None, scope.get("location"))
         entry["scopes"].append({"scope": {"base": scope.get("base"), "foundation": scope.get("foundation"),
                                           "map": map_id, "location": scope.get("location")},
                                 "facts": derived["facts"]})
@@ -529,6 +715,11 @@ def add_rows(path, row_files: list) -> dict:
 
     An existing ledger that does not validate is refused, not appended to: a row added under a
     malformed one would be a fact recorded in a file nothing can derive from.
+
+    The read, the validation and the write happen under this ledger's own ``lock``, so two
+    campaign workers appending at once append both rows instead of one overwriting the other, and
+    the write itself is ``write_ledger``: a temporary file, an ``fsync`` and a rename, so a
+    failure leaves the rows that were already there.
     """
     path = Path(path)
     directory = path if path.is_dir() else path.parent
@@ -542,7 +733,17 @@ def add_rows(path, row_files: list) -> dict:
         raise Failure(INPUT_LIMIT, f"At most {MAX_ROW_FILES} --row files in one invocation; {len(row_files)} were given")
     subject = _declared_id(directory)
 
-    created = not (path.exists() or path.is_symlink())
+    with lock(path):
+        return _append_locked(path, subject, row_files)
+
+
+def _append_locked(path: Path, subject: str, row_files: list) -> dict:
+    """The read, the validation and the write, with the ledger's lock held around all three.
+
+    Nothing between reading the book and replacing it may be done on a book another invocation
+    has since replaced: that is how a row is lost while both commands report success.
+    """
+    created = not regular(path)
     if created:
         previous, book = None, {"schema": 1, "subject": {"id": subject}, "rows": []}
     else:
@@ -609,7 +810,7 @@ def add_rows(path, row_files: list) -> dict:
     if len(text.encode("utf-8")) > MAX_BYTES:
         raise Failure(INPUT_LIMIT, f"The ledger would exceed {MAX_BYTES} bytes; nothing was written to {path}",
                       ledger=str(path), bytes=len(text.encode("utf-8")))
-    path.write_text(text, encoding="utf-8")
+    write_ledger(path, text)
 
     appended = list(range(rows_before, total))
     return {"protocol": ADD_PROTOCOL, "ledger": str(path), "created": created, "subject": subject,

@@ -7,9 +7,13 @@ import contextlib
 import hashlib
 import io
 import json
+import os
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from plutonium_agent_toolkit import cli
 from plutonium_agent_toolkit.dev import ledger
@@ -251,6 +255,136 @@ class LedgerAddTests(unittest.TestCase):
         self.assertEqual(row["details"]["rows_before"], ledger.MAX_ROWS)
         self.assertEqual(len(self.book()["rows"]), ledger.MAX_ROWS)
         self.assertNotEqual(self.ledger.read_text(encoding="utf-8"), before)
+
+    # ----- a date that happened, text that can be written --------------------------------
+
+    def test_a_date_that_is_not_on_the_calendar_is_refused(self):
+        row = self.add(self.row_file({**BUILT, "at": "2026-99-99"}), code=1)
+        self.assertEqual(row["error_code"], "input_invalid")
+        self.assertEqual(row["details"]["diagnostics"][0]["field"], "/rows/0/at")
+        self.assertIn("calendar", row["details"]["diagnostics"][0]["message"])
+        self.assertFalse(self.ledger.exists())
+        # The shape check still passes what it always did: a real date, with or without a time.
+        result = self.add(self.row_file({**BUILT, "at": "2026-02-28T23:59:59Z"}))
+        self.assertEqual(result["rows_after"], 1)
+
+    def test_a_row_holding_a_lone_surrogate_is_refused_and_not_written(self):
+        # "\ud800" is valid JSON, parses to a perfectly ordinary Python string, and cannot be
+        # encoded as UTF-8: without this check the write raises instead of reporting a defect.
+        row = self.add(self.row_file({**BUILT, "note": "a lone \ud800 surrogate"}), code=1)
+        self.assertEqual(row["error_code"], "input_invalid")
+        self.assertEqual(row["details"]["diagnostics"][0]["field"], "/rows/0/note")
+        self.assertFalse(self.ledger.exists())
+
+    # ----- the ledger the route writes through --------------------------------------------
+
+    def test_a_symlinked_ledger_is_refused_and_its_target_is_not_written_through(self):
+        victim = self.root / "victim.txt"
+        victim.write_text("someone else's file\n", encoding="utf-8")
+        try:
+            self.ledger.symlink_to(victim)
+        except (OSError, NotImplementedError) as exc:       # Windows without the privilege
+            self.skipTest(f"this host cannot create a symlink: {exc}")
+        row = self.add(self.row_file(BUILT), code=1)
+        self.assertEqual(row["error_code"], "input_invalid")
+        self.assertIn("not a regular file", row["message"])
+        self.assertEqual(victim.read_text(encoding="utf-8"), "someone else's file\n",
+                         "the link's target is not written through")
+        self.assertTrue(self.ledger.is_symlink(), "the link itself is left where it was")
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "a FIFO needs a POSIX host")
+    def test_a_fifo_in_the_ledger_s_place_is_refused_without_ever_opening_it(self):
+        os.mkfifo(self.ledger)
+        source = self.row_file(BUILT)
+        outcome = {}
+
+        def append():
+            try:
+                outcome["row"] = self.add(source, code=1)
+            except BaseException as exc:                    # an open() here would never return
+                outcome["error"] = exc
+
+        worker = threading.Thread(target=append, daemon=True)
+        worker.start()
+        worker.join(60)
+        self.assertFalse(worker.is_alive(), "the route opened the FIFO and blocked on it")
+        self.assertNotIn("error", outcome, outcome.get("error"))
+        self.assertEqual(outcome["row"]["error_code"], "input_invalid")
+        self.assertIn("not a regular file", outcome["row"]["message"])
+
+    def test_a_directory_in_the_ledger_s_place_is_refused(self):
+        self.ledger.mkdir()
+        row = self.add(self.row_file(BUILT), code=1)
+        self.assertEqual(row["error_code"], "input_invalid")
+        self.assertIn("not a regular file", row["message"])
+
+    def test_a_write_that_fails_part_way_leaves_the_ledger_that_was_there(self):
+        self.add(self.row_file(BUILT))
+        before = self.ledger.read_text(encoding="utf-8")
+        with mock.patch("plutonium_agent_toolkit.dev.ledger.os.fsync",
+                        side_effect=OSError(28, "No space left on device")):
+            row = self.add(self.row_file(TESTED), code=1)
+        self.assertEqual(row["error_code"], "operation_failed")
+        self.unchanged(before)
+        self.assertEqual([p.name for p in self.module.iterdir() if p.name.endswith(".tmp")], [],
+                         "the temporary file the failed write left is removed")
+
+    def test_two_appends_at_once_both_land_because_the_ledger_is_locked(self):
+        # The second invocation is released only after the first has replaced the file, so it
+        # reads the row the first one wrote instead of the book both started from.
+        self.add(self.row_file(BUILT))
+        first_row = self.row_file(TESTED, "first.json")
+        second_row = self.row_file(ACCEPTED, "second.json")
+        reading = threading.Event()
+        real_read = ledger.read
+
+        def slow_read(path):
+            # The book is read first and held for a quarter second: that is the window in which a
+            # second invocation, if nothing serialised it, would read the same book and then
+            # overwrite this one's row with its own.
+            book = real_read(path)
+            reading.set()
+            time.sleep(0.25)
+            return book
+
+        results, errors = [], []
+
+        def append(source):
+            try:
+                results.append(ledger.add_rows(str(self.module), [source]))
+            except BaseException as exc:
+                errors.append(exc)
+
+        with mock.patch.object(ledger, "read", slow_read):
+            first = threading.Thread(target=append, args=(first_row,))
+            first.start()
+            self.assertTrue(reading.wait(30), "the first append never read the ledger")
+            second = threading.Thread(target=append, args=(second_row,))
+            second.start()
+            first.join(60)
+            second.join(60)
+        self.assertEqual(errors, [], "both appends succeed; neither is refused")
+        self.assertEqual([row["type"] for row in self.book()["rows"]],
+                         ["built-alone", "game-tested", "player-accepted"],
+                         "neither appended row was overwritten by the other")
+        self.assertEqual(sorted(result["rows_before"] for result in results), [1, 2],
+                         "the second append read the row the first one had written")
+
+    # ----- a row scoped to every map --------------------------------------------------------
+
+    def test_a_row_scoped_to_every_map_answers_from_the_rows_scoped_to_every_map(self):
+        self.add(self.row_file(BUILT))          # built alone, offline verified, on zm_transit only
+        every_map = {**TESTED, "scope": {"base": "stock", "foundation": "bo2-stock", "maps": ["*"]}}
+        entry = self.add(self.row_file(every_map))["rows"][0]["scopes"][0]
+        self.assertEqual(entry["scope"]["map"], "*")
+        self.assertIs(values(entry["facts"])["installed"], True)
+        self.assertIsNone(values(entry["facts"])["offline_verified"],
+                          "one map's built-alone row does not verify the module on every map")
+        # A built-alone row that itself speaks for every map does answer the wildcard query.
+        self.add(self.row_file({**BUILT, "at": "2026-09-12",
+                                "scope": {"base": "stock", "foundation": "bo2-stock", "maps": ["*"]}}))
+        again = self.add(self.row_file({**every_map, "run": "a-second-run"}))
+        self.assertIs(values(again["rows"][0]["scopes"][0]["facts"])["offline_verified"], True)
 
     def test_usage_refusals(self):
         code, row = invoke(["module", "ledger-add", str(self.module), "--json"])
