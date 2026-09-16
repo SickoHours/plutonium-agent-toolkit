@@ -703,6 +703,33 @@
             "none"
           ]
         },
+        "system": {
+          "description": "Present only when the declaration names system: the player-facing system a person finds this module under, a browse word and never a resolution rule. Format: docs/MODULES.md.",
+          "type": "string",
+          "enum": [
+            "pack-a-punch",
+            "perks",
+            "hud",
+            "weapons",
+            "powerups",
+            "box",
+            "core-rules",
+            "gums",
+            "bosses",
+            "equipment",
+            "audio",
+            "map"
+          ]
+        },
+        "port_status": {
+          "description": "Present only when the declaration names port_status: whether the port does what it is meant to do on its target. 'finished' is the default a declaration that does not name it means; a member that is not finished is refused by the plan (kind port_status) unless the composition's member object lists its status under accept. Format: docs/MODULES.md.",
+          "type": "string",
+          "enum": [
+            "finished",
+            "loads-but-wrong",
+            "not-ported"
+          ]
+        },
         "dependency_kinds": {
           "description": "Present only when at least one dependencies entry was an object: what each dependency is for, by id. A kind of null is an entry that did not say. Format: docs/MODULES.md.",
           "type": "object",
@@ -870,6 +897,7 @@
               "role",
               "name",
               "commit",
+              "accept",
               "parameters"
             ],
             "properties": {
@@ -898,6 +926,17 @@
                     "type": "null"
                   }
                 ]
+              },
+              "accept": {
+                "description": "The unfinished port statuses this composition composes knowingly for this member; empty when it names none, in which case a member whose port_status is not finished is refused. Format: docs/MODULES.md.",
+                "type": "array",
+                "maxItems": 2,
+                "items": {
+                  "enum": [
+                    "loads-but-wrong",
+                    "not-ported"
+                  ]
+                }
               },
               "parameters": {
                 "description": "What this member sets on its module's declared parameters; empty when it sets none.",
