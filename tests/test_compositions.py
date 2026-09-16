@@ -913,6 +913,42 @@ class PoolAndDeliveryTests(CompositionFixture):
         self.assertIn("humangun_zm", result["message"])
         self.assertIn("box-weapon-not-found", result["message"])
 
+    def _server_module(self, mid, body):
+        d = self.module(mid)
+        (d / "scripts" / f"{mid}.gsc").write_text(body)
+        return d
+
+    def test_a_bare_stock_call_no_include_covers_refuses_the_plan(self):
+        """blast_furnace shipped with a bare `register_zombie_damage_callback` and no #include; the
+        plan accepted it with 0 failed rows and the load died at `Unresolved external`."""
+        self._server_module("furnace", "main()\n{\n    register_zombie_damage_callback(::ammo_damage);\n}\nammo_damage()\n{\n}\n")
+        code, result = invoke(["module", "plan", str(self.composition(["furnace"])), "--allow-unqualified", "--output", self.out()])
+        self.assertFalse(result["ok"])
+        self.assertIn("Offline checks failed", result["message"])
+        self.assertIn("externals:scripts/zm/furnace.gsc", result["details"]["failed"])
+        self.assertIn("maps/mp/zombies/_zm_spawner", result["message"])
+        row = next(c for c in result["details"]["checks"] if c["id"] == "externals:scripts/zm/furnace.gsc")
+        self.assertEqual(row["outcome"], "failed")
+
+    def test_an_argument_count_no_included_owner_takes_refuses_the_plan(self):
+        """qol_max_ammo's shape: the include is present, the arity is not."""
+        self._server_module("maxammo", "#include maps\\mp\\_utility;\nmain()\n{\n    players = get_players( self.team );\n}\n")
+        code, result = invoke(["module", "plan", str(self.composition(["maxammo"])), "--allow-unqualified", "--output", self.out()])
+        self.assertFalse(result["ok"])
+        self.assertIn("externals:scripts/zm/maxammo.gsc", result["details"]["failed"])
+        self.assertIn("get_players called with 1 argument", result["message"])
+
+    def test_an_unknown_bare_name_carries_its_own_row_and_does_not_refuse(self):
+        """The unknown listing is not_counted, so it never refuses, but it is its own row."""
+        self._server_module("probe", "main()\n{\n    totally_unknown_thing();\n}\n")
+        code, result = invoke(["module", "plan", str(self.composition(["probe"])), "--allow-unqualified", "--output", self.out()])
+        self.assertEqual(code, 0, result)
+        rows = {c["id"]: c for c in result["result"]["checks"]}
+        self.assertEqual(rows["externals:scripts/zm/probe.gsc"]["outcome"], "passed")
+        unknown = rows["externals-unknown:scripts/zm/probe.gsc"]
+        self.assertEqual(unknown["outcome"], "not_counted")
+        self.assertIn("totally_unknown_thing", unknown["detail"])
+
     def test_a_client_box_registration_for_a_provided_weapon_passes(self):
         self._client_module("wave", "microwavegundw_zm", ["microwavegundw_zm", "microwavegundw_upgraded_zm"])
         code, result = invoke(["module", "plan", str(self.composition(["wave"])), "--allow-unqualified", "--output", self.out()])

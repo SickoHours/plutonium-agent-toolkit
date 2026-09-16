@@ -55,6 +55,19 @@ and the *engine* must have those scripts loaded too.
   `externals:` check rows from `knowledge/stock-exports.json`. The include must be on the script's
   own VM: a `.csc` resolves against `clientscripts\mp\_utility` and
   `clientscripts\mp\zombies\_zm_utility`, and no stock client script includes a `maps\...` path.
+  **The link signature is the name and the argument count together, and the script's includes are
+  the whole scope.** A bare call resolves only against the script's own functions and the scripts it
+  `#include`s; nothing else the engine has loaded is reachable without a qualified path. Where two
+  stock scripts export one name at different arities the scope decides which you get, so the arities
+  are never merged: `get_players` takes no argument in `maps\mp\_utility` and one in
+  `common_scripts\utility`, and on 2026-09-15 `qol_instant_nuke` (both included) linked while
+  `qol_max_ammo` (only `maps\mp\_utility`) died at `Unresolved external "get_players" with 1
+  parameters`. Passing *fewer* arguments than the declaration lists is ordinary and safe — GSC binds
+  undefined to the rest, and 564 bare calls in the `patch_zm` decompile do it — so only an excess
+  fails. A bare name no export row owns and no builtin witness covers is reported separately as
+  `externals-unknown:<script>`, `not_counted`: the toolkit cannot refuse on ignorance, but that name
+  is where an unresolved external hides, as `register_zombie_damage_callback` did for
+  `blast_furnace` before `maps\mp\zombies\_zm_spawner` was in the table.
 - **Unresolved external.** A helper that compiled because a name matched, but the engine could not
   find it in a loaded script. `setclientfield` with two parameters lives in `maps/mp/_utility`;
   include it. Resolve every unqualified call against the includes and exports the engine will

@@ -7,6 +7,26 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- The `externals:` check now judges a bare call against the script's `#include` scope and against
+  the argument count the export declares, and `knowledge/stock-exports.json` carries the arities to
+  do it with. Two load failures this table could not see: `blast_furnace` called
+  `register_zombie_damage_callback` with no `#include` at all and the table had no
+  `maps/mp/zombies/_zm_spawner` row, so the symbol matched nothing and left a `not_counted` row
+  beside two unwitnessed builtins; `qol_max_ammo` included `maps\mp\_utility`, whose `get_players`
+  takes no argument, and called it with one. Both plans were accepted with 0 failed rows and both
+  loads died at `COM_ERROR (6) ... Unresolved external`. The spawner row is added (93 exports, the
+  complete list from the same `patch_zm` decompile as the other seven, which the regeneration
+  reproduces byte-for-byte), every row gains an `arity` map beside its `functions` list, and a name
+  two scripts export at different arities is judged per owner and never merged: a one-argument
+  `get_players` resolves only for a script that included `common_scripts\utility`. A declaration
+  accepts every count up to its own parameter count, because GSC passes undefined for an argument a
+  call omits — 564 bare calls in the decompile do exactly that — so only an excess is a fault.
+  Qualified `owner::name(...)` calls are judged against that owner's arities too. Names no row owns
+  and no builtin witness covers now leave a separate `externals-unknown:<script>` row, still
+  `not_counted` because ignorance cannot refuse a build, but under its own id rather than pooled
+  with the verdict. A read-only sweep of 407 module sources in the private workspace turns up
+  exactly the three known-broken scripts and no other row. Verified offline on Linux; nothing was
+  built, installed or played.
 - `module qualify` now plans its synthesized composition with the base's asset listings, read from
   the foundation record's `base_listings` and from the directory the link loads sit in when it holds
   `<zone>-list.txt` beside them, and records them under `base_listings` in `qualify.json` and the
