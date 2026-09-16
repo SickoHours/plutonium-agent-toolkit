@@ -13,7 +13,7 @@ class AdapterFixture(CompositionFixture):
         os.environ["PAT_BACKEND_ADAPTER_BUILDER"] = str(FAKES / "fake_adapter_builder.py")
         self.addCleanup(lambda: os.environ.pop("PAT_BACKEND_ADAPTER_BUILDER", None))
 
-    def adapter(self, mid, weapons=("halo_gum_x_eat_zm",), bank="halo_gum_x.all", rawfiles=(), localize=None, aliases=("hsp_s_shared",), prepared=True, **overrides):
+    def adapter(self, mid, weapons=("halo_gum_x_eat_zm",), bank="halo_gum_x.all", rawfiles=(), localize=None, aliases=("hsp_s_shared",), prepared=True, exclude_aliases=None, **overrides):
         d = self.root / "modules" / mid
         (d / "src").mkdir(parents=True, exist_ok=True)
         (d / "src" / f"{mid}.gsc").write_text("main()\n{\n}\n")
@@ -24,6 +24,8 @@ class AdapterFixture(CompositionFixture):
                   "assets": {"weapons": list(weapons), "xmodel": [f"{mid}_view"], "materials": [], "images": []}, "resource_contract": {}}
         if bank:
             recipe["soundbank"] = {"name": bank, "aliases": "soundbank/new.aliases.csv", "sounds": "sound/x"}
+            if exclude_aliases is not None:
+                recipe["soundbank"]["exclude_aliases"] = exclude_aliases
         if prepared:
             prep = self.root / "prepared" / mid
             (prep / "assets" / "soundbank").mkdir(parents=True, exist_ok=True)
@@ -31,7 +33,7 @@ class AdapterFixture(CompositionFixture):
             (prep / "prepared.json").write_text(json.dumps({"entries": [{"id": w, "clips": {"idle": f"{mid}_idle"}} for w in weapons]}))
             recipe["prepared"] = str(prep)
         (d / "recipe.json").write_text(json.dumps(recipe, indent=2))
-        decl = declaration(mid, recipe="recipe.json", category="gobblegums", distribution="private", **overrides)
+        decl = declaration(mid, recipe="recipe.json", distribution="private", **{"category": "gobblegums", **overrides})
         (d / "module.json").write_text(json.dumps(decl, indent=2))
         return d
 
@@ -131,6 +133,66 @@ class AdapterPayloadTests(AdapterFixture):
         self.assertEqual(code, 1, row)
         kinds = {r["kind"] for r in row["details"]["refusals"]}
         self.assertEqual(kinds, {"service"})
+
+
+class ExcludedAliasTests(AdapterFixture):
+    """``soundbank.exclude_aliases``: the rows a partial sharer hands to the bank module that owns
+    them. The gum shape (delete the whole soundbank block) only fits a member whose bank is
+    exactly the shared alias; a weapon whose bank carries its own rows too needs a subset."""
+
+    def owner(self, mid="rw_audio", bank="halo_rw_shared.all", aliases=("owned_a", "owned_b")):
+        """The bank module: it carries the shared rows and nothing else, and says so."""
+        return self.adapter(mid, weapons=(), bank=bank, aliases=aliases, localize={},
+                            category="audio", kind="bank", tags=["shared-service"],
+                            provides={"soundbanks": [bank], "aliases": list(aliases)})
+
+    def test_the_planner_credits_a_member_with_its_table_minus_the_rows_it_gave_up(self):
+        self.adapter("rw_acr", aliases=("owned_a", "owned_b", "acr_fire", "acr_reload"), exclude_aliases=["owned_a", "owned_b"])
+        code, row = invoke(["module", "plan", str(self.composition(["rw_acr"], name="stock_exclude_test")), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        plan = json.loads((Path(row["result"]["output"]) / "plan.json").read_text())
+        self.assertEqual(plan["adapters"][0]["aliases"], ["acr_fire", "acr_reload"])
+        self.assertEqual(plan["adapters"][0]["excluded_aliases"], ["owned_a", "owned_b"])
+        self.assertEqual(plan["modules"][0]["adapter"]["aliases"], ["acr_fire", "acr_reload"])
+        self.assertEqual(plan["modules"][0]["adapter"]["excluded_aliases"], ["owned_a", "owned_b"])
+        self.assertEqual(plan["modules"][0]["provides"]["soundbanks"], ["halo_gum_x.all"], "the bank is still the member's; only the rows moved")
+
+    def test_an_excluded_name_the_alias_table_does_not_carry_is_refused(self):
+        self.adapter("rw_acr", aliases=("owned_a", "acr_fire"), exclude_aliases=["owned_a", "owned_gone"])
+        code, row = invoke(["module", "plan", str(self.composition(["rw_acr"], name="stock_exclude_test")), "--output", self.out()])
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["error_code"], "input_invalid")
+        self.assertIn("owned_gone", row["message"]); self.assertIn("does not carry", row["message"])
+
+    def test_a_malformed_exclusion_is_refused_before_anything_is_read(self):
+        for value in ([], "owned_a", [""], ["ok", 7], ["x" * 257], [f"a{i}" for i in range(257)]):
+            with self.subTest(value=value):
+                self.adapter("rw_acr", aliases=("owned_a", "acr_fire"), exclude_aliases=value)
+                code, row = invoke(["module", "plan", str(self.composition(["rw_acr"], name="stock_exclude_test")), "--output", self.out()])
+                self.assertEqual(code, 1, row)
+                self.assertEqual(row["error_code"], "input_invalid")
+                self.assertIn("exclude_aliases is a list of 1 to 256 alias names", row["message"])
+
+    def test_an_owner_bank_and_a_member_that_gave_the_owned_rows_up_plan_with_no_service_refusal(self):
+        self.owner()
+        self.adapter("rw_acr", bank="halo_rw_acr.all", aliases=("owned_a", "owned_b", "acr_fire"), exclude_aliases=["owned_a", "owned_b"],
+                     dependencies=["rw_audio"])
+        code, row = invoke(["module", "plan", str(self.composition(["rw_audio", "rw_acr"], name="stock_owner_test")), "--output", self.out()])
+        self.assertEqual(code, 0, row)  # a plan that refuses returns 1 with the refusals under details
+        self.assertEqual(row["result"]["undecided"], [], "the shared rows are not an owner decision either")
+        plan = json.loads((Path(row["result"]["output"]) / "plan.json").read_text())
+        by_id = {a["id"]: a for a in plan["adapters"]}
+        self.assertEqual(by_id["rw_audio"]["aliases"], ["owned_a", "owned_b"])
+        self.assertEqual(by_id["rw_acr"]["aliases"], ["acr_fire"], "the shared rows are the owner's alone")
+
+    def test_the_same_pack_without_the_exclusion_still_refuses_on_every_shared_row(self):
+        self.owner()
+        self.adapter("rw_acr", bank="halo_rw_acr.all", aliases=("owned_a", "owned_b", "acr_fire"), dependencies=["rw_audio"])
+        code, row = invoke(["module", "plan", str(self.composition(["rw_audio", "rw_acr"], name="stock_owner_test")), "--output", self.out()])
+        self.assertEqual(code, 1, row)
+        refusals = [r for r in row["details"]["refusals"] if r["kind"] == "service"]
+        self.assertEqual([r["collision"] for r in refusals], ["alias:owned_a", "alias:owned_b"])
+        self.assertEqual(refusals[0]["modules"], ["rw_acr", "rw_audio"])
 
 
 class SoundBankBoundTests(CompositionFixture):

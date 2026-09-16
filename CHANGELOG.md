@@ -7,6 +7,19 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- An adapter recipe's `soundbank` takes `exclude_aliases`: 1 to 256 alias names the cut hands to the
+  bank module that owns them. `dev/adapters.load_recipe` credited a member with every `Name` in the
+  alias table its recipe points at, so a weapon that shares 6 of its 18 rows with a bank module was
+  attributed rows its package no longer carries and `module plan` refused the pack on each of them as
+  a `service` collision — the one-owner shape the refusal advises only worked for a member whose whole
+  bank was the shared alias. The names are now subtracted from the member's aliases, recorded as
+  `excluded_aliases` on the plan row and on the plan's `adapters[]` entry, and checked against the
+  alias table wherever the prepared inputs are on this machine: a name the table does not carry is
+  refused as a stale list (`input_invalid`), as is a malformed or empty list. Nothing is subtracted
+  from what the builder writes — the workspace builder that cuts the bank must drop the same rows, and
+  the readback of the package it produced is what proves it did. A recipe without the field is
+  unchanged. Offline verified on Linux; no game was loaded.
+
 - `module qualify` now plans its synthesized composition with the base's asset listings, read from
   the foundation record's `base_listings` and from the directory the link loads sit in when it holds
   `<zone>-list.txt` beside them, and records them under `base_listings` in `qualify.json` and the
