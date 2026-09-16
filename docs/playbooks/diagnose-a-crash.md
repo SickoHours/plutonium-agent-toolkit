@@ -50,6 +50,11 @@ cause. Diagnosis reads; it changes nothing.
 - Resend a command that reported `delivery_uncertain`.
 - Claim a leak, a limit or a fix from a pattern search or a screenshot.
 - Blame the mod for a host OOM kill, an OpenAssetTools tool crash or a pre-existing menu Lua error.
+- Blame a pack for a wrong texture, a missing camo or any other rendering fault on this evidence.
+  A rendering fault writes no console line at all, so nothing in steps 3 to 5 can clear the base:
+  it needs a control load of the bare foundation on the same map, and Plutonium's global
+  `storage/t6/images` can repaint a stock image for that bare load too
+  (`playbooks/compose-a-pack.md`, `MODULES.md`).
 - Fix anything in this playbook.
 
 ## Stop conditions

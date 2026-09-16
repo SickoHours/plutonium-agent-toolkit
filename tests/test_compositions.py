@@ -1141,3 +1141,96 @@ class DonorShadowingTests(CompositionFixture):
         self.assertEqual(code, 1, row)
         check = next(c for c in row["details"]["checks"] if c["id"] == "donor-shadowing")
         self.assertEqual((check["outcome"], check["count"], check["names"]), ("failed", 1, ["moon"]))
+
+
+class LooseOverrideTests(CompositionFixture):
+    """Plutonium's global `storage/t6/images` is the other half of the shadowing failure, and it is
+    not in any fastfile: a loose file there wins over every image bank, for every mod folder on the
+    machine and for the bare game with none selected. A loose copy of a base-owned name therefore
+    repaints that name on the bare foundation too, which is why a rendering diagnosis starts with a
+    control load and why this refuses at plan time. The executable half of that section in
+    docs/MODULES.md.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.module("skull")
+        d = self.root / "packs" / "zones"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "common_zm.ff").write_text(json.dumps({"zone": "common_zm", "rawfiles": {}, "assets": [], "pulls": []}))
+        listings = self.root / "packs" / "listings"
+        listings.mkdir(parents=True, exist_ok=True)
+        (listings / "common_zm-list.txt").write_text("image, camo_zombies_nml\nmaterial, mtl_stock\n")
+
+    def storage(self, *loose):
+        """A configured Plutonium T6 storage folder, with `images/` present only when asked."""
+        storage = self.root / "storage" / "t6"
+        storage.mkdir(parents=True, exist_ok=True)
+        if loose:
+            (storage / "images").mkdir(exist_ok=True)
+            for name in loose:
+                (storage / "images" / name).write_bytes(b"IWi\x0d" + b"\0" * 32)
+        code, row = invoke(["configure", "--plutonium-storage-t6", str(storage)])
+        self.assertEqual(code, 0, row)
+        return storage
+
+    def pack(self, name):
+        return self.composition(["skull"], name=name, loads=["../zones/common_zm.ff"],
+                                base_owned=["../listings/common_zm-list.txt"])
+
+    def test_a_loose_file_carrying_a_base_owned_name_refuses_the_plan(self):
+        self.storage("camo_zombies_nml.iwi", "t5_weapon_thundergun_n.iwi")
+        code, row = invoke(["module", "plan", str(self.pack("stock_loose_test")), "--output", self.out()])
+        self.assertEqual(code, 1, row)
+        self.assertIn("loose-overrides:camo_zombies_nml", row["message"])
+        check = next(c for c in row["details"]["checks"] if c["id"] == "loose-overrides")
+        self.assertEqual(check["outcome"], "failed")
+        self.assertEqual((check["count"], check["names"]), (1, ["camo_zombies_nml"]))
+        self.assertTrue(check["counted"])
+        named = next(c for c in row["details"]["checks"] if c["id"] == "loose-overrides:camo_zombies_nml")
+        self.assertEqual(named["outcome"], "failed")
+        self.assertIn("camo_zombies_nml.iwi", named["detail"])
+
+    def test_a_configured_loose_path_with_nothing_the_base_owns_passes(self):
+        self.storage("t5_weapon_thundergun_n.iwi")
+        code, row = invoke(["module", "plan", str(self.pack("stock_loose2_test")), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        check = next(c for c in row["result"]["checks"] if c["id"] == "loose-overrides")
+        self.assertEqual(check["outcome"], "passed")
+        self.assertEqual((check["count"], check["loose_images"], check["counted"]), (0, 1, True))
+
+    def test_a_configured_storage_without_an_images_folder_is_not_counted(self):
+        self.storage()
+        code, row = invoke(["module", "plan", str(self.pack("stock_loose3_test")), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        check = next(c for c in row["result"]["checks"] if c["id"] == "loose-overrides")
+        self.assertEqual(check["outcome"], "not_counted")
+        self.assertFalse(check["counted"], "an absent loose path is uncounted, not clean")
+
+    def test_no_configured_storage_is_not_counted_and_not_a_pass(self):
+        code, row = invoke(["module", "plan", str(self.pack("stock_loose4_test")), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        check = next(c for c in row["result"]["checks"] if c["id"] == "loose-overrides")
+        self.assertEqual(check["outcome"], "not_counted")
+        self.assertFalse(check["counted"])
+        self.assertIn("pat configure --plutonium-storage-t6", check["hint"])
+
+    def test_an_iw5_pack_is_never_judged_against_t6_s_loose_folder(self):
+        self.storage("camo_zombies_nml.iwi")
+        d = self.module("iw5_thing", game="iw5")
+        recipe = json.loads((d / "project.json").read_text()); recipe["game"] = "iw5"; recipe["mode"] = "mp"
+        (d / "project.json").write_text(json.dumps(recipe))
+        comp = self.composition(["iw5_thing"], name="iw5_loose_test", base="stock", map_id="mp_alpha", game="iw5")
+        code, row = invoke(["module", "plan", str(comp), "--output", self.out()])
+        checks = (row.get("result") or row.get("details") or {}).get("checks") or []
+        self.assertFalse([c for c in checks if c["id"].startswith("loose-overrides")], row)
+
+    def test_a_composition_with_no_base_listing_compares_nothing(self):
+        self.storage("camo_zombies_nml.iwi")
+        comp = self.composition(["skull"], name="stock_loose5_test", loads=["../zones/common_zm.ff"])
+        code, row = invoke(["module", "plan", str(comp), "--output", self.out()])
+        # No listing is already a donor-shadowing refusal; loose-overrides has nothing to compare.
+        self.assertEqual(code, 1, row)
+        check = next(c for c in row["details"]["checks"] if c["id"] == "loose-overrides")
+        self.assertEqual(check["outcome"], "not_counted")
+        self.assertIn("No base listing", check["detail"])

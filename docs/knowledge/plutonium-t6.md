@@ -12,6 +12,7 @@ Inside it:
 | `main/console_zm.log` | The Zombies client's console log; every script error, load failure and shutdown reason is written here |
 | `usermaps/<map>/` | Custom maps as their own fastfiles, when a base uses that layout |
 | `raw/` | Loose files the client reads directly: global scripts under `raw/scripts/zm/`, UI Lua under `raw/ui_mp/` |
+| `images/` | Plutonium's global loose textures. An `.iwi` here supplies the pixels for that image name and wins over every image bank — for every mod folder on the machine and for the bare game with none selected. It is machine state: a file left here years ago still repaints a stock weapon's camo today, on an untouched base, writing nothing to the console. Nothing in this toolkit writes or deletes it; `loose-overrides` only reports which of its files carry a name the base owns |
 | `zone/` | Extra fastfiles some mod bases keep beside the mod folder |
 
 `pat game mods --json` lists the mod folders and whether each is loadable (`mod.ff` or

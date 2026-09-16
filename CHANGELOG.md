@@ -7,6 +7,32 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- New check `loose-overrides`. Plutonium reads an image's pixels from an image bank *or* from the
+  global loose path `storage/t6/images`, and a loose file there wins: it applies to every mod folder
+  on the machine and to the bare game with no mod selected. A loose `<name>.iwi` whose name one of
+  the base's own zones carries therefore repaints that name everywhere, on a pack that never touched
+  it and on the untouched base alike, and no composition can cause or cure it. `module plan` and
+  `module build` now list every loose texture whose name the base's image listing carries and refuse,
+  one `failed` row per file (`loose-overrides:<name>`) plus a summary with `count`, the first ten
+  `names`, `path` and `loose_images`. The loose path is not guessed: it is the `images/` folder of the
+  T6 storage directory saved with `pat configure --plutonium-storage-t6`, read from the `config.json`
+  under whichever home `PAT_HOME` selects. When no storage is configured, the configured folder has
+  no `images/`, or no base listing says which names the base owns, the summary is `not_counted` with
+  `counted: false` and which of those it was — an absent loose path is the ordinary case and is
+  neither a failure nor a pass. Nothing writes or deletes a loose file; the folder is global and the
+  user's. Offline unit tests on Linux; no native receipt, and no route status changes.
+- Two rules the donor-shadowing work paid for, in `docs/MODULES.md` and
+  `docs/playbooks/compose-a-pack.md`. **A rendering fault is not evidence about a pack until the bare
+  foundation has been loaded as a control on the same map**: a wrong texture writes nothing to the
+  console, so no log slice and no readback can clear the base, and a readback difference only shows
+  that the zone changed. **Measure every asset type a donor answers instead of reasoning about which
+  ones shadow**: the rebuild that took base-named `image` copies from 166 to 0 and `material` copies
+  from 67 to 0 left 8 `techniqueset`, 4 `xmodel` and 7 `fx` copies of base-owned names in the zone,
+  because the type list had been chosen rather than read, and one of those xmodels differed from the
+  base's copy. The link log's `Loaded <type> "<name>" (src: <zone>)` rows are per type; group them and
+  exclude or justify each. `donor-shadowing` still judges only the two types it can exclude, and the
+  docs now say so. `docs/knowledge/plutonium-t6.md` gains the `storage/t6/images` row, and
+  `docs/playbooks/diagnose-a-crash.md` says a rendering fault cannot be diagnosed from its evidence.
 - The shipped knowledge JSON is re-exported from the workspace generator at `2026-09-15T11:54:18Z`.
   One data row is new: the `box-weapon-not-found` crash signature (`AddZombieBoxWeapon: Failed to
   find weapon <name>`), the fault a client box registration raises for a weapon no loaded zone
@@ -96,7 +122,9 @@ Every entry states what shipped, on which platform it was verified, and what rem
   cut for one target, so widening alone cannot qualify one: the target's cut is written as
   `recipe-<base>.json` from the declared recipe with only `foundation`, `map`, `profile` and
   `revision` changed, built through the workspace's adapter builder and recorded under `recipes`;
-  an existing cut is reused and a recipe on disk is never overwritten.
+  an existing cut is reused and a recipe on disk is never overwritten. The check runs for `t6` compositions only (`storage/t6` is T6's folder), reads the directory
+  lazily under its entry bound, and a scan the bound cut short with no hit is `not_counted`, never
+  `passed`.
 
   Only after the second verify are the records written, together or not at all: `module.json`
   widened by exactly that base and map, a `docs/TEST.md` section citing every receipt by relative

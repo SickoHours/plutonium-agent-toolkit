@@ -273,6 +273,116 @@ def donor_shadowing(plan,shadowable=None,sources=None):
                    f'so none of the {len(donors)} donor zone(s) can answer one; the build\'s link log is the proof',
                    count=0,names=[])
 
+LOOSE_IMAGE_SUFFIX='.iwi'
+# One row per shadowing file up to this many; the summary always carries the true count.
+MAX_LOOSE_ROWS=64
+# A flat texture folder, not a tree to walk: stop reading rather than enumerate an unbounded one.
+MAX_LOOSE_FILES=20000
+
+def loose_images_dir():
+    """Plutonium's global loose texture path, ``<plutonium storage t6>/images``.
+
+    The directory is not guessed: it is derived from the storage folder the user configured with
+    ``pat configure --plutonium-storage-t6``, read from the ``config.json`` under whichever home
+    ``PAT_HOME`` selects, which is the same key ``game install-mod`` and the game routes use.
+    ``None`` when no storage is configured, or when the configuration cannot be read at all -- and
+    ``None`` means *not counted*, never *clean*."""
+    from ..core import config
+    try:
+        storage=config.load().get('plutonium_storage_t6')
+    except Failure:
+        return None
+    return Path(storage)/'images' if storage else None
+
+def loose_overrides(plan,shadowable=None,directory=None):
+    """Every loose global texture file whose name a base zone also carries.
+
+    Plutonium loads an image's pixels from an image bank the zone header reads *or* from the global
+    loose path ``storage/t6/images``, and a loose file there wins: it applies to every mod folder on
+    the machine and to the bare game with no mod selected. So a loose ``<name>.iwi`` whose name one of
+    the base's own zones carries repaints that name everywhere -- the Pack-a-Punch and camo textures a
+    stock weapon binds render from the loose file, on a pack that never touched them and on the bare
+    foundation alike. It is machine state, so no composition change can cause it and none can cure it;
+    the only reason a plan is where it surfaces is that a plan is the last place that knows which names
+    the base owns.
+
+    That makes it refusal-grade for the same reason ``donor-shadowing`` is: the rendering is wrong and
+    the pack is not the cause, and a build that ships under those textures buys a diagnosis nobody can
+    make from the package. Each shadowing file is a ``failed`` row naming it, and the summary refuses.
+
+    The base's names are the ``image`` half of the same listings ``donor-shadowing`` excludes from the
+    zone (``shadowable``); with no listing nothing is compared and the summary is ``not_counted``.
+    ``directory`` is the configured loose path (``loose_images_dir``). Not configured, and absent from
+    this machine, are both ``not_counted`` and say which they are: an uncounted directory and a counted
+    empty one are different facts, and neither is a pass."""
+    owned={name for name in (shadowable or {}).get('image',()) if name and not name.startswith(',')}
+    def summary(outcome,detail,**extra):return [{'id':'loose-overrides','outcome':outcome,'detail':detail,**extra}]
+    if not owned:
+        return summary('not_counted',
+                       'No base listing says which image names the base owns, so no loose file in Plutonium\'s global '
+                       'storage/t6/images can be shown to shadow one. Pass --base-listings <dir> with the base zones\' '
+                       'listings, or list them under base_owned in the composition',
+                       count=0,names=[])
+    if directory is None:
+        return summary('not_counted',
+                       'Plutonium\'s global loose texture path is not counted: no T6 storage folder is configured, so '
+                       f'nothing here reads it. {len(owned)} base-owned image name(s) went unchecked against it, which is '
+                       'not the same as checking them and finding none',
+                       count=0,names=[],counted=False,
+                       hint='Run: pat configure --plutonium-storage-t6 <absolute path to storage\\t6>; the loose path is its images/ folder.')
+    directory=Path(directory)
+    if not directory.is_dir():
+        return summary('not_counted',
+                       f'Plutonium\'s global loose texture path is not counted: {directory} is configured but is not a directory '
+                       f'on this machine. {len(owned)} base-owned image name(s) went unchecked against it. An absent loose path '
+                       'is the common case and is not a failure, but it is not a pass either',
+                       count=0,names=[],counted=False)
+    files=[];truncated=False
+    try:
+        # Lazy: the bound is on directory entries read, before any is sorted or stat-ed.
+        for index,entry in enumerate(directory.iterdir()):
+            if index>=MAX_LOOSE_FILES:truncated=True;break
+            if entry.is_file():files.append(entry.name)
+    except OSError as error:
+        return summary('not_counted',
+                       f'Plutonium\'s global loose texture path is not counted: {directory} could not be read ({error.strerror or error}). '
+                       f'{len(owned)} base-owned image name(s) went unchecked against it',
+                       count=0,names=[],counted=False)
+    images={}
+    for name in files:
+        if name.lower().endswith(LOOSE_IMAGE_SUFFIX):images.setdefault(name[:-len(LOOSE_IMAGE_SUFFIX)].casefold(),name)
+    by_fold={name.casefold():name for name in sorted(owned)}
+    hits=sorted((by_fold[fold],images[fold]) for fold in sorted(set(images)&set(by_fold)))
+    scanned=len(images)
+    if truncated and not hits:
+        # An incomplete scan that found nothing proves nothing: the file that shadows may be one
+        # the bound stopped short of.
+        return summary('not_counted',
+                       f'Plutonium\'s global loose texture path is not counted: {directory} holds more than {MAX_LOOSE_FILES} entries, '
+                       f'so the scan stopped before reading all of them and found no hit among the first {scanned} texture(s). '
+                       f'{len(owned)} base-owned image name(s) may still be shadowed by a file it never reached',
+                       count=0,names=[],counted=False,path=str(directory),loose_images=scanned)
+    if not hits:
+        return summary('passed',
+                       f'None of the {scanned} loose texture(s) in {directory} carries one of the {len(owned)} image name(s) the base owns, '
+                       'so no loose file repaints a base image for this pack or for the bare game',
+                       count=0,names=[],counted=True,path=str(directory),loose_images=scanned)
+    rows=[{'id':'loose-overrides:'+asset,'outcome':'failed',
+           'detail':f'{filename} is in Plutonium\'s global loose texture path {directory} and the base carries the image {asset}. '
+                    'A loose file wins over every image bank, for every mod folder on this machine and for the bare game with none '
+                    'selected, so this name renders from that file whatever is loaded. Move it out of the folder (or accept it '
+                    'deliberately and say so), then load the bare foundation as a control before any render is blamed on a pack'}
+          for asset,filename in hits[:MAX_LOOSE_ROWS]]
+    more=f' (first {MAX_LOOSE_ROWS} listed)' if len(hits)>MAX_LOOSE_ROWS else ''
+    return summary('failed',
+                   f'{len(hits)} of the {scanned} loose texture(s) in {directory} carry an image name the base owns{more}: '
+                   +', '.join(asset for asset,_ in hits[:10])+(', ...' if len(hits)>10 else '')+
+                   ('. Scanning stopped at the file bound, so there may be more' if truncated else '')+
+                   '. They render over the base\'s own copies for every mod and for the bare game, so a wrong texture here is '
+                   'machine state and no change to this composition can fix it',
+                   count=len(hits),names=[asset for asset,_ in hits[:10]],counted=True,path=str(directory),
+                   loose_images=scanned)+rows
+
 def script_result(name,text,passed):
     errors=re.findall(r'(?im)^.*(?:unresolved external|\berror\b|\bfatal\b).*$',text)
     return {'id':'symbols:'+name,'outcome':'failed' if errors or not passed else 'not_counted',
