@@ -25,7 +25,7 @@ from pathlib import Path, PureWindowsPath
 
 from ..core.errors import INPUT_INVALID, INVALID_ARGUMENTS, Failure
 from ..core.jobs import Job
-from . import adapters, compositions, ledger, projects, targets
+from . import adapters, changelog, compositions, ledger, projects, targets
 
 PROTOCOL = "pat.module-verify/1"
 OUTCOMES = ("agrees", "declared_not_observed", "observed_not_declared", "partial", "not_counted")
@@ -692,6 +692,35 @@ def version_row(directory: Path, metadata: dict, rows: list[dict], propose: bool
     return f"{match[1]}.{match[2]}.{int(match[3]) + 1}", None
 
 
+def changelog_row(directory: Path, rows: list[dict]) -> None:
+    """Whether the module's generated changelog is the page its own bytes render today.
+
+    ``CHANGELOG.md`` is generated and never hand-edited, so the only honest check is to render it
+    again and compare. A file that differs was edited by hand or is stale, and the row says which
+    command regenerates it. A module with no page at all is ``not_counted``: writing one is a
+    choice, and this route writes nothing either way.
+    """
+    field, how = "/changelog", "the page pat module changelog renders, against the file on disk"
+    path = directory / changelog.FILENAME
+    if path.is_symlink() or not path.is_file():
+        rows.append(_row(field, [], [], how, "not_counted",
+                         f"no {changelog.FILENAME}; pat module changelog --write generates one"))
+        return
+    try:
+        report = changelog.check(directory)
+    except Failure as exc:
+        rows.append(_row(field, [changelog.FILENAME], [], how, "not_counted",
+                         f"the changelog could not be compared: {exc.message[:200]}"))
+        return
+    if report["current"]:
+        rows.append(_row(field, [changelog.FILENAME], [changelog.FILENAME], how, "agrees",
+                         "the file is the page this module's history and ledger render"))
+        return
+    rows.append(_row(field, [changelog.FILENAME], [f"{report['diff_lines']} differing lines"], how,
+                     "observed_not_declared",
+                     f"{changelog.FILENAME} was edited by hand or is stale; run pat module changelog --write"))
+
+
 # ----- the route ---------------------------------------------------------------------------
 
 def _target(value: str | None) -> tuple[str, str] | None:
@@ -1048,6 +1077,8 @@ def verify(directory: Path, *, workspace: str | None = None, base_listings=(), t
         hud_proposal = "icon" if hud_declared is None and icon else None
     reach_candidates = [word for word in found if word in REACH_PROPOSABLE]
     reach_proposal = reach_candidates[0] if reach_declared is None and len(reach_candidates) == 1 else None
+
+    changelog_row(directory, rows)
 
     for field, reason in UNREAD_FIELDS.items():
         rows.append(_row("/" + field, [], [], "nothing in this route", "not_counted", reason))
