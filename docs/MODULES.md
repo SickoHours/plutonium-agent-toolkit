@@ -1409,6 +1409,13 @@ Absent means the declaration does not say. `reach` is orthogonal to `exclusive` 
 owns), `service` (what others depend on) and `system` (where a person browses for it): it is what
 a player can get to.
 
+Two facts measured on the first placed-machine work, so the words are read correctly: on the
+Zombies Declassified Beta 2 cut of Der Riese no perk machine exists as an entity in any loaded zone
+(no machine structs, no vending trigger), so every machine on that base is module-placed or absent
+and `reach: machine` is never satisfied by the map itself; and a ported perk whose script never
+calls the engine's perk-set function has no HUD slot at all, so its `hud: none` is literal rather
+than a missing icon.
+
 **Reachability is a fact about a composition on a map, not about the module.** `module plan`
 derives, per member, `reachable: true | false | unknown` for the composition's map, with a
 one-line `reason`, on the plan row and on the summary row:
