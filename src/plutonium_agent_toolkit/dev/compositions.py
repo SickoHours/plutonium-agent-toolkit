@@ -157,6 +157,8 @@ def add_parser(sub, common):
         common(q)
     from . import qualify as qualify_route
     qualify_route.add_parser(actions, common)
+    from . import accept as accept_route
+    accept_route.add_parser(actions, common)
     q = actions.add_parser("compose", help="Compose declared IDs against a foundation, or publish a successfully built recipe")
     q.add_argument("--name"); q.add_argument("--base"); q.add_argument("--map")
     q.add_argument("--game", choices=titles.names(), default=None, help="Title the recipe targets; inferred from the members when omitted")
@@ -1528,6 +1530,10 @@ def execute(args, job: Job) -> dict:
         from . import qualify
 
         return qualify.execute(args, job)
+    if args.action == "accept":
+        from . import accept
+
+        return accept.execute(args, job)
     if args.action == "compose":
         from . import compose
         return compose.execute(args, job)

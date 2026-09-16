@@ -33,6 +33,28 @@ Every entry states what shipped, on which platform it was verified, and what rem
   receipts, `pat-review` reads the six facts off the ledger rows with `null` meaning not earned rather
   than false, and the `plutonium-agent-toolkit` entry point names the ledger beside the other reference
   pages. Documentation only; no route, schema or behaviour changes.
+- `pat module accept` writes a person's gameplay verdict into a module's `evidence.json` as one
+  `player-accepted` row, scoped to the base, foundation and map it was given on and pinned to the
+  package hash that was installed while they played. Player acceptance is one of the six facts the
+  shelf keeps separate and the only one no build, readback or agent observation can produce, and
+  until now it was the only one with no route that writes it: a verdict lived in a chat message
+  and the ledger stayed silent. A pack is a composition, so a verdict on a pack is written once per
+  member module. The row is validated through the same validator `module state --ledger` reads
+  before anything reaches disk, so a refusal leaves the file byte for byte as it was; the ledger
+  stays append-only, and a second verdict is a second row rather than an edit of the first. The
+  append itself (create the header when absent, validate the whole book, keep the file's own
+  serialisation) is now one helper in `dev/ledger.py` that `module qualify` uses for its
+  `built-alone` row as well, instead of two copies of the same mechanism, and it writes through
+  the same locked, atomic writer `module ledger-add` uses: the ledger is read and replaced under
+  an advisory lock on a sibling `.evidence.json.lock`, so two verdicts recorded at the same
+  moment are two rows rather than one overwriting the other, and the replacement is a temporary
+  file, an `fsync` and a rename, so a failed write leaves the verdicts already there. The read is
+  bounded by the ledger's 1 MiB limit (`input_limit`, rather than parsing an oversized file into
+  memory), and an `evidence.json` that is not a regular file — a symlink, a FIFO, a directory —
+  is refused with `input_invalid` before anything opens it, so a module directory cannot make the
+  route write through a link to another file or block on a FIFO that never opens. Verified
+  offline on Linux; the route touches no game, network, install or build.
+  Format: `docs/evidence-ledger.md`.
 - New route `pat module ledger-add <module dir|evidence.json> --row <row.json> [--row ...] --json`,
   the only way to add a row to a module's evidence ledger besides the `built-alone` row
   `module qualify` earns. `module state --ledger` reads a ledger and `module ledger-from-registry`
