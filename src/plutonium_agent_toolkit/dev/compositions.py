@@ -138,6 +138,11 @@ def add_parser(sub, common):
     q.add_argument("--location", help="With --ledger: a survival location inside --map; without it only rows with no location match")
     q.add_argument("--target", help="With --ledger: a target key <foundation>/<map>/<mode>[/<location>] supplying foundation, map and location at once")
     q.add_argument("--json",action="store_true")
+    q = actions.add_parser("ledger-add", help="Append validated rows to a module's evidence.json; append-only and all-or-nothing")
+    q.add_argument("ledger", help="A module directory or its evidence.json; created from the module.json id when absent")
+    q.add_argument("--row", action="append", default=[], required=True, metavar="FILE",
+                   help="A JSON file holding one row object or a list of row objects; repeatable, appended in the order given")
+    q.add_argument("--json", action="store_true")
     q = actions.add_parser("ledger-from-registry", help="Propose evidence.json rows for one workspace module from the registry and its docs; prints them, writes nothing")
     q.add_argument("workspace", help="Workspace root holding modules/, registry/t6-modules.json and foundations/")
     q.add_argument("module_id", help="Directory name under modules/")
@@ -163,6 +168,8 @@ def add_parser(sub, common):
         common(q)
     from . import qualify as qualify_route
     qualify_route.add_parser(actions, common)
+    from . import accept as accept_route
+    accept_route.add_parser(actions, common)
     q = actions.add_parser("compose", help="Compose declared IDs against a foundation, or publish a successfully built recipe")
     q.add_argument("--name"); q.add_argument("--base"); q.add_argument("--map")
     q.add_argument("--game", choices=titles.names(), default=None, help="Title the recipe targets; inferred from the members when omitted")
@@ -1625,6 +1632,10 @@ def execute(args, job: Job) -> dict:
         from . import qualify
 
         return qualify.execute(args, job)
+    if args.action == "accept":
+        from . import accept
+
+        return accept.execute(args, job)
     if args.action == "compose":
         from . import compose
         return compose.execute(args, job)
@@ -1800,7 +1811,13 @@ def execute(args, job: Job) -> dict:
                "footprint": plan["footprint"], "withheld": len(withheld)}
     summary["checks"] = plan["checks"]
     summary["placements"] = plan["placements"]
-    failed=[c for c in plan["checks"] if c["outcome"]=="failed"]
+    # A caller may name checks it records instead of refusing on. The rows keep outcome `failed`
+    # in the plan; only the late refusal skips them. `module qualify` is the one caller that does
+    # this, for a check about machine state rather than about the package (dev/qualify.py);
+    # `module plan` and `module build` invoked directly name none and refuse on every failed row.
+    report_only=tuple(getattr(args,"report_only_checks",()) or ())
+    failed=[c for c in plan["checks"] if c["outcome"]=="failed"
+            and not any(c["id"]==name or str(c["id"]).startswith(name+":") for name in report_only)]
     if failed:
         contributors=sorted({c["id"] for row in failed for c in row.get("contributors",[]) if c["id"] in by_id})
         late_refusals.append(_refusal("checks","Offline checks failed: "+"; ".join(f'{c["id"]}: {c["detail"]}' for c in failed)[:1200],

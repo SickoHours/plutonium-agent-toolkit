@@ -152,8 +152,18 @@ def target_inputs(workspace: Path, foundation: str, map_id: str, job: Job) -> di
         if load.is_symlink() or not load.is_file():
             raise Failure(INPUT_MISSING, f"A link load this foundation stages for {map_id} is missing: {load}")
         resolved.append(load)
+    # The base's asset listings. A synthesized composition loads the foundation's own zones and
+    # whatever a member's recipe loads beside them; without a listing the planner cannot say which
+    # image and material names the base owns, so `donor-shadowing` refuses every donor-loading
+    # module before it is built. The workspace already knows where they are, in two places: the
+    # foundation record's own ``base_listings``, and the directory the link loads themselves sit
+    # in, which is where a staging workspace writes `<zone>-list.txt` beside the `.ff` it listed.
+    listings: list[Path] = []
+    for candidate in targets.base_listing_dirs(workspace, foundation) + [load.parent for load in resolved]:
+        if candidate.is_dir() and candidate not in listings and any(candidate.glob("*-list.txt")):
+            listings.append(candidate)
     return {"foundation": foundation, "map": map_id, "base": base, "loads": resolved, "zone_header": header,
-            "foundation_file": path, "descriptor": descriptor_path}
+            "base_listings": listings, "foundation_file": path, "descriptor": descriptor_path}
 
 
 # ----- the shelf ----------------------------------------------------------------------------
@@ -259,13 +269,9 @@ def replace(path: Path, data: str) -> None:
     path.write_text(data, encoding="utf-8")
 
 
-def serialise(data, raw: str | None = None) -> str:
-    """JSON the way the file already writes it, so a record is an addition and not a reformat:
-    the ledger and the registry differ on ``ensure_ascii`` across this shelf and a diff that
-    re-escapes every accent hides the row that was added."""
-    if raw is not None and json.dumps(data, indent=2) + "\n" != raw:
-        return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
-    return json.dumps(data, indent=2) + "\n"
+# The registry files this route rewrites are written the same way the ledger's own appends are,
+# so both share one serialiser; ``module accept`` appends its row through the same helper.
+serialise = ledger.serialise
 
 
 # ----- one step -----------------------------------------------------------------------------
@@ -289,11 +295,24 @@ def run_step(parent: Job, path: Path, command: str, argv: list[str], call) -> tu
     return result, None, child
 
 
-def composition_args(args, composition: Path, action: str, allow_unqualified: bool, output: Path):
+# Checks a module qualified alone is not judged by. ``loose-overrides`` reads Plutonium's global
+# `storage/t6/images`: machine state that applies to every mod folder and to the bare game with
+# none selected, that no package contains and no build can change. A module built alone is judged
+# on its package bytes, so the row is recorded as a warning here and still refuses `module plan`
+# and `module build` invoked directly, where the question is whether to ship a pack on this
+# machine rather than whether this module builds on this target.
+REPORT_ONLY_CHECKS = ("loose-overrides",)
+
+
+def composition_args(args, composition: Path, action: str, allow_unqualified: bool, output: Path,
+                     base_listings: list[Path] | None = None):
     """``module plan``/``module build`` arguments for one synthesized composition. ``--target`` is
-    this route's ``<foundation>/<map>``, which is not the placements target list the planner takes."""
+    this route's ``<foundation>/<map>``, which is not the placements target list the planner takes;
+    ``base_listings`` is what ``--base-listings <dir>`` gives on the command line."""
     return SimpleNamespace(action=action, composition=str(composition), allow_unqualified=allow_unqualified,
                            workspace=args.workspace, target=[], image_report=None,
+                           base_listings=[str(d) for d in base_listings or ()],
+                           report_only_checks=REPORT_ONLY_CHECKS,
                            timeout=args.timeout, output=str(output), json=True)
 
 
@@ -413,6 +432,16 @@ def test_section(row: dict, number: int) -> str:
     return "\n".join(lines)
 
 
+def warning_note(row: dict) -> str:
+    """The recorded-not-refused checks, in the built-alone row's own words. `loose-overrides` counts
+    files in this machine's global texture path, so the note says whose fact it is not."""
+    summary = next((w for w in row.get("warnings") or () if w.get("id") == "loose-overrides"), None)
+    if summary is None:
+        return ""
+    return (f"loose-overrides: {summary.get('count')} loose global textures shadow base names on "
+            f"this machine (not a package fact). ")
+
+
 def ledger_row(row: dict) -> dict:
     build = row["steps"]["build-qualified"]
     cut = next((a for a in build.get("adapters") or [] if a.get("id") == row["id"]), None)
@@ -428,6 +457,7 @@ def ledger_row(row: dict) -> dict:
                     f"pat project verify --inputs unchanged. "
                     + (f"The workspace builder cut this module's adapter recipe for the target to mod.ff {cut['mod_ff_sha256']} and the "
                        f"package above is the pack that links alone against it. " if cut else "")
+                    + warning_note(row)
                     + f"The declaration was widened to this base and map by this receipt. "
                       f"Offline only: not installed, not launched, not played."}
 
@@ -473,14 +503,9 @@ def write_records(row: dict, directory: Path, workspace: Path, staged: Path) -> 
         row["records"]["test_build"] = number
 
         path = directory / ledger.FILENAME
-        book = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {"schema": 1, "subject": {"id": row["id"]}, "rows": []}
-        book.setdefault("rows", []).append(ledger_row(row))
-        normalized, diagnostics = ledger.validate(book)
-        if normalized is None or diagnostics:
-            raise Failure(INPUT_INVALID, f"The built-alone row does not validate against {ledger.PROTOCOL}: {diagnostics[:4]}",
-                          "The ledger row is written through the same validator module state --ledger reads.")
-        put(path, serialise(book, path.read_text(encoding="utf-8") if path.is_file() else None))
-        row["records"]["ledger_rows"] = len(normalized["rows"])
+        text, rows_written = ledger.append_row(path, ledger_row(row), row["id"])
+        put(path, text)
+        row["records"]["ledger_rows"] = rows_written
 
         bindings = workspace / BINDINGS
         if bindings.is_file():
@@ -528,6 +553,7 @@ def qualify_one(directory: Path, index: dict[str, tuple[Path, dict]], info: dict
            "target": f"{foundation}/{map_id}", "foundation": foundation, "map": map_id, "base": base,
            "at": now(), "outcome": "refused", "steps": {}, "refusals": [], "records": {},
            "already_declared": declared_for(metadata, base, map_id), "recipe_cut": list(cut) if cut else None,
+           "base_listings": [str(d) for d in info.get("base_listings") or ()], "warnings": [],
            "job": relative_to(home, workspace)}
 
     members, missing = closure(mid, index)
@@ -577,13 +603,15 @@ def qualify_one(directory: Path, index: dict[str, tuple[Path, dict]], info: dict
             return finish(row, home)
         planned, exc, child = run_step(job, home / f"plan-{phase}", "module plan",
                                        ["pat", "module", "plan", str(composition)],
-                                       lambda c, a=allow: compositions.execute(composition_args(args, composition, "plan", a, c.root), c))
+                                       lambda c, a=allow: compositions.execute(
+                                           composition_args(args, composition, "plan", a, c.root, info["base_listings"]), c))
         record_step(row, f"plan-{phase}", child, planned, exc, workspace)
         if exc is not None:
             return finish(refuse(row, **plan_refusal(exc)), home)
         built, exc, child = run_step(job, home / f"build-{phase}", "module build",
                                      ["pat", "module", "build", str(composition)],
-                                     lambda c, a=allow: compositions.execute(composition_args(args, composition, "build", a, c.root), c))
+                                     lambda c, a=allow: compositions.execute(
+                                         composition_args(args, composition, "build", a, c.root, info["base_listings"]), c))
         record_step(row, f"build-{phase}", child, built, exc, workspace)
         if exc is not None:
             return finish(refuse(row, **build_refusal(exc, child)), home)
@@ -702,6 +730,13 @@ def prepare_qualified(row: dict, staged: Path, index, info: dict, job: Job) -> b
     return True
 
 
+def report_only(check_id) -> bool:
+    """Is this check id one ``module qualify`` records instead of refusing on? A summary row is the
+    bare id and a per-item row is ``<id>:<name>``; both belong to the same check."""
+    return isinstance(check_id, str) and any(check_id == name or check_id.startswith(name + ":")
+                                             for name in REPORT_ONLY_CHECKS)
+
+
 def record_step(row: dict, name: str, child: Job, result: dict | None, exc: Failure | None, workspace: Path) -> None:
     receipt = child.receipt_path
     step = {"receipt": relative_to(receipt, workspace), "ok": exc is None,
@@ -719,6 +754,12 @@ def record_step(row: dict, name: str, child: Job, result: dict | None, exc: Fail
     if result and name.startswith("plan"):
         step["unqualified"] = [u["id"] for u in result.get("unqualified") or []]
         step["adapt"] = result.get("adapt") or []
+    if result and name == "plan-qualified":
+        # A check the route records instead of refusing on (REPORT_ONLY_CHECKS) still failed; the
+        # qualified plan is the one whose rows describe the module as it will be declared.
+        row["warnings"] = [{k: c.get(k) for k in ("id", "outcome", "detail", "count")}
+                           for c in result.get("checks") or []
+                           if c.get("outcome") == "failed" and report_only(c.get("id"))]
     row["steps"][name] = step
 
 
@@ -807,4 +848,6 @@ def table(rows: list[dict]) -> list[dict]:
              "adapter_cuts": (r["steps"].get("build-qualified") or {}).get("adapters") or [],
              "receipts": {name: step["receipt"] for name, step in r["steps"].items()},
              "records": r.get("records") or {},
+             "base_listings": r.get("base_listings") or [],
+             "warnings": r.get("warnings") or [],
              "refusal": (r["refusals"][0] if r.get("refusals") else None)} for r in rows]

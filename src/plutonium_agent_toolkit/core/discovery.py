@@ -17,6 +17,7 @@ EFFECTS = (
     "downloads-backends",  # pinned HTTPS downloads into the backends directory
     "downloads-source",    # one HTTPS download of a repository snapshot at an exact commit into a new output directory
     "writes-output",       # new output directory with artifacts and receipt
+    "writes-record",       # appends to one record file beside a declaration, in place; no job directory and no receipt
     "query-engine",        # reads fresh game state through the external console
     "changes-game",        # launches, loads, restarts or stops the game
     "captures-display",    # records or screenshots the game window

@@ -3,7 +3,7 @@ name: plutonium-agent-toolkit
 description: Use the `pat` command to build, control and test Plutonium T6 Zombies mods and build Plutonium IW5 (Modern Warfare 3) mods for a user who describes outcomes and expects the agent to operate and adapt the tools. The build tools run on Windows and Linux; game control is Windows-only. Any harness; the toolkit is meant to be configured and edited to fit the user's machine.
 metadata:
   version: "1.0.0"
-  updated: "2026-09-13"
+  updated: "2026-09-16"
 ---
 
 # Plutonium Agent Toolkit
@@ -35,6 +35,9 @@ when it is worth having. Never decline on that basis.
   memory) to run before a build's first install. Each playbook is finite: exact commands, the
   receipt field that proves a step, the commands that are wasted, the stop conditions. Follow its
   "Do not" list.
+- `docs/evidence-ledger.md`: `evidence.json` beside a `module.json`. A module's history is typed,
+  scoped, hashed rows, never flags; the six facts are derived per query by `pat module state
+  --ledger` and a fact no row states stays unknown. Nothing is inferred from a pack that used it.
 - `skills/pat-*`: the flows. `pat-help` routes; `pat-grill`, `pat-build`, `pat-port`,
   `pat-diagnose` and `pat-review` do the work.
 
