@@ -60,6 +60,35 @@ class AdapterFixture(CompositionFixture):
 
 
 class AdapterPayloadTests(AdapterFixture):
+    def _adapter_with_client_script(self, mid, body):
+        """An adapter whose stage produces a loose client script under scripts/zm, beside its
+        server one. The stage's scripts never enter `compiled`, so only the package-wide source
+        set sees them."""
+        d = self.adapter(mid)
+        (d / "src" / f"{mid}.csc").write_text(body)
+        recipe = json.loads((d / "recipe.json").read_text())
+        recipe["loose_scripts"] = [recipe.pop("loose_script"),
+                                   {"source": f"src/{mid}.csc", "target": f"scripts/zm/halo_{mid}.csc", "instance": "client"}]
+        (d / "recipe.json").write_text(json.dumps(recipe, indent=2))
+        return d
+
+    def test_an_adapter_staged_client_script_that_works_in_main_is_refused(self):
+        self._adapter_with_client_script("gum_a", "main()\n{\n    gum_register();\n}\n\ngum_register()\n{\n}\n")
+        code, row = invoke(["module", "plan", str(self.composition(["gum_a"], name="stock_adapter_test")), "--output", self.out()])
+        self.assertEqual(code, 1, row)
+        self.assertIn("csc-main-body:scripts/zm/halo_gum_a.csc", row["details"]["failed"])
+        check = next(c for c in row["details"]["checks"] if c["id"] == "csc-main-body:scripts/zm/halo_gum_a.csc")
+        self.assertEqual(check["outcome"], "failed")
+        self.assertIn("init()", check["detail"])
+
+    def test_an_adapter_staged_client_script_with_an_empty_main_plans(self):
+        self._adapter_with_client_script("gum_a", "main()\n{\n}\n\ninit()\n{\n    level.gum = 1;\n}\n")
+        code, row = invoke(["module", "plan", str(self.composition(["gum_a"], name="stock_adapter_test")), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        rows = {c["id"]: c["outcome"] for c in row["result"]["checks"] if c["id"].startswith("csc-main-body:")}
+        self.assertEqual(rows["csc-main-body:scripts/zm/halo_gum_a.csc"], "passed")
+        self.assertEqual(rows["csc-main-body:scripts/zm/halo_gum_a.gsc"], "not_counted", "the stage's server script is not judged")
+
     def test_plan_reads_an_adapter_recipe_as_a_third_payload(self):
         self.adapter("gum_a", rawfiles=["animtrees/halo_gum.atr"])
         code, row = invoke(["module", "plan", str(self.composition(["gum_a"], name="stock_adapter_test")), "--output", self.out()])

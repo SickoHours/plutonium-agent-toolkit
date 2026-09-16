@@ -35,6 +35,33 @@ shared developer menu is delivered; use that only for tooling shared across mods
 thread that waits for players to connect and spawn. Its recipe maps `scripts/hello.gsc` to the
 target `scripts/zm/hello_zm.gsc`.
 
+## The client VM's two passes
+
+The client VM calls both roots of every loose mod `.csc`, in **two passes over all of them**: every
+script's `main()` first, then every script's `init()`. A passing load prints them in that order:
+
+```
+CSC Executed "scripts/zm/halo_cr35_powerup_tesla::main()"
+CSC Executed "scripts/zm/zzz_zm_sumpffog::main()"
+CSC Executed "scripts/zm/halo_cr35_powerup_tesla::init()"
+CSC Executed "scripts/zm/zzz_zm_sumpffog::init()"
+```
+
+So `main()` runs before the client's own `_zm` rows exist and before any other script's `init()`.
+**Leave a `.csc`'s `main()` empty and do the work in `init()`**, the pass the client VM calls after
+its own rows, the way the server half runs after the server's. A `.csc` that registers, includes a
+weapon or threads from `main()` reaches tables that are not built yet: the whole client-script pass
+dies with **zero `CSC Executed` lines**, no script error, and a crash-text `last gsc pos` naming
+whatever per-frame loop the position register held rather than the fault (`crashes.md`). `module
+plan` and `project plan` raise it as a `csc-main-body:<target>` row.
+
+A missing root is **not** a fault: the engine links a no-op stub for whichever is absent and carries
+on, printing `Unable to find client function: "init" in "scripts/zm/<name>"` then `******* Linking
+to default stub function instead ******`, and the server twin for an absent `main`. One passing load
+printed 32 such lines. Scope any matcher to `scripts/zm`: every healthy load also prints the same
+line for `"soundNotify" in "clientscripts/mp/_dogs"`. The line is a reliable *marker* that a mod
+`.csc` has the wrong shape, never the mechanism.
+
 ## Compiling
 
 `pat gsc compile <file>` runs gsc-tool in `comp` mode for `t6`, platform `pc`, with the

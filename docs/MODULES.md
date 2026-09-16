@@ -868,7 +868,15 @@ point has begun its work — and only when its branch returns unconditionally: a
 block whose own statements are returns, prints and assignments. A map conditional further down, or
 one whose branch holds a nested `if (...) return;`, is program logic and stays `not_counted`, which
 means unread and never clean.
-Projectile FX union requires
+
+`csc-main-body:<target>` rows refuse a T6 client script that does its work in `main()`. The client
+VM runs every loose `.csc`'s `main()` in one early pass and every `init()` in a second pass, so a
+`main()` body runs before the client's own `_zm` rows exist and before any script's `init()`; the
+client-script pass dies there with zero `CSC Executed` lines and no script error
+(`knowledge/crashes.md`, `client-script-pass-died`). An empty or absent `main()` passes — the engine
+links a no-op stub for an absent root — and a `.gsc` is `not_counted`, because a server `main()`
+runs after the server's own rows and threading from it is the normal shape. `project plan` raises
+the same rows for a recipe's own scripts. Projectile FX union requires
 weapon blobs and is not inferred from weapon count. Soundbank listing is only a floor.
 Builds run a receipted `gsc check` dry run per script before linking. Compiler-reported unresolved
 externals fail; successful compilation alone cannot prove runtime external resolution and that
@@ -1232,6 +1240,22 @@ without either, `replaces.files` rows are `not_counted` per path and the route s
 evidence would decide them. And a project recipe's `provides.weapons` is checked against the
 recipe rows and the source literals the toolkit knows how to read; a module that registers a
 weapon by building its name at run time is reported `partial`, never `agrees`.
+
+**How to run it.** The route reads one module directory and needs nothing else to start:
+
+```
+pat module verify-declaration modules/my_module --json
+pat module verify-declaration modules/my_module --workspace . --base-listings foundations/stock/listings \
+    --target stock/zm_transit --strict --json
+```
+
+Each flag adds a source of fact, and the rows say what is missing without it: `--workspace` reads
+each dependency's own declaration from `<root>/modules/*/module.json` (without it every
+`dependencies` row is `not_counted`), `--base-listings` and `--target` are the two ways a path is
+shown to be base-owned (without either, each staged path in a base namespace is `not_counted` and
+the row names the evidence that would decide it), `--strict` is the library gate (exit 1, with the
+whole report under `details.report`), and `--propose` prints the fields the observed side would
+fill. There is no `--output`: the route writes nothing.
 
 ### Refusal kinds added by this section
 
