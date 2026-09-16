@@ -1,11 +1,12 @@
 {
  "schema": 1,
- "note": "Function exports of stock zombies scripts by script VM (patch_zm decompile, gsc-tool). An unqualified call to one of these from a module script on the same VM, without the matching #include, is an unresolved external at link time. A row only judges scripts of its own vm: a .csc never links against a server script, so server rows say nothing about a client script and the reverse. The server rows are the complete export lists of those seven scripts; the client rows carry only the names proven so far, so a client call this table does not hold stays not_counted rather than failed.",
+ "note": "Function exports of stock zombies scripts by script VM (patch_zm decompile, gsc-tool). An unqualified call to one of these from a module script on the same VM, without the matching #include, is an unresolved external at link time. A row only judges scripts of its own vm: a .csc never links against a server script, so server rows say nothing about a client script and the reverse. The server rows are the complete export lists of those eight scripts; the client rows carry only the names proven so far, so a client call this table does not hold stays not_counted rather than failed. `complete` says which: only a complete row can be read negatively, so `owner::name` naming a function a complete row does not list is a failed call, while the same shape against a partial row says nothing. `arity` carries each function's declared parameter count from the same decompile. GSC passes undefined for an argument a call omits, so a call resolves against a declaration whose parameter count is at least its own argument count; a call with more arguments than any reachable declaration accepts is an unresolved external at link, which no compiler reports.",
  "foundation": "bo2-stock",
  "zone": "patch_zm",
  "exports": {
   "common_scripts/utility": {
    "vm": "server",
+   "complete": true,
    "functions": [
     "_delay_notify_proc",
     "_delay_thread_proc",
@@ -131,10 +132,385 @@
     "waittill_multiple_ents",
     "waittill_string",
     "waittillend"
-   ]
+   ],
+   "arity": {
+    "_delay_notify_proc": [
+     3
+    ],
+    "_delay_thread_proc": [
+     8
+    ],
+    "_disableusability": [
+     0
+    ],
+    "_disableweapon": [
+     0
+    ],
+    "_enableusability": [
+     0
+    ],
+    "_enableweapon": [
+     0
+    ],
+    "_timeout": [
+     1
+    ],
+    "_trigger_wait": [
+     1
+    ],
+    "_trigger_wait_think": [
+     2
+    ],
+    "add_to_array": [
+     3
+    ],
+    "alert_notify_wrapper": [
+     0
+    ],
+    "angle_dif": [
+     2
+    ],
+    "array_average": [
+     1
+    ],
+    "array_check_for_dupes": [
+     2
+    ],
+    "array_copy": [
+     1
+    ],
+    "array_delete": [
+     2
+    ],
+    "array_ent_thread": [
+     7
+    ],
+    "array_exclude": [
+     2
+    ],
+    "array_func": [
+     8
+    ],
+    "array_notify": [
+     2
+    ],
+    "array_randomize": [
+     1
+    ],
+    "array_reverse": [
+     1
+    ],
+    "array_std_deviation": [
+     2
+    ],
+    "array_swap": [
+     3
+    ],
+    "array_thread": [
+     8
+    ],
+    "array_wait": [
+     3
+    ],
+    "array_wait_any": [
+     3
+    ],
+    "array_waitlogic1": [
+     3
+    ],
+    "array_waitlogic2": [
+     3
+    ],
+    "array_waitlogic3": [
+     4
+    ],
+    "call_func": [
+     1
+    ],
+    "clamp": [
+     3
+    ],
+    "clear_exception": [
+     1
+    ],
+    "cointoss": [
+     0
+    ],
+    "create_flags_and_return_tokens": [
+     1
+    ],
+    "damage_notify_wrapper": [
+     9
+    ],
+    "death_notify_wrapper": [
+     2
+    ],
+    "delay_notify": [
+     3
+    ],
+    "delay_thread": [
+     8
+    ],
+    "draw_debug_line": [
+     3
+    ],
+    "empty": [
+     5
+    ],
+    "explode_notify_wrapper": [
+     0
+    ],
+    "fileprint_chk": [
+     2
+    ],
+    "fileprint_end": [
+     0
+    ],
+    "fileprint_map_entity_end": [
+     0
+    ],
+    "fileprint_map_entity_start": [
+     0
+    ],
+    "fileprint_map_header": [
+     1
+    ],
+    "fileprint_map_keypairprint": [
+     2
+    ],
+    "fileprint_map_start": [
+     1
+    ],
+    "fileprint_radiant_vec": [
+     1
+    ],
+    "fileprint_start": [
+     1
+    ],
+    "flag": [
+     1
+    ],
+    "flag_clear": [
+     1
+    ],
+    "flag_delete": [
+     1
+    ],
+    "flag_exists": [
+     1
+    ],
+    "flag_init": [
+     3
+    ],
+    "flag_set": [
+     1
+    ],
+    "flag_set_for_time": [
+     2
+    ],
+    "flag_toggle": [
+     1
+    ],
+    "flag_wait": [
+     1
+    ],
+    "flag_wait_any": [
+     5
+    ],
+    "flag_wait_any_array": [
+     1
+    ],
+    "flag_waitopen": [
+     1
+    ],
+    "flag_waitopen_array": [
+     1
+    ],
+    "get_players": [
+     1
+    ],
+    "getstruct": [
+     2
+    ],
+    "getstructarray": [
+     2
+    ],
+    "has_spawnflag": [
+     1
+    ],
+    "init_session_mode_flags": [
+     0
+    ],
+    "init_trigger_flags": [
+     0
+    ],
+    "is_false": [
+     1
+    ],
+    "is_german_build": [
+     0
+    ],
+    "is_gib_restricted_build": [
+     0
+    ],
+    "is_look_trigger": [
+     1
+    ],
+    "is_mature": [
+     0
+    ],
+    "is_prefix": [
+     2
+    ],
+    "is_suffix": [
+     2
+    ],
+    "is_trigger_once": [
+     1
+    ],
+    "is_true": [
+     1
+    ],
+    "isflashed": [
+     0
+    ],
+    "isstunned": [
+     0
+    ],
+    "isusabilityenabled": [
+     0
+    ],
+    "isweaponenabled": [
+     0
+    ],
+    "lag": [
+     4
+    ],
+    "linear_map": [
+     5
+    ],
+    "melee_notify_wrapper": [
+     0
+    ],
+    "new_func": [
+     7
+    ],
+    "notify_delay_with_ender": [
+     3
+    ],
+    "random": [
+     1
+    ],
+    "random_normal_distribution": [
+     4
+    ],
+    "random_vector": [
+     1
+    ],
+    "remove_undefined_from_array": [
+     1
+    ],
+    "resetusability": [
+     0
+    ],
+    "script_gen_dump_addline": [
+     2
+    ],
+    "set_all_exceptions": [
+     1
+    ],
+    "set_exception": [
+     2
+    ],
+    "set_trigger_flag_permissions": [
+     1
+    ],
+    "shoot_notify_wrapper": [
+     0
+    ],
+    "sign": [
+     1
+    ],
+    "single_func": [
+     8
+    ],
+    "single_thread": [
+     8
+    ],
+    "struct_class_init": [
+     0
+    ],
+    "structdelete": [
+     0
+    ],
+    "track": [
+     1
+    ],
+    "trigger_off": [
+     2
+    ],
+    "trigger_off_proc": [
+     0
+    ],
+    "trigger_on": [
+     2
+    ],
+    "trigger_on_proc": [
+     0
+    ],
+    "trigger_use": [
+     4
+    ],
+    "trigger_wait": [
+     3
+    ],
+    "update_trigger_based_on_flags": [
+     0
+    ],
+    "vector_compare": [
+     2
+    ],
+    "waittill_any": [
+     5
+    ],
+    "waittill_any_array": [
+     1
+    ],
+    "waittill_any_array_return": [
+     1
+    ],
+    "waittill_any_ents": [
+     14
+    ],
+    "waittill_any_ents_two": [
+     4
+    ],
+    "waittill_any_return": [
+     7
+    ],
+    "waittill_any_timeout": [
+     6
+    ],
+    "waittill_flag_exists": [
+     1
+    ],
+    "waittill_multiple": [
+     5
+    ],
+    "waittill_multiple_ents": [
+     8
+    ],
+    "waittill_string": [
+     2
+    ],
+    "waittillend": [
+     1
+    ]
+   }
   },
   "maps/mp/_utility": {
    "vm": "server",
+   "complete": true,
    "functions": [
     "_playlocalsound",
     "activate_exploder",
@@ -312,10 +688,541 @@
     "warning",
     "waslastround",
     "within_fov"
-   ]
+   ],
+   "arity": {
+    "_playlocalsound": [
+     1
+    ],
+    "activate_exploder": [
+     1
+    ],
+    "activate_exploder_on_clients": [
+     1
+    ],
+    "activate_individual_exploder": [
+     0
+    ],
+    "add_trigger_to_ent": [
+     1
+    ],
+    "addcallback": [
+     2
+    ],
+    "alphabet_compare": [
+     2
+    ],
+    "alphabetize": [
+     1
+    ],
+    "anyteamhitroundlimitwithdraws": [
+     0
+    ],
+    "anyteamhitroundwinlimit": [
+     0
+    ],
+    "anyteamhitscorelimit": [
+     0
+    ],
+    "append_array_struct": [
+     2
+    ],
+    "array_levelthread": [
+     4
+    ],
+    "brush_delete": [
+     0
+    ],
+    "brush_show": [
+     0
+    ],
+    "brush_throw": [
+     0
+    ],
+    "callback": [
+     1
+    ],
+    "cannon_effect": [
+     0
+    ],
+    "clearlowermessage": [
+     1
+    ],
+    "clientnotify": [
+     1
+    ],
+    "closerfunc": [
+     2
+    ],
+    "closestpointonline": [
+     3
+    ],
+    "combinearrays": [
+     2
+    ],
+    "comparesizes": [
+     4
+    ],
+    "comparesizesfx": [
+     4
+    ],
+    "createexploder": [
+     1
+    ],
+    "createloopeffect": [
+     1
+    ],
+    "createoneshoteffect": [
+     1
+    ],
+    "delete_exploder_on_clients": [
+     1
+    ],
+    "deleteaftertime": [
+     1
+    ],
+    "deleteaftertimethread": [
+     1
+    ],
+    "deleteplacedentity": [
+     1
+    ],
+    "domaxdamage": [
+     5
+    ],
+    "drawcylinder": [
+     5
+    ],
+    "drawcylinder_think": [
+     5
+    ],
+    "dvarfloatvalue": [
+     4
+    ],
+    "dvarintvalue": [
+     4
+    ],
+    "effect_soundalias": [
+     0
+    ],
+    "ent_already_in_trigger": [
+     1
+    ],
+    "error": [
+     1
+    ],
+    "exploder": [
+     1
+    ],
+    "exploder_after_load": [
+     1
+    ],
+    "exploder_before_load": [
+     1
+    ],
+    "exploder_damage": [
+     0
+    ],
+    "exploder_delay": [
+     0
+    ],
+    "exploder_playsound": [
+     0
+    ],
+    "exploder_sound": [
+     0
+    ],
+    "exploder_stop": [
+     1
+    ],
+    "fartherfunc": [
+     2
+    ],
+    "fire_effect": [
+     0
+    ],
+    "freeze_player_controls": [
+     1
+    ],
+    "freezecontrolswrapper": [
+     1
+    ],
+    "get2dyaw": [
+     2
+    ],
+    "get_all_alive_players_s": [
+     0
+    ],
+    "get_array_of_closest": [
+     5
+    ],
+    "get_player_height": [
+     0
+    ],
+    "get_players": [
+     0
+    ],
+    "get_team_alive_players_s": [
+     1
+    ],
+    "getclientfield": [
+     1
+    ],
+    "getclientfieldtoplayer": [
+     1
+    ],
+    "getclientsysstate": [
+     1
+    ],
+    "getclosest": [
+     3
+    ],
+    "getclosestfx": [
+     3
+    ],
+    "getdvarfloatdefault": [
+     2
+    ],
+    "getdvarintdefault": [
+     2
+    ],
+    "getexploderid": [
+     1
+    ],
+    "getfarthest": [
+     3
+    ],
+    "getfx": [
+     1
+    ],
+    "gethostplayer": [
+     0
+    ],
+    "gethostplayerforbots": [
+     0
+    ],
+    "getlastweapon": [
+     0
+    ],
+    "getobjectivehinttext": [
+     1
+    ],
+    "getobjectivescoretext": [
+     1
+    ],
+    "getobjectivetext": [
+     1
+    ],
+    "getotherteam": [
+     1
+    ],
+    "getotherteamsmask": [
+     1
+    ],
+    "getotherteamsroundswon": [
+     1
+    ],
+    "getplant": [
+     0
+    ],
+    "getplayerfromclientnum": [
+     1
+    ],
+    "getremotename": [
+     0
+    ],
+    "getroundsplayed": [
+     0
+    ],
+    "getroundswon": [
+     1
+    ],
+    "getroundwinlimitwinningteam": [
+     0
+    ],
+    "getteammask": [
+     1
+    ],
+    "getweaponclass": [
+     1
+    ],
+    "hitroundlimit": [
+     0
+    ],
+    "hitroundwinlimit": [
+     0
+    ],
+    "hitscorelimit": [
+     0
+    ],
+    "is_bot": [
+     0
+    ],
+    "is_later_in_alphabet": [
+     2
+    ],
+    "isbulletimpactmod": [
+     1
+    ],
+    "isenemyplayer": [
+     1
+    ],
+    "isfirstround": [
+     0
+    ],
+    "isflashbanged": [
+     0
+    ],
+    "ishacked": [
+     0
+    ],
+    "iskillstreaksenabled": [
+     0
+    ],
+    "islastround": [
+     0
+    ],
+    "ismg": [
+     1
+    ],
+    "isoneround": [
+     0
+    ],
+    "ispregame": [
+     0
+    ],
+    "ispressbuild": [
+     0
+    ],
+    "isrankenabled": [
+     0
+    ],
+    "isroundbased": [
+     0
+    ],
+    "isscoreroundbased": [
+     0
+    ],
+    "isstrstart": [
+     2
+    ],
+    "isusingremote": [
+     0
+    ],
+    "loop_fx_sound": [
+     4
+    ],
+    "loop_sound_delete": [
+     2
+    ],
+    "loop_sound_in_space": [
+     3
+    ],
+    "mayapplyscreeneffect": [
+     0
+    ],
+    "onfinalizeinitialization_callback": [
+     1
+    ],
+    "orienttonormal": [
+     1
+    ],
+    "play_sound_in_space": [
+     3
+    ],
+    "play_sound_on_tag": [
+     2
+    ],
+    "player_flag": [
+     1
+    ],
+    "player_flag_clear": [
+     1
+    ],
+    "player_flag_init": [
+     2
+    ],
+    "player_flag_set": [
+     1
+    ],
+    "player_flag_set_delayed": [
+     2
+    ],
+    "player_flag_wait": [
+     1
+    ],
+    "player_flag_wait_either": [
+     2
+    ],
+    "player_flag_waitopen": [
+     1
+    ],
+    "playsmokesound": [
+     5
+    ],
+    "playsoundinspace": [
+     3
+    ],
+    "playsoundonplayers": [
+     2
+    ],
+    "plot_points": [
+     5
+    ],
+    "printandsoundoneveryone": [
+     7
+    ],
+    "printboldonteam": [
+     2
+    ],
+    "printboldonteamarg": [
+     3
+    ],
+    "printonplayers": [
+     2
+    ],
+    "printonteam": [
+     2
+    ],
+    "printonteamarg": [
+     3
+    ],
+    "registerclientsys": [
+     1
+    ],
+    "registernumlives": [
+     2
+    ],
+    "registerroundlimit": [
+     2
+    ],
+    "registerroundswitch": [
+     2
+    ],
+    "registerroundwinlimit": [
+     2
+    ],
+    "registerscorelimit": [
+     2
+    ],
+    "registertimelimit": [
+     2
+    ],
+    "remove_trigger_from_ent": [
+     1
+    ],
+    "set_dvar_float_if_unset": [
+     3
+    ],
+    "set_dvar_if_unset": [
+     3
+    ],
+    "set_dvar_int_if_unset": [
+     3
+    ],
+    "setclientfield": [
+     2
+    ],
+    "setclientfieldtoplayer": [
+     2
+    ],
+    "setclientsysstate": [
+     3
+    ],
+    "setlowermessage": [
+     3
+    ],
+    "setlowermessagevalue": [
+     3
+    ],
+    "setobjectivehinttext": [
+     2
+    ],
+    "setobjectivescoretext": [
+     2
+    ],
+    "setobjectivetext": [
+     2
+    ],
+    "setusingremote": [
+     1
+    ],
+    "sound_effect": [
+     0
+    ],
+    "spawn_array_struct": [
+     0
+    ],
+    "spread_array_thread": [
+     5
+    ],
+    "stop_exploder": [
+     1
+    ],
+    "struct_arrayspawn": [
+     0
+    ],
+    "structarray_add": [
+     2
+    ],
+    "structarray_remove": [
+     2
+    ],
+    "structarray_shuffle": [
+     2
+    ],
+    "structarray_swap": [
+     2
+    ],
+    "structarray_swaptolast": [
+     2
+    ],
+    "trail_effect": [
+     0
+    ],
+    "trail_effect_ender": [
+     2
+    ],
+    "trigger_thread": [
+     3
+    ],
+    "trigger_thread_death_monitor": [
+     2
+    ],
+    "triggeroff": [
+     0
+    ],
+    "triggeron": [
+     0
+    ],
+    "vectoangles": [
+     1
+    ],
+    "wait_endon": [
+     5
+    ],
+    "waitrespawnbutton": [
+     0
+    ],
+    "waittill_either": [
+     2
+    ],
+    "waittillnotmoving": [
+     0
+    ],
+    "warning": [
+     1
+    ],
+    "waslastround": [
+     0
+    ],
+    "within_fov": [
+     4
+    ]
+   }
   },
   "maps/mp/zombies/_zm_utility": {
    "vm": "server",
+   "complete": true,
    "functions": [
     "activate_zombie_point_of_interest",
     "add_gameloc",
@@ -623,10 +1530,931 @@
     "waittill_not_moving",
     "waittill_notify_or_timeout",
     "waittill_subset"
-   ]
+   ],
+   "arity": {
+    "activate_zombie_point_of_interest": [
+     0
+    ],
+    "add_gameloc": [
+     4
+    ],
+    "add_gametype": [
+     4
+    ],
+    "add_poi_attractor": [
+     1
+    ],
+    "add_poi_to_ignore_list": [
+     1
+    ],
+    "add_sound": [
+     2
+    ],
+    "add_spawn_function": [
+     5
+    ],
+    "add_spawner": [
+     1
+    ],
+    "add_vox_response_chance": [
+     2
+    ],
+    "add_zombie_hint": [
+     2
+    ],
+    "ads_button_held": [
+     0
+    ],
+    "ads_button_pressed": [
+     0
+    ],
+    "all_chunks_destroyed": [
+     2
+    ],
+    "all_chunks_intact": [
+     2
+    ],
+    "array_check_for_dupes_using_compare": [
+     3
+    ],
+    "array_flag_wait_any": [
+     1
+    ],
+    "array_flag_wait_any_thread": [
+     2
+    ],
+    "array_limiter": [
+     2
+    ],
+    "array_removedead": [
+     1
+    ],
+    "array_validate": [
+     1
+    ],
+    "assign_zombie_point_of_interest": [
+     2
+    ],
+    "attack_button_held": [
+     0
+    ],
+    "attack_button_pressed": [
+     0
+    ],
+    "bullet_attack": [
+     1
+    ],
+    "button_held_think": [
+     1
+    ],
+    "can_attract": [
+     1
+    ],
+    "change_zombie_run_cycle": [
+     0
+    ],
+    "check_and_create_node_lists": [
+     0
+    ],
+    "check_point_in_enabled_zone": [
+     3
+    ],
+    "check_point_in_playable_area": [
+     1
+    ],
+    "clear_all_corpses": [
+     0
+    ],
+    "clear_fog_threads": [
+     0
+    ],
+    "clear_is_drinking": [
+     0
+    ],
+    "clear_mature_blood": [
+     0
+    ],
+    "clear_run_anim": [
+     0
+    ],
+    "convertsecondstomilliseconds": [
+     1
+    ],
+    "create_counter_hud": [
+     1
+    ],
+    "create_simple_hud": [
+     2
+    ],
+    "create_vox_timer": [
+     1
+    ],
+    "create_zombie_buildable_piece": [
+     4
+    ],
+    "create_zombie_point_of_interest": [
+     7
+    ],
+    "create_zombie_point_of_interest_attractor_positions": [
+     3
+    ],
+    "deactivate_zombie_point_of_interest": [
+     0
+    ],
+    "debug_attack_spots_taken": [
+     0
+    ],
+    "debug_blocker": [
+     3
+    ],
+    "debug_breadcrumbs": [
+     0
+    ],
+    "debug_draw_attractor_positions": [
+     0
+    ],
+    "debug_magic_bullet_shield_death": [
+     1
+    ],
+    "debug_print": [
+     1
+    ],
+    "debug_round_advancer": [
+     0
+    ],
+    "decrement_is_drinking": [
+     0
+    ],
+    "default_validate_enemy_path_length": [
+     1
+    ],
+    "delete_spawned_path_nodes": [
+     0
+    ],
+    "destroy_ent": [
+     0
+    ],
+    "destroy_hud": [
+     0
+    ],
+    "disable_player_move_states": [
+     1
+    ],
+    "disable_react": [
+     0
+    ],
+    "disable_trigger": [
+     0
+    ],
+    "display_message": [
+     3
+    ],
+    "do_player_general_vox": [
+     4
+    ],
+    "do_player_vo": [
+     2
+    ],
+    "does_player_have_correct_navcard": [
+     1
+    ],
+    "does_player_have_map_navcard": [
+     1
+    ],
+    "draw_line_ent_to_ent": [
+     2
+    ],
+    "draw_line_ent_to_pos": [
+     3
+    ],
+    "drawcylinder": [
+     3
+    ],
+    "enable_player_move_states": [
+     0
+    ],
+    "enable_react": [
+     0
+    ],
+    "enable_trigger": [
+     0
+    ],
+    "ent_flag": [
+     1
+    ],
+    "ent_flag_clear": [
+     1
+    ],
+    "ent_flag_clear_delayed": [
+     2
+    ],
+    "ent_flag_exist": [
+     1
+    ],
+    "ent_flag_init": [
+     2
+    ],
+    "ent_flag_init_ai_standards": [
+     0
+    ],
+    "ent_flag_set": [
+     1
+    ],
+    "ent_flag_set_delayed": [
+     2
+    ],
+    "ent_flag_toggle": [
+     1
+    ],
+    "ent_flag_wait": [
+     1
+    ],
+    "ent_flag_wait_ai_standards": [
+     1
+    ],
+    "ent_flag_wait_either": [
+     2
+    ],
+    "ent_flag_wait_or_timeout": [
+     2
+    ],
+    "ent_flag_waitopen": [
+     1
+    ],
+    "ent_wait_for_flag_or_time_elapses": [
+     2
+    ],
+    "fake_physicslaunch": [
+     2
+    ],
+    "flag_wait_or_timeout": [
+     2
+    ],
+    "flat_angle": [
+     1
+    ],
+    "float_print3d": [
+     2
+    ],
+    "general_vox_timer": [
+     2
+    ],
+    "generated_radius_attract_positions": [
+     4
+    ],
+    "get_chunk_state": [
+     0
+    ],
+    "get_closest_2d": [
+     2
+    ],
+    "get_closest_index": [
+     3
+    ],
+    "get_closest_index_to_entity": [
+     4
+    ],
+    "get_closest_node": [
+     2
+    ],
+    "get_closest_non_destroyed_chunk": [
+     3
+    ],
+    "get_closest_player": [
+     1
+    ],
+    "get_closest_player_using_paths": [
+     2
+    ],
+    "get_closest_valid_player": [
+     2
+    ],
+    "get_current_actor_count": [
+     0
+    ],
+    "get_current_corpse_count": [
+     0
+    ],
+    "get_current_zombie_count": [
+     0
+    ],
+    "get_current_zone": [
+     1
+    ],
+    "get_destroyed_chunks": [
+     1
+    ],
+    "get_destroyed_repair_grates": [
+     1
+    ],
+    "get_eye": [
+     0
+    ],
+    "get_game_var": [
+     1
+    ],
+    "get_gamemode_var": [
+     1
+    ],
+    "get_hint_string": [
+     3
+    ],
+    "get_non_destroyed_chunks": [
+     2
+    ],
+    "get_non_destroyed_chunks_grate": [
+     2
+    ],
+    "get_non_destroyed_variant1": [
+     1
+    ],
+    "get_non_destroyed_variant2": [
+     1
+    ],
+    "get_non_destroyed_variant4": [
+     1
+    ],
+    "get_non_destroyed_variant5": [
+     1
+    ],
+    "get_number_of_valid_players": [
+     0
+    ],
+    "get_path_length_to_enemy": [
+     1
+    ],
+    "get_player_equipment": [
+     0
+    ],
+    "get_player_lethal_grenade": [
+     0
+    ],
+    "get_player_melee_weapon": [
+     0
+    ],
+    "get_player_perk_purchase_limit": [
+     0
+    ],
+    "get_player_placeable_mine": [
+     0
+    ],
+    "get_player_tactical_grenade": [
+     0
+    ],
+    "get_player_weapon_limit": [
+     1
+    ],
+    "get_random_destroyed_chunk": [
+     2
+    ],
+    "get_round_enemy_array": [
+     0
+    ],
+    "get_table_var": [
+     5
+    ],
+    "get_zombie_hint": [
+     1
+    ],
+    "get_zombie_point_of_interest": [
+     2
+    ],
+    "getweaponclasszm": [
+     1
+    ],
+    "getyaw": [
+     1
+    ],
+    "getyawtospot": [
+     1
+    ],
+    "give_start_weapon": [
+     1
+    ],
+    "giveachievement_wrapper": [
+     2
+    ],
+    "grate_order_destroyed": [
+     1
+    ],
+    "groundpos": [
+     1
+    ],
+    "groundpos_ignore_water": [
+     1
+    ],
+    "groundpos_ignore_water_new": [
+     1
+    ],
+    "hacker_active": [
+     0
+    ],
+    "has_deployed_equipment": [
+     1
+    ],
+    "has_player_equipment": [
+     1
+    ],
+    "has_powerup_weapon": [
+     0
+    ],
+    "hotjoin_setup_player": [
+     1
+    ],
+    "hudelem_count": [
+     0
+    ],
+    "ignore_triggers": [
+     1
+    ],
+    "in_playable_area": [
+     0
+    ],
+    "in_revive_trigger": [
+     0
+    ],
+    "include_buildable": [
+     1
+    ],
+    "include_equipment": [
+     1
+    ],
+    "include_powered_item": [
+     7
+    ],
+    "include_powerup": [
+     1
+    ],
+    "include_weapon": [
+     4
+    ],
+    "increment_is_drinking": [
+     0
+    ],
+    "init_button_wrappers": [
+     0
+    ],
+    "init_player_equipment": [
+     0
+    ],
+    "init_player_lethal_grenade": [
+     0
+    ],
+    "init_player_melee_weapon": [
+     0
+    ],
+    "init_player_offhand_weapons": [
+     0
+    ],
+    "init_player_placeable_mine": [
+     0
+    ],
+    "init_player_tactical_grenade": [
+     0
+    ],
+    "init_utility": [
+     0
+    ],
+    "init_zombie_run_cycle": [
+     0
+    ],
+    "invalidate_attractor_pos": [
+     2
+    ],
+    "is_alt_weapon": [
+     1
+    ],
+    "is_buildable": [
+     0
+    ],
+    "is_buildable_included": [
+     1
+    ],
+    "is_classic": [
+     0
+    ],
+    "is_createfx_active": [
+     0
+    ],
+    "is_encounter": [
+     0
+    ],
+    "is_equipment": [
+     1
+    ],
+    "is_equipment_that_blocks_purchase": [
+     1
+    ],
+    "is_explosive_damage": [
+     1
+    ],
+    "is_favorite_weapon": [
+     1
+    ],
+    "is_float": [
+     1
+    ],
+    "is_gametype_active": [
+     1
+    ],
+    "is_grenade_launcher": [
+     1
+    ],
+    "is_headshot": [
+     3
+    ],
+    "is_jumping": [
+     0
+    ],
+    "is_leaper": [
+     0
+    ],
+    "is_lethal_grenade": [
+     1
+    ],
+    "is_limited_weapon": [
+     1
+    ],
+    "is_magic_bullet_shield_enabled": [
+     1
+    ],
+    "is_melee_weapon": [
+     1
+    ],
+    "is_multiple_drinking": [
+     0
+    ],
+    "is_offhand_weapon": [
+     1
+    ],
+    "is_placeable_mine": [
+     1
+    ],
+    "is_player": [
+     0
+    ],
+    "is_player_equipment": [
+     1
+    ],
+    "is_player_lethal_grenade": [
+     1
+    ],
+    "is_player_looking_at": [
+     4
+    ],
+    "is_player_melee_weapon": [
+     1
+    ],
+    "is_player_offhand_weapon": [
+     1
+    ],
+    "is_player_placeable_mine": [
+     1
+    ],
+    "is_player_tactical_grenade": [
+     1
+    ],
+    "is_player_valid": [
+     3
+    ],
+    "is_quad": [
+     0
+    ],
+    "is_standard": [
+     0
+    ],
+    "is_survival": [
+     0
+    ],
+    "is_tactical_grenade": [
+     1
+    ],
+    "is_temporary_zombie_weapon": [
+     1
+    ],
+    "is_valid_zombie_spawn_point": [
+     1
+    ],
+    "is_zombie_perk_bottle": [
+     1
+    ],
+    "isads": [
+     1
+    ],
+    "isexplosivedamage": [
+     1
+    ],
+    "isfiredamage": [
+     2
+    ],
+    "isplayerexplosiveweapon": [
+     2
+    ],
+    "isprimarydamage": [
+     1
+    ],
+    "lerp": [
+     1
+    ],
+    "limit_equipment": [
+     2
+    ],
+    "link_changes_internal": [
+     2
+    ],
+    "link_changes_internal_internal": [
+     2
+    ],
+    "link_nodes": [
+     3
+    ],
+    "link_nodes_wrapper": [
+     2
+    ],
+    "magic_bullet_shield": [
+     0
+    ],
+    "no_valid_repairable_boards": [
+     2
+    ],
+    "non_destroyed_bar_board_order": [
+     2
+    ],
+    "non_destroyed_grate_order": [
+     2
+    ],
+    "non_destroyed_variant1_order": [
+     2
+    ],
+    "non_destroyed_variant2_order": [
+     2
+    ],
+    "non_destroyed_variant4_order": [
+     2
+    ],
+    "non_destroyed_variant5_order": [
+     2
+    ],
+    "onplayerconnect_callback": [
+     1
+    ],
+    "onplayerdisconnect_callback": [
+     1
+    ],
+    "pick_up": [
+     0
+    ],
+    "place_navcard": [
+     4
+    ],
+    "places_before_decimal": [
+     1
+    ],
+    "play_loopsound_on_ent": [
+     1
+    ],
+    "play_sound_2d": [
+     1
+    ],
+    "play_sound_at_pos": [
+     3
+    ],
+    "play_sound_on_ent": [
+     1
+    ],
+    "play_vox_to_player": [
+     3
+    ],
+    "poi_locations_equal": [
+     2
+    ],
+    "print3d_at_pos": [
+     4
+    ],
+    "print3d_ent": [
+     6
+    ],
+    "print_run_speed": [
+     1
+    ],
+    "random_tan": [
+     0
+    ],
+    "really_play_2d_sound": [
+     1
+    ],
+    "recalc_zombie_array": [
+     0
+    ],
+    "redo_link_changes": [
+     0
+    ],
+    "register_custom_spawner_entry": [
+     2
+    ],
+    "register_equipment_for_level": [
+     1
+    ],
+    "register_lethal_grenade_for_level": [
+     1
+    ],
+    "register_map_navcard": [
+     2
+    ],
+    "register_melee_weapon_for_level": [
+     1
+    ],
+    "register_offhand_weapons_for_level_defaults": [
+     0
+    ],
+    "register_placeable_mine_for_level": [
+     1
+    ],
+    "register_tactical_grenade_for_level": [
+     1
+    ],
+    "remove_mod_from_methodofdeath": [
+     1
+    ],
+    "remove_poi_attractor": [
+     1
+    ],
+    "remove_poi_from_ignore_list": [
+     1
+    ],
+    "respawn_path_nodes": [
+     0
+    ],
+    "round_up_score": [
+     2
+    ],
+    "round_up_to_ten": [
+     1
+    ],
+    "run_spawn_functions": [
+     0
+    ],
+    "script_delay": [
+     0
+    ],
+    "self_delete": [
+     0
+    ],
+    "set_demo_intermission_point": [
+     0
+    ],
+    "set_game_var": [
+     2
+    ],
+    "set_game_var_once": [
+     2
+    ],
+    "set_gamemode_var": [
+     2
+    ],
+    "set_gamemode_var_once": [
+     2
+    ],
+    "set_hint_string": [
+     3
+    ],
+    "set_player_equipment": [
+     1
+    ],
+    "set_player_is_female": [
+     1
+    ],
+    "set_player_lethal_grenade": [
+     1
+    ],
+    "set_player_melee_weapon": [
+     1
+    ],
+    "set_player_placeable_mine": [
+     1
+    ],
+    "set_player_tactical_grenade": [
+     1
+    ],
+    "set_player_tombstone_index": [
+     0
+    ],
+    "set_run_speed": [
+     0
+    ],
+    "set_run_speed_easy": [
+     0
+    ],
+    "set_zombie_run_cycle": [
+     1
+    ],
+    "set_zombie_var": [
+     5
+    ],
+    "shock_onexplosion": [
+     3
+    ],
+    "shock_onpain": [
+     0
+    ],
+    "should_watch_for_emp": [
+     0
+    ],
+    "show_grate_pull": [
+     0
+    ],
+    "show_grate_repair": [
+     0
+    ],
+    "sndswitchannouncervox": [
+     1
+    ],
+    "spawn_failed": [
+     1
+    ],
+    "spawn_path_node": [
+     6
+    ],
+    "spawn_path_node_internal": [
+     6
+    ],
+    "spawn_weapon_model": [
+     5
+    ],
+    "spawn_zombie": [
+     4
+    ],
+    "speed_change_watcher": [
+     0
+    ],
+    "sq_refresh_player_navcard_hud": [
+     0
+    ],
+    "sq_refresh_player_navcard_hud_internal": [
+     0
+    ],
+    "stop_magic_bullet_shield": [
+     0
+    ],
+    "string_to_float": [
+     1
+    ],
+    "track_players_intersection_tracker": [
+     0
+    ],
+    "trigger_invisible": [
+     1
+    ],
+    "undo_link_changes": [
+     0
+    ],
+    "unitrigger_set_hint_string": [
+     3
+    ],
+    "unlink_nodes": [
+     3
+    ],
+    "unlink_nodes_wrapper": [
+     2
+    ],
+    "update_on_poi_removal": [
+     1
+    ],
+    "update_poi_on_death": [
+     1
+    ],
+    "use_button_held": [
+     0
+    ],
+    "use_button_pressed": [
+     0
+    ],
+    "wait_for_buildable": [
+     1
+    ],
+    "wait_for_flag_or_time_elapses": [
+     2
+    ],
+    "wait_network_frame": [
+     0
+    ],
+    "waittill_any_or_timeout": [
+     6
+    ],
+    "waittill_not_moving": [
+     0
+    ],
+    "waittill_notify_or_timeout": [
+     2
+    ],
+    "waittill_subset": [
+     6
+    ]
+   }
   },
   "maps/mp/zombies/_zm_weapons": {
    "vm": "server",
+   "complete": true,
    "functions": [
     "acquire_weapon_toggle",
     "activate_weapon_toggle",
@@ -736,10 +2564,337 @@
     "weaponobjects_on_player_connect_override",
     "weaponobjects_on_player_connect_override_internal",
     "will_upgrade_weapon_as_attachment"
-   ]
+   ],
+   "arity": {
+    "acquire_weapon_toggle": [
+     2
+    ],
+    "activate_weapon_toggle": [
+     2
+    ],
+    "add_attachments": [
+     2
+    ],
+    "add_custom_limited_weapon_check": [
+     1
+    ],
+    "add_dynamic_wallbuy": [
+     3
+    ],
+    "add_limited_weapon": [
+     2
+    ],
+    "add_retrievable_knife_init_name": [
+     1
+    ],
+    "add_shared_ammo_weapon": [
+     2
+    ],
+    "add_weapon_to_content": [
+     2
+    ],
+    "add_zombie_weapon": [
+     8
+    ],
+    "ammo_give": [
+     1
+    ],
+    "can_upgrade_weapon": [
+     1
+    ],
+    "checkgrenadefordud": [
+     3
+    ],
+    "claymoredetonate": [
+     2
+    ],
+    "createballisticknifewatcher_zm": [
+     2
+    ],
+    "createclaymorewatcher_zm": [
+     0
+    ],
+    "deactivate_weapon_toggle": [
+     2
+    ],
+    "default_1st_move_weighting_func": [
+     0
+    ],
+    "default_attachment": [
+     1
+    ],
+    "default_check_firesale_loc_valid_func": [
+     0
+    ],
+    "default_cymbal_monkey_weighting_func": [
+     0
+    ],
+    "default_tesla_weighting_func": [
+     0
+    ],
+    "default_upgrade_weapon_weighting_func": [
+     0
+    ],
+    "default_weighting_func": [
+     0
+    ],
+    "disable_weapon_toggle": [
+     1
+    ],
+    "enable_weapon_toggle": [
+     1
+    ],
+    "get_ammo_cost": [
+     1
+    ],
+    "get_attachment_index": [
+     1
+    ],
+    "get_attachment_name": [
+     2
+    ],
+    "get_base_name": [
+     1
+    ],
+    "get_base_weapon_name": [
+     2
+    ],
+    "get_is_in_box": [
+     1
+    ],
+    "get_nonalternate_weapon": [
+     1
+    ],
+    "get_pack_a_punch_weapon_options": [
+     1
+    ],
+    "get_player_index": [
+     1
+    ],
+    "get_player_weapon_with_same_base": [
+     1
+    ],
+    "get_player_weapondata": [
+     2
+    ],
+    "get_shared_ammo_weapon": [
+     1
+    ],
+    "get_upgrade_weapon": [
+     2
+    ],
+    "get_upgraded_ammo_cost": [
+     1
+    ],
+    "get_weapon_cost": [
+     1
+    ],
+    "get_weapon_display_name": [
+     1
+    ],
+    "get_weapon_hint": [
+     1
+    ],
+    "get_weapon_hint_ammo": [
+     0
+    ],
+    "get_weapon_toggle": [
+     1
+    ],
+    "get_weapon_with_attachments": [
+     1
+    ],
+    "give_fallback_weapon": [
+     0
+    ],
+    "grenade_safe_to_bounce": [
+     2
+    ],
+    "grenade_safe_to_throw": [
+     2
+    ],
+    "has_attachment": [
+     2
+    ],
+    "has_upgrade": [
+     1
+    ],
+    "has_weapon_or_attachments": [
+     1
+    ],
+    "has_weapon_or_upgrade": [
+     1
+    ],
+    "include_zombie_weapon": [
+     4
+    ],
+    "init": [
+     0
+    ],
+    "init_spawnable_weapon_upgrade": [
+     0
+    ],
+    "init_weapon_toggle": [
+     0
+    ],
+    "init_weapon_upgrade": [
+     0
+    ],
+    "init_weapons": [
+     0
+    ],
+    "is_weapon_included": [
+     1
+    ],
+    "is_weapon_or_base_included": [
+     1
+    ],
+    "is_weapon_toggle": [
+     1
+    ],
+    "is_weapon_upgraded": [
+     1
+    ],
+    "isempweapon": [
+     1
+    ],
+    "limited_weapon_below_quota": [
+     3
+    ],
+    "makegrenadedudanddestroy": [
+     0
+    ],
+    "merge_weapons": [
+     2
+    ],
+    "onplayerconnect": [
+     0
+    ],
+    "onplayerspawned": [
+     0
+    ],
+    "play_weapon_vo": [
+     2
+    ],
+    "player_can_use_content": [
+     1
+    ],
+    "random_attachment": [
+     2
+    ],
+    "register_zombie_weapon_callback": [
+     2
+    ],
+    "reset_wallbuy_internal": [
+     1
+    ],
+    "reset_wallbuys": [
+     0
+    ],
+    "setupretrievablehintstrings": [
+     0
+    ],
+    "show_all_weapon_buys": [
+     4
+    ],
+    "switch_back_primary_weapon": [
+     1
+    ],
+    "switch_from_alt_weapon": [
+     1
+    ],
+    "take_fallback_weapon": [
+     0
+    ],
+    "trackweaponzm": [
+     0
+    ],
+    "unacquire_weapon_toggle": [
+     1
+    ],
+    "unacquire_weapon_toggle_on_death_or_disconnect_thread": [
+     1
+    ],
+    "updatelastheldweapontimingszm": [
+     1
+    ],
+    "updateweapontimingszm": [
+     1
+    ],
+    "wait_explode": [
+     0
+    ],
+    "wait_for_explosion": [
+     1
+    ],
+    "wait_timeout": [
+     1
+    ],
+    "wall_weapon_update_prompt": [
+     1
+    ],
+    "watchforgrenadeduds": [
+     0
+    ],
+    "watchforgrenadelauncherduds": [
+     0
+    ],
+    "watchforscriptexplosion": [
+     3
+    ],
+    "watchweaponchangezm": [
+     0
+    ],
+    "watchweaponusagezm": [
+     0
+    ],
+    "weapon_give": [
+     4
+    ],
+    "weapon_is_better": [
+     2
+    ],
+    "weapon_set_first_time_hint": [
+     2
+    ],
+    "weapon_show": [
+     1
+    ],
+    "weapon_spawn_think": [
+     0
+    ],
+    "weapon_supports_attachments": [
+     1
+    ],
+    "weapon_supports_default_attachment": [
+     1
+    ],
+    "weapon_supports_this_attachment": [
+     2
+    ],
+    "weapon_toggle_think": [
+     0
+    ],
+    "weapon_type_check": [
+     1
+    ],
+    "weapondata_give": [
+     1
+    ],
+    "weaponobjects_on_player_connect_override": [
+     0
+    ],
+    "weaponobjects_on_player_connect_override_internal": [
+     0
+    ],
+    "will_upgrade_weapon_as_attachment": [
+     1
+    ]
+   }
   },
   "maps/mp/zombies/_zm_perks": {
    "vm": "server",
+   "complete": true,
    "functions": [
     "_register_undefined_perk",
     "activate_packapunch",
@@ -836,10 +2991,298 @@
     "wait_for_player_to_take",
     "wait_for_timeout",
     "wait_give_perk"
-   ]
+   ],
+   "arity": {
+    "_register_undefined_perk": [
+     1
+    ],
+    "activate_packapunch": [
+     0
+    ],
+    "can_pack_weapon": [
+     1
+    ],
+    "check_player_has_perk": [
+     1
+    ],
+    "deactivate_packapunch": [
+     0
+    ],
+    "default_vending_precaching": [
+     0
+    ],
+    "destroy_weapon_in_blackout": [
+     1
+    ],
+    "destroy_weapon_on_disconnect": [
+     1
+    ],
+    "disable_quickrevive": [
+     1
+    ],
+    "do_initial_power_off_callback": [
+     2
+    ],
+    "do_knuckle_crack": [
+     0
+    ],
+    "electric_perks_dialog": [
+     0
+    ],
+    "fx_ent_failsafe": [
+     0
+    ],
+    "get_perk_array": [
+     1
+    ],
+    "get_perk_machine_start_state": [
+     1
+    ],
+    "getvendingmachinenotify": [
+     0
+    ],
+    "give_perk": [
+     2
+    ],
+    "give_random_perk": [
+     0
+    ],
+    "has_perk_paused": [
+     1
+    ],
+    "init": [
+     0
+    ],
+    "initialize_custom_perk_arrays": [
+     0
+    ],
+    "lose_random_perk": [
+     0
+    ],
+    "pap_weapon_move_in": [
+     3
+    ],
+    "pap_weapon_move_out": [
+     3
+    ],
+    "perk_abort_drinking": [
+     1
+    ],
+    "perk_flash_audio": [
+     1
+    ],
+    "perk_fx": [
+     2
+    ],
+    "perk_give_bottle_begin": [
+     1
+    ],
+    "perk_give_bottle_end": [
+     2
+    ],
+    "perk_hostmigration": [
+     0
+    ],
+    "perk_hud_destroy": [
+     1
+    ],
+    "perk_hud_flash": [
+     0
+    ],
+    "perk_hud_grey": [
+     2
+    ],
+    "perk_hud_start_flash": [
+     1
+    ],
+    "perk_hud_stop_flash": [
+     2
+    ],
+    "perk_machine_removal": [
+     2
+    ],
+    "perk_machine_spawn_init": [
+     0
+    ],
+    "perk_pause": [
+     1
+    ],
+    "perk_pause_all_perks": [
+     0
+    ],
+    "perk_set_max_health_if_jugg": [
+     3
+    ],
+    "perk_think": [
+     1
+    ],
+    "perk_unpause": [
+     1
+    ],
+    "perk_unpause_all_perks": [
+     0
+    ],
+    "perks_register_clientfield": [
+     0
+    ],
+    "play_loop_on_machine": [
+     0
+    ],
+    "player_use_can_pack_now": [
+     0
+    ],
+    "players_are_in_perk_area": [
+     1
+    ],
+    "quantum_bomb_give_nearest_perk_result": [
+     1
+    ],
+    "quantum_bomb_give_nearest_perk_validation": [
+     1
+    ],
+    "reenable_quickrevive": [
+     2
+    ],
+    "register_perk_basic_info": [
+     5
+    ],
+    "register_perk_clientfields": [
+     3
+    ],
+    "register_perk_host_migration_func": [
+     2
+    ],
+    "register_perk_machine": [
+     3
+    ],
+    "register_perk_precache_func": [
+     2
+    ],
+    "register_perk_threads": [
+     3
+    ],
+    "reset_vending_hint_string": [
+     0
+    ],
+    "restart_quickrevive": [
+     0
+    ],
+    "return_retained_perks": [
+     0
+    ],
+    "revive_solo_fx": [
+     2
+    ],
+    "set_perk_clientfield": [
+     2
+    ],
+    "set_power_on": [
+     1
+    ],
+    "shutoffpapsounds": [
+     3
+    ],
+    "solo_revive_buy_trigger_move": [
+     1
+    ],
+    "solo_revive_buy_trigger_move_trigger": [
+     1
+    ],
+    "third_person_weapon_upgrade": [
+     5
+    ],
+    "thread_bump_trigger": [
+     0
+    ],
+    "turn_additionalprimaryweapon_on": [
+     0
+    ],
+    "turn_chugabud_on": [
+     0
+    ],
+    "turn_deadshot_on": [
+     0
+    ],
+    "turn_doubletap_on": [
+     0
+    ],
+    "turn_jugger_on": [
+     0
+    ],
+    "turn_marathon_on": [
+     0
+    ],
+    "turn_packapunch_on": [
+     0
+    ],
+    "turn_perk_off": [
+     1
+    ],
+    "turn_revive_on": [
+     0
+    ],
+    "turn_sleight_on": [
+     0
+    ],
+    "turn_tombstone_on": [
+     0
+    ],
+    "turnonpapsounds": [
+     1
+    ],
+    "unhide_quickrevive": [
+     0
+    ],
+    "update_perk_hud": [
+     0
+    ],
+    "update_quickrevive_power_state": [
+     1
+    ],
+    "upgrade_knuckle_crack_begin": [
+     0
+    ],
+    "upgrade_knuckle_crack_end": [
+     1
+    ],
+    "use_solo_revive": [
+     0
+    ],
+    "vending_machine_trigger_think": [
+     0
+    ],
+    "vending_set_hintstring": [
+     1
+    ],
+    "vending_trigger_post_think": [
+     2
+    ],
+    "vending_trigger_think": [
+     0
+    ],
+    "vending_weapon_upgrade": [
+     0
+    ],
+    "vending_weapon_upgrade_cost": [
+     0
+    ],
+    "wait_for_disconnect": [
+     1
+    ],
+    "wait_for_player_to_take": [
+     4
+    ],
+    "wait_for_timeout": [
+     3
+    ],
+    "wait_give_perk": [
+     2
+    ]
+   }
   },
   "maps/mp/zombies/_zm_powerups": {
    "vm": "server",
+   "complete": true,
    "functions": [
     "add_zombie_powerup",
     "add_zombie_special_drop",
@@ -943,10 +3386,319 @@
     "toggle_bonfire_sale_on",
     "toggle_fire_sale_on",
     "watch_for_drop"
-   ]
+   ],
+   "arity": {
+    "add_zombie_powerup": [
+     12
+    ],
+    "add_zombie_special_drop": [
+     1
+    ],
+    "bonus_points_player_powerup": [
+     2
+    ],
+    "bonus_points_team_powerup": [
+     1
+    ],
+    "check_for_instakill": [
+     3
+    ],
+    "check_for_rare_drop_override": [
+     1
+    ],
+    "cleanup_random_weapon_list": [
+     0
+    ],
+    "devil_dialog_delay": [
+     0
+    ],
+    "disable_perk_before_power": [
+     1
+    ],
+    "double_points_powerup": [
+     2
+    ],
+    "empty_clip_powerup": [
+     1
+    ],
+    "fire_sale_weapon_wait": [
+     0
+    ],
+    "free_perk_powerup": [
+     1
+    ],
+    "full_ammo_move_hud": [
+     1
+    ],
+    "full_ammo_on_hud": [
+     2
+    ],
+    "full_ammo_powerup": [
+     2
+    ],
+    "func_should_always_drop": [
+     0
+    ],
+    "func_should_drop_carpenter": [
+     0
+    ],
+    "func_should_drop_fire_sale": [
+     0
+    ],
+    "func_should_drop_minigun": [
+     0
+    ],
+    "func_should_never_drop": [
+     0
+    ],
+    "get_closest_window_repair": [
+     2
+    ],
+    "get_far_boards": [
+     1
+    ],
+    "get_near_boards": [
+     1
+    ],
+    "get_next_powerup": [
+     0
+    ],
+    "get_num_window_destroyed": [
+     0
+    ],
+    "get_powerups": [
+     2
+    ],
+    "get_valid_powerup": [
+     0
+    ],
+    "include_zombie_powerup": [
+     1
+    ],
+    "init": [
+     0
+    ],
+    "init_player_zombie_vars": [
+     0
+    ],
+    "init_powerups": [
+     0
+    ],
+    "insta_kill_on_hud": [
+     2
+    ],
+    "insta_kill_powerup": [
+     2
+    ],
+    "is_carpenter_boards_upgraded": [
+     0
+    ],
+    "is_insta_kill_active": [
+     0
+    ],
+    "lose_perk_powerup": [
+     1
+    ],
+    "lose_points_team_powerup": [
+     1
+    ],
+    "minigun_no_drop": [
+     0
+    ],
+    "minigun_watch_gunner_downed": [
+     0
+    ],
+    "minigun_weapon_powerup": [
+     2
+    ],
+    "minigun_weapon_powerup_countdown": [
+     3
+    ],
+    "minigun_weapon_powerup_off": [
+     0
+    ],
+    "minigun_weapon_powerup_remove": [
+     2
+    ],
+    "minigun_weapon_powerup_replace": [
+     2
+    ],
+    "nuke_flash": [
+     1
+    ],
+    "nuke_powerup": [
+     2
+    ],
+    "play_bonfiresale_audio": [
+     0
+    ],
+    "play_firesale_audio": [
+     0
+    ],
+    "point_doubler_on_hud": [
+     2
+    ],
+    "powerup_delete": [
+     0
+    ],
+    "powerup_delete_delayed": [
+     1
+    ],
+    "powerup_drop": [
+     1
+    ],
+    "powerup_emp": [
+     0
+    ],
+    "powerup_grab": [
+     1
+    ],
+    "powerup_hud_monitor": [
+     0
+    ],
+    "powerup_move": [
+     0
+    ],
+    "powerup_round_start": [
+     0
+    ],
+    "powerup_set_can_pick_up_in_last_stand": [
+     2
+    ],
+    "powerup_setup": [
+     3
+    ],
+    "powerup_timeout": [
+     0
+    ],
+    "powerup_vo": [
+     1
+    ],
+    "powerup_wobble": [
+     0
+    ],
+    "powerup_wobble_fx": [
+     0
+    ],
+    "powerup_zombie_grab": [
+     1
+    ],
+    "powerup_zombie_grab_trigger_cleanup": [
+     1
+    ],
+    "print_powerup_drop": [
+     2
+    ],
+    "quantum_bomb_random_bonus_or_lose_points_powerup_result": [
+     1
+    ],
+    "quantum_bomb_random_powerup_result": [
+     1
+    ],
+    "quantum_bomb_random_weapon_powerup_result": [
+     1
+    ],
+    "quantum_bomb_random_zombie_grab_powerup_result": [
+     1
+    ],
+    "random_weapon_powerup": [
+     2
+    ],
+    "random_weapon_powerup_throttle": [
+     0
+    ],
+    "randomize_powerups": [
+     0
+    ],
+    "register_carpenter_node": [
+     2
+    ],
+    "remove_temp_chest": [
+     1
+    ],
+    "repair_far_boards": [
+     2
+    ],
+    "set_clientfield_powerups": [
+     5
+    ],
+    "set_weapon_ignore_max_ammo": [
+     1
+    ],
+    "setup_bonfiresale_audio": [
+     0
+    ],
+    "setup_firesale_audio": [
+     0
+    ],
+    "should_award_stat": [
+     1
+    ],
+    "special_drop_setup": [
+     0
+    ],
+    "special_powerup_drop": [
+     1
+    ],
+    "specific_powerup_drop": [
+     4
+    ],
+    "start_bonfire_sale": [
+     1
+    ],
+    "start_carpenter": [
+     1
+    ],
+    "start_carpenter_new": [
+     1
+    ],
+    "start_fire_sale": [
+     1
+    ],
+    "teller_withdrawl": [
+     2
+    ],
+    "tesla_powerup_active": [
+     0
+    ],
+    "tesla_watch_gunner_downed": [
+     0
+    ],
+    "tesla_weapon_powerup": [
+     2
+    ],
+    "tesla_weapon_powerup_countdown": [
+     3
+    ],
+    "tesla_weapon_powerup_off": [
+     0
+    ],
+    "tesla_weapon_powerup_remove": [
+     2
+    ],
+    "tesla_weapon_powerup_replace": [
+     2
+    ],
+    "time_remaining_on_point_doubler_powerup": [
+     1
+    ],
+    "time_remaning_on_insta_kill_powerup": [
+     1
+    ],
+    "toggle_bonfire_sale_on": [
+     0
+    ],
+    "toggle_fire_sale_on": [
+     0
+    ],
+    "watch_for_drop": [
+     0
+    ]
+   }
   },
   "maps/mp/zombies/_zm": {
    "vm": "server",
+   "complete": true,
    "functions": [
     "actor_damage_override",
     "actor_damage_override_wrapper",
@@ -1116,19 +3868,917 @@
     "zombie_speed_up",
     "zombiemode_melee_miss",
     "zombify_player"
-   ]
+   ],
+   "arity": {
+    "actor_damage_override": [
+     11
+    ],
+    "actor_damage_override_wrapper": [
+     11
+    ],
+    "actor_killed_override": [
+     8
+    ],
+    "add_bots": [
+     0
+    ],
+    "add_rampage_bookmark_kill_time": [
+     0
+    ],
+    "ai_calculate_health": [
+     1
+    ],
+    "ai_zombie_health": [
+     1
+    ],
+    "award_grenades_for_survivors": [
+     0
+    ],
+    "breakafter": [
+     3
+    ],
+    "callback_playerdamage": [
+     11
+    ],
+    "callback_playerlaststand": [
+     9
+    ],
+    "can_do_input": [
+     1
+    ],
+    "can_track_ammo": [
+     1
+    ],
+    "check_end_game_intermission_delay": [
+     0
+    ],
+    "check_for_valid_spawn_near_position": [
+     3
+    ],
+    "check_for_valid_spawn_near_team": [
+     2
+    ],
+    "check_for_valid_spawn_within_range": [
+     5
+    ],
+    "check_player_damage_callbacks": [
+     10
+    ],
+    "check_quickrevive_for_hotjoin": [
+     1
+    ],
+    "checkforalldead": [
+     1
+    ],
+    "clear_path_timers": [
+     0
+    ],
+    "codecallback_destructibleevent": [
+     4
+    ],
+    "default_delayed_exit": [
+     0
+    ],
+    "default_exit_level": [
+     0
+    ],
+    "default_find_exit_point": [
+     0
+    ],
+    "default_max_zombie_func": [
+     1
+    ],
+    "delete_in_createfx": [
+     0
+    ],
+    "disable_end_game_intermission": [
+     1
+    ],
+    "drive_client_connected_notifies": [
+     0
+    ],
+    "end_game": [
+     0
+    ],
+    "fade_out_intro_screen_zm": [
+     3
+    ],
+    "fade_up_over_time": [
+     1
+    ],
+    "failsafe_revive_give_back_weapons": [
+     1
+    ],
+    "finishplayerdamagewrapper": [
+     11
+    ],
+    "get_player_out_of_playable_area_monitor_wait_time": [
+     0
+    ],
+    "get_player_too_many_weapons_monitor_wait_time": [
+     0
+    ],
+    "get_players_on_team": [
+     1
+    ],
+    "get_safe_breadcrumb_pos": [
+     1
+    ],
+    "get_valid_spawn_location": [
+     4
+    ],
+    "getallotherplayers": [
+     0
+    ],
+    "getfreespawnpoint": [
+     2
+    ],
+    "in_enabled_playable_area": [
+     0
+    ],
+    "in_kill_brush": [
+     0
+    ],
+    "in_life_brush": [
+     0
+    ],
+    "increment_dog_round_stat": [
+     1
+    ],
+    "init": [
+     0
+    ],
+    "init_client_flags": [
+     0
+    ],
+    "init_custom_ai_type": [
+     0
+    ],
+    "init_dvars": [
+     0
+    ],
+    "init_flags": [
+     0
+    ],
+    "init_function_overrides": [
+     0
+    ],
+    "init_fx": [
+     0
+    ],
+    "init_levelvars": [
+     0
+    ],
+    "init_player_levelvars": [
+     0
+    ],
+    "init_shellshocks": [
+     0
+    ],
+    "init_sounds": [
+     0
+    ],
+    "init_strings": [
+     0
+    ],
+    "initializestattracking": [
+     0
+    ],
+    "intermission": [
+     0
+    ],
+    "is_sidequest_previously_completed": [
+     1
+    ],
+    "last_stand_best_pistol": [
+     0
+    ],
+    "last_stand_compare_pistols": [
+     1
+    ],
+    "last_stand_grenade_save_and_return": [
+     0
+    ],
+    "last_stand_pistol_rank_init": [
+     0
+    ],
+    "last_stand_pistol_swap": [
+     0
+    ],
+    "last_stand_restore_pistol_ammo": [
+     0
+    ],
+    "last_stand_revive": [
+     0
+    ],
+    "last_stand_save_pistol_ammo": [
+     0
+    ],
+    "last_stand_take_thrown_grenade": [
+     0
+    ],
+    "laststand_giveback_player_perks": [
+     0
+    ],
+    "onallplayersready": [
+     0
+    ],
+    "onplayerconnect_clientdvars": [
+     0
+    ],
+    "onplayerspawned": [
+     0
+    ],
+    "play_door_dialog": [
+     0
+    ],
+    "play_level_start_vox_delayed": [
+     0
+    ],
+    "player_damage_override": [
+     10
+    ],
+    "player_damage_override_cheat": [
+     10
+    ],
+    "player_exit_level": [
+     0
+    ],
+    "player_fake_death": [
+     0
+    ],
+    "player_grenade_multiattack_bookmark_watcher": [
+     1
+    ],
+    "player_grenade_watcher": [
+     0
+    ],
+    "player_intermission": [
+     0
+    ],
+    "player_killed_override": [
+     9
+    ],
+    "player_laststand": [
+     9
+    ],
+    "player_monitor_time_played": [
+     0
+    ],
+    "player_monitor_travel_dist": [
+     0
+    ],
+    "player_out_of_playable_area_monitor": [
+     0
+    ],
+    "player_prevent_damage": [
+     10
+    ],
+    "player_revive_monitor": [
+     0
+    ],
+    "player_shield_facing_attacker": [
+     2
+    ],
+    "player_spawn_protection": [
+     0
+    ],
+    "player_too_many_players_check": [
+     0
+    ],
+    "player_too_many_weapons_monitor": [
+     0
+    ],
+    "player_too_many_weapons_monitor_takeaway_sequence": [
+     1
+    ],
+    "player_too_many_weapons_monitor_takeaway_simultaneous": [
+     1
+    ],
+    "player_track_ammo_count": [
+     0
+    ],
+    "player_zombie_breadcrumb": [
+     0
+    ],
+    "players_playing": [
+     0
+    ],
+    "playerzombie_downed_hud": [
+     0
+    ],
+    "playerzombie_downed_state": [
+     0
+    ],
+    "playerzombie_infinite_health": [
+     0
+    ],
+    "playerzombie_play_sound": [
+     1
+    ],
+    "playerzombie_player_damage": [
+     0
+    ],
+    "playerzombie_soundboard": [
+     0
+    ],
+    "playerzombie_waitfor_buttonrelease": [
+     1
+    ],
+    "playswipesound": [
+     2
+    ],
+    "post_all_players_connected": [
+     0
+    ],
+    "post_main": [
+     0
+    ],
+    "precache_models": [
+     0
+    ],
+    "precache_shaders": [
+     0
+    ],
+    "precache_zombie_leaderboards": [
+     0
+    ],
+    "process_friendly_fire_callbacks": [
+     11
+    ],
+    "refresh_player_navcard_hud": [
+     0
+    ],
+    "register_custom_ai_spawn_check": [
+     4
+    ],
+    "register_player_damage_callback": [
+     1
+    ],
+    "register_player_friendly_fire_callback": [
+     1
+    ],
+    "register_sidequest": [
+     2
+    ],
+    "remote_revive_watch": [
+     0
+    ],
+    "remove_deadshot_bottle": [
+     0
+    ],
+    "remove_ignore_attacker": [
+     0
+    ],
+    "reset_rampage_bookmark_kill_times": [
+     0
+    ],
+    "round_end_monitor": [
+     0
+    ],
+    "round_one_up": [
+     0
+    ],
+    "round_over": [
+     0
+    ],
+    "round_pause": [
+     1
+    ],
+    "round_spawn_failsafe": [
+     0
+    ],
+    "round_spawn_failsafe_debug": [
+     0
+    ],
+    "round_spawning": [
+     0
+    ],
+    "round_spawning_test": [
+     0
+    ],
+    "round_start": [
+     0
+    ],
+    "round_think": [
+     1
+    ],
+    "round_wait": [
+     0
+    ],
+    "run_custom_ai_spawn_checks": [
+     0
+    ],
+    "set_default_laststand_pistol": [
+     1
+    ],
+    "set_sidequest_completed": [
+     1
+    ],
+    "set_third_person": [
+     1
+    ],
+    "setspectatepermissions": [
+     1
+    ],
+    "setup_player_navcard_hud": [
+     0
+    ],
+    "spawn_kill_brush": [
+     3
+    ],
+    "spawn_life_brush": [
+     3
+    ],
+    "spawn_vo": [
+     0
+    ],
+    "spawn_vo_player": [
+     2
+    ],
+    "spawnspectator": [
+     0
+    ],
+    "spectator_respawn": [
+     0
+    ],
+    "spectator_thread": [
+     0
+    ],
+    "spectator_toggle_3rd_person": [
+     0
+    ],
+    "spectators_respawn": [
+     0
+    ],
+    "start_zombie_logic_in_x_sec": [
+     1
+    ],
+    "startunitriggers": [
+     0
+    ],
+    "store_crumb": [
+     1
+    ],
+    "take_additionalprimaryweapon": [
+     0
+    ],
+    "to_mins": [
+     1
+    ],
+    "update_quick_revive": [
+     1
+    ],
+    "upload_leaderboards": [
+     0
+    ],
+    "uploadglobalstatcounters": [
+     0
+    ],
+    "wait_and_revive": [
+     0
+    ],
+    "wait_until_first_player": [
+     0
+    ],
+    "watch_rampage_bookmark": [
+     0
+    ],
+    "watchdisconnect": [
+     0
+    ],
+    "zbot_spawn": [
+     0
+    ],
+    "zbot_spawn_think": [
+     2
+    ],
+    "zm_on_player_connect": [
+     0
+    ],
+    "zm_on_player_disconnect": [
+     0
+    ],
+    "zombie_game_over_death": [
+     0
+    ],
+    "zombie_intro_screen": [
+     5
+    ],
+    "zombie_speed_up": [
+     0
+    ],
+    "zombiemode_melee_miss": [
+     0
+    ],
+    "zombify_player": [
+     0
+    ]
+   }
+  },
+  "maps/mp/zombies/_zm_spawner": {
+   "vm": "server",
+   "complete": true,
+   "functions": [
+    "add_cusom_zombie_spawn_logic",
+    "add_custom_zombie_spawn_logic",
+    "attractors_generated_listener",
+    "check_for_zombie_death",
+    "check_zbarrier_piece_for_zombie_death",
+    "check_zbarrier_piece_for_zombie_inert",
+    "check_zombie_damage_callbacks",
+    "check_zombie_death_animscript_callbacks",
+    "check_zombie_death_event_callbacks",
+    "crumb_is_bad",
+    "damage_on_fire",
+    "damage_over_time",
+    "delayed_zombie_eye_glow",
+    "deregister_zombie_death_event_callback",
+    "derive_damage_refs",
+    "do_a_taunt",
+    "do_zombie_rise",
+    "do_zombie_spawn",
+    "dragons_breath_flame_death_fx",
+    "enemy_death_detection",
+    "get_attack_spot",
+    "get_attack_spot_index",
+    "get_desired_origin",
+    "get_number_variants",
+    "get_rise_death_anim",
+    "handle_rise_notetracks",
+    "head_should_gib",
+    "headshot_blood_fx",
+    "hide_pop",
+    "init",
+    "init_gib_tags",
+    "is_spawner_targeted_by_blocker",
+    "is_weapon_shotgun",
+    "jitter_enemies_bad_breadcrumbs",
+    "play_ambient_zombie_vocals",
+    "player_attacker",
+    "player_attacks_enemy",
+    "player_using_hi_score_weapon",
+    "register_zombie_damage_callback",
+    "register_zombie_death_animscript_callback",
+    "register_zombie_death_event_callback",
+    "reset_attack_spot",
+    "should_attack_player_thru_boards",
+    "should_skip_teardown",
+    "stop_zombie_rise_dust_fx",
+    "taunt_notetracks",
+    "tear_into_building",
+    "window_notetracks",
+    "zombie_assure_node",
+    "zombie_bad_path",
+    "zombie_bad_path_notify",
+    "zombie_bad_path_timeout",
+    "zombie_bartear_offset_fx_horizontle",
+    "zombie_bartear_offset_fx_verticle",
+    "zombie_boardtear_offset_fx_horizontle",
+    "zombie_boardtear_offset_fx_verticle",
+    "zombie_can_drop_powerups",
+    "zombie_complete_emerging_into_playable_area",
+    "zombie_damage",
+    "zombie_damage_ads",
+    "zombie_damage_failsafe",
+    "zombie_death_achievement_sliquifier_check",
+    "zombie_death_animscript",
+    "zombie_death_event",
+    "zombie_death_points",
+    "zombie_delay_powerup_drop",
+    "zombie_entered_playable",
+    "zombie_eye_glow",
+    "zombie_eye_glow_stop",
+    "zombie_flame_damage",
+    "zombie_follow_enemy",
+    "zombie_free_cam_allowed",
+    "zombie_gib_on_damage",
+    "zombie_give_flame_damage_points",
+    "zombie_goto_entrance",
+    "zombie_gut_explosion",
+    "zombie_hat_gib",
+    "zombie_head_gib",
+    "zombie_history",
+    "zombie_pathing",
+    "zombie_pathing_get_breadcrumb",
+    "zombie_ragdoll_then_explode",
+    "zombie_repath_notifier",
+    "zombie_rise_burst_fx",
+    "zombie_rise_death",
+    "zombie_rise_dust_fx",
+    "zombie_rise_fx",
+    "zombie_setup_attack_properties",
+    "zombie_should_gib",
+    "zombie_spawn_init",
+    "zombie_tear_notetracks",
+    "zombie_tesla_head_gib",
+    "zombie_think"
+   ],
+   "arity": {
+    "add_cusom_zombie_spawn_logic": [
+     1
+    ],
+    "add_custom_zombie_spawn_logic": [
+     1
+    ],
+    "attractors_generated_listener": [
+     0
+    ],
+    "check_for_zombie_death": [
+     1
+    ],
+    "check_zbarrier_piece_for_zombie_death": [
+     3
+    ],
+    "check_zbarrier_piece_for_zombie_inert": [
+     3
+    ],
+    "check_zombie_damage_callbacks": [
+     5
+    ],
+    "check_zombie_death_animscript_callbacks": [
+     0
+    ],
+    "check_zombie_death_event_callbacks": [
+     0
+    ],
+    "crumb_is_bad": [
+     2
+    ],
+    "damage_on_fire": [
+     1
+    ],
+    "damage_over_time": [
+     4
+    ],
+    "delayed_zombie_eye_glow": [
+     0
+    ],
+    "deregister_zombie_death_event_callback": [
+     1
+    ],
+    "derive_damage_refs": [
+     1
+    ],
+    "do_a_taunt": [
+     0
+    ],
+    "do_zombie_rise": [
+     1
+    ],
+    "do_zombie_spawn": [
+     0
+    ],
+    "dragons_breath_flame_death_fx": [
+     0
+    ],
+    "enemy_death_detection": [
+     0
+    ],
+    "get_attack_spot": [
+     1
+    ],
+    "get_attack_spot_index": [
+     1
+    ],
+    "get_desired_origin": [
+     0
+    ],
+    "get_number_variants": [
+     1
+    ],
+    "get_rise_death_anim": [
+     0
+    ],
+    "handle_rise_notetracks": [
+     2
+    ],
+    "head_should_gib": [
+     3
+    ],
+    "headshot_blood_fx": [
+     0
+    ],
+    "hide_pop": [
+     0
+    ],
+    "init": [
+     0
+    ],
+    "init_gib_tags": [
+     0
+    ],
+    "is_spawner_targeted_by_blocker": [
+     1
+    ],
+    "is_weapon_shotgun": [
+     1
+    ],
+    "jitter_enemies_bad_breadcrumbs": [
+     1
+    ],
+    "play_ambient_zombie_vocals": [
+     0
+    ],
+    "player_attacker": [
+     1
+    ],
+    "player_attacks_enemy": [
+     4
+    ],
+    "player_using_hi_score_weapon": [
+     1
+    ],
+    "register_zombie_damage_callback": [
+     1
+    ],
+    "register_zombie_death_animscript_callback": [
+     1
+    ],
+    "register_zombie_death_event_callback": [
+     1
+    ],
+    "reset_attack_spot": [
+     0
+    ],
+    "should_attack_player_thru_boards": [
+     0
+    ],
+    "should_skip_teardown": [
+     1
+    ],
+    "stop_zombie_rise_dust_fx": [
+     1
+    ],
+    "taunt_notetracks": [
+     1
+    ],
+    "tear_into_building": [
+     0
+    ],
+    "window_notetracks": [
+     1
+    ],
+    "zombie_assure_node": [
+     0
+    ],
+    "zombie_bad_path": [
+     0
+    ],
+    "zombie_bad_path_notify": [
+     0
+    ],
+    "zombie_bad_path_timeout": [
+     0
+    ],
+    "zombie_bartear_offset_fx_horizontle": [
+     1
+    ],
+    "zombie_bartear_offset_fx_verticle": [
+     1
+    ],
+    "zombie_boardtear_offset_fx_horizontle": [
+     2
+    ],
+    "zombie_boardtear_offset_fx_verticle": [
+     2
+    ],
+    "zombie_can_drop_powerups": [
+     1
+    ],
+    "zombie_complete_emerging_into_playable_area": [
+     0
+    ],
+    "zombie_damage": [
+     6
+    ],
+    "zombie_damage_ads": [
+     6
+    ],
+    "zombie_damage_failsafe": [
+     0
+    ],
+    "zombie_death_achievement_sliquifier_check": [
+     2
+    ],
+    "zombie_death_animscript": [
+     0
+    ],
+    "zombie_death_event": [
+     1
+    ],
+    "zombie_death_points": [
+     6
+    ],
+    "zombie_delay_powerup_drop": [
+     1
+    ],
+    "zombie_entered_playable": [
+     0
+    ],
+    "zombie_eye_glow": [
+     0
+    ],
+    "zombie_eye_glow_stop": [
+     0
+    ],
+    "zombie_flame_damage": [
+     2
+    ],
+    "zombie_follow_enemy": [
+     0
+    ],
+    "zombie_free_cam_allowed": [
+     0
+    ],
+    "zombie_gib_on_damage": [
+     0
+    ],
+    "zombie_give_flame_damage_points": [
+     0
+    ],
+    "zombie_goto_entrance": [
+     2
+    ],
+    "zombie_gut_explosion": [
+     0
+    ],
+    "zombie_hat_gib": [
+     2
+    ],
+    "zombie_head_gib": [
+     2
+    ],
+    "zombie_history": [
+     1
+    ],
+    "zombie_pathing": [
+     0
+    ],
+    "zombie_pathing_get_breadcrumb": [
+     4
+    ],
+    "zombie_ragdoll_then_explode": [
+     2
+    ],
+    "zombie_repath_notifier": [
+     0
+    ],
+    "zombie_rise_burst_fx": [
+     1
+    ],
+    "zombie_rise_death": [
+     2
+    ],
+    "zombie_rise_dust_fx": [
+     1
+    ],
+    "zombie_rise_fx": [
+     1
+    ],
+    "zombie_setup_attack_properties": [
+     0
+    ],
+    "zombie_should_gib": [
+     3
+    ],
+    "zombie_spawn_init": [
+     1
+    ],
+    "zombie_tear_notetracks": [
+     3
+    ],
+    "zombie_tesla_head_gib": [
+     0
+    ],
+    "zombie_think": [
+     0
+    ]
+   }
   },
   "clientscripts/mp/_utility": {
    "vm": "client",
+   "complete": false,
    "functions": [
     "add_to_array"
-   ]
+   ],
+   "arity": {
+    "add_to_array": [
+     3
+    ]
+   }
   },
   "clientscripts/mp/zombies/_zm_utility": {
    "vm": "client",
+   "complete": false,
    "functions": [
     "onplayerconnect_callback"
-   ]
+   ],
+   "arity": {
+    "onplayerconnect_callback": [
+     1
+    ]
+   }
   }
  }
 }

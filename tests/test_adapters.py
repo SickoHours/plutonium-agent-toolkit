@@ -428,9 +428,16 @@ class AdapterPerTargetRecipeTests(AdapterFixture):
         code, row = invoke(["module", "build", str(comp), "--workspace", str(self.root), "--output", self.out()])
         self.assertEqual(code, 0, row)
         argv = self._builder_argv(row["result"])
-        self.assertEqual(Path(argv[argv.index("--output") - 1]).name, "recipe-b2.json")
+        # The builder reads the resolved copy, so the cut it was given is named by that copy's own
+        # target and by the report's `recipe`, not by the file name on the command line.
+        given = Path(argv[argv.index("--output") - 1])
+        self.assertEqual(given.name, "gum_a.recipe.resolved.json")
+        self.assertEqual((json.loads(given.read_text())["foundation"], json.loads(given.read_text())["map"]),
+                         ("dlc5-beta2", "zm_factory"))
         self.assertNotIn("--foundation", argv); self.assertNotIn("--map", argv)
         report = row["result"]["adapters"][0]
+        self.assertEqual(Path(report["recipe"]).name, "recipe-b2.json")
+        self.assertEqual(Path(report["recipe_resolved"]), given)
         self.assertFalse(report["retargeted"])
         self.assertEqual(report["recipe_target"], {"foundation": "dlc5-beta2", "map": "zm_factory"})
         self.assertEqual(report["built_target"], {"foundation": "dlc5-beta2", "map": "zm_factory"})
@@ -443,9 +450,10 @@ class AdapterPerTargetRecipeTests(AdapterFixture):
         code, row = invoke(["module", "build", str(comp), "--workspace", str(self.root), "--output", self.out()])
         self.assertEqual(code, 0, row)
         argv = self._builder_argv(row["result"])
-        self.assertEqual(Path(argv[argv.index("--output") - 1]).name, "recipe.json")
+        self.assertEqual(Path(argv[argv.index("--output") - 1]).name, "gum_a.recipe.resolved.json")
         self.assertNotIn("--foundation", argv); self.assertNotIn("--map", argv)
         report = row["result"]["adapters"][0]
+        self.assertEqual(Path(report["recipe"]).name, "recipe.json", "the default cut is the one resolved and built")
         self.assertEqual(report["recipe_target"], {"foundation": "bo2-stock", "map": "zm_transit"})
         plan = json.loads((Path(row["result"]["output"]) / "plan.json").read_text())
         self.assertIsNone(plan["adapters"][0]["recipe_key"], "the default cut is not one of the recipes keys")
@@ -459,7 +467,8 @@ class AdapterPerTargetRecipeTests(AdapterFixture):
         code, row = invoke(["module", "build", str(comp), "--workspace", str(self.root), "--output", self.out()])
         self.assertEqual(code, 0, row)
         argv = self._builder_argv(row["result"])
-        self.assertEqual(Path(argv[argv.index("--output") - 1]).name, "recipe.json")
+        self.assertEqual(Path(argv[argv.index("--output") - 1]).name, "gum_a.recipe.resolved.json")
+        self.assertEqual(Path(row["result"]["adapters"][0]["recipe"]).name, "recipe.json")
         self.assertEqual(argv[argv.index("--map") + 1], "zm_buried")
         self.assertTrue(row["result"]["adapters"][0]["retargeted"])
 
@@ -551,3 +560,136 @@ class WithheldStagingTests(CompositionFixture):
                                 decisions=[{"collision": "accuracy/aivsplayer/pistol.accu", "owner": "gun_a", "reason": "same graph"}])
         code, row = invoke(["module", "build", str(comp), "--output", self.out()])
         self.assertEqual(code, 0, row); self.assertEqual(row["result"]["withheld_staged"], 1)
+
+
+class PreparedPathTests(AdapterFixture):
+    """Where a relative `prepared` points, and the one copy of the recipe both halves agree on.
+
+    An adapter recipe names its converted inputs with `prepared`. A relative one used to be tested
+    against the caller's working directory by the planner and against the job's output directory by
+    the builder, so the same recipe planned as "prepared absent" and then failed the build, and
+    which it did depended on where `pat` happened to be run from.
+    """
+
+    def prepared_at(self, mid, target, value):
+        """Move the fixture's prepared inputs to ``target`` and point the recipe at ``value``."""
+        directory = self.root / "modules" / mid
+        target.parent.mkdir(parents=True, exist_ok=True)
+        (self.root / "prepared" / mid).rename(target)
+        recipe = json.loads((directory / "recipe.json").read_text())
+        recipe["prepared"] = value
+        (directory / "recipe.json").write_text(json.dumps(recipe, indent=2))
+        return directory
+
+    def adapter_row(self, *arguments, action="plan", code=0):
+        code_out, row = invoke(["module", action, str(self.composition(["gum_a"], name="stock_prepared_test")),
+                                *arguments, "--output", self.out()])
+        self.assertEqual(code_out, code, row)
+        plan = json.loads((Path(row["result"]["output"]) / "plan.json").read_text())
+        return row, plan, plan["adapters"][0]
+
+    def test_an_absolute_prepared_path_is_read_as_the_recipe_gave_it(self):
+        self.adapter("gum_a")
+        _, plan, adapter = self.adapter_row()
+        self.assertTrue(adapter["prepared_present"])
+        self.assertEqual(adapter["prepared_source"], "recipe")
+        self.assertEqual(adapter["prepared_resolved"], str(self.root / "prepared" / "gum_a"))
+        self.assertEqual(adapter["aliases"], ["hsp_s_shared"], "the alias table is read through the resolved path")
+        self.assertEqual(plan["modules"][0]["adapter"]["prepared_source"], "recipe")
+
+    def test_a_prepared_path_relative_to_the_module_directory_resolves(self):
+        self.adapter("gum_a")
+        directory = self.prepared_at("gum_a", self.root / "modules" / "gum_a" / "prepared", "prepared")
+        _, _, adapter = self.adapter_row()
+        self.assertTrue(adapter["prepared_present"])
+        self.assertEqual(adapter["prepared_source"], "module-dir")
+        self.assertEqual(adapter["prepared_resolved"], str(directory / "prepared"))
+        self.assertIn("xanim,gum_a_idle", adapter["roots"], "the prepared record is read from the resolved path")
+
+    def test_a_prepared_path_relative_to_the_workspace_resolves_only_with_a_workspace(self):
+        self.adapter("gum_a")
+        self.prepared_at("gum_a", self.root / "converted" / "gum_a", "converted/gum_a")
+        _, _, alone = self.adapter_row()
+        self.assertFalse(alone["prepared_present"], "without --workspace the module directory is the only base")
+        self.assertIsNone(alone["prepared_source"])
+        self.assertEqual(alone["prepared_candidates"], [str(self.root / "modules" / "gum_a" / "converted" / "gum_a")])
+        self._workspace()
+        _, _, found = self.adapter_row("--workspace", str(self.root))
+        self.assertTrue(found["prepared_present"])
+        self.assertEqual(found["prepared_source"], "workspace")
+        self.assertEqual(found["prepared_resolved"], str(self.root / "converted" / "gum_a"))
+        self.assertEqual(found["aliases"], ["hsp_s_shared"])
+
+    def test_a_prepared_path_neither_base_resolves_names_both_candidates(self):
+        self.adapter("gum_a")
+        self.prepared_at("gum_a", self.root / "converted" / "gum_a", "nowhere/gum_a")
+        self._workspace()
+        _, _, adapter = self.adapter_row("--workspace", str(self.root))
+        self.assertFalse(adapter["prepared_present"])
+        self.assertIsNone(adapter["prepared_resolved"])
+        self.assertIsNone(adapter["prepared_source"])
+        self.assertEqual(adapter["prepared_candidates"],
+                         [str(self.root / "modules" / "gum_a" / "nowhere" / "gum_a"), str(self.root / "nowhere" / "gum_a")])
+        self.assertEqual(adapter["aliases"], [], "nothing is read from a prepared directory that is not here")
+
+    def test_the_builder_is_given_a_resolved_copy_of_the_recipe(self):
+        self.adapter("gum_a", rawfiles=["animtrees/halo_gum.atr"])
+        directory = self.prepared_at("gum_a", self.root / "converted" / "gum_a", "converted/gum_a")
+        self._workspace()
+        code, row = invoke(["module", "build", str(self.composition(["gum_a"], name="stock_prepared_test")),
+                            "--workspace", str(self.root), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        output = Path(row["result"]["output"])
+        copy = output / "adapters" / "gum_a.recipe.resolved.json"
+        self.assertEqual(self._builder_argv(row["result"])[-3], str(copy), "the builder is given the resolved copy")
+        self.assertTrue(copy.is_file())
+        self.assertFalse((output / "adapters" / "gum_a" / "recipe.resolved.json").exists(),
+                         "the copy is a sibling: the builder owns its own output directory and creates it itself")
+        resolved = json.loads(copy.read_text())
+        self.assertEqual(resolved["prepared"], str(self.root / "converted" / "gum_a"))
+        self.assertTrue(Path(resolved["prepared"]).is_absolute())
+        plan = json.loads((output / "plan.json").read_text())
+        self.assertEqual(plan["adapters"][0]["recipe_resolved"], str(copy))
+        self.assertEqual(plan["adapter_builds"][0]["recipe_resolved"], str(copy))
+
+    def test_the_resolved_copy_carries_absolute_loose_script_sources(self):
+        # The recipe moves out of the module directory, so every path it states relative to that
+        # directory has to travel with it; a builder reading `recipe.parent / source` is unaffected,
+        # because joining an absolute path returns it unchanged.
+        self.adapter("gum_a")
+        directory = self.prepared_at("gum_a", self.root / "converted" / "gum_a", "converted/gum_a")
+        self._workspace()
+        code, row = invoke(["module", "build", str(self.composition(["gum_a"], name="stock_prepared_test")),
+                            "--workspace", str(self.root), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        copy = Path(row["result"]["output"]) / "adapters" / "gum_a.recipe.resolved.json"
+        source = json.loads(copy.read_text())["loose_script"]["source"]
+        self.assertTrue(Path(source).is_absolute())
+        self.assertEqual(source, str((directory / "src" / "gum_a.gsc").resolve()))
+        self.assertEqual(Path(copy.parent / source), Path(source), "recipe.parent / an absolute source is that source")
+        self.assertIn("scripts/zm/halo_gum_a.gsc", row["result"]["loose_scripts"],
+                      "the builder found the script through the resolved copy")
+
+    def test_the_resolved_copy_is_absolute_even_when_the_inputs_are_not_here(self):
+        # The build fails either way — the converted inputs are not on this machine — but the copy
+        # must not hand the builder a relative path: its working directory is the job's, so the
+        # path would name something inside the job that nobody wrote.
+        self.adapter("gum_a")
+        directory = self.prepared_at("gum_a", self.root / "converted" / "gum_a", "nowhere/gum_a")
+        self._workspace()
+        _, _, adapter = self.adapter_row("--workspace", str(self.root))
+        self.assertFalse(adapter["prepared_present"])
+        code, row = invoke(["module", "build", str(self.composition(["gum_a"], name="stock_prepared_test")),
+                            "--workspace", str(self.root), "--output", self.out()])
+        # The fixture builder does not read prepared; the copy is what is under test.
+        self.assertEqual(code, 0, row)
+        copy = Path(row["result"]["output"]) / "adapters" / "gum_a.recipe.resolved.json"
+        prepared = json.loads(copy.read_text())["prepared"]
+        self.assertTrue(Path(prepared).is_absolute())
+        self.assertEqual(prepared, str(directory / "nowhere" / "gum_a"), "the module-directory reading, the first candidate")
+        self.assertEqual(prepared, adapter["prepared_candidates"][0])
+
+    def test_a_plan_records_no_resolved_copy_because_none_was_written(self):
+        self.adapter("gum_a")
+        _, _, adapter = self.adapter_row()
+        self.assertIsNone(adapter["recipe_resolved"])
