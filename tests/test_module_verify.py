@@ -304,3 +304,47 @@ class InertnessTests(ModuleVerifyFixture):
         self.assertEqual((route["effect"], route["status"], route["available_here"]), ("inert", "implemented", True))
         self.assertIn("pat.module-verify/1", route["notes"])
         self.assertTrue((Path(__file__).resolve().parents[1] / "schemas/module-verify-v1.schema.json").is_file())
+
+
+class RegistrationTests(ModuleVerifyFixture):
+    """The registration line: `self` needs the literal in source, `entry` needs the entry field,
+    `none` must print nothing, and an absent field is reported and proposed, never invented."""
+
+    def printing(self, mid, **over):
+        d = self.module(mid, **over)
+        (d / "scripts" / f"{mid}.gsc").write_text(
+            f'main()\n{{\n    println("{mid} >> registered");\n}}\n')
+        return d
+
+    def test_self_with_the_literal_is_partial_and_without_it_is_declared_not_observed(self):
+        row = self.one(self.verify(self.printing("alpha", registration="self")), "/registration", "partial")
+        self.assertEqual(row["observed"], ["self"])
+        self.one(self.verify(self.module("beta", registration="self")), "/registration", "declared_not_observed")
+
+    def test_a_commented_line_does_not_count(self):
+        d = self.module("alpha", registration="self")
+        (d / "scripts" / "alpha.gsc").write_text('main()\n{\n    // println("alpha >> registered");\n}\n')
+        self.one(self.verify(d), "/registration", "declared_not_observed")
+
+    def test_none_agrees_when_silent_and_is_observed_not_declared_when_it_prints(self):
+        self.one(self.verify(self.module("alpha", registration="none")), "/registration", "agrees")
+        self.one(self.verify(self.printing("beta", registration="none")), "/registration", "observed_not_declared")
+
+    def test_entry_agrees_on_the_entry_field_alone(self):
+        d = self.module("alpha", registration="entry",
+                        entry={"replace": "scripts/zm/alpha::alpha_replace", "register": "scripts/zm/alpha::alpha_register"})
+        (d / "scripts" / "alpha.gsc").write_text("alpha_replace()\n{\n}\n\nalpha_register()\n{\n}\n")
+        self.assertEqual(self.one(self.verify(d), "/registration", "agrees")["observed"], ["entry"])
+
+    def test_absent_is_not_counted_when_silent_and_observed_when_it_prints_and_propose_fills_the_word(self):
+        row = self.one(self.verify(self.module("alpha")), "/registration", "not_counted")
+        self.assertIn("does not say", row["note"])
+        result = self.verify(self.printing("beta"), "--propose")
+        self.one(result, "/registration", "observed_not_declared")
+        self.assertEqual(result["proposal"]["registration"], "self")
+
+    def test_another_spelling_is_reported_and_does_not_match(self):
+        d = self.module("alpha", registration="self")
+        (d / "scripts" / "alpha.gsc").write_text('main()\n{\n    println("ALPHA >> registered (stock module)");\n}\n')
+        row = self.one(self.verify(d), "/registration", "declared_not_observed")
+        self.assertIn("ALPHA >> registered", row["note"])

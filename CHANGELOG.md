@@ -30,7 +30,10 @@ Every entry states what shipped, on which platform it was verified, and what rem
   service are promises, not observations. Protocol `pat.module-verify/1`, schema
   `schemas/module-verify-v1.schema.json`. Offline tests on Linux (`tests/test_module_verify.py`); no
   native receipt, and the route status is `implemented`. A row measures bytes and never claims the
-  module works.
+  module works. The `registration` row lands here as well: `self` is `partial` when the `<id> >> registered` literal is in a server
+  script and `declared_not_observed` when it is not, `entry` agrees on the entry field alone, `none` is
+  `observed_not_declared` when the module prints anyway, and an absent field is `not_counted` with the other
+  spelling it saw, or `observed_not_declared` with `--propose` filling `self`.
 - The planner reads two of those promises and refuses on them. `ownership`: a member that stages a
   path the base or the target map already carries and does not list it under `replaces.files` is
   refused, one row per member and path, naming the path, the owner (`base` or `map`), the evidence

@@ -461,7 +461,7 @@ def verify(directory: Path, *, workspace: str | None = None, base_listings=(), t
     listings = _listing_files(listing_dirs)
     base_names: set[str] = set()
     if listings:
-        base_names, _shadowable = compositions._base_owned(listings)
+        base_names, _shadowable, _zones = compositions._base_owned(listings)
     map_scripts: set[str] = set()
     native: set[str] = set()
     if pair:
@@ -657,8 +657,42 @@ def verify(directory: Path, *, workspace: str | None = None, base_listings=(), t
             rows.append(_row(field, [other_id], [], "both ends declaring the same exclusive role", "not_counted",
                              "no exclusive role covers the pair" if workspace else "the other declaration needs --workspace"))
 
-    # registration: added when the field lands (another branch adds registration self|entry|none;
-    # its row belongs here, beside the other declaration-side promises).
+    # ----- the registration line --------------------------------------------------------
+    # `self`: the literal must be in a server script. `entry`: the build prints it, so source is
+    # not consulted and the entry field is the fact. `none`: nothing should print it. Absent: the
+    # declaration does not say; the observation is reported and --propose fills the word.
+    reg_field, reg_declared = "/registration", metadata.get("registration")
+    reg_how = 'a println literal beginning "<id> >> registered" in a server script'
+    line = compositions.registration_line(metadata["id"])
+    reg_lines = sorted({value for value in source.literals if value.startswith(line)})
+    other_spellings = sorted({value for value in source.literals
+                              if compositions.REGISTRATION_SUFFIX.strip() in value and value not in reg_lines})[:8]
+    printed = bool(reg_lines)
+    if reg_declared == "entry":
+        rows.append(_row(reg_field, ["entry"], ["entry"] if metadata["entry"] else [], "the entry field; the generated entry prints the line",
+                         "agrees" if metadata["entry"] else "declared_not_observed"))
+    elif no_source and reg_declared != "none":
+        rows.append(_row(reg_field, [reg_declared] if reg_declared else [], [], reg_how, "not_counted", no_source))
+    elif reg_declared == "self":
+        rows.append(_row(reg_field, ["self"], ["self"] if printed else [], reg_how,
+                         "partial" if printed else "declared_not_observed",
+                         "the literal is present; that the path printing it runs is the console's proof" if printed
+                         else "the fix is a source edit: print the line from the registration path"
+                         + (f"; seen instead: {other_spellings}" if other_spellings else "")))
+    elif reg_declared == "none":
+        rows.append(_row(reg_field, ["none"], ["self"] if printed else [], reg_how,
+                         "observed_not_declared" if printed else "agrees",
+                         "the module prints the line and says it does not" if printed else None))
+    else:
+        rows.append(_row(reg_field, [], ["self"] if printed else [], reg_how,
+                         "observed_not_declared" if printed else "not_counted",
+                         None if printed else "the declaration does not say and the script prints no registration line"
+                         + (f"; seen instead: {other_spellings}" if other_spellings else "")))
+    registration_proposal = None
+    if reg_declared is None:
+        registration_proposal = "self" if printed else ("entry" if metadata["entry"] else None)
+    registration_note = None if reg_declared or printed or metadata["entry"] else \
+        "registration: no line in source; the edit an author would make is println(\"" + line + "\") from the registration path, then registration: self"
 
     for field, reason in UNREAD_FIELDS.items():
         rows.append(_row("/" + field, [], [], "nothing in this route", "not_counted", reason))
@@ -675,6 +709,10 @@ def verify(directory: Path, *, workspace: str | None = None, base_listings=(), t
     }
     if propose:
         result["proposal"], result["proposal_notes"] = _proposal(metadata, owned, observed, rows, payload, footprint_notes)
+        if registration_proposal:
+            result["proposal"]["registration"] = registration_proposal
+        if registration_note:
+            result["proposal_notes"].append(registration_note)
     return result
 
 
