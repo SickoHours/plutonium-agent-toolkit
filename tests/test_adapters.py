@@ -579,6 +579,25 @@ class PreparedPathTests(AdapterFixture):
         self.assertIn("scripts/zm/halo_gum_a.gsc", row["result"]["loose_scripts"],
                       "the builder found the script through the resolved copy")
 
+    def test_the_resolved_copy_is_absolute_even_when_the_inputs_are_not_here(self):
+        # The build fails either way — the converted inputs are not on this machine — but the copy
+        # must not hand the builder a relative path: its working directory is the job's, so the
+        # path would name something inside the job that nobody wrote.
+        self.adapter("gum_a")
+        directory = self.prepared_at("gum_a", self.root / "converted" / "gum_a", "nowhere/gum_a")
+        self._workspace()
+        _, _, adapter = self.adapter_row("--workspace", str(self.root))
+        self.assertFalse(adapter["prepared_present"])
+        code, row = invoke(["module", "build", str(self.composition(["gum_a"], name="stock_prepared_test")),
+                            "--workspace", str(self.root), "--output", self.out()])
+        # The fixture builder does not read prepared; the copy is what is under test.
+        self.assertEqual(code, 0, row)
+        copy = Path(row["result"]["output"]) / "adapters" / "gum_a.recipe.resolved.json"
+        prepared = json.loads(copy.read_text())["prepared"]
+        self.assertTrue(Path(prepared).is_absolute())
+        self.assertEqual(prepared, str(directory / "nowhere" / "gum_a"), "the module-directory reading, the first candidate")
+        self.assertEqual(prepared, adapter["prepared_candidates"][0])
+
     def test_a_plan_records_no_resolved_copy_because_none_was_written(self):
         self.adapter("gum_a")
         _, _, adapter = self.adapter_row()

@@ -10,7 +10,9 @@ Every entry states what shipped, on which platform it was verified, and what rem
 - An adapter recipe's `prepared` path now resolves the same way for the planner and for the builder.
   An absolute path is unchanged; a relative one is resolved against the module directory first and
   then the workspace root when `--workspace` is given, first directory wins, and when neither is one
-  the inputs are absent and the plan row names both candidates tried. The adapter plan row gains
+  the inputs are absent and the plan row names both candidates tried. The copy handed to the builder
+  states an absolute `prepared` in every case, falling back to the module-directory reading when
+  nothing resolved, so the builder never resolves a relative path against the job directory. The adapter plan row gains
   `prepared_resolved`, `prepared_source` (`recipe`, `module-dir`, `workspace`), `prepared_candidates`
   and `recipe_resolved`. Because the builder reads the recipe from disk by path, `module build` now
   writes a resolved copy beside the builder's output directory —

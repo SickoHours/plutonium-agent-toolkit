@@ -147,13 +147,20 @@ def resolve_prepared(prepared: str | None, directory: Path, workspace: str | Non
 
 def resolved_recipe(adapter: dict) -> dict:
     """The recipe as a builder must read it from anywhere: ``prepared`` and every loose script
-    source absolute. The builder resolves a recipe's relative paths against the recipe's own
+    source absolute, whether or not the prepared inputs are on this machine. The builder resolves a recipe's relative paths against the recipe's own
     directory, so a copy written outside the module directory has to state them in full; joining
     an absolute path to that directory returns it unchanged, so a builder that predates this copy
     reads it the same way."""
     data = json.loads(adapter["recipe"].read_text(encoding="utf-8"))
-    if adapter["prepared_resolved"]:
-        data["prepared"] = adapter["prepared_resolved"]
+    # When nothing resolved, the copy still states the module-directory reading (the first
+    # candidate) rather than carrying the relative path through: the builder's working directory is
+    # the job's, so a relative `prepared` there would name a path inside the job and fail on a
+    # directory nobody wrote. The build fails either way -- the inputs are not on this machine --
+    # but it fails naming the path the recipe meant, and `prepared_present: false` with
+    # `prepared_candidates` on the plan row already said so before the builder ran.
+    prepared = adapter["prepared_resolved"] or next(iter(adapter["prepared_candidates"]), None)
+    if prepared:
+        data["prepared"] = prepared
     directory = adapter["directory"]
     # Exactly the key ``_script_entries`` read, so nothing else in the document is touched.
     rows = data.get("loose_scripts")

@@ -210,7 +210,9 @@ the module directory first — the recipe's own directory is the only base that 
 module — and then against the workspace root when `--workspace` names one, which is what a shelf
 whose builder was run by hand from that root means. The first candidate that is a directory wins.
 When neither is a directory the inputs are absent, the plan drops the alias table and the clip list
-as before, and the row says which paths were tried.
+as before, and the row says which paths were tried; the resolved copy below still states the
+module-directory reading, so a builder that runs anyway fails naming the path the recipe meant
+rather than one inside the job directory.
 
 The plan row records the reading: `adapter.prepared_resolved` (the absolute path used),
 `adapter.prepared_source` (`recipe` for an absolute path, `module-dir` or `workspace` for a relative
