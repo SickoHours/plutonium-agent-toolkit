@@ -707,7 +707,8 @@ def _recipe_for_target(declaration: dict, directory: Path, job: Job, target: tup
     return chosen, chosen_key
 
 
-def load_declaration(directory: Path, job: Job, target: tuple[str | None, str | None] | None = None) -> dict:
+def load_declaration(directory: Path, job: Job, target: tuple[str | None, str | None] | None = None,
+                     workspace: str | None = None) -> dict:
     path = directory / "module.json"
     if path.is_symlink() or not path.is_file():
         raise Failure(INPUT_MISSING, f"Module directory has no module.json: {directory}")
@@ -735,7 +736,7 @@ def load_declaration(directory: Path, job: Job, target: tuple[str | None, str | 
                 shape = None
             if adapters.is_adapter_recipe(shape):
                 recipe, recipe_key = _recipe_for_target(declaration, directory, job, target)
-                adapter = adapters.load_recipe(recipe, directory, job, mid)
+                adapter = adapters.load_recipe(recipe, directory, job, mid, workspace)
                 recipe = None
         if recipe is not None and declaration["recipes"]:
             raise Failure(INPUT_INVALID, f"{mid}: recipes belongs to an adapter recipe; {declaration['payload_path']} is a project recipe the toolkit compiles itself",
@@ -991,12 +992,15 @@ def load_composition(path: Path, job: Job, depth: int = 0, seen: tuple = ()) -> 
                    "base_listings": listings, "source": src}
 
 
-def flatten(comp: dict, job: Job, target: tuple[str | None, str | None] | None = None) -> tuple[list[dict], list[Path], list[dict], list[str]]:
+def flatten(comp: dict, job: Job, target: tuple[str | None, str | None] | None = None,
+            workspace: str | None = None) -> tuple[list[dict], list[Path], list[dict], list[str]]:
     """Every module in this composition and its nested compositions, with the loads and
     decisions gathered along the way. A nested composition's decisions apply to its own
     collisions; the outer recipe records the ones between its members. ``target`` is the pack's
     ``(foundation, map)``, which an adapter member's ``recipes`` picks its cut by; a nested
-    composition declares the same base and map, so the outer target is its target too."""
+    composition declares the same base and map, so the outer target is its target too.
+    ``workspace`` is the second base an adapter recipe's relative ``prepared`` path may be stated
+    against (``adapters.resolve_prepared``)."""
     modules: list[dict] = []
     loads: list[Path] = list(comp["loads"])
     decisions: list[dict] = list(comp["decisions"])
@@ -1006,7 +1010,7 @@ def flatten(comp: dict, job: Job, target: tuple[str | None, str | None] | None =
     header: list[str] = list(comp["zone_header"])
     for member in comp["members"]:
         if member["kind"] == "module":
-            declaration = load_declaration(member["directory"], job, target)
+            declaration = load_declaration(member["directory"], job, target, workspace)
             declaration["role"] = member["role"]
             declaration["parameters_set"] = member["parameters"]
             # The pointer a parameters refusal carries is into the composition file that set the
@@ -1016,7 +1020,7 @@ def flatten(comp: dict, job: Job, target: tuple[str | None, str | None] | None =
             declaration["via"] = comp["name"]
             modules.append(declaration)
         else:
-            inner_modules, inner_loads, inner_decisions, inner_header = flatten(member["composition"], job, target)
+            inner_modules, inner_loads, inner_decisions, inner_header = flatten(member["composition"], job, target, workspace)
             header += [h for h in inner_header if h not in header]
             for declaration in inner_modules:
                 if member["role"] == "base":
@@ -1457,7 +1461,9 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
             row["recipes"] = sorted(m.get("recipes") or ())
             row["adapter"] = {"foundation": a["foundation"], "map": a["map"], "profile": a["profile"],
                               "recipe_key": m.get("recipe_key"),
-                              "prepared_present": a["prepared_present"], "declared_roots": len(a["embedded"]),
+                              "prepared_present": a["prepared_present"], "prepared_resolved": a["prepared_resolved"],
+                              "prepared_source": a["prepared_source"], "prepared_candidates": a["prepared_candidates"],
+                              "declared_roots": len(a["embedded"]),
                               "loose_scripts": [s["target"] for s in a["scripts"]], "soundbank": a["soundbank"], "aliases": a["aliases"]}
         else:
             row["seed_sha256"] = m["seed"]["files"]["mod.ff"] and job.inputs[str(m["seed"]["package"].resolve())]
@@ -1537,7 +1543,7 @@ def execute(args, job: Job) -> dict:
     # The pack's target in the workspace's own foundation ids, resolved once: an adapter member
     # whose declaration names a recipe for it is planned and built from that cut, not the default.
     pack_foundation = offline_checks.foundation_of(comp["base"], getattr(args, "workspace", None))
-    modules, loads, decisions, header = flatten(comp, job, (pack_foundation, comp["map"]))
+    modules, loads, decisions, header = flatten(comp, job, (pack_foundation, comp["map"]), getattr(args, "workspace", None))
     from ..testing.planner import prepare_probe
     try:
         prepare_probe(comp,modules,job)
@@ -1632,7 +1638,11 @@ def execute(args, job: Job) -> dict:
                       "foundation": m["adapter"]["foundation"], "map": m["adapter"]["map"],
                       "roots": m["adapter"]["embedded"], "soundbanks": [m["adapter"]["soundbank"]] if m["adapter"]["soundbank"] else [],
                       "aliases": m["adapter"]["aliases"], "loose_scripts": [s["target"] for s in m["adapter"]["scripts"]],
-                      "prepared_present": m["adapter"]["prepared_present"]} for m in adapter_modules],
+                      "prepared_present": m["adapter"]["prepared_present"],
+                      "prepared_resolved": m["adapter"]["prepared_resolved"], "prepared_source": m["adapter"]["prepared_source"],
+                      "prepared_candidates": m["adapter"]["prepared_candidates"],
+                      # Written by the build, so a plan that builds nothing records none.
+                      "recipe_resolved": None} for m in adapter_modules],
         "loads": [str(p) for p in loads], "zone_header": header,
         "unqualified": resolved["unqualified"], "adapt": adapt_rows(comp, modules, resolved["unqualified"], pack_foundation),
         "resource_totals": resolved["resource_totals"], "budget": comp["budget"],
@@ -1739,9 +1749,12 @@ def execute(args, job: Job) -> dict:
         workspace = getattr(args, "workspace", None)
         from . import targets
         builder_foundation = targets.foundation_for_base(Path(workspace).expanduser(), comp["base"]) if workspace else None
+        rows_by_id = {row["id"]: row for row in plan["adapters"]}
         for m in adapter_modules:
             m["seed"] = adapters.build(m, args, job, workspace, builder_foundation, comp["map"])
             plan["adapter_builds"].append(m["seed"]["report"])
+            # The resolved copy exists now, so the plan row names the file the builder was given.
+            rows_by_id[m["id"]]["recipe_resolved"] = m["seed"]["report"]["recipe_resolved"]
         seed_modules = [by_id[mid] for mid in resolved["order"] if by_id[mid]["seed"]]
         plan["seeds"] = [{"id": m["id"], "package": str(m["seed"]["package"]), "roots": m["seed"]["roots"],
                           "soundbanks": [n for n in m["seed"]["files"] if n != "mod.ff"],

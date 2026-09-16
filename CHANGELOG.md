@@ -7,6 +7,22 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- An adapter recipe's `prepared` path now resolves the same way for the planner and for the builder.
+  An absolute path is unchanged; a relative one is resolved against the module directory first and
+  then the workspace root when `--workspace` is given, first directory wins, and when neither is one
+  the inputs are absent and the plan row names both candidates tried. The adapter plan row gains
+  `prepared_resolved`, `prepared_source` (`recipe`, `module-dir`, `workspace`), `prepared_candidates`
+  and `recipe_resolved`. Because the builder reads the recipe from disk by path, `module build` now
+  writes a resolved copy beside the builder's output directory —
+  `<job>/adapters/<id>.recipe.resolved.json`, the same document with `prepared` and every
+  loose-script `source` absolute — and passes that path in the builder argv; a builder resolving
+  `recipe.parent / source` is unaffected, since joining an absolute path returns it unchanged. Before
+  this the planner tested a relative `prepared` against the caller's working directory and the
+  builder ran with the job's output directory as its own, so a workspace-relative recipe planned as
+  "prepared absent" — silently dropping its alias table and clip list — and then failed the build
+  with the builder's own traceback, depending on where `pat` was run from. Offline verified on Linux;
+  no game was loaded.
+
 - `module qualify` now plans its synthesized composition with the base's asset listings, read from
   the foundation record's `base_listings` and from the directory the link loads sit in when it holds
   `<zone>-list.txt` beside them, and records them under `base_listings` in `qualify.json` and the

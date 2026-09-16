@@ -117,10 +117,59 @@ def read_aliases(path: Path, owner: str) -> list[str]:
     return names
 
 
-def load_recipe(path: Path, directory: Path, job: Job, owner: str) -> dict:
+def resolve_prepared(prepared: str | None, directory: Path, workspace: str | None) -> tuple[str | None, str | None, list[str]]:
+    """Where an adapter recipe's ``prepared`` inputs actually are, as ``(path, source, tried)``.
+
+    An absolute path is the recipe's own answer and is used unchanged (``source`` is ``recipe``).
+    A relative one is resolved against the module directory first -- the recipe's own directory is
+    the only base that travels with the module -- and then against the workspace root when
+    ``--workspace`` names one, which is what a shelf whose builder was run by hand from that root
+    means today. The first candidate that is a directory wins. When neither is, the caller reports
+    the inputs as absent and says which paths were tried, rather than guessing."""
+    tried: list[str] = []
+    if not prepared:
+        return None, None, tried
+    given = Path(prepared)
+    if given.is_absolute():
+        tried.append(str(given))
+        return (str(given), "recipe", tried) if given.is_dir() else (None, None, tried)
+    bases = [(directory, "module-dir")]
+    if workspace:
+        bases.append((Path(workspace).expanduser(), "workspace"))
+    found: tuple[str | None, str | None] = (None, None)
+    for base, source in bases:
+        candidate = base / given
+        tried.append(str(candidate))
+        if found[0] is None and candidate.is_dir():
+            found = (str(candidate.resolve()), source)
+    return found[0], found[1], tried
+
+
+def resolved_recipe(adapter: dict) -> dict:
+    """The recipe as a builder must read it from anywhere: ``prepared`` and every loose script
+    source absolute. The builder resolves a recipe's relative paths against the recipe's own
+    directory, so a copy written outside the module directory has to state them in full; joining
+    an absolute path to that directory returns it unchanged, so a builder that predates this copy
+    reads it the same way."""
+    data = json.loads(adapter["recipe"].read_text(encoding="utf-8"))
+    if adapter["prepared_resolved"]:
+        data["prepared"] = adapter["prepared_resolved"]
+    directory = adapter["directory"]
+    # Exactly the key ``_script_entries`` read, so nothing else in the document is touched.
+    rows = data.get("loose_scripts")
+    if not isinstance(rows, list):
+        rows = [data["loose_script"]] if isinstance(data.get("loose_script"), dict) else data.get("scripts")
+    for row in rows if isinstance(rows, list) else []:
+        if isinstance(row, dict) and isinstance(row.get("source"), str):
+            row["source"] = str((directory / row["source"]).resolve())
+    return data
+
+
+def load_recipe(path: Path, directory: Path, job: Job, owner: str, workspace: str | None = None) -> dict:
     """Validate an adapter recipe, hash what the plan can see (the recipe, its pinned inputs
     record, every loose script source, the alias table when the prepared inputs are on this
-    machine) and derive the seed-like facts the planner needs."""
+    machine) and derive the seed-like facts the planner needs. ``workspace`` is the second base a
+    relative ``prepared`` path may be stated against (``resolve_prepared``)."""
     src = job.input(path, limit=MAX_RECIPE_BYTES)
     try:
         data = json.loads(src.read_text(encoding="utf-8"))
@@ -172,16 +221,19 @@ def load_recipe(path: Path, directory: Path, job: Job, owner: str) -> dict:
                 job.input(p)
     embed_loose = bool(data.get("embed_loose_scripts", False))
     prepared = data.get("prepared") if isinstance(data.get("prepared"), str) else None
-    prepared_present = bool(prepared) and Path(prepared).is_dir()
+    # One reading for the whole job: the plan below and the copy the builder is given both use the
+    # resolved path, so `prepared_present` and the build can no longer disagree (docs/MODULES.md).
+    prepared_resolved, prepared_source, prepared_candidates = resolve_prepared(prepared, directory, workspace)
+    prepared_present = prepared_resolved is not None
     aliases: list[str] = []
     clips: list[str] = []
     if prepared_present:
         if aliases_rel and "\\" not in aliases_rel and ".." not in Path(aliases_rel).parts:
-            table = Path(prepared) / "assets" / aliases_rel
+            table = Path(prepared_resolved) / "assets" / aliases_rel
             if table.is_file() and not table.is_symlink():
                 job.input(table, limit=MAX_ALIAS_BYTES)
                 aliases = read_aliases(table, owner)
-        record = Path(prepared) / "prepared.json"
+        record = Path(prepared_resolved) / "prepared.json"
         if record.is_file() and not record.is_symlink():
             try:
                 job.input(record, limit=MAX_RECIPE_BYTES)
@@ -219,7 +271,8 @@ def load_recipe(path: Path, directory: Path, job: Job, owner: str) -> dict:
             "weapons": weapons, "soundbank": bank, "aliases": aliases, "localize": dict(localize), "scripts": scripts,
             "rawfiles": rawfiles, "native_scripts": native_scripts, "effects": effects, "clips": clips,
             "embed_loose_scripts": embed_loose, "embedded": seen, "provides": provides,
-            "prepared": prepared, "prepared_present": prepared_present}
+            "prepared": prepared, "prepared_present": prepared_present, "prepared_resolved": prepared_resolved,
+            "prepared_source": prepared_source, "prepared_candidates": prepared_candidates}
 
 
 def builder_argv(workspace: str | None) -> list[str]:
@@ -275,7 +328,12 @@ def build(module: dict, args, job: Job, workspace: str | None, foundation: str |
     out.parent.mkdir(parents=True, exist_ok=True)
     timeout = max(1, int(job.deadline - __import__("time").monotonic()))
     target = target_argv(adapter, foundation, map_id)
-    log = job.run([*argv, str(adapter["recipe"]), "--output", str(out), *target], timeout=min(args.timeout, timeout))
+    # The recipe the builder reads is a resolved copy beside its output directory, never inside it:
+    # the builder owns that directory and creates it itself, and the toolkit's own files live
+    # alongside (the readback job does the same). Same document, absolute paths.
+    recipe = out.parent / f"{mid}.recipe.resolved.json"
+    recipe.write_text(json.dumps(resolved_recipe(adapter), indent=2) + "\n", encoding="utf-8")
+    log = job.run([*argv, str(recipe), "--output", str(out), *target], timeout=min(args.timeout, timeout))
     record_path = out / "build.json"
     if record_path.is_symlink() or not record_path.is_file() or record_path.stat().st_size > MAX_RECIPE_BYTES:
         raise Failure(INPUT_INVALID, f"Adapter builder for {mid} wrote no build.json", f"See {log.name}")
@@ -322,7 +380,9 @@ def build(module: dict, args, job: Job, workspace: str | None, foundation: str |
             "provides": seeds.provides_of(embedded), "strings": strings, "private": False, "missing": [],
             "manifest": record_path, "directory": stage, "loose_scripts": loose,
             "report": {"id": mid, "output": str(out), "builder": argv[-1] if argv else None, "log": log.name,
-                       "recipe": str(adapter["recipe"]), "recipe_key": module.get("recipe_key"),
+                       "recipe": str(adapter["recipe"]), "recipe_resolved": str(recipe),
+                       "prepared_resolved": adapter["prepared_resolved"], "prepared_source": adapter["prepared_source"],
+                       "recipe_key": module.get("recipe_key"),
                        "recipe_target": {"foundation": adapter["foundation"], "map": adapter["map"]},
                        "built_target": {"foundation": foundation or adapter["foundation"], "map": map_id or adapter["map"]},
                        "retargeted": bool(target),
