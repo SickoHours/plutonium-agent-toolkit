@@ -7,6 +7,26 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- A module can say it has a known bug, and say when a fix landed. `evidence.json` takes a ninth row
+  type, `known-issue`: required `issue` (one line), `seen_by` (the person or agent who saw it),
+  `scope`, and `at` — required here, where it is optional on the other eight, because a bug with no
+  date cannot be read against the fix that closed it — with optional `closes_with` (the 40-hex
+  commit that closes it; an abbreviation is refused, because a prefix that means one commit in the
+  repository the row was written in may mean another here) and `capture`. The row states no fact:
+  it never makes a module less verified, it says what is wrong with what was verified, and
+  `module state --ledger` counts it under `history["known-issue"]` like every other history row.
+  That route now also reports `known_issues`, the rows split into `open` and `closed`: a row is
+  closed when its `closes_with` commit is an ancestor of the module directory's current git head,
+  and open otherwise — with no fix yet, with a fix that is not in this checkout, or with a fix this
+  host cannot place (no git, no repository, an unknown commit), the last carrying
+  `"ancestry": "unknown"` to say why. The reader runs `git rev-parse HEAD` and
+  `git merge-base --is-ancestor`, reads only, and never writes or fetches; a missing git is an
+  unanswered question, never a crash. So a person holding a version from before the fix sees the
+  bug they still have and does not stitch a broken version by accident. `module ledger-add` writes
+  the row through the same validator, unchanged. Format in `docs/evidence-ledger.md`. Verified by
+  offline unit tests on Linux (`tests/test_ledger_known_issue.py`, which creates its own git
+  repository); no native receipt and no route status changes.
+
 - A module can say where a person finds it and whether its port works yet. `module.json` takes an
   optional `system`, one of `pack-a-punch`, `perks`, `hud`, `weapons`, `powerups`, `box`,
   `core-rules`, `gums`, `bosses`, `equipment`, `audio` or `map`: the player-facing system a module

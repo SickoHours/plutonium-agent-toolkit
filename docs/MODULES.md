@@ -602,7 +602,8 @@ Optional `lineage` records a T4/T5 source relationship: `[{"game":"t5","map":"zm
 
 `lineage` is also the first row type of the evidence ledger: an optional `evidence.json` beside
 `module.json` holds typed, scoped rows (`lineage`, `authored`, `accepted-in-pack`,
-`extracted-from-release`, `built-alone`, `agent-reviewed`, `game-tested`, `player-accepted`) from
+`extracted-from-release`, `built-alone`, `agent-reviewed`, `game-tested`, `player-accepted`,
+`known-issue`) from
 which the six facts are derived per scope, unknown kept unknown. `module inspect` validates it
 when present; `module state --ledger` reports it. Format: [evidence-ledger.md](evidence-ledger.md).
 

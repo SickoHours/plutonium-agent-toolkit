@@ -204,7 +204,8 @@ class LedgerFactsTests(unittest.TestCase):
         self.assertEqual(set(scopes), {("stock", "bo2-stock", "zm_transit")})
         self.assertEqual(scopes[("stock", "bo2-stock", "zm_transit")]["captured"], None)
         self.assertEqual(scopes[("stock", "bo2-stock", "zm_transit")]["player_accepted"], True)
-        self.assertEqual(derived["history"], {"lineage": 1, "authored": 1, "accepted-in-pack": 1, "extracted-from-release": 1, "agent-reviewed": 1})
+        self.assertEqual(derived["history"], {"lineage": 1, "authored": 1, "accepted-in-pack": 1, "extracted-from-release": 1,
+                                              "agent-reviewed": 1, "known-issue": 0})
 
 
 class LedgerCliTests(unittest.TestCase):
