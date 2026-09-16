@@ -82,19 +82,8 @@ and the *engine* must have those scripts loaded too.
   `externals:` check rows from `knowledge/stock-exports.json`. The include must be on the script's
   own VM: a `.csc` resolves against `clientscripts\mp\_utility` and
   `clientscripts\mp\zombies\_zm_utility`, and no stock client script includes a `maps\...` path.
-- **A script packed outside `scripts/zm/` is never loaded.** A T6 client registers a mod's
-  scripts out of `scripts/zm/` and nowhere else. A load prints one line per script it accepts from
-  the zone — `Overridden rawfile: scripts/zm/halo_test_probe.gsc from zone mod` — and prints
-  nothing for a `rawfile` rooted under `maps/...` or `clientscripts/...` in that same zone: one
-  measured `mod.ff` held fifteen script rawfiles and produced fourteen registration lines, the
-  missing one being its only `maps/mp/halo/` path. The script is in the fastfile, the readback
-  round-trips it byte for byte, and the engine still never opens it. The fault appears only when
-  something calls into it — `Could not load scriptparsetree "maps/mp/halo/cr35_buildables.gsc"`,
-  then `COM_ERROR (6)`, every symbol behind that path as an unresolved external, and `SV_Shutdown`.
-  A loose file under a raw search path is the separate, working route for such a path (the stock
-  `maps/mp/animscripts/zm_dog_combat.gsc` is demand-loaded that way), which is why the packed copy
-  being unreachable is a property of the delivery, not of the path. Put a module's own scripts
-  under `scripts/zm/`; `module plan` reports this as a `script-reach:` row and refuses.
+- **A rawfile outside `scripts/zm/` is never registered as a script.** No `Overridden rawfile:` line,
+  then `Could not load scriptparsetree "maps/mp/halo/x.gsc"` at the first call in. `script-reach:` refuses.
 - **Unresolved external.** A helper that compiled because a name matched, but the engine could not
   find it in a loaded script. `setclientfield` with two parameters lives in `maps/mp/_utility`;
   include it. Resolve every unqualified call against the includes and exports the engine will

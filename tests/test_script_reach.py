@@ -149,7 +149,8 @@ class LooseDelivery(CompositionFixture):
     def test_only_a_script_under_a_loaded_root_travels_loose_beside_the_package(self):
         a = self.module("alpha")
         recipe = json.loads((a / "project.json").read_text())
-        (a / "scripts" / "alpha.csc").write_text("main()\n{\n    wait 1;\n}\n")
+        # main() stays empty: the client VM runs it before its own rows exist (`csc-main-body`).
+        (a / "scripts" / "alpha.csc").write_text("main()\n{\n}\n\ninit()\n{\n    wait 1;\n}\n")
         recipe["scripts"].append({"source": "scripts/alpha.csc", "target": "scripts/zm/alpha.csc", "instance": "client"})
         (a / "project.json").write_text(json.dumps(recipe))
         code, row = invoke(["module", "build", str(self.composition(["alpha"])), "--output", self.out(), "--json"])
