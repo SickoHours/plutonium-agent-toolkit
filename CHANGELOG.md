@@ -28,6 +28,40 @@ Every entry states what shipped, on which platform it was verified, and what rem
   shipped `crash-signatures.json` is generator output and is unchanged; the maintainer's next export
   carries the amended row. Offline verified on Linux; no game was loaded.
 
+- A module can declare who prints its one console line at init. `module.json` takes an optional
+  `registration`: `self` when the module's own server script prints `<id> >> registered` from its
+  registration path, `entry` when the module is entry-managed and the pack's generated entry script
+  prints the line on its behalf, `none` when nothing of the module runs at init. `entry` without an
+  `entry` field is refused at `/registration`; absent keeps meaning what every declaration written
+  before this field means, and changes nothing about how the module builds or plans. `module inspect`
+  echoes `registration` only when the declaration names it. `plan.json` and the `module plan` summary
+  carry `expected_lines`, one `{id, registration, line}` row per member in plan order with `line` set
+  for `self` and `entry` and `null` otherwise, so a load check, a test plan and a campaign tool read
+  one derived list instead of each keeping its own. `module build` emits
+  `println("<id> >> registered");` in the generated entry's `init()` immediately after each `entry`
+  member's register call, in the composition's dependency order. `test plan` adds one agent-verified
+  log check `present: "^<id> >> registered"` to the load phase per `self` or `entry` member, beside
+  the existing error-absence check, and lists a member that promises no line under `not_covered` as
+  "<id> prints no registration line". The phase count and order are unchanged. The
+  `verify-declaration` route that would compare the declaration against the module's source is
+  designed in `docs/MODULES.md` and is not implemented here. Verified by offline unit tests on Linux
+  (`tests/test_registration_line.py`); no native receipt and no route status changes. No line has yet
+  been observed in a real game console through this code: what ships is the declaration field, the
+  derived list, the generated `println` and the test-plan step, all checked offline.
+- New check `map-guard`. A module ported from another map often keeps its donor's entry guard — a
+  top-level `if ( getdvar( "mapname" ) != "zm_transit" ) return;` in `main()` or `init()`, or the
+  `level.script` form, or the `==` form whose `else` returns. It compiles, links and loads on any
+  map; on the map the guard does not name, the entry point returns and the member does nothing,
+  and no compiler, linker or load-time error says so. `module plan` and `module build` now read
+  every compiled `.gsc`/`.csc` for that guard and refuse when it names a map other than the
+  composition's (`map-guard:<script>`, one row per script). One condition may name several maps
+  (`!= "a" && != "b"`, or the `==`/`||` dual) and fails only when the target is in none of them,
+  listing every map named. A guard naming the target map passes. The reading is narrow, because a
+  failed row refuses: only a conditional that is the entry point's first real statement (prints,
+  waits and assignments may precede it) and whose branch returns unconditionally is a guard;
+  anything else, including a source with no guard at all, is `not_counted`. `adapt` gains the matching `map-guard` pattern: a
+  member whose guard names another map is a port, not a widening, because declaring the target
+  would not make a returning `main()` run. Offline verified on Linux; no game was loaded.
 - A module can declare what it *promises*, and the declaration reader checks it. `replaces.files`
   is widened from GSC/CSC scripts to any relative zone path the base or the map already carries (a
   table, a visionset, a `weapons/<name>` file), still lowercase, forward slashes, deduplicated and

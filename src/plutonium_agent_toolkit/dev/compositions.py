@@ -94,6 +94,11 @@ PROVIDES_KINDS = ("weapons", "perks", "gobblegums", "powerups", "equipment", "lo
 # outright, never when it merely touches it: a new HUD owns `hud`, a counter widget does not.
 # The list grows by a measured collision, not by anticipation (docs/MODULES.md).
 EXCLUSIVE_ROLES = ("hud", "box", "loadscreen", "boss", "perk-machines", "perk-art")
+# Who prints the module's one console line at init, so a load says which members registered instead
+# of only that the pack's entry script ran: the module's own script, the generated entry on its
+# behalf, or nobody (docs/MODULES.md, "The registration line").
+REGISTRATION_KINDS = ("self", "entry", "none")
+REGISTRATION_SUFFIX = " >> registered"
 # What a dependency is *for*. `call`, `name` and `service` leave evidence in bytes; `runtime` is a
 # relationship only the engine shows (a level variable, a notify, an order of init), so it says why.
 DEPENDENCY_KINDS = ("call", "name", "service", "runtime")
@@ -122,6 +127,12 @@ MAX_LIST = 64
 MAX_TAGS = 16
 MAX_CONTRACT = 100_000
 MAX_NESTING = 4
+
+
+def registration_line(mid: str) -> str:
+    """The exact line a registered module leaves in the console. One shape, derived from the id,
+    so a plan, a test plan and a checker all read it from here and none of them spells it out."""
+    return mid + REGISTRATION_SUFFIX
 
 
 def add_parser(sub, common):
@@ -202,9 +213,11 @@ MAX_INSPECTION_TEXT = 2048
 MAX_INSPECTION_CODE = 200
 MODULE_METADATA_FIELDS = ("id", "version", "game", "title", "category", "kind", "tags", "bases", "maps",
                           "dependencies", "conflicts", "origin", "donor", "distribution", "menu_route", "payload", "recipes",
-                          "lineage", "replaces", "entry", "placements", "parameters", "exclusive", "service", "dependency_kinds")
+                          "lineage", "replaces", "entry", "placements", "parameters", "exclusive", "service", "registration",
+                          "dependency_kinds")
 # Echoed only when the declaration names them, so a declaration written before a field is unchanged.
-MODULE_METADATA_OPTIONAL = ("replaces", "entry", "placements", "parameters", "recipes", "exclusive", "service", "dependency_kinds")
+MODULE_METADATA_OPTIONAL = ("replaces", "entry", "placements", "parameters", "recipes", "exclusive", "service", "registration",
+                            "dependency_kinds")
 COMPOSITION_METADATA_FIELDS = ("name", "title", "game", "tags", "base", "map", "origin", "donor", "members")
 
 
@@ -485,6 +498,24 @@ def _service(value, owner: str, provides: dict, exclusive: list[str]) -> bool:
     return value
 
 
+def _registration(value, owner: str, entry) -> str | None:
+    """Who prints the module's ``<id> >> registered`` line at init. Absent means the declaration
+    does not say, which is what every declaration written before this field means; it is not a
+    claim that the module prints nothing. ``entry`` is the pack's generated entry script printing
+    the line on the module's behalf, so it needs an entry to print it from."""
+    if value is None:
+        return None
+    if not isinstance(value, str) or value not in REGISTRATION_KINDS:
+        raise Failure(INPUT_INVALID, f"{owner}: registration is one of self, entry or none",
+                      "self is the module's own script, entry the pack's generated entry script on its behalf, "
+                      "none a module with nothing that runs at init.")
+    if value == "entry" and entry is None:
+        raise Failure(INPUT_INVALID, f"{owner}: registration entry needs an entry field; the generated entry script "
+                                     "prints the line after calling entry.register",
+                      "Declare entry.replace and entry.register, or say self and print the line from the module's own script.")
+    return value
+
+
 def _dependencies(value, owner: str) -> tuple[list[str], dict[str, dict]]:
     """Ids, and what each dependency is *for*. An entry is a module id, or an object
     ``{id, kind, why?}`` saying why the edge exists. The ids are the plan's fact either way: the
@@ -692,7 +723,7 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
     _fields(data, {"schema", "id", "version", "game", "title", "category", "kind", "tags", "recipe", "recipes", "seed", "bases", "maps",
                             "dependencies", "conflicts", "provides", "resource_contract", "menu_route", "distribution", "source",
                             "origin", "donor", "lineage", "tests", "replaces", "entry", "placements", "parameters",
-                            "exclusive", "service"},
+                            "exclusive", "service", "registration"},
                      {"schema", "id", "version", "bases", "maps"}, where)
     if data["schema"] != 1:
         raise Failure(INPUT_INVALID, f"{where}: expected schema 1", field='/schema')
@@ -762,6 +793,7 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
     # After provides and exclusive: what a service may claim is read from what it already declares.
     service = _at("/service", _service, data.get("service"), mid, provides, exclusive)
     dependencies, dependency_kinds = _at("/dependencies", _dependencies, data.get("dependencies", []), mid)
+    registration = _at("/registration", _registration, data.get("registration"), mid, data.get("entry"))
     return {"id": mid, "version": data["version"], "game": game, "title": title, "category": category, "kind": kind, "tags": list(tags),
             "payload": payload, "payload_path": payload_path, "recipes": recipes, "distribution": distribution, "tests": tests,
             "replaces":_at("/replaces",_replaces,data.get("replaces")), "entry":_at("/entry",_entry,data.get("entry")),
@@ -770,7 +802,7 @@ def validate_declaration_metadata(data, *, where: str = "module.json") -> dict:
             "bases": list(bases), "maps": list(maps),
             "dependencies": dependencies, "dependency_kinds": dependency_kinds,
             "conflicts": _at("/conflicts", _ids, data.get("conflicts", []), "conflicts", mid),
-            "provides": provides, "exclusive": exclusive, "service": service,
+            "provides": provides, "exclusive": exclusive, "service": service, "registration": registration,
             "resource_contract": _at("/resource_contract", _contract, data.get("resource_contract"), f"{mid}: resource_contract"),
             "menu_route": menu_route, "source": source,
             "lineage": validate_lineage(data.get("lineage")),
@@ -1260,7 +1292,7 @@ def resolve(comp: dict, modules: list[dict], allow_unqualified: bool = False) ->
 # it can tell. ``unknown`` is the honest answer for everything a plan cannot see (a missing effect
 # root, a donor asset the target zones lack); only a build finds those, and `module qualify` types
 # them from its own receipts.
-ADAPT_PATTERNS = ("map-scripts", "dependency-unqualified", "adapter-recipe-single-target-without-recipes", "unknown")
+ADAPT_PATTERNS = ("map-scripts", "map-guard", "dependency-unqualified", "adapter-recipe-single-target-without-recipes", "unknown")
 
 
 def adapt_rows(comp: dict, modules: list[dict], unqualified: list[dict], foundation: str | None, checks=()) -> list[dict]:
@@ -1269,7 +1301,9 @@ def adapt_rows(comp: dict, modules: list[dict], unqualified: list[dict], foundat
     Read-only: nothing is widened, built or written here. Each row names the module, the target
     as ``<foundation>/<map>``, the command that would earn the widening, and the pattern the plan
     could see. The patterns a plan can decide are a script the target map does not carry
-    (``map-scripts``, from a failed check this member owns), a dependency that is itself
+    (``map-scripts``, from a failed check this member owns), a script whose entry guard names
+    another map (``map-guard``: the member is a port, not a widening, because declaring the
+    target would not make a returning ``main()`` run), a dependency that is itself
     undeclared (``dependency-unqualified``), and an adapter whose recipe is a cut for another
     target with no ``recipes`` entry for this one
     (``adapter-recipe-single-target-without-recipes``); everything else is ``unknown``."""
@@ -1280,6 +1314,8 @@ def adapt_rows(comp: dict, modules: list[dict], unqualified: list[dict], foundat
     target = f"{foundation or comp['base']}/{comp['map']}"
     failed_scripts = {c["id"][len("map-scripts:"):]: c for c in checks
                       if c.get("outcome") == "failed" and str(c.get("id", "")).startswith("map-scripts:")}
+    failed_guards = {c["id"][len("map-guard:"):]: c for c in checks
+                     if c.get("outcome") == "failed" and str(c.get("id", "")).startswith("map-guard:")}
     rows = []
     for row in unqualified:
         m = by_id.get(row["id"])
@@ -1287,9 +1323,13 @@ def adapt_rows(comp: dict, modules: list[dict], unqualified: list[dict], foundat
             continue
         pattern, detail = "unknown", None
         owned = sorted(name for name in failed_scripts if name in set(m.get("provides", {}).get("scripts", [])))
+        guarded = sorted(name for name in failed_guards if name in set(m.get("provides", {}).get("scripts", [])))
         if owned:
             pattern = "map-scripts"
             detail = failed_scripts[owned[0]].get("detail")
+        elif guarded:
+            pattern = "map-guard"
+            detail = failed_guards[guarded[0]].get("detail")
         elif m.get("adapter") is not None and m.get("recipe_key") is None \
                 and (m["adapter"]["foundation"], m["adapter"]["map"]) != (foundation, comp["map"]):
             pattern = "adapter-recipe-single-target-without-recipes"
@@ -1585,6 +1625,7 @@ def _plan_rows(modules: list[dict], order: list[str], job: Job) -> list[dict]:
                "payload": "seed" if m["seed"] else "adapter" if m.get("adapter") else "recipe",
                "distribution": m["distribution"], "dependencies": m["dependencies"], "conflicts": m["conflicts"],
                "dependency_kinds": m["dependency_kinds"], "exclusive": m["exclusive"], "service": m["service"],
+               "registration": m["registration"],
                "bases": m["bases"], "maps": m["maps"], "provides": m["provides"], "resource_contract": m["resource_contract"],
                "menu_route": m["menu_route"], "source": m["source"], "reference": m.get("reference"),
                "origin": m["origin"], "donor": m["donor"], "replaces":m["replaces"], "entry":m["entry"], "placements": m.get("placements"),
@@ -1759,13 +1800,19 @@ def execute(args, job: Job) -> dict:
     adapter_modules = [by_id[mid] for mid in resolved["order"] if by_id[mid].get("adapter")]
     checks = _backends(compiled, bool(adapter_modules), getattr(args, "workspace", None))
     rows = _plan_rows(modules, resolved["order"], job)
+    # One row per member in plan order: the console line the declaration promises, or None where it
+    # promises none. Derived from the declaration and nothing else, so a load check, a test plan and
+    # a campaign tool read one list instead of each keeping its own (docs/MODULES.md).
+    expected_lines = [{"id": r["id"], "registration": r["registration"],
+                       "line": registration_line(r["id"]) if r["registration"] in ("self", "entry") else None}
+                      for r in rows]
     base_ids = [r["id"] for r in rows if r["role"] == "base"]
     plan = {
         "schema_version": 1, "name": comp["name"], "title": comp["title"], "tags": comp["tags"], "base": comp["base"],
         "map": comp["map"], "origin": comp["origin"], "donor": comp["donor"],
         "game": comp["game"], "mode": titles.zone(comp["game"])["mode"], "warnings":warnings,
         "base_member": base_ids[0] if base_ids else None,
-        "modules": rows, "order": resolved["order"],
+        "modules": rows, "order": resolved["order"], "expected_lines": expected_lines,
         "scripts": [{"source": str(p), "target": t.as_posix(), "instance": i, "module": owner_of_script.get(t.as_posix())} for p, t, i in compiled],
         "assets": [{"source": str(p), "target": t.as_posix(), "type": k, "name": n, "module": owner_of_script.get(t.as_posix())} for p, t, k, n in loose],
         "withheld": withheld,
@@ -1823,6 +1870,7 @@ def execute(args, job: Job) -> dict:
         except OSError: continue
         plan["checks"] += offline_checks.external_symbols(target.as_posix(),text,comp["game"])
         plan["checks"] += offline_checks.map_script_externals(target.as_posix(),text,comp["map"],foundation,comp["game"],pack_scripts)
+        plan["checks"] += offline_checks.map_guards(target.as_posix(),text,comp["map"])
         plan["checks"] += offline_checks.box_registrations(target.as_posix(),text,provided_weapons)
         key=(str(source),target.as_posix())
         if key in survivors:
@@ -1849,6 +1897,7 @@ def execute(args, job: Job) -> dict:
                "modules": [{"id": r["id"], "version": r["version"], "order": i + 1, "payload": r["payload"], "role": r["role"],
                             "parameters": r.get("parameters", {})}
                            for i, r in enumerate(rows)],
+               "expected_lines": expected_lines,
                "unqualified": resolved["unqualified"], "adapt": plan["adapt"],
         "resource_totals": resolved["resource_totals"], "budget": comp["budget"],
                "scripts": len(compiled), "assets": len(loose), "seeds": len(seed_modules), "adapters": len(adapter_modules), "loads": len(loads),
@@ -1962,7 +2011,13 @@ def entry_source(name, members):
     lines += ['#include '+path.replace('/',chr(92))+';' for path in includes]
     for root,key in (('main','replace'),('init','register')):
         lines += ['',root+'()','{']
-        lines += ['    '+m['entry'][key].replace('/',chr(92))+'();' for m in members]
+        for m in members:
+            lines.append('    '+m['entry'][key].replace('/',chr(92))+'();')
+            # A member that declared `registration: "entry"` has its one console line printed here, on
+            # its behalf and after the call that registers it, so the line means the registration ran
+            # rather than that the file loaded (docs/MODULES.md, "The registration line").
+            if key=='register' and m.get('registration')=='entry':
+                lines.append('    println("'+registration_line(m['id'])+'");')
         lines += ['}']
     return '\n'.join(lines)+'\n'
 

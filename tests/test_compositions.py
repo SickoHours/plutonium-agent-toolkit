@@ -5,6 +5,7 @@ The formats are specified in docs/MODULES.md; these tests are the executable hal
 import json
 from pathlib import Path
 
+from plutonium_agent_toolkit.dev.compositions import staged_scripts
 from tests.test_dev_routes import DevRouteFixture, invoke
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,6 +55,57 @@ class CompositionFixture(DevRouteFixture):
             (d / "scripts" / f"{mid}.gsc").write_text(script)
         (d / "project.json").write_text(json.dumps(recipe, indent=2))
         return d
+
+
+class StagedScripts(CompositionFixture):
+    """What the pack's own bytes are. A pack-level check reads the rows the build stages and no
+    others: the loser of a file collision never reaches the package, and the generated entry does."""
+
+    def rows(self, compiled, decided=(), modules=()):
+        return staged_scripts(compiled, list(decided), list(modules))
+
+    def test_a_decided_collision_keeps_only_the_owners_copy(self):
+        alpha = (Path("/m/alpha/scripts/half.csc"), Path("scripts/zm/half.csc"), "client")
+        beta = (Path("/m/beta/scripts/half.csc"), Path("scripts/zm/half.csc"), "client")
+        modules = [{"id": "alpha", "directory": "/m/alpha"}, {"id": "beta", "directory": "/m/beta"}]
+        decided = [{"kind": "file", "collision": "scripts/zm/half.csc", "owner": "beta"}]
+        self.assertEqual(self.rows([alpha, beta], decided, modules), [(*beta, "beta")])
+        decided = [{"kind": "file", "collision": "scripts/zm/half.csc", "owner": "alpha"}]
+        self.assertEqual(self.rows([alpha, beta], decided, modules), [(*alpha, "alpha")])
+
+    def test_without_a_decision_the_first_row_wins_once(self):
+        alpha = (Path("/m/alpha/scripts/x.gsc"), Path("scripts/zm/x.gsc"), "server")
+        beta = (Path("/m/beta/scripts/x.gsc"), Path("scripts/zm/X.GSC"), "server")
+        modules = [{"id": "alpha", "directory": "/m/alpha"}, {"id": "beta", "directory": "/m/beta"}]
+        self.assertEqual(self.rows([alpha, beta], (), modules), [(*alpha, "alpha")],
+                         "one target is staged once, case-insensitively")
+
+    def test_the_generated_entry_is_a_staged_row_owned_by_no_member(self):
+        """Its source is the job directory, not a module's: it is the pack's own script and it is
+        staged like any other compiled row, so a check reads it with no module to name."""
+        member = (Path("/m/alpha/scripts/alpha.gsc"), Path("scripts/zm/alpha.gsc"), "server")
+        entry = (Path("/job/generated-entry/zz_stock_pack_test_entry.gsc"),
+                 Path("scripts/zm/zz_stock_pack_test_entry.gsc"), "server")
+        modules = [{"id": "alpha", "directory": "/m/alpha"}]
+        self.assertEqual(self.rows([member, entry], (), modules), [(*member, "alpha"), (*entry, None)])
+
+    def test_a_pack_with_a_generated_entry_still_reads_its_clientfields(self):
+        """End to end: the generated entry is compiled, staged and read with the members."""
+        m = self.module("alpha", entry={"replace": "scripts/zm/alpha::alpha_replace",
+                                        "register": "scripts/zm/alpha::alpha_register"}, registration="entry")
+        (m / "scripts/alpha.gsc").write_text(
+            'alpha_replace() {}\nalpha_register()\n{\n    registerclientfield("toplayer", "halo_cr35_meter", 1, 2, "int");\n}\n')
+        code, result = invoke(["module", "plan", str(self.composition(["alpha"])), "--output", self.out()])
+        self.assertFalse(result["ok"], result)
+        self.assertIn("clientfield-symmetry:halo_cr35_meter", result["details"]["failed"])
+        entry_target = "scripts/zm/zz_stock_pack_test_entry.gsc"
+        self.assertIn("externals:" + entry_target, [s["id"] for s in result["details"]["checks"]],
+                      "the generated entry is one of the compiled scripts the checks read")
+        plan = json.loads((Path(result["receipt"]).parent / "plan.json").read_text())
+        self.assertIn(entry_target, [s["target"] for s in plan["scripts"]],
+                      "and it is a script row in the plan like any member's")
+        row = next(c for c in result["details"]["checks"] if c["id"] == "clientfield-symmetry:halo_cr35_meter")
+        self.assertIn("module alpha", row["detail"])
 
 
 class CompositionTests(CompositionFixture):
@@ -856,6 +908,28 @@ class PoolAndDeliveryTests(CompositionFixture):
         self.assertEqual(pool["base"], 531, "TranZit's own rawfiles from shipped occupancy")
         self.assertEqual(pool["contribution"], 602)
         self.assertEqual(pool["contributors"][0], {"id": "wavegun", "count": 601})
+
+    def test_a_member_guarded_on_another_map_refuses_naming_the_script(self):
+        # The script compiles, links and loads; its main() just returns, so the pack ships a
+        # member that does nothing. Only reading the guard finds that before the game does.
+        guarded = 'main()\n{\n    if ( getdvar( "mapname" ) != "zm_nuked" )\n        return;\n    level thread bus();\n}\n\nbus()\n{\n    wait 1;\n}\n'
+        self.module_with_assets("bus", [], script=guarded)
+        comp = self.composition(["bus"], name="stock_guard_test")
+        code, row = invoke(["module", "plan", str(comp), "--output", self.out()])
+        self.assertEqual(code, 1, row)
+        self.assertIn("map-guard:scripts/zm/bus.gsc", row["message"])
+        check = next(c for c in row["details"]["checks"] if c["id"] == "map-guard:scripts/zm/bus.gsc")
+        self.assertEqual(check["outcome"], "failed")
+        self.assertEqual(check["detail"], "returns unless mapname is zm_nuked; this composition targets zm_transit, so the script does nothing on it")
+
+    def test_a_member_guarded_on_the_target_map_passes_and_an_unguarded_one_is_not_counted(self):
+        self.module_with_assets("bus", [], script='main()\n{\n    if ( getdvar( "mapname" ) != "zm_transit" )\n        return;\n    level thread bus();\n}\n\nbus()\n{\n    wait 1;\n}\n')
+        self.module("hud")
+        code, row = invoke(["module", "plan", str(self.composition(["bus", "hud"], name="stock_guard_test")), "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        by_id = {c["id"]: c for c in row["result"]["checks"]}
+        self.assertEqual(by_id["map-guard:scripts/zm/bus.gsc"]["outcome"], "passed")
+        self.assertEqual(by_id["map-guard:scripts/zm/hud.gsc"]["outcome"], "not_counted")
 
     def test_deliver_false_withholds_authoring_inputs_from_the_zone_and_the_pool(self):
         rows = [{"source": f"model_export/m{i}.glb", "target": f"model_export/m{i}.glb", "type": "rawfile", "deliver": False} for i in range(600)]
