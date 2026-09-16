@@ -7,6 +7,21 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- Re-exported T6 knowledge, carrying two new crash-signature rows and one corrected regex.
+  `sound-bank-failed-to-load` (class `asset-missing`) matches
+  `ERROR: sound bank failed to load <name>.all. You have a build problem.` and is the first row in
+  the table whose cause was never found: the evidence rotated away before the diagnosis ran, and the
+  two obvious explanations — a bank missing from the mod folder, a bank under the wrong name — were
+  checked and ruled out first. Its cause column is an observation, and `docs/knowledge/crashes.md`
+  says so under the table rather than letting the row imply a mechanism. `csc-main-only` (class
+  `shape-marker`) is the row the previous change said would land with the next export; this is that
+  export, and the page now reads that way. `client-script-pass-died` stays documented and unshipped,
+  because a pairing with an absent line is not something a line matcher can hold; the generator skips
+  it by name instead of deriving a row from its wording. `too-early-to-loadmod` carried the regex
+  `too early to loadmod!` and matched no real line, because the engine prints
+  `Too early to loadmod!`; widened to `[Tt]oo early to loadmod!`. All six exported files are
+  generator output with a fresh `exported_by`/`exported_at` marker and nothing here was hand-edited
+  (`tests/test_knowledge_export_contract.py`). Verified on Linux.
 - A module can say it has a known bug, and say when a fix landed. `evidence.json` takes a ninth row
   type, `known-issue`: required `issue` (one line), `seen_by` (the person or agent who saw it),
   `scope`, and `at` — required here, where it is optional on the other eight, because a bug with no

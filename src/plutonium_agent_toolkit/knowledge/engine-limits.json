@@ -1,5 +1,5 @@
 {
- "exported_at": "2026-09-15T11:54:18Z",
+ "exported_at": "2026-09-16T03:09:22Z",
  "exported_by": "t6-knowledge-export",
  "note": "The public table as data. bound is the observed number, never a specification; count_source names the loaded-sets.json field that counts against it, null when nothing on disk counts it (record unknown, not passing).",
  "rows": [

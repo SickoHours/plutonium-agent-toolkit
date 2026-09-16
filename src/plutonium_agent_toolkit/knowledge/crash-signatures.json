@@ -1,5 +1,5 @@
 {
- "exported_at": "2026-09-15T11:54:18Z",
+ "exported_at": "2026-09-16T03:09:22Z",
  "exported_by": "t6-knowledge-export",
  "note": "Console log lines and Plutonium crash-text lines seen after clean compiles and readbacks, as regexes without the [HH:MM:SS] prefix. `python scripts/t6_knowledge.py lookup log <slice>` matches a slice. The cause beside each is the one found and fixed, not the only possible one. A repair that names a new line adds a row in the same task.",
  "rows": [
@@ -74,6 +74,15 @@
    "log_text": null,
    "regex": "G_FindConfigstringIndex: overflow \\((\\d+)\\)",
    "source": "private repair record of the maintainer"
+  },
+  {
+   "cause": "Not a fault on its own: the client VM calls `main()` and `init()` on every loose mod `.csc` and links a no-op stub for whichever is absent. One passing load printed 32 such lines, including the server twin for about twenty `main`-less scripts that work",
+   "class": "shape-marker",
+   "fix": "Read it as a *shape marker* only — a `.csc` that defines `main()` but no `init()` is doing its work in the early pass (`gsc.md`). Scope the matcher to `scripts/zm`: every healthy load also prints the same line for `\"soundNotify\" in \"clientscripts/mp/_dogs\"`",
+   "id": "csc-main-only",
+   "log_text": "Unable to find client function: \"init\" in \"scripts/zm/<name>\", then ******* Linking to default stub function instead ******",
+   "regex": "Unable to find client function: \"init\" in \"scripts/zm/([a-z0-9_]+)\"",
+   "source": "docs/knowledge/crashes.md"
   },
   {
    "cause": "Tracer reference registered before its default",
@@ -220,6 +229,15 @@
    "source": "docs/knowledge/crashes.md"
   },
   {
+   "cause": "Observation only, no mechanism established. The engine refused a sound bank a loaded zone named. Seen 2026-09-15 on one pack: four of its .all banks printed this line in a single session while the pack's other banks, in the same folder, did not; every named .all.sabl was present beside mod.ff under exactly that name, and the same four had loaded from that same folder the day before. The session's report and console slice have since rotated away, so what distinguished the four is unknown",
+   "class": "asset-missing",
+   "fix": "No repair is recorded for this line yet. Read the load's own console before inferring one: a bank that loads prints 'Adding prioritized sound bank \"<name>.all\" from zone \"mod\"', 'Attempting to load soundbank <name>.all', 'Soundbank <name>.all has load asset bank <name>.all.sabl' and 'SOUND Header load success ... <name>.all.sabl'. Check that every bank the zone names sits beside mod.ff under exactly that name, and count the composition's banks against the 32 'sound' asset limit",
+   "id": "sound-bank-failed-to-load",
+   "log_text": null,
+   "regex": "sound bank failed to load ([a-z0-9_]+)\\.all\\. You have a build problem",
+   "source": "docs/knowledge/crashes.md"
+  },
+  {
    "cause": "Whitespace between quoted tokens lost in an entity edit",
    "class": "asset-parse",
    "fix": "Preserve token separators and every original key",
@@ -243,7 +261,7 @@
    "fix": "Sequence: disconnect or return to the lobby first, then select the mod, then load the map",
    "id": "too-early-to-loadmod",
    "log_text": null,
-   "regex": "too early to loadmod!",
+   "regex": "[Tt]oo early to loadmod!",
    "source": "docs/knowledge/crashes.md"
   },
   {
