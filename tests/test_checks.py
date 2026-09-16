@@ -205,6 +205,30 @@ class ExternalSymbols(unittest.TestCase):
         row=self.row(checks.external_symbols('scripts/zm/a.gsc',src),'externals:')
         self.assertEqual(row['outcome'],'failed')
         self.assertIn('maps/mp/_utility::get_players called with 1 argument',row['detail'])
+    def test_a_qualified_call_naming_a_function_its_owner_does_not_export_fails(self):
+        """The linker refuses `owner::name` for an absent name exactly as it refuses a bare miss;
+        passing it would let a typo or a renamed helper through the only check that can see it."""
+        src='main()\n{\n    maps\\mp\\_utility::no_such_helper();\n}\n'
+        row=self.row(checks.external_symbols('scripts/zm/a.gsc',src),'externals:')
+        self.assertEqual(row['outcome'],'failed')
+        self.assertIn('maps/mp/_utility does not export no_such_helper',row['detail'])
+    def test_a_qualified_call_on_the_wrong_owner_names_the_owner_that_does_export_it(self):
+        """gersch, gstrike and matryoshka all qualify register_tactical_grenade_for_level to
+        _zm_weapons; it is declared in _zm_utility, so the linker refuses all three."""
+        src='main()\n{\n    maps\\mp\\zombies\\_zm_weapons::register_tactical_grenade_for_level("x");\n}\n'
+        row=self.row(checks.external_symbols('scripts/zm/a.gsc',src),'externals:')
+        self.assertEqual(row['outcome'],'failed')
+        self.assertIn('maps/mp/zombies/_zm_weapons does not export register_tactical_grenade_for_level',row['detail'])
+        self.assertIn('maps/mp/zombies/_zm_utility does',row['detail'])
+    def test_a_qualified_call_into_a_partial_row_is_not_read_negatively(self):
+        """The client rows carry only the names proven so far, so an absence there is silence, not
+        evidence the client utility lacks the name."""
+        src='main()\n{\n    clientscripts\\mp\\_utility::some_unproven_name();\n}\n'
+        self.assertEqual(self.row(checks.external_symbols('scripts/zm/a.csc',src),'externals:')['outcome'],'passed')
+    def test_a_qualified_call_into_a_path_no_row_owns_is_not_judged(self):
+        """A pack's own script, or any path the table has no row for, is map-scripts' business."""
+        src='main()\n{\n    maps\\mp\\halo\\mine::helper();\n}\n'
+        self.assertEqual(self.row(checks.external_symbols('scripts/zm/a.gsc',src),'externals:')['outcome'],'passed')
     def test_a_string_literal_argument_is_counted_as_an_argument(self):
         """The mask blanks string literals; counting arguments on the blanked text would read
         `get_players("axis")` as passing none and miss the excess."""

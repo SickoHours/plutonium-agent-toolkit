@@ -21,7 +21,11 @@ Every entry states what shipped, on which platform it was verified, and what rem
   `get_players` resolves only for a script that included `common_scripts\utility`. A declaration
   accepts every count up to its own parameter count, because GSC passes undefined for an argument a
   call omits — 564 bare calls in the decompile do exactly that — so only an excess is a fault.
-  Qualified `owner::name(...)` calls are judged against that owner's arities too. Names no row owns
+  Qualified `owner::name(...)` calls are judged against that owner's arities too, and one naming a
+  function its owner does not export fails pointing at the row that does: three shelf modules
+  qualify `register_tactical_grenade_for_level` to `_zm_weapons` when it is declared in
+  `_zm_utility`. Rows carry `complete`, and only a complete row is read negatively, so the partial
+  client rows still say nothing by omission. Names no row owns
   and no builtin witness covers now leave a separate `externals-unknown:<script>` row, still
   `not_counted` because ignorance cannot refuse a build, but under its own id rather than pooled
   with the verdict. A read-only sweep of 407 module sources in the private workspace turns up

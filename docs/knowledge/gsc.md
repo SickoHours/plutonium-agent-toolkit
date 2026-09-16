@@ -64,7 +64,9 @@ and the *engine* must have those scripts loaded too.
   `qol_max_ammo` (only `maps\mp\_utility`) died at `Unresolved external "get_players" with 1
   parameters`. Passing *fewer* arguments than the declaration lists is ordinary and safe — GSC binds
   undefined to the rest, and 564 bare calls in the `patch_zm` decompile do it — so only an excess
-  fails. A bare name no export row owns and no builtin witness covers is reported separately as
+  fails. Qualifying a call to the wrong stock script is the same refusal: `register_tactical_grenade_for_level`
+lives in `maps\mp\zombies\_zm_utility`, so `maps\mp\zombies\_zm_weapons::register_tactical_grenade_for_level`
+does not link. A bare name no export row owns and no builtin witness covers is reported separately as
   `externals-unknown:<script>`, `not_counted`: the toolkit cannot refuse on ignorance, but that name
   is where an unresolved external hides, as `register_zombie_damage_callback` did for
   `blast_furnace` before `maps\mp\zombies\_zm_spawner` was in the table.

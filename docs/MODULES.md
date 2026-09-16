@@ -833,7 +833,10 @@ VM. The script's `#include` list is the scope: a call to a stock export the scri
 nor qualifies fails naming the owner, and a call carrying more arguments than any owner in scope
 declares fails naming the counts and the include that would supply a declaration taking it. Fewer
 arguments than declared is not a fault; GSC binds undefined to the rest. A qualified
-`owner::name(...)` call is judged against that owner's arities alone. Bare names no row owns and no
+`owner::name(...)` call is judged against that owner's arities alone, and naming a function the
+owner does not export fails too, pointing at the row that does export it — the linker refuses a
+qualified miss exactly as it refuses a bare one. Only a row flagged `complete` in the table can be
+read that way; the client rows carry only proven names, so an absence there says nothing. Bare names no row owns and no
 builtin witness covers are listed separately as `externals-unknown:<script>`, `not_counted` — they
 cannot refuse a build, but they are where an unresolved external hides and they no longer share a
 row with the verdict.

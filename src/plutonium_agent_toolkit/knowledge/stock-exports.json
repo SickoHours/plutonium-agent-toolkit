@@ -1,11 +1,12 @@
 {
  "schema": 1,
- "note": "Function exports of stock zombies scripts by script VM (patch_zm decompile, gsc-tool). An unqualified call to one of these from a module script on the same VM, without the matching #include, is an unresolved external at link time. A row only judges scripts of its own vm: a .csc never links against a server script, so server rows say nothing about a client script and the reverse. The server rows are the complete export lists of those eight scripts; the client rows carry only the names proven so far, so a client call this table does not hold stays not_counted rather than failed. `arity` carries each function's declared parameter count from the same decompile. GSC passes undefined for an argument a call omits, so a call resolves against a declaration whose parameter count is at least its own argument count; a call with more arguments than any reachable declaration accepts is an unresolved external at link, which no compiler reports.",
+ "note": "Function exports of stock zombies scripts by script VM (patch_zm decompile, gsc-tool). An unqualified call to one of these from a module script on the same VM, without the matching #include, is an unresolved external at link time. A row only judges scripts of its own vm: a .csc never links against a server script, so server rows say nothing about a client script and the reverse. The server rows are the complete export lists of those eight scripts; the client rows carry only the names proven so far, so a client call this table does not hold stays not_counted rather than failed. `complete` says which: only a complete row can be read negatively, so `owner::name` naming a function a complete row does not list is a failed call, while the same shape against a partial row says nothing. `arity` carries each function's declared parameter count from the same decompile. GSC passes undefined for an argument a call omits, so a call resolves against a declaration whose parameter count is at least its own argument count; a call with more arguments than any reachable declaration accepts is an unresolved external at link, which no compiler reports.",
  "foundation": "bo2-stock",
  "zone": "patch_zm",
  "exports": {
   "common_scripts/utility": {
    "vm": "server",
+   "complete": true,
    "functions": [
     "_delay_notify_proc",
     "_delay_thread_proc",
@@ -509,6 +510,7 @@
   },
   "maps/mp/_utility": {
    "vm": "server",
+   "complete": true,
    "functions": [
     "_playlocalsound",
     "activate_exploder",
@@ -1220,6 +1222,7 @@
   },
   "maps/mp/zombies/_zm_utility": {
    "vm": "server",
+   "complete": true,
    "functions": [
     "activate_zombie_point_of_interest",
     "add_gameloc",
@@ -2451,6 +2454,7 @@
   },
   "maps/mp/zombies/_zm_weapons": {
    "vm": "server",
+   "complete": true,
    "functions": [
     "acquire_weapon_toggle",
     "activate_weapon_toggle",
@@ -2890,6 +2894,7 @@
   },
   "maps/mp/zombies/_zm_perks": {
    "vm": "server",
+   "complete": true,
    "functions": [
     "_register_undefined_perk",
     "activate_packapunch",
@@ -3277,6 +3282,7 @@
   },
   "maps/mp/zombies/_zm_powerups": {
    "vm": "server",
+   "complete": true,
    "functions": [
     "add_zombie_powerup",
     "add_zombie_special_drop",
@@ -3692,6 +3698,7 @@
   },
   "maps/mp/zombies/_zm": {
    "vm": "server",
+   "complete": true,
    "functions": [
     "actor_damage_override",
     "actor_damage_override_wrapper",
@@ -4371,6 +4378,7 @@
   },
   "maps/mp/zombies/_zm_spawner": {
    "vm": "server",
+   "complete": true,
    "functions": [
     "add_cusom_zombie_spawn_logic",
     "add_custom_zombie_spawn_logic",
@@ -4750,6 +4758,7 @@
   },
   "clientscripts/mp/_utility": {
    "vm": "client",
+   "complete": false,
    "functions": [
     "add_to_array"
    ],
@@ -4761,6 +4770,7 @@
   },
   "clientscripts/mp/zombies/_zm_utility": {
    "vm": "client",
+   "complete": false,
    "functions": [
     "onplayerconnect_callback"
    ],

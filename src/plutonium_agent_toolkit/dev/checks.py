@@ -449,6 +449,13 @@ def stock_arities(vm):
     if vm is None:return {}
     return {path:row.get('arity',{}) for path,row in knowledge.load('stock-exports.json')['exports'].items() if row.get('vm')==vm}
 
+def stock_complete(vm):
+    """The rows on ``vm`` whose export list is the whole script's. Only those can be read
+    negatively: a name a complete row does not list is a name its owner does not export, while the
+    same absence in a partial row is silence."""
+    if vm is None:return set()
+    return {path for path,row in knowledge.load('stock-exports.json')['exports'].items() if row.get('vm')==vm and row.get('complete')}
+
 def call_arguments(text,paren):
     """The top-level argument count of the call whose `(` sits at ``paren``; None when the
     parentheses do not close. Nested calls, arrays and commas inside them belong to one argument."""
@@ -497,7 +504,9 @@ def external_symbols(name,text,game='t6'):
     `maps/mp/_utility` and 1 in `common_scripts/utility`, and a one-argument call resolves only for
     a script that included the latter (2026-09-15, `qol_instant_nuke` links, `qol_max_ammo` dies at
     `Unresolved external "get_players" with 1 parameters`). A qualified `owner::name(...)` call is
-    judged against that owner's arities alone.
+    judged against that owner's arities alone, and a qualified call naming a function a complete row
+    does not list fails too: the linker refuses `owner::name` for an absent name exactly as it
+    refuses a bare one.
 
     `externals:<script>` is failed when a call needs an #include the script lacks or carries more
     arguments than the scope takes, and passed otherwise. Bare identifiers no export row owns and
@@ -537,16 +546,25 @@ def external_symbols(name,text,game='t6'):
         if witness.get('verdict')=='builtin':continue
         if witness.get('also_on'):unknown.append(f'{call} (witnessed on {", ".join(witness["also_on"])} only)')
         else:unknown.append(call)
+    complete=stock_complete(vm)
     for match in QUALIFIED_CALL.finditer(text):
         owner=match.group(1).replace(chr(92),'/').lower();call=match.group(2).lower()
         count=call_arguments(text,match.end()-1)
-        if count is None or call not in arities.get(owner,{}):continue
+        if count is None or owner not in arities:continue
+        if call not in arities[owner]:
+            # The linker refuses a qualified miss exactly like a bare one; only a row that lists the
+            # whole script can say the name is absent rather than merely unproven.
+            if owner in complete:
+                elsewhere=[path for path,names in exports.items() if call in names]
+                overrun.append(f'{owner} does not export {call}'+
+                               (f'; {" or ".join(elsewhere)} does' if elsewhere else ''))
+            continue
         overrun+=arity_faults(f'{owner}::{call}',{count},[owner],[owner],arities,key=call)
     rows=[]
     if missing or overrun:
         detail='; '.join([part for part in
             ('Unqualified stock calls without #include: '+'; '.join(missing) if missing else '',
-             'Stock calls the export cannot take: '+'; '.join(sorted(set(overrun))) if overrun else '') if part])
+             'Stock calls the owner cannot resolve: '+'; '.join(sorted(set(overrun))) if overrun else '') if part])
         rows.append({'id':'externals:'+name,'outcome':'failed','detail':detail[:800]})
     elif unknown:
         rows.append({'id':'externals:'+name,'outcome':'passed',
