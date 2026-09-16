@@ -104,7 +104,10 @@ PLANNED = [
                 "proof the path runs; the /hud row reads an image or material asset row, a shader precache or a stock icon "
                 "name, and is omitted entirely for a module whose reach is passive, since a rule with no pickup draws nothing "
                 "for a player to see. --propose fills reach only when exactly one of wall-or-box, drop and passive is found, never machine, "
-                "granted or menu, and fills hud: icon from the byte while never proposing hud: none. Writes nothing."),
+                "granted or menu, and fills hud: icon from the byte while never proposing hud: none. The /changelog row "
+                "regenerates the page module changelog writes and compares it to the CHANGELOG.md on disk: agrees on the same "
+                "bytes, observed_not_declared with the differing line count when the file was edited by hand or is stale, and "
+                "not_counted when the module has no page at all. Writes nothing."),
     Route("module", "compose", "Write and plan a recipe from member IDs and a foundation, or publish a recipe after a successful build", "writes-output", status="implemented", owner=OWNER, notes="Use --name --base --map --foundation --member-root --module with a fresh --output. Publish with --composition --from-build --publish-to. No game actions."),
     Route("module", "plan", "Resolve a composition of declared modules (dependency order, conflicts, base and map fit, "
           "resource budget), list every collision as a decision, and hash every input without running a backend", "writes-output",
@@ -179,6 +182,20 @@ PLANNED = [
 
 register(Route("module", "state", "Derive composition evidence state from exact artifact hashes, or report a module's six facts per scope from its evidence ledger", "inert", status="implemented", owner=OWNER,
                notes="--composition DIR [--plan --verify --test-plan --run --verdict] derives the composition rungs by hash. --ledger <module dir|evidence.json> [--base --foundation --map --location --package --target] reads evidence.json rows and reports each of the six facts per scope (a scope is base and/or foundation, a map set and optionally one survival location that never collapses into its map) and per {base, map, location} target; --target <foundation>/<map>/<mode>[/<location>] supplies foundation, map and location at once (docs/target-sets.md); a fact with no row of the matching type is null (unknown), and accepted-in-pack rows never feed a fact. A shipped row (the game ships this here, the provenance of distribution stock content) feeds none of them either and is reported separately as shipped, per scope and per target, where no row means false rather than unknown. known_issues lists the known-issue rows split into open and closed, a row being closed when its 40-hex closes_with commit is an ancestor of the module directory's current git head (read-only rev-parse and merge-base; a fix this checkout cannot place leaves the row open with ancestry unknown). Format: docs/evidence-ledger.md."))
+register(Route("module", "changelog", "Generate one module's CHANGELOG.md from its own git history and its evidence ledger, grouped by the version each commit declared", "writes-record", status="implemented", owner=OWNER,
+               notes="Arguments: <module dir> [--write | --check] --json. Protocol pat.module-changelog/1. **Only --write writes**: without it the route is inert and "
+                     "prints the rendered page in the result, and --check writes nothing either. It takes no --output and creates no job directory or receipt; "
+                     "--write replaces <module dir>/CHANGELOG.md through a sibling temporary file and one rename, refusing a path that is not a regular file. "
+                     "Three read-only sources: git log over the module directory (bounded to 2000 commits, 20 s, never raising -- no git, no repository or no "
+                     "readable history renders one paragraph saying so with the reason), the evidence.json beside the declaration (its known-issue, game-tested "
+                     "and player-accepted rows; a module with no ledger simply has none), and the declaration's current version. A commit belongs to the version "
+                     "its own declaration carried at that commit, read once per distinct declaration blob; a commit older than the declaration lands under "
+                     "unversioned. Sections are newest version first with the declaration's current version leading even when no commit carries it yet, commits "
+                     "newest first inside a section with a shared day broken by the sha, and each version's evidence rows are the ones whose at falls within its "
+                     "commit dates (a row with no at, or one dated outside every span, goes under the current version rather than nowhere). Deterministic: the "
+                     "same directory at the same commit renders the same bytes, and no timestamp of the run appears anywhere. --check compares byte for byte and "
+                     "exits 1 with input_invalid, current false and diff_lines when the file differs or is missing. module verify-declaration reports the same "
+                     "comparison as its /changelog row and never writes. Format: docs/MODULES.md."))
 register(Route("module", "ledger-add", "Append validated rows to a module's evidence ledger: every row through the same validator module inspect applies, append-only and all-or-nothing", "writes-record", status="implemented", owner=OWNER,
                notes="Arguments: <module dir|evidence.json> --row <row.json> [--row ...] --json. Each row file holds one row object or a list of them, appended in the order given. "
                      "evidence.json is created with the module.json id as its subject when absent, and a ledger whose subject is a different id is refused. Every row is validated in the "

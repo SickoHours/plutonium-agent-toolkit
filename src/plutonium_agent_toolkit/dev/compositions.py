@@ -215,6 +215,12 @@ def add_parser(sub, common):
     q.add_argument("--strict", action="store_true", help="Exit 1 when any row is declared_not_observed or observed_not_declared; what a library gate wants")
     q.add_argument("--propose", action="store_true", help="Add the declaration fields the observed side would fill; written nowhere, and never removing a declared name")
     q.add_argument("--json", action="store_true")
+    q = actions.add_parser("changelog", help="Generate the module's CHANGELOG.md from its git history and its evidence ledger; never hand-edited")
+    q.add_argument("directory", help="Module directory holding module.json")
+    g = q.add_mutually_exclusive_group()
+    g.add_argument("--write", action="store_true", help="Write <dir>/CHANGELOG.md atomically; without it the text is printed and nothing is written")
+    g.add_argument("--check", action="store_true", help="Compare the generated page to the file on disk; exit 1 when it differs or is missing")
+    q.add_argument("--json", action="store_true")
     for action, help_text in (("plan", "Resolve a composition, list collisions as decisions and hash its inputs; runs no backend"),
                               ("build", "Compile, link against seeds and loads, read back and compare every module into one mod.ff")):
         q = actions.add_parser(action, help=help_text)

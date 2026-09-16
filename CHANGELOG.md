@@ -25,6 +25,33 @@ Every entry states what shipped, on which platform it was verified, and what rem
   classifies a member's zone exactly as before — by listing presence, not by who named it — and a
   test now says so. Offline verified on Linux (`tests/test_compositions.py`,
   `tests/test_qualify.py`); no game was loaded.
+
+- `pat module changelog <module dir> [--write | --check] --json` generates a module's
+  `CHANGELOG.md`, so a person or a community member can see what changed in a module and why by
+  reading one file on the repository, with no build, no receipt and no agent. It reads three things
+  and only reads them: `git log` over the module directory (bounded to 2000 commits and 20 seconds,
+  and never raising -- no git, no repository or no readable history renders one paragraph saying so,
+  with the reason), the `evidence.json` beside the declaration for its `known-issue`, `game-tested`
+  and `player-accepted` rows, and the declaration's own `version`. **The grouping rule is the
+  declaration's own history**: each commit is read for the `module.json` it carried at that commit
+  and belongs to the version that declaration named, each distinct declaration read once, so a fix
+  that shipped in 0.1.0 stays under 0.1.0 after the bump and the page does not rewrite itself every
+  time the version moves; a commit older than the declaration lands under `unversioned`. Sections
+  run newest version first with the current version leading even when no commit carries it yet,
+  commits newest first inside a section with a shared day broken by the sha, and a version's
+  evidence rows are the ones whose `at` falls within its commit dates. It is deterministic by
+  contract: the same directory at the same commit renders the same bytes, and no timestamp of the
+  run appears anywhere, so a diff of this file is a change in the module and not a change in the
+  clock. **Only `--write` writes** -- it replaces the file through a sibling temporary file and one
+  rename, refusing a path that is not a regular file -- while the plain run prints the page and
+  `--check` compares it byte for byte, exiting 1 with `current: false` and `diff_lines` when the
+  page is stale or missing. The file is generated and never hand-edited, and
+  `module verify-declaration` enforces that with a new `/changelog` row: `agrees` when the file is
+  the page the module's own bytes render, `observed_not_declared` with the differing line count and
+  the command that regenerates it when somebody edited it, `not_counted` when the module has no page
+  at all, and it never writes one. Designed in `docs/MODULES.md`, "A generated changelog per
+  module". Offline verified on Linux (`tests/test_module_changelog.py`); no native receipt, and no
+  existing route's status changed.
 - A declaration can now say how a player reaches a feature and whether they can see they have it,
   and `module plan` derives reachability per composition and map. `reach` is one word from
   `wall-or-box`, `machine`, `granted`, `drop`, `passive` and `menu`; `hud` is `icon` or `none`.

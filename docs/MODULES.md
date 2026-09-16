@@ -1538,6 +1538,61 @@ registration function ran, nothing after it), and not a replacement for the erro
 followed by a script error is still a failure). It adds one rawfile to nothing: the line lives in
 scripts that already exist.
 
+### A generated changelog per module
+
+A person who finds a module on a repository should be able to read what changed in it, and why,
+without running a build or asking an agent. `pat module changelog <module dir> [--write | --check]
+--json` writes that page: one `CHANGELOG.md` beside `module.json`, generated from bytes that
+already exist and **never hand-edited**.
+
+It reads three things, all read-only, and writes nothing without `--write`:
+
+| Source | What it contributes |
+| --- | --- |
+| `git log` over the module directory (at most 2000 commits, 20 s, never raising) | one line per commit: `- <short sha> <date> <subject>` |
+| the `evidence.json` beside the declaration | its `known-issue`, `game-tested` and `player-accepted` rows, the ones that say what somebody saw |
+| the declaration's own `version` | the section a reader lands on first |
+
+**The grouping rule is the declaration's own history.** Walking the commits oldest to newest, each
+one is read for the `module.json` it carried at that commit, and it belongs to the version that
+declaration named -- so a fix that shipped in 0.1.0 stays under 0.1.0 after the bump, and the page
+does not rewrite itself every time the version moves. Each distinct declaration is read once, so a
+module with a long history costs one read per version and not one per commit. A commit older than
+the declaration belongs to `unversioned`, which is always last. Sections run newest version first,
+with the declaration's current version leading even when no commit carries it yet; inside a
+section commits run newest first, with a day two commits share broken by the sha. A version's
+evidence rows are the ones whose `at` falls within its first and last commit date, inclusive; a row
+with no `at`, and one dated outside every span, reads under the current version rather than nowhere.
+
+The evidence lines have fixed shapes, so a row written once reads the same in every module's page:
+
+```
+- known issue (2026-09-02, agent-7): Box table misses the donor rifle after round 10 closed by 01234567
+- game-tested passed on zm_transit, zm_prison (2026-09-05, run run-1)
+- player-accepted accepted on zm_transit (2026-09-12)
+```
+
+**Deterministic by contract.** The same directory at the same commit renders the same bytes: no
+timestamp of the run appears anywhere, ties are broken by sha, and dates are git's `--date=short`.
+That is what makes a diff of this file a change in the module rather than a change in the clock.
+No git, no repository or no readable history is not a defect in the module: the page is then one
+paragraph saying the history could not be read, with the reason.
+
+**Two flags, and only one of them writes.**
+
+| Flag | What it does |
+| --- | --- |
+| none | renders the page into the JSON result and writes nothing |
+| `--write` | replaces `<module dir>/CHANGELOG.md` through a sibling temporary file and one rename, refusing a path that is not a regular file, so a link is never written through |
+| `--check` | compares byte for byte: exit 0 with `current: true`, or exit 1 with `input_invalid`, `current: false` and `diff_lines` when the page differs or is missing |
+
+**What keeps it honest.** `module verify-declaration` reports a `/changelog` row: it regenerates
+the page and compares it to the file on disk -- `agrees` when they are the same bytes,
+`observed_not_declared` with the differing line count and "run pat module changelog --write" when
+the file was edited by hand or is stale, and `not_counted` when the module has no page at all.
+Verify never writes one. So a hand edit is a `--strict` failure and not a thing that quietly
+survives, and a module that has never generated a page is not accused of anything.
+
 ### What a checker can verify, kind by kind
 
 `pat module verify-declaration <module dir> [--workspace <root>] [--base-listings <dir>]
