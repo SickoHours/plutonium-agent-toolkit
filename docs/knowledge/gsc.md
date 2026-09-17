@@ -58,7 +58,7 @@ line for `"soundNotify" in "clientscripts/mp/_dogs"`. The line is a reliable *ma
 
 `pat gsc compile <file>` runs gsc-tool in `comp` mode for `t6`, platform `pc`, with the
 instance for the file's side. `--includes <dir>` adds a directory searched for `#include` files
-and hashes it into the receipt. Decompiling a compiled script uses the same tool in `decomp` mode.
+and hashes it into the receipt. Decompiling a compiled script uses the same tool in `decomp` mode. gsc-tool 1.4.10 refuses some shipped T6 map scripts with `[ERROR]:decompiler: location 'loc_XXXX' not found` (2026-09-17: three of seven DLC 5 map scripts, `zm_asylum`, `zm_theater`, `zm_cosmodrome`, extracted with `ff extract --types script`; the receipt says `backend_failed`); the compiled file's literal table is intact, and `strings -n 4` on it recovers every string literal, enough to read which power-ups its `include_powerups()` names, which `specialty_*` perks it mentions and which scripts it includes, so read the string table before calling such a fact unknowable, and cite the compiled file rather than a line.
 
 gsc-tool compiles a script that only uses engine builtins with no include files at all. A script
 calling the game's own helpers needs their includes, and the *engine* must have those scripts loaded.

@@ -23,7 +23,11 @@ and it is where a real program that differs from the fake gets its adapter fixed
   fixture Blender generates itself. The four Windows-only backends (CoDLuaDecompiler, Greyhound,
   Husky, C2M) have no tier step: `lua decompile` needs a real LUI bytecode file the repository
   cannot ship, and the other three are GUIs no route runs. Qualifying `lua decompile` means
-  adding a step that reads a file you supply, and saying so in the receipt notes.
+  adding a step that reads a file you supply, and saying so in the receipt notes. A real T6 file is
+  `ui/t6/*.lua` inside the retail `patch_ui_zm.ff` (`ff extract --types rawfile`; the lobby
+  screens are LuaQ bytecode). `ui_zm.ff` carries 133 `menu` assets and no Lua: the T6 Zombies
+  in-match HUD is menu files plus server-drawn elements, so a Lua route reaches the lobby, not
+  the in-match HUD. On Linux the pin is Windows-only, so this step needs `PAT_BACKEND_LUA`.
 - The route is a development route. Game control and capture routes are Windows-only by
   transport (Win32 console); on Linux they are unsupported, not unmeasured, and this playbook
   does not apply to them.
