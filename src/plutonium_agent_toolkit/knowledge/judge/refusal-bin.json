@@ -7,7 +7,8 @@
     "fields": {
       "plan_request": "The composition request: target name, map, mode, member ids, foundation",
       "member_declarations": "Per member: kind, resource contract, bases, maps, when the receipt carried them",
-      "refusal_messages": "The planner's refusal rows as message and hint text, with their kind and module fields removed"
+      "refusal_messages": "The planner's refusal rows as message and hint text, with their kind and module fields removed",
+      "members": "The member ids of the plan request, one per line, so the named_member question can select one"
     },
     "max_bytes": 16384,
     "redact": true
@@ -28,9 +29,10 @@
       "type": "choice",
       "instructions": "Which member of the plan request does the refusal message name as the one at fault or the one to act on? If the message names several, pick the first one named. If it names none, pick none.",
       "criteria_from": {
-        "state_regex": "\\b[a-z][a-z0-9_]{2,40}\\b",
-        "fields": ["plan_request.members"],
-        "plus": { "none": "The refusal names no member, or names something that is not a member of this request" }
+        "state_lines": "members",
+        "plus": {
+          "none": "The refusal names no member, or names something that is not a member of this request"
+        }
       }
     },
     "actionable": {
