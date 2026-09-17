@@ -355,7 +355,8 @@ def status(work: str, workspace: str | None = None) -> dict:
     requests = _rows(root, "decisions.json", "requests")
     pending = [r for r in requests if r.get("answer") is None]
     last = spine[-1] if spine else None
-    done = [row["step"] for row in rows if row["outcome"] == "done"]
+    # A step is behind the work once it is done or deliberately skipped; a failed step is still ahead.
+    done = [row["step"] for row in rows if row["outcome"] in ("done", "skipped")]
     next_step = None
     for name in STEPS:
         if name not in done:

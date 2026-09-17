@@ -238,7 +238,7 @@ class StatusTests(WorkFixture):
         self.assertTrue(result["waiting_on_person"])
         self.assertEqual(len(result["pending"]), 1)
         self.assertEqual(result["current_step"], "build")
-        self.assertEqual(result["next_step"], "donor", "a skipped step is not done; the reader says so rather than hiding it")
+        self.assertEqual(result["next_step"], "build", "a skipped step is behind the work, like a done one; build is started, not done")
         self.assertEqual(result["last"]["step"], "build")
         self.assertEqual(result["evidence"], {"receipted": 0, "narrated": 3, "receipt-missing": 0, "receipt-drifted": 0})
 
