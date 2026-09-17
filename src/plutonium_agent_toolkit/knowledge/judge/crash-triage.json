@@ -1,0 +1,67 @@
+{
+  "schema": 1,
+  "id": "crash-triage",
+  "title": "Which catalog row explains a T6 Zombies crash, what kind of thing caused it, which script owns it, and which line says so",
+  "model": "jev-latest",
+  "state": {
+    "fields": {
+      "crash_text": "The crash .txt written beside the minidump: exception code, last com error message, last gsc error message, last gsc pos",
+      "console_before_crash": "Up to 40 console lines before the crash from console_zm.log, engine timestamps kept, dvar dump lines dropped"
+    },
+    "max_bytes": 16384,
+    "redact": true
+  },
+  "questions": {
+    "signature": {
+      "type": "choice",
+      "instructions": "This is a Plutonium T6 Zombies crash: the crash text the engine wrote, and the console lines just before it. Which catalog row names the cause of this crash? Pick the row whose cause the crash text or console lines actually show. If the only evidence is a script position with no error message, the row that describes 'position only' applies. If no row's cause is shown, pick none.",
+      "criteria_from": {
+        "knowledge": "crash-signatures.json",
+        "key": "id",
+        "describe": "{cause} (log pattern: {regex})",
+        "plus": { "none": "No catalog row names the cause shown in this crash text or console" }
+      }
+    },
+    "culprit_kind": {
+      "type": "choice",
+      "instructions": "What kind of thing most likely caused this crash, judging only from the crash text and the console lines?",
+      "criteria": {
+        "script_logic": "A GSC script read an undefined value, cast it wrongly, or called a function with a bad argument; the crash text names a gsc error message",
+        "hard_limit": "The engine hit a fixed capacity: no free entities, configstring overflow, asset count, client field space, memory; the com error or console names the limit",
+        "asset_missing": "A referenced asset, animation, sound bank, image or file was absent or failed to parse; the console names what was missing",
+        "position_only": "The crash text names a script position but no error message and no com error, and the console shows no failure line; the cause is not shown",
+        "engine_internal": "An engine fault with no script position and no mod-attributable message"
+      }
+    },
+    "owner_script": {
+      "type": "choice",
+      "instructions": "Which script named anywhere in the crash text or console is the most likely owner of the defect? The 'last gsc pos' names where the VM was when it died, which is usually but not always the owner; a com error naming a spawn or limit points at the script that was spawning.",
+      "criteria_from": {
+        "state_regex": "[a-z0-9_/]+::[a-z0-9_]+|maps/mp/[a-z0-9_/]+\\.gsc|maps/mp/[a-z0-9_/]+",
+        "fields": ["crash_text", "console_before_crash"],
+        "plus": { "none_named": "No script is named, or none of the named scripts is clearly the owner" }
+      }
+    },
+    "evidence_line": {
+      "type": "choice",
+      "instructions": "Which single line of the crash text most directly justifies the signature you would pick?",
+      "criteria_from": {
+        "state_lines": "crash_text",
+        "plus": { "none": "No single line of the crash text justifies a signature; the console lines carry the evidence, or nothing does" }
+      }
+    },
+    "catalog_gap": {
+      "type": "noul",
+      "instructions": "Does the crash text or console contain a specific engine error message, in words, that names a cause, and that message is not the pattern of any catalog row listed in the signature question?",
+      "criteria": {
+        "true": "There is a specific error message in words, such as a com error or a console failure line, and no catalog row's log pattern matches it",
+        "false": "A catalog row's pattern matches the message, or the only evidence is an exception code and a script position with no message in words"
+      }
+    }
+  },
+  "policy": {
+    "act": 0.85,
+    "ask": 0.5,
+    "note": "Regex runs first and is authoritative when it matches a specific row. This set is consulted when regex matches nothing or only the generic position row. Above act: the answer may be shown as the likely row. Never promotes a signature; catalog_gap above act queues the crash for a person."
+  }
+}
