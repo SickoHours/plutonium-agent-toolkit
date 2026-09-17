@@ -7,6 +7,12 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- Knowledge: gsc-tool 1.4.10 refuses some shipped DLC 5 map scripts with `location 'loc_XXXX' not
+  found`; the compiled file's string table still answers include and registration questions
+  (`docs/knowledge/gsc.md`). `lua decompile` was run against a real T6 LuaQ file on Linux for the
+  first time and refused `backend_unavailable` because only a Windows pin exists; `docs/SUPPORT.md`
+  says so, and the qualify playbook and `zombies-contracts.md` record that the T6 Zombies in-match HUD
+  is menu assets plus server elements, with Lua reaching the lobby only.
 - `pat agent hosts`, `status` and `dispatch` send `x-t3-orchestration-protocol` naming the protocol
   the client speaks. T3 Code 0.0.42 gates every orchestration read on that header
   (`OrchestrationProtocolHeaders`, literal `"2"`) and answered `400 invalid_request` to the bare

@@ -35,6 +35,9 @@ universal budget, until you measure it in the composition you are shipping.
   a mockup asks for smaller type.
 - HUD elements need an allocation pool that is actually visible in the composed client; a
   server-side allocation success and a local element count do not prove visibility.
+- The in-match Zombies HUD is `menu` assets plus server-drawn `newclienthudelem` elements, not
+  LUI: `ui_zm.ff` holds 133 menus and no Lua, `patch_ui_zm.ff` holds only lobby Lua (inspected
+  2026-09-17). A HUD rebuilt for a mod is server elements or menu files; Lua changes the lobby.
 - Menu D-pad navigation must not activate carried equipment; a held Select must not carry into a
   nearby pickup after the menu closes.
 
