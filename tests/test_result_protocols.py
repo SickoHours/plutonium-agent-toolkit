@@ -27,6 +27,8 @@ LITERAL = re.compile(r'"(pat\.[a-z-]+/[0-9]+)"|\'(pat\.[a-z-]+/[0-9]+)\'')
 # what `module state --ledger` answers with, the other half of a route whose row names the
 # derived-state protocol instead.
 KNOWN = {
+    "pat.judge-eval/1",
+    "pat.judge-set/1",
     "pat.module-accept/1",
     "pat.module-changelog/1",
     "pat.module-inspect/1",
