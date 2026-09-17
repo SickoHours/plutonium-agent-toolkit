@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "id": "refusal-bin",
+  "title": "Which of the loadout screen's bins a planner refusal belongs to, and which member it names",
+  "model": "jev-latest",
+  "state": {
+    "fields": {
+      "plan_request": "The composition request: target name, map, mode, member ids, foundation",
+      "member_declarations": "Per member: kind, resource contract, bases, maps, when the receipt carried them",
+      "refusal_messages": "The planner's refusal rows as message and hint text, with their kind and module fields removed",
+      "members": "The member ids of the plan request, one per line, so the named_member question can select one"
+    },
+    "max_bytes": 16384,
+    "redact": true
+  },
+  "questions": {
+    "bin": {
+      "type": "choice",
+      "instructions": "The offline planner for Black Ops II Zombies packs refused this composition. Read the refusal message and hint. Which bin does the refusal belong to, judged by what a person must do next? The loadout screen draws two kinds of refusal: ones where the plan knows what to remove or resolve, and ones where it does not.",
+      "criteria": {
+        "remove_member": "A pool or budget is over its line, or two members collide on one file or role, and the message names the members contributing; the fix is to take a member out of the pack (an offline check failed with a measured count over a bound; an exclusive role owned twice)",
+        "resolve_with_service": "Two or more members each replace a map-owned table or file with their own copy, or a member stages an asset the map already carries without declaring it; the fix is a service module that owns the shared thing, or a replaces declaration",
+        "qualify_on_map": "A member is declared for other maps and not for this target's map; the fix is to qualify the module on this map first",
+        "missing_input": "A member's recipe inputs, donor payload or private files are not on this machine; the fix is to obtain the inputs, not to change the pack",
+        "unknown_cause": "The message names a failure the other bins do not describe: a probe that does not cover the target, a roll-up that only says refused, or a message too thin to act on"
+      }
+    },
+    "named_member": {
+      "type": "choice",
+      "instructions": "Which member of the plan request does the refusal message name as the one at fault or the one to act on? If the message names several, pick the first one named. If it names none, pick none.",
+      "criteria_from": {
+        "state_lines": "members",
+        "plus": {
+          "none": "The refusal names no member, or names something that is not a member of this request"
+        }
+      }
+    },
+    "actionable": {
+      "type": "noul",
+      "instructions": "Does the refusal message, with its hint, tell a person exactly what to change so the plan would be accepted?",
+      "criteria": {
+        "true": "The message names the member or file and the hint names the change: remove, declare, qualify, obtain",
+        "false": "The message reports a failure without naming what to change, or the hint is absent or generic"
+      }
+    }
+  },
+  "policy": {
+    "act": 0.85,
+    "ask": 0.5,
+    "note": "Review screen use: a refusal the planner already tagged with a kind keeps that kind; this set is for refusals whose kind is generic (checks, input_invalid) or absent, to place them in a bin and light the member tile. Never changes a plan outcome."
+  }
+}
