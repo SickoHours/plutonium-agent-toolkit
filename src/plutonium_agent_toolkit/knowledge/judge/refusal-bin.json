@@ -21,8 +21,10 @@
         "remove_member": "A pool or budget is over its line, or two members collide on one file or role, and the message names the members contributing; the fix is to take a member out of the pack (an offline check failed with a measured count over a bound; an exclusive role owned twice)",
         "resolve_with_service": "Two or more members each replace a map-owned table or file with their own copy, or a member stages an asset the map already carries without declaring it; the fix is a service module that owns the shared thing, or a replaces declaration",
         "qualify_on_map": "A member is declared for other maps and not for this target's map; the fix is to qualify the module on this map first",
-        "missing_input": "A member's recipe inputs, donor payload or private files are not on this machine; the fix is to obtain the inputs, not to change the pack",
-        "unknown_cause": "The message names a failure the other bins do not describe: a probe that does not cover the target, a roll-up that only says refused, or a message too thin to act on"
+        "missing_input": "A member's recipe inputs, donor payload or private files are not on this machine, or a base listing the check needs is absent (donor-shadowing with no base listing); the fix is to obtain the inputs or write the listing, not to change the pack",
+        "unknown_cause": "The message names a failure the other bins do not describe: a probe that does not cover the target, a roll-up that only says refused, or a message too thin to act on",
+        "add_dependency": "A member's script calls a script path the target map does not carry and no member provides (an offline map-scripts check names the missing paths); the fix is to add the module that provides those scripts, or declare the dependency",
+        "fix_declaration": "A member's own declaration is invalid: a kind outside its category's list, a field the schema refuses, a version that must bump; the fix is to edit that module's declaration, not the pack"
       }
     },
     "named_member": {
