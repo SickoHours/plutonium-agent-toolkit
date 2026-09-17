@@ -30,6 +30,7 @@
     pat registry add <file|url> | list | search [words] [--category ...] | show <owner/id>
     pat registry baseline <directory> [--repository <url>] [--commit <40 hex>] --output <new dir>
     pat knowledge builtin <name> [--vm server|client] | signature --log <file> | limits [--map <zm_map>]   shipped T6 facts
+    pat judge list | show <set> | eval <set> --cases <file> --output <new dir> [--dry-run]   typed judgments from a hosted System One model
     pat agent probe|hosts|models|dispatch|status|send|interrupt ...   T3 Code (protocol 1) as an agent host
     pat plane actions | serve --library <dir> --jobs <dir>   a local control plane over these routes
     pat mcp tools | serve --library <dir> --jobs <dir>       the same typed actions as MCP tools on stdin and stdout
@@ -173,6 +174,9 @@ def build_parser() -> Parser:
     q = ka.add_parser("limits", help="Observed engine limits, or one map's loaded zones counted against them")
     q.add_argument("--map", help="Zombies map id, for example zm_transit"); q.add_argument("--json", action="store_true")
     q.add_argument("--output", help="Optional new directory: also write the answer and a receipt there (provenance for a benchmark)")
+    from .dev import judge
+
+    judge.add_parser(sub, common)
     from .agent import cli as _agent_cli
 
     _agent_cli.add_parser(sub)
@@ -193,7 +197,7 @@ def build_parser() -> Parser:
     g.add_argument("--json", action="store_true")
 
     # Planned/deferred groups accept any action so they can answer with a structured refusal.
-    for group in sorted({r.group for r in routes()} - {"dev", "gsc", "ff", "project", "module", "registry", "workspace", "knowledge", "target", "game", "agent", "plane", "mcp", "audio", "image", "lua", "model", "weapon", "test"}):
+    for group in sorted({r.group for r in routes()} - {"dev", "gsc", "ff", "project", "module", "registry", "workspace", "knowledge", "judge", "target", "game", "agent", "plane", "mcp", "audio", "image", "lua", "model", "weapon", "test"}):
         g = sub.add_parser(group)
         g.add_argument("action")
         g.add_argument("rest", nargs=argparse.REMAINDER)
@@ -211,7 +215,7 @@ JOB_GROUPS = {"gsc": "scripts", "ff": "fastfiles", "project": "projects", "modul
               "image": "media", "lua": "media", "model": "models", "weapon": "weapons"}
 # Single actions that are jobs inside a group whose other actions are not (registry add|list|search|show
 # take no --output; registry baseline writes a report and a receipt into a new directory).
-JOB_ACTIONS = {("registry", "baseline"): "baseline", ("test", "plan"): "testing.planner"}
+JOB_ACTIONS = {("registry", "baseline"): "baseline", ("test", "plan"): "testing.planner", ("judge", "eval"): "judge"}
 
 
 def is_job(group: str, action: str) -> bool:
@@ -422,6 +426,10 @@ def run(argv: list[str]) -> dict:
         if args.action == "signature":
             return success(command, knowledge.signature(Path(args.log) if args.log else None, args.text))
         return success(command, knowledge.limits(args.map))
+    if group == "judge":
+        from .dev import judge
+
+        return success(command, judge.listing() if args.action == "list" else judge.show(args.set))
     if group == "agent":
         from .agent import cli as agent_cli
 

@@ -175,6 +175,21 @@ PLANNED = [
     Route("knowledge", "signature", "Match a console log slice against the recorded crash signatures: class, cause found and fix that worked, per line", "inert",
           status="implemented", owner=OWNER,
           notes="Arguments: --log <file> or --text <line>. Reads that file only; the log stays on this machine. Diagnosis reads, it does not fix."),
+    Route("judge", "list", "List the question sets that ship with the toolkit: each set's id, title, model, questions and state fields", "inert",
+          status="implemented", owner=OWNER, result_protocol="pat.judge-set/1",
+          notes="No argument. Reads src/plutonium_agent_toolkit/knowledge/judge/*.json and nothing else; no network, no evidence, no key."),
+    Route("judge", "show", "Print one question set exactly as it ships, with its criteria, policy thresholds and state contract", "inert",
+          status="implemented", owner=OWNER, result_protocol="pat.judge-set/1",
+          notes="Argument: <set>. A set is a question bank, not an answer; judge eval is what asks anything."),
+    Route("judge", "eval", "Score one question set against labeled cases: one request per case to the hosted System One API, the exact bytes kept, and scores.json", "writes-output",
+          status="implemented", owner=OWNER, result_protocol="pat.judge-eval/1",
+          notes="Arguments: <set> --cases <file> [--model <slug>] [--dry-run] --output <new dir> [--timeout <s>]. **This is the only route that sends "
+                "evidence off this machine**: each case's declared state fields, redacted line by line with the private pattern, bounded to the set's "
+                "max_bytes, go to https://api.typesafe.ai/v1/systemone. request-<case>.json holds the exact bytes sent and is written before the send; "
+                "response-<case>.json holds the exact reply. --dry-run writes the requests and sends nothing. The key is read from TYPESAFE_API_KEY in "
+                "the environment and is never printed, logged or stored; without it the route refuses with judge_key_missing before writing a request. "
+                "An answer is inferred state: it never promotes a signature, writes a ledger fact, sends a game command or runs inside a build, install "
+                "or game job. Opt-in per invocation. Rules: docs/JUDGE.md and docs/contributors/JUDGE.md."),
     Route("knowledge", "limits", "The observed engine limits and, per map, what the zones the engine loads already carry against each", "inert",
           status="implemented", owner=OWNER,
           notes="Argument: [--map <zm_map>]. Counts are zone contents from listings, decompiled text and WeaponDefs, never runtime pools; null means nothing on disk counts it."),
