@@ -242,6 +242,12 @@ def materialize_state(question_set: dict, case: dict) -> tuple[dict, dict]:
     missing = []
     for name in declared:
         value = raw.get(name)
+        if isinstance(value, (dict, list)):
+            # Structured evidence is sent as JSON text: the model reads named fields, and the
+            # harness still redacts and bounds it line by line like any other field.
+            value = json.dumps(value, indent=1, sort_keys=True, ensure_ascii=False)
+        elif isinstance(value, (int, float, bool)):
+            value = json.dumps(value)
         if name in absent or not isinstance(value, str) or not value.strip() or value.strip() == ABSENT:
             values[name] = ABSENT
             missing.append(name)

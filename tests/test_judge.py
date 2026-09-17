@@ -403,7 +403,7 @@ class EvalJobTests(Temp):
         self.assertEqual(scores["set"], "crash-triage")
         self.assertEqual(scores["model"], "jev-1.13.0")
         self.assertEqual(scores["cases"], 2)
-        self.assertEqual(sorted(scores["questions"]), ["catalog_gap", "culprit_kind", "evidence_line", "owner_script", "signature"])
+        self.assertEqual(sorted(scores["questions"]), ["culprit_kind", "evidence_line", "has_message_in_words", "owner_script", "signature"])
         self.assertEqual(row["result"]["scores"], scores)
         self.assertTrue((out / "judge.log").is_file())
 
@@ -519,3 +519,14 @@ class RouteTests(Temp):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StructuredState(unittest.TestCase):
+    def test_object_and_list_fields_are_sent_as_json_text(self):
+        from plutonium_agent_toolkit.dev import judge
+        question_set = {"state": {"fields": {"declaration": "x", "file_list": "y", "readme_head": "z"}, "max_bytes": 4096, "redact": True}}
+        case = {"state": {"declaration": {"title": "Juggernog", "maps": ["zm_factory"]}, "file_list": ["README.md", "module.json"], "readme_head": "# Juggernog"}}
+        state, notes = judge.materialize_state(question_set, case)
+        self.assertIn('"title": "Juggernog"', state["declaration"])
+        self.assertIn('"module.json"', state["file_list"])
+        self.assertEqual(notes["absent"], [])
