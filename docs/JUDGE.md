@@ -11,11 +11,10 @@ Read this first, because this route is unlike every other one here:
 - **It sends your evidence to a third party.** `judge eval` posts each case's state to
   `https://api.typesafe.ai/v1/systemone`. Other routes read the network — the pinned backend
   downloads, `registry add` with a URL, `module fetch`, `dev builtin` — and `agent` writes to a T3
-  Code server the person runs. This is the only one that sends your evidence anywhere. What is
-  sent is exactly the bytes in
-  `request-<case>.json`, written into the output directory *before* the request goes out, so you
-  can read it afterwards — or read it first with `--dry-run`, which writes the requests and sends
-  nothing.
+  Code server the person runs. This is the only one that sends your evidence anywhere. What is sent
+  is exactly the bytes in `request-<case>.json`, written into the output directory *before* the
+  request goes out, so you can read it afterwards — or read it first with `--dry-run`, which writes
+  the requests and sends nothing.
 - **It is opt-in, per invocation.** No build, install, plan, verify, test or game route calls it.
   There is no flag anywhere else that turns it on, and a judgment never runs as a side effect of
   something you asked for.
