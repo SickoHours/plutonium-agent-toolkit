@@ -139,6 +139,14 @@ weapon rig, HUD text, audio memory) exist because every failure of that class re
 after a clean conversion and a passing suite; run them before the first package, not after the
 first crash.
 
+`pat judge` sits beside that knowledge and is the one route that leaves the machine. It asks a
+hosted System One model narrow typed questions about one piece of evidence and scores the answers
+against cases a person already labeled; `docs/JUDGE.md` is the page to read before running it. It
+is opt-in per invocation, no build, install, test or game route calls it, its key comes from
+`TYPESAFE_API_KEY` in the person's own shell, and an answer is inferred state: it may say which
+observed thing applies and how sure it is, and it promotes nothing. Never reach for it when the
+regex catalog already matches; `knowledge signature` runs first and is authoritative.
+
 `CONTEXT.md` at the repository root defines the words those pages, the receipts and the skills
 use, one definition each with the synonyms to avoid. `skills/` holds one skill per flow:
 `pat-help` routes, and `pat-grill`, `pat-build`, `pat-port`, `pat-diagnose` and `pat-review` do
