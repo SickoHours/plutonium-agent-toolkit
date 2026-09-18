@@ -102,6 +102,8 @@ let an agent compose several mods, from local directories or fetched repositorie
 [docs/target-sets.md](docs/target-sets.md) specifies targets (stock maps, DLC5 maps and survival
 locations as `<foundation>/<map>/<mode>[/<location>]`), the per-target location tables `pat target`
 validates, and the `placements` contract a module declares against them;
+[docs/work-orders.md](docs/work-orders.md) specifies the work order, spine and decision requests `pat work` records
+so a surface can show a person what an agent is doing on their ask and let them answer the few questions it cannot settle alone;
 [docs/REGISTRY.md](docs/REGISTRY.md) specifies the registry file that lists them by name at exact
 commits, with `pat registry` and `pat module fetch`, and the static baseline a registry runs
 before listing (`pat registry baseline`; a check of files, not a security audit); the toolkit
