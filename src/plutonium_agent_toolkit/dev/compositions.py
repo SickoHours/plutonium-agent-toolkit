@@ -3072,6 +3072,7 @@ def _build_composition(comp: dict, plan: dict, compiled, loose, seed_modules, lo
             "embedded_assets": len(embedded), "referenced_assets": len(referenced), "localized_strings": len(strings),
             "soundbanks": sorted(p.name for p in banks.iterdir() if p.is_file() and p.name != "mod.ff"),
             "loose_scripts": loose_scripts,
+            "report_only_failed": plan.get("report_only_failed", []),
             "name": comp["name"], "title": comp["title"], "base": comp["base"], "map": comp["map"], "base_member": plan["base_member"],
             "modules": [{"id": r["id"], "version": r["version"], "order": i + 1, "payload": r["payload"], "role": r["role"],
                          "parameters": r.get("parameters", {})}

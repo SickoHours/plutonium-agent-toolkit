@@ -1444,6 +1444,16 @@ class LooseOverrideTests(CompositionFixture):
         plan = json.loads((Path(row["result"]["output"]) / "plan.json").read_text())
         self.assertEqual([c["id"] for c in plan["report_only_failed"]], [c["id"] for c in recorded])
 
+    def test_report_only_rows_ride_the_build_receipt_too(self):
+        """`module build` runs the same plan step; the recorded rows are on its result and receipt,
+        so a reader of the build alone sees the finding beside the package."""
+        self.storage("camo_zombies_nml.iwi")
+        code, row = invoke(["module", "build", str(self.pack("stock_loose9_test")), "--report-only", "loose-overrides", "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        self.assertEqual([c["id"] for c in row["result"]["report_only_failed"]], ["loose-overrides", "loose-overrides:camo_zombies_nml"])
+        receipt = json.loads((Path(row["result"]["output"]) / "receipt.json").read_text())
+        self.assertEqual([c["id"] for c in receipt["result"]["report_only_failed"]], ["loose-overrides", "loose-overrides:camo_zombies_nml"])
+
     def test_report_only_names_only_a_machine_state_check(self):
         """A check about the package itself is never recordable: the flag's vocabulary is the one
         list, and an unknown name is a usage error before anything is planned."""
