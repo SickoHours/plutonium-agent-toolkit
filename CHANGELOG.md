@@ -8,6 +8,32 @@ Every entry states what shipped, on which platform it was verified, and what rem
 ## [Unreleased]
 
 - `pat work start|step|ask|answer|status`: one piece of work from a person's ask to their verdict, as three files in one directory a surface can read (`docs/work-orders.md`). `start` writes the **work order** (what was asked in the person's words, the target key, the donor, and the door it came in by: `form`, where placement decides the module, or `shelf`, where `--subject` names the module or composition it starts from) into a new directory with a receipt. `step` appends one **spine** row (`placement`, `donor`, `build`, `verify`, `install`, `load`, `verdict`; `started`, `done`, `failed`, `skipped`) with an optional note and the receipt that proves it, hashed in; a row with none is recorded as narrated. `ask` appends one **decision request** (a question, two to four options with what each implies, a default) and refuses while an earlier one is unanswered; `answer` records the person's choice once, naming the surface it came from (`app`, `host`, `person`). `status` (protocol `pat.work-status/1`) reports whether a question waits on the person, the current and next step, and every spine row with its receipt re-hashed as `receipted`, `narrated`, `receipt-missing` or `receipt-drifted`. The record files are locked and replaced whole, the way the evidence ledger is. None of it builds, plans, installs or reads the game; a spine row is the agent's statement and only its receipt is the fact. Three words added to `CONTEXT.md`: work order, spine, decision request.
+- Crash catalog: a `g-spawn-no-free-entities` row (class `pool-exhausted`) for the com error `G_Spawn: no free entities`, seen in a real crash text on 2026-09-17 and matched by no row; and every supplement row now carries a `log_text` example line, checked against its own regex by a test. Re-exported the shipped knowledge with a fresh marker.
+- `pat judge list`, `judge show <set>` and `judge eval <set> --cases <file> --output <new dir>`:
+  narrow typed questions about modding evidence, asked of a hosted System One model (TypeSafe's
+  Jev) and scored against cases a person or a receipt already labeled. The design rules are
+  `docs/contributors/JUDGE.md`; the first question set, `crash-triage`, ships under
+  `knowledge/judge/`. `list` and `show` are inert reads of those files. `eval` is a job: per case
+  it materializes the set's run-time criteria (a knowledge catalog's rows, the numbered lines of a
+  state field, or the scripts a regex finds in the state), replaces an absent field with
+  `(not available)`, redacts every line the private pattern matches, bounds the state to the set's
+  `max_bytes` and records the cut, writes the exact request bytes to `request-<case>.json` **before**
+  sending, posts them to `https://api.typesafe.ai/v1/systemone`, writes the exact reply to
+  `response-<case>.json`, and writes `scores.json` (per question: cases, labeled, agree, disagree,
+  unknown, not-asked, the two mean confidences and the count of confident-and-wrong; per case:
+  expected, answer, confidence and the top three probabilities) beside the receipt. `--dry-run`
+  writes the requests and sends nothing. **This is the only route that sends evidence off the
+  machine**, it is opt-in per invocation, and no build, install, plan, test or game route calls it.
+  An answer is inferred state: it promotes no signature, writes no ledger fact and sends no game
+  command. The key is read from `TYPESAFE_API_KEY` in the environment, used in one request header
+  and never stored, printed or logged; without it the route refuses with the new stable error code
+  `judge_key_missing` before writing or sending anything, and a redirect is refused rather than
+  followed with the bearer. Uses `urllib` from the standard library; no new dependency. A question
+  whose run-time options collapse to its no-match option alone is left out of that case's request
+  and recorded as `not-asked` rather than asked as a choice of one. Offline verified on Linux with
+  the API faked (`tests/test_judge.py`, 36 tests); the agreement of any set on any corpus is what a
+  run's own `scores.json` reports and is not claimed here.
+
 - `pat agent hosts`, `status` and `dispatch` send `x-t3-orchestration-protocol` naming the protocol
   the client speaks. T3 Code 0.0.42 gates every orchestration read on that header
   (`OrchestrationProtocolHeaders`, literal `"2"`) and answered `400 invalid_request` to the bare

@@ -1,0 +1,82 @@
+{
+  "schema": 1,
+  "id": "module-kind",
+  "title": "Which T6 module kind a declaration-less module is, from its title, files and README",
+  "model": "jev-latest",
+  "state": {
+    "fields": {
+      "declaration": "The module's declaration with its classification fields removed: title, version, origin, donor credit, bases, maps, dependencies, conflicts, distribution, recipe path, recipes map per target when present, tags, resource contract",
+      "file_list": "Relative paths of the module's files, up to 200, sorted",
+      "readme_head": "The first 1500 characters of the module's README"
+    },
+    "max_bytes": 16384,
+    "redact": true
+  },
+  "questions": {
+    "kind": {
+      "type": "choice",
+      "instructions": "This is a module for Black Ops II Zombies on Plutonium, described by its declaration (classification removed), its file list and the start of its README. Which one kind is it? Judge from what the module gives the player or the pack: a weapon a player holds, a perk they drink, a gum they chew, a power-up they pick up, equipment they throw or carry, an enemy, a helper, a UI element, a shared table or service other modules depend on, a script that changes rules, an audio bank, or a test tool. A module that owns a machine (perk machine, gum machine, Pack-a-Punch) is a machine even when the perk it serves is named. A module whose title says 'service', 'ownership', 'identity', 'sites' or 'table' and that ships no weapon or perk of its own is a registry. An adapter carries another module's payload onto a specific map or foundation and typically has per-target recipes. A README that calls a perk, gum or power-up a 'native adapter' or 'native adaptation' of a donor is describing how it was ported; the module is still that perk, gum or power-up. The adapter kind is only for a module whose declaration carries a recipes map keyed by foundation/map, or whose README says it carries another module's payload onto a target.",
+      "criteria": {
+        "wonder": "A wonder weapon: a unique, usually box-only weapon with special effects (ray gun class, Thundergun, Wave Gun, Alistair's Folly, Blundergat)",
+        "firearm": "A conventional gun: rifle, SMG, shotgun, pistol, LMG, sniper; wall-buy or box; ported from another Call of Duty or made native",
+        "melee": "A held melee weapon that replaces the knife: bowie knife, spork, bat, sickle",
+        "launcher": "A grenade or rocket launcher held as a weapon",
+        "special": "A special weapon held in the weapon slot that is not a gun, wonder weapon or melee: Annihilator pistol class, Ragnarok, gauntlets, bows",
+        "perk": "A perk a player buys at a machine or is granted: Juggernog-class effects, Bandolier, Blaze Phase, Blood Bullets; the module ships the perk's effect, not the machine model",
+        "machine": "A machine object in the map: a perk machine, the GobbleGum machine, the Pack-a-Punch machine, including vanilla machines wrapped as modules",
+        "gum": "A GobbleGum: a one-use or timed chewable effect from the gum machine (Cache Back, Alchemical Antithesis, Crate Power)",
+        "powerup": "A power-up drop zombies leave on death: Max Ammo class, All Revive, Bonfire Sale, Armour Reward",
+        "tactical": "Throwable tactical equipment: Gersch device, Lil' Arnies, monkey bombs, G-Strike",
+        "lethal": "Placed or thrown lethal equipment: claymore, spikemore, semtex-class",
+        "shield": "A carried shield: zombie shield, dragon shield",
+        "buildable": "A buildable assembled from parts at a workbench",
+        "boss": "An enemy type: Margwa, Panzer, a boss zombie with its own AI type files",
+        "special-round": "A special round type: dog rounds, brutus rounds, a round that replaces normal zombies",
+        "companion": "A friendly AI that helps the player: Civil Protector, a turret companion",
+        "hud": "A HUD element: hitmarkers, kill feedback, a counter, a bar, drawn on screen",
+        "menu": "A menu or menu screen a player navigates",
+        "inventory": "A core inventory service: a tactical inventory, slot management, that other modules register into",
+        "registry": "A core registry other modules depend on and that ships no weapon, perk, gum or power-up of its own: perk ownership, weapon identity, gum sites for a map, a shared table; the title usually says ownership, identity, sites, registry or table",
+        "adapter": "An adapter: its declaration has a recipes map keyed by foundation/map, or it carries another module's payload onto a specific map or foundation (a disguise on a map, mixed rounds on a map, actor variants core); not a perk or power-up that merely calls itself a native adaptation",
+        "script": "A gameplay script that changes rules or adds a mechanic without being any of the above: a trap rule, a construction sequence, a kit, a round modifier, quality-of-life logic",
+        "bank": "A shared audio bank: sound aliases other modules use, gum audio, a shared audio module",
+        "music": "Music: a round-change song, an easter egg track",
+        "map": "A map or map port",
+        "patch": "A patch to a map's scripts or assets",
+        "tool": "A test or development tool: a probe, a harness, a diagnostic module with no player-facing feature"
+      }
+    },
+    "category": {
+      "type": "choice",
+      "instructions": "Which shelf does a person browse to find this module? The shelf is the broad category, not the specific kind.",
+      "criteria": {
+        "weapons": "Held weapons of any kind: guns, wonder weapons, melee, launchers, special weapons",
+        "perks": "Perks and perk machines",
+        "gobblegums": "GobbleGums and the gum machine",
+        "powerups": "Power-up drops",
+        "equipment": "Tacticals, lethals, shields, buildables",
+        "bosses": "Enemy types and special rounds",
+        "companions": "Friendly AI helpers",
+        "ui": "HUD and menus",
+        "core": "Registries, services, inventories, adapters that other modules depend on",
+        "scripts": "Rule and mechanic scripts",
+        "audio": "Sound banks and music",
+        "tooling": "Test and development tools",
+        "maps": "Maps and map patches"
+      }
+    },
+    "is_service": {
+      "type": "noul",
+      "instructions": "Does this module exist mainly so that other modules can depend on it, rather than to give the player something directly?",
+      "criteria": {
+        "true": "The title or README describes a shared table, ownership, identity, sites, a bank, an inventory, or a service; the module is listed as a dependency target and ships no weapon, perk, gum or power-up of its own",
+        "false": "The module gives the player a weapon, perk, gum, power-up, equipment, enemy, helper or HUD element directly"
+      }
+    }
+  },
+  "policy": {
+    "act": 0.85,
+    "ask": 0.5,
+    "note": "Ingestion use: a candidate module from a community pack gets a suggested kind and category. Above act: pre-fill the declaration for a person to confirm. Between: show the top three. Below: leave blank. Never writes a declaration."
+  }
+}
