@@ -1,5 +1,5 @@
 {
- "exported_at": "2026-09-16T03:09:22Z",
+ "exported_at": "2026-09-18T00:33:20Z",
  "exported_by": "t6-knowledge-export",
  "note": "Console log lines and Plutonium crash-text lines seen after clean compiles and readbacks, as regexes without the [HH:MM:SS] prefix. `python scripts/t6_knowledge.py lookup log <slice>` matches a slice. The cause beside each is the one found and fixed, not the only possible one. A repair that names a new line adds a row in the same task.",
  "rows": [
@@ -35,7 +35,7 @@
    "class": "script-error",
    "fix": "Register in the box only the weapons the module's own zone or the map provides; a client script copied from another weapon's module must have its weapon list replaced, and the planner refuses a client box registration for a name no member provides",
    "id": "box-weapon-not-found",
-   "log_text": null,
+   "log_text": "AddZombieBoxWeapon: Failed to find weapon <name>",
    "regex": "AddZombieBoxWeapon: Failed to find weapon (\\S+)",
    "source": "docs/knowledge/crashes.md"
   },
@@ -58,9 +58,9 @@
    "source": "docs/knowledge/crashes.md"
   },
   {
-   "cause": "A server registration ran before native init while the client half ran from a loose `scripts/zm/*.csc`, which executes after the client's own fields are registered",
+   "cause": "Two causes carry this line. The halves registered at different points: a server registration ran before native init while the client half ran from a loose `scripts/zm/*.csc`, which executes after the client's own fields are registered. Or the pack registered on one VM only: `_zm_powerups::add_zombie_powerup` registers the toplayer field its client-field-name argument names (the ninth argument on the server, the second on the client) on whichever VM is passed one — a call without that argument registers nothing, which is why the point drops and `full_ammo` need no client half — and where the map's client include list leaves the powerup out the client half never runs, so the field exists on the server alone",
    "class": "registration-order",
-   "fix": "Register on both VMs at the same point: redirect the map script's `_zm::init` import on server and client to an adapter that registers, then chains to native init",
+   "fix": "Either remedy closes it. Register on both VMs at the same point: redirect the map script's `_zm::init` import on server and client to an adapter that registers, then chains to native init. Or ship the missing half as a loose `scripts/zm` script — a `.csc` for a server registration, a `.gsc` for a client one — that registers the same name with the same width and version (`registerclientfield(\"toplayer\", <name>, 1, 2, \"int\", undefined, 0, 1)` is what `add_zombie_powerup` emits: Int, 2 bits, version 1), running after its own VM's native rows exactly as the other half runs after that VM's, so both sides append the field in the same order. Either way the registration must be **unconditional** on both sides: guarding one half on state only that VM holds (a weapon in `level.zombie_weapons`) inverts the mismatch on the loads the guard excludes instead of curing it. `clientfield-symmetry` in a composition plan refuses a one-sided or one-sidedly-guarded pack offline",
    "id": "clientfield-registrations-mismatch",
    "log_text": "Client and server clientfield registrations don't match",
    "regex": "Client and server clientfield registrations don't match",
@@ -71,7 +71,7 @@
    "class": "pool-exhausted",
    "fix": "Bound HUD text churn; reuse strings; Plutonium exposes settextunlimited for HUD text (see plutonium-builtins.json)",
    "id": "configstring-overflow",
-   "log_text": null,
+   "log_text": "G_FindConfigstringIndex: overflow (N)",
    "regex": "G_FindConfigstringIndex: overflow \\((\\d+)\\)",
    "source": "private repair record of the maintainer"
   },
@@ -121,6 +121,15 @@
    "source": "docs/knowledge/crashes.md"
   },
   {
+   "cause": "The entity table was full when a script spawned one more: the map's own entities plus everything the members spawned reached the engine's cap and G_Spawn refused. Seen 2026-09-17 in the Plutonium crash text, last gsc pos in a probe's spawn loop",
+   "class": "pool-exhausted",
+   "fix": "Spawn fewer entities and delete each when its work is done; a probe or a script that spawns per player per frame must reuse one entity. Count the composition against the entity budget (resource_contract entities) before blaming the engine",
+   "id": "g-spawn-no-free-entities",
+   "log_text": "last com error message 'G_Spawn: no free entities'",
+   "regex": "G_Spawn: no free entities",
+   "source": "private repair record of the maintainer"
+  },
+  {
    "cause": "Not a defect of its own: it names the script and function the VM was in when it died. The fatal GSC line is written only to the crash text, never to the console log, so a matcher that reads the console tail alone sees nothing",
    "class": "script-error",
    "fix": "Read `plutonium-r*.txt` as a log source beside the console; pair this line with the `last gsc error message` line above it to name both the failure and its site",
@@ -143,7 +152,7 @@
    "class": "script-panic",
    "fix": "Recompile from source with the pinned compiler; compare the compiled bytes with the readback",
    "id": "havok-script-panic",
-   "log_text": null,
+   "log_text": "Havok Script Panic",
    "regex": "Havok Script Panic",
    "source": "docs/knowledge/crashes.md"
   },
@@ -161,7 +170,7 @@
    "class": "ui-lua-error",
    "fix": "Record it separately; do not fold it into the gameplay failure",
    "id": "lui-error",
-   "log_text": null,
+   "log_text": "LUI_ERROR: <message>",
    "regex": "LUI_ERROR|\\.lua:\\d+",
    "source": "docs/knowledge/crashes.md"
   },
@@ -224,16 +233,16 @@
    "class": "script-error",
    "fix": "Read the first error line above it, not the last; fix the script, not the engine",
    "id": "script-error",
-   "log_text": null,
+   "log_text": "******* script runtime error *******",
    "regex": "script (?:runtime |compile )?error",
    "source": "docs/knowledge/crashes.md"
   },
   {
-   "cause": "Observation only, no mechanism established. The engine refused a sound bank a loaded zone named. Seen 2026-09-15 on one pack: four of its .all banks printed this line in a single session while the pack's other banks, in the same folder, did not; every named .all.sabl was present beside mod.ff under exactly that name, and the same four had loaded from that same folder the day before. The session's report and console slice have since rotated away, so what distinguished the four is unknown",
+   "cause": "Not established, and the row says so. Seen four times in one session for four of one pack's banks while the pack's other banks in the same folder loaded; every named `.all.sabl` was beside `mod.ff` under exactly that name, and the same four had loaded from that folder the day before. The session's log slice is gone, so what separated those four is unknown",
    "class": "asset-missing",
-   "fix": "No repair is recorded for this line yet. Read the load's own console before inferring one: a bank that loads prints 'Adding prioritized sound bank \"<name>.all\" from zone \"mod\"', 'Attempting to load soundbank <name>.all', 'Soundbank <name>.all has load asset bank <name>.all.sabl' and 'SOUND Header load success ... <name>.all.sabl'. Check that every bank the zone names sits beside mod.ff under exactly that name, and count the composition's banks against the 32 'sound' asset limit",
+   "fix": "No repair is recorded for this line yet. Read the load's own console first: a bank that loads prints `Adding prioritized sound bank \"<name>.all\" from zone \"mod\"`, `Attempting to load soundbank <name>.all`, `Soundbank <name>.all has load asset bank <name>.all.sabl` and `SOUND Header load success ... <name>.all.sabl`. Check that every bank the zone names sits beside `mod.ff` under exactly that name, then count the pack's banks against the 32 `sound` asset limit",
    "id": "sound-bank-failed-to-load",
-   "log_text": null,
+   "log_text": "ERROR: sound bank failed to load <name>.all. You have a build problem.",
    "regex": "sound bank failed to load ([a-z0-9_]+)\\.all\\. You have a build problem",
    "source": "docs/knowledge/crashes.md"
   },
@@ -251,7 +260,7 @@
    "class": "load-refused",
    "fix": "Start the match from the menu path; compare with a playable session before blaming the mod",
    "id": "sv-shutdown-hostquit",
-   "log_text": null,
+   "log_text": "SV_Shutdown: hostquit",
    "regex": "SV_Shutdown: hostquit",
    "source": "docs/knowledge/crashes.md"
   },
@@ -260,7 +269,7 @@
    "class": "load-refused",
    "fix": "Sequence: disconnect or return to the lobby first, then select the mod, then load the map",
    "id": "too-early-to-loadmod",
-   "log_text": null,
+   "log_text": "Too early to loadmod!",
    "regex": "[Tt]oo early to loadmod!",
    "source": "docs/knowledge/crashes.md"
   },
@@ -269,7 +278,7 @@
    "class": "script-error",
    "fix": "Look the name up in builtins.json for the right VM and arity; add the include that exports it, or replace the call; never stub it",
    "id": "unresolved-external",
-   "log_text": null,
+   "log_text": "Unresolved external: <name> with N parameters",
    "regex": "Unresolved external: (\\w+) with (\\d+) parameters",
    "source": "docs/knowledge/crashes.md"
   },
