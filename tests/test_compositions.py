@@ -1429,6 +1429,34 @@ class LooseOverrideTests(CompositionFixture):
         self.assertEqual(named["outcome"], "failed")
         self.assertIn("camo_zombies_nml.iwi", named["detail"])
 
+    def test_report_only_records_the_loose_file_in_the_plan_and_on_the_receipt_instead_of_refusing(self):
+        """A single-member composition a workspace builds by hand (because the load order matters)
+        meets the same machine-state row `module qualify` already records; asked for by name, plan
+        and build record it under `report_only_failed` and go on. The rows keep outcome `failed`."""
+        self.storage("camo_zombies_nml.iwi")
+        code, row = invoke(["module", "plan", str(self.pack("stock_loose6_test")), "--report-only", "loose-overrides", "--output", self.out()])
+        self.assertEqual(code, 0, row)
+        check = next(c for c in row["result"]["checks"] if c["id"] == "loose-overrides")
+        self.assertEqual((check["outcome"], check["count"]), ("failed", 1))
+        recorded = row["result"]["report_only_failed"]
+        self.assertEqual([c["id"] for c in recorded], ["loose-overrides", "loose-overrides:camo_zombies_nml"])
+        self.assertTrue(all(c["outcome"] == "failed" for c in recorded))
+        plan = json.loads((Path(row["result"]["output"]) / "plan.json").read_text())
+        self.assertEqual([c["id"] for c in plan["report_only_failed"]], [c["id"] for c in recorded])
+
+    def test_report_only_names_only_a_machine_state_check(self):
+        """A check about the package itself is never recordable: the flag's vocabulary is the one
+        list, and an unknown name is a usage error before anything is planned."""
+        self.storage("camo_zombies_nml.iwi")
+        code, row = invoke(["module", "plan", str(self.pack("stock_loose7_test")), "--report-only", "donor-shadowing", "--output", self.out()])
+        self.assertEqual(code, 2, row)
+
+    def test_without_the_flag_the_loose_file_still_refuses(self):
+        self.storage("camo_zombies_nml.iwi")
+        code, row = invoke(["module", "plan", str(self.pack("stock_loose8_test")), "--output", self.out()])
+        self.assertEqual(code, 1, row)
+        self.assertEqual(row["details"].get("report_only_failed", []), [])
+
     def test_a_configured_loose_path_with_nothing_the_base_owns_passes(self):
         self.storage("t5_weapon_thundergun_n.iwi")
         code, row = invoke(["module", "plan", str(self.pack("stock_loose2_test")), "--output", self.out()])

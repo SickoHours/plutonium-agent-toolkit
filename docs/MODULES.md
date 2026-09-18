@@ -611,8 +611,12 @@ base owns. One check is recorded rather than refused on: `loose-overrides` count
 machine's global `storage/t6/images`, which no package contains and no build can change, so a module
 built alone keeps its `failed` rows under `warnings` in `qualify.json` and the results table, adds
 them to the built-alone note, and still qualifies. `module plan` and `module build` invoked directly
-are unchanged and still refuse on that check: there the question is whether to ship a pack on this
-machine, not whether this module builds on this target.
+refuse on that check by default: there the question is whether to ship a pack on this machine, not
+whether this module builds on this target. A caller that has read the finding and is building a
+composition by hand (a single member whose load order `qualify` cannot express, for one) asks for
+the same treatment by name, `--report-only loose-overrides`: the rows keep outcome `failed`, are
+copied to the plan and the receipt under `report_only_failed`, and the build goes on. The flag's
+vocabulary is that one check; a check about the package is never recordable.
 
 **An unfinished port: `--accept`.** A member whose `port_status` is not `finished` is refused by
 the planner unless the composition names that status under the member's `accept` ("Where a person
@@ -1142,6 +1146,11 @@ one `failed` row per file, `loose-overrides:<image name>`, plus a `loose-overrid
 refusal-grade for the same reason `donor-shadowing` is — the rendering is wrong and the pack is not
 the cause — and refusing at plan time is what stops a machine-state fault from being shipped and then
 diagnosed as a package.
+
+Because it is machine state, a caller may record it instead: `module qualify` always does (a module
+built alone is judged on its bytes), and `module plan` and `module build` do when asked with
+`--report-only loose-overrides`, keeping the `failed` rows under `report_only_failed` in the plan and
+on the receipt so the finding travels with the package it did not stop.
 
 Three answers are possible and the summary always says which:
 

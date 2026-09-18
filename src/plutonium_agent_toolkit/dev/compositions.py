@@ -235,6 +235,11 @@ def add_parser(sub, common):
                        help="A directory of asset listings of the base's zones (<zone>-list.txt, the shape an unlinker --list prints); repeatable. "
                             "Every load with a listing here is a base zone and its image and material names are excluded from the pack's zone, so a "
                             "donor load can never shadow one. Without it, --workspace reads the same directory from foundations/<id>.json's base_listings")
+        q.add_argument("--report-only", action="append", default=[], metavar="CHECK", dest="report_only_checks",
+                       choices=sorted(REPORT_ONLY_ALLOWED),
+                       help="A check to record in the plan instead of refusing on; repeatable. Only a check about this machine rather than "
+                            "the package may be named (loose-overrides: a loose global texture the base owns, which no pack causes or cures). "
+                            "The rows keep outcome failed and are copied to the receipt under report_only_failed")
         common(q)
     from . import qualify as qualify_route
     qualify_route.add_parser(actions, common)
@@ -1121,6 +1126,11 @@ ANSI = re.compile(r"\x1b\[[0-9;]*m")  # an unlinker listing captured from a colo
 # never its pixels, so a donor's copy of a name the base owns puts a foreign header in front of the
 # base's pixels; a material is the thing that names images, so it shadows the same way one level up.
 SHADOWABLE_TYPES = ("image", "material")
+# Checks a caller may ask `module plan` and `module build` to record instead of refuse on. Only a
+# check about machine state qualifies: `loose-overrides` reads Plutonium's global `storage/t6/images`,
+# which no package contains and no build changes, and `module qualify` already records it the same
+# way (dev/qualify.py REPORT_ONLY_CHECKS). A check about the package itself is never on this list.
+REPORT_ONLY_ALLOWED = ("loose-overrides",)
 
 
 LISTING_SUFFIXES = ("-list.txt", ".txt", "-list.csv", ".csv")
@@ -2635,8 +2645,15 @@ def execute(args, job: Job) -> dict:
     # this, for a check about machine state rather than about the package (dev/qualify.py);
     # `module plan` and `module build` invoked directly name none and refuse on every failed row.
     report_only=tuple(getattr(args,"report_only_checks",()) or ())
-    failed=[c for c in plan["checks"] if c["outcome"]=="failed"
-            and not any(c["id"]==name or str(c["id"]).startswith(name+":") for name in report_only)]
+    recorded=[c for c in plan["checks"] if c["outcome"]=="failed"
+              and any(c["id"]==name or str(c["id"]).startswith(name+":") for name in report_only)]
+    failed=[c for c in plan["checks"] if c["outcome"]=="failed" and c not in recorded]
+    # What was asked to be recorded rather than refused on, in the plan and on the receipt, so a
+    # reader of either sees the machine-state finding beside the package it did not stop.
+    plan["report_only_failed"]=[{k:c.get(k) for k in ("id","outcome","detail","count") if k in c} for c in recorded]
+    summary["report_only_failed"]=plan["report_only_failed"]
+    if recorded:
+        (job.root / "plan.json").write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
     if failed:
         contributors=sorted({c["id"] for row in failed for c in row.get("contributors",[]) if c["id"] in by_id})
         late_refusals.append(_refusal("checks","Offline checks failed: "+"; ".join(f'{c["id"]}: {c["detail"]}' for c in failed)[:1200],
