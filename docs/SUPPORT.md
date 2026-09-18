@@ -278,8 +278,12 @@ shadowing file refused and named, a clean loose path passed with the count it re
 name still matched, a reference row not treated as a base copy, the bounded row list with the full
 count in the summary, and three uncounted cases — no storage configured, a configured folder with no
 `images/`, and a composition with no base listing — each `not_counted` with `counted: false`, never a
-pass. The check reads directory entries and file names only; it opens no file, writes nothing, and
-never touches the loose folder. What it does **not** establish: that a matching file is in fact the
+pass. `--report-only loose-overrides` on `module plan` and `module build` records the `failed` rows
+under `report_only_failed` in the plan and on the receipt instead of refusing, the treatment
+`module qualify` already gives the check; the flag's vocabulary is that one check and a package check
+named there is a usage error (`tests/test_compositions.py`: recorded and copied to the plan file, carried on the build result and receipt,
+refused without the flag, `donor-shadowing` refused at the parser). The check reads directory entries
+and file names only; it opens no file, writes nothing, and never touches the loose folder. What it does **not** establish: that a matching file is in fact the
 one the client renders from (that is a game observation, not an offline one), or that a clean loose
 path means the textures are right — an image bank or a donor zone can still be the cause. The
 measurement behind it (a loose folder whose files predated the project overriding a base map's
