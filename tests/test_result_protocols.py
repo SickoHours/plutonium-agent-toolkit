@@ -41,6 +41,7 @@ KNOWN = {
     "pat.module-verify/1",
     "pat.target/1",
     "pat.test-plan/1",
+    "pat.work-status/1",
     "pat.workspace-catalog/1",
 }
 

@@ -220,6 +220,22 @@ _Avoid_: dashboard, GUI runtime, launcher
 **Run**: One admitted test with explicit owner, plan, display mode, bounded events and receipts.
 _Avoid_: session, job, test case
 
+**Work order**: What a person asked for, in their words, with the target it is for, the donor it
+starts from and the door it came in by (`form` or `shelf`); `work.json`, written once by
+`pat work start` (`docs/work-orders.md`).
+_Avoid_: ticket, task, project, issue
+
+**Spine**: The ordered record of the steps an agent took on one work order (`placement`, `donor`,
+`build`, `verify`, `install`, `load`, `verdict`), each row with its outcome and the receipt that
+proves it, or none. A row with no receipt is **narrated**; a row whose receipt is there and
+unchanged is **receipted**. `spine.json`, appended by `pat work step`.
+_Avoid_: timeline, progress log, history
+
+**Decision request**: A question an agent cannot settle alone, with two to four options and what
+each implies, recorded for a person to answer from any surface. One waits at a time. The
+request and its answer are rows in `decisions.json` (`pat work ask`, `pat work answer`).
+_Avoid_: prompt, approval, blocker
+
 **Display mode**: Who owns the screen during a run: `away` (agent may show the game),
 `background` (agent preserves the desktop), `human` (agent prepares, the human plays).
 _Avoid_: headless, focus mode

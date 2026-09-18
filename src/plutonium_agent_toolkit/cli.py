@@ -187,6 +187,35 @@ def build_parser() -> Parser:
 
     _mcp_cli.add_parser(sub)
 
+    w = sub.add_parser("work", help="One piece of work from a person's ask to their verdict: the order, its spine of steps, and the decisions asked of the person")
+    wa = w.add_subparsers(dest="action", required=True)
+    q = wa.add_parser("start", help="Record the order in a new directory (a job with a receipt)")
+    q.add_argument("workspace", help="Workspace root the work is for")
+    q.add_argument("--title", required=True); q.add_argument("--want", required=True, help="What the person wants, in their words")
+    q.add_argument("--target", required=True, help="<foundation>/<map>/<mode>[/<location>]")
+    q.add_argument("--donor", help="Where the work starts from: a path, a release, or a map name")
+    q.add_argument("--donor-kind", choices=["path", "release", "map"], help="What --donor names (default path)")
+    q.add_argument("--subject", help="Shelf door: the module or composition directory, relative to the workspace, the work starts from")
+    q.add_argument("--by", help="Who asked")
+    common(q)
+    q = wa.add_parser("step", help="Append one spine row")
+    q.add_argument("work", help="The work directory or its work.json")
+    q.add_argument("--step", required=True, choices=["placement", "donor", "build", "verify", "install", "load", "verdict"])
+    q.add_argument("--outcome", required=True, choices=["started", "done", "failed", "skipped"])
+    q.add_argument("--note"); q.add_argument("--receipt", help="The receipt.json this step wrote; hashed into the row")
+    q.add_argument("--workspace", help="Root the receipt path is cited relative to")
+    q.add_argument("--json", action="store_true")
+    q = wa.add_parser("ask", help="Record a decision request; one waits at a time")
+    q.add_argument("work"); q.add_argument("--request", required=True, help="A JSON file: question, step, options[{key,label,implies}], default")
+    q.add_argument("--json", action="store_true")
+    q = wa.add_parser("answer", help="Record the person's answer to one request")
+    q.add_argument("work"); q.add_argument("--request-id", required=True); q.add_argument("--choice", required=True)
+    q.add_argument("--by", required=True, choices=["app", "host", "person"], help="The surface the answer came from")
+    q.add_argument("--note"); q.add_argument("--json", action="store_true")
+    q = wa.add_parser("status", help="Read the order, pending questions and the spine with each receipt checked")
+    q.add_argument("work"); q.add_argument("--workspace", help="Root the cited receipts are resolved against")
+    q.add_argument("--json", action="store_true")
+
     g = sub.add_parser("game", help="Plutonium T6 Zombies control through the external console; install-mod also places IW5 packages")
     g.add_argument("action", choices=sorted(r.action for r in routes() if r.group == "game"))
     g.add_argument("argument", nargs="?", help="Mod folder ID, map ID, load ID or (install-mod) mod.ff path")
@@ -197,7 +226,7 @@ def build_parser() -> Parser:
     g.add_argument("--json", action="store_true")
 
     # Planned/deferred groups accept any action so they can answer with a structured refusal.
-    for group in sorted({r.group for r in routes()} - {"dev", "gsc", "ff", "project", "module", "registry", "workspace", "knowledge", "judge", "target", "game", "agent", "plane", "mcp", "audio", "image", "lua", "model", "weapon", "test"}):
+    for group in sorted({r.group for r in routes()} - {"dev", "gsc", "ff", "project", "module", "registry", "workspace", "knowledge", "judge", "target", "game", "agent", "plane", "mcp", "audio", "image", "lua", "model", "weapon", "test", "work"}):
         g = sub.add_parser(group)
         g.add_argument("action")
         g.add_argument("rest", nargs=argparse.REMAINDER)
@@ -215,7 +244,7 @@ JOB_GROUPS = {"gsc": "scripts", "ff": "fastfiles", "project": "projects", "modul
               "image": "media", "lua": "media", "model": "models", "weapon": "weapons"}
 # Single actions that are jobs inside a group whose other actions are not (registry add|list|search|show
 # take no --output; registry baseline writes a report and a receipt into a new directory).
-JOB_ACTIONS = {("registry", "baseline"): "baseline", ("test", "plan"): "testing.planner", ("judge", "eval"): "judge"}
+JOB_ACTIONS = {("registry", "baseline"): "baseline", ("test", "plan"): "testing.planner", ("judge", "eval"): "judge", ("work", "start"): "work"}
 
 
 def is_job(group: str, action: str) -> bool:
@@ -398,6 +427,18 @@ def run(argv: list[str]) -> dict:
             return success(command, registry.search(" ".join(args.words), category=args.category, kind=args.kind, tag=args.tag,
                                                         base=args.base, map_id=args.map, entry_kind=args.entry_kind, origin=args.origin))
         return success(command, registry.show(args.name))
+    if group == "work":
+        from .dev import work
+
+        if args.action == "step":
+            return success(command, work.step(args))
+        if args.action == "ask":
+            return success(command, work.ask(args))
+        if args.action == "answer":
+            return success(command, work.answer(args))
+        if args.action == "status":
+            return success(command, work.status(args.work, args.workspace))
+
     if group == "target":
         from .dev import targets
 
