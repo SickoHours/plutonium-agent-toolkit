@@ -75,6 +75,16 @@ asset kinds extract to editable text (weapon and sound alias definitions), some 
 images in the format you choose, and some only to a listing. Keep extracted game assets private;
 the toolkit never commits them and neither should you.
 
+## Sound banks
+
+A T6 `soundbank` asset is an alias table; its audio lives in `.sabs` and `.sabl` archives beside
+the zones, and a map's bank names sounds that the shared archives (`cmn_root`, the common
+Zombies bank) carry. The Unlinker resolves each entry only through the archives of the zones it
+has loaded, so dumping a map zone alone writes its own files, warns `Could not find data for
+sound` for the rest and exits 0. Load `code_post_gfx`, `common_zm` and `zm_transit` first and the
+same dump resolves every entry. A sound named by no loaded zone is found by dumping the zone that
+owns it, not by a search path. A dump is complete when its warning count is zero.
+
 ## Sizes and pools
 
 A fastfile's compressed size on disk, its uncompressed asset bytes, the engine's fixed asset
