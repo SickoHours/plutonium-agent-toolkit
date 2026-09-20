@@ -26,7 +26,15 @@ conversion; the numbered list is the gate, not a suggestion.
    the count.
 2. Check the hierarchy and names against the destination's hand variant and weapon root: bind
    matrices, weights and parent chains. A parent mismatch on shared bones (eleven were found in
-   one donor) is a blocker until retargeted.
+   one donor) is a blocker until retargeted. For a native `weaponType=melee` weapon, evaluate the
+   model at `tag_knife_attach` below `j_wrist_le`, not at the firearm attachment
+   `tag_weapon`. If the clip was authored for `tag_weapon`, solve the melee tag relative
+   to its actual parent: `inverse(world(j_wrist_le)) * world(desired_grip)`. Check the
+   packaged attachment against the intended grip through idle, attack, equip, put-away,
+   sprint, crawl and dive. A preview using the firearm tag can hide this fault while
+   the game draws only a small piece of the blade between the hands. Retain the native
+   hand tracks and events when adapting movement clips; record position and orientation
+   errors from the packaged animation, and still inspect a fresh in-game frame.
 3. Reconstruct the runtime transform convention. T6 adds the weapon model's local translation to
    animation offsets; derive offsets from the standalone packaged weapon, subtract them before
    encoding, and never subtract hand bind positions or apply an offset twice. Evaluate idle,
@@ -45,7 +53,13 @@ conversion; the numbered list is the gate, not a suggestion.
 8. Compare the weapon definition field by field with its native counterpart: inventory type per
    hand, shared ammo group and cap, impact type and projectile physics, animation and sound alias
    names. Write the differences down; each is intentional or a bug.
-9. Record all nine results in the module README with the inspect receipt paths.
+9. Check material inputs with the packaged geometry: lit triangles need nonzero UV
+   area so tangent-space generation has valid directions. Sampling one palette point
+   at all three corners makes every UV difference zero; use a small UV rectangle
+   inside the solid-color tile instead. Specular RGB and gloss alpha are separate
+   controls; an opaque-only texture does not author gloss. Inspect the result under
+   both indoor and outdoor lighting rather than accepting a flat offline preview.
+10. Record all ten results in the module README with the inspect receipt paths.
 
 ## Do not
 
@@ -53,7 +67,7 @@ conversion; the numbered list is the gate, not a suggestion.
 - Take a clean `model convert` as proof of the rig; it proves the file converted.
 - Verify a roundtrip against itself using the same wrong convention; compare against the native
   reference pose.
-- Build the package before items 1 to 8 have a recorded result.
+- Build the package before items 1 to 9 have a recorded result.
 
 ## Stop conditions
 
