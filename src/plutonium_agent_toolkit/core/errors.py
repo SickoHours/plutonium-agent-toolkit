@@ -44,6 +44,10 @@ ROW_DUPLICATE = "row_duplicate"
 ARTIFACT_CHANGED = "artifact_changed"
 INPUT_CHANGED = "input_changed"
 HASH_MISMATCH = "hash_mismatch"
+# The judge route's hosted-model key is not in the environment. Distinct from config_missing
+# because nothing the toolkit configures supplies it: the person exports TYPESAFE_API_KEY from
+# their own 600-permission file, and the toolkit never reads, writes or prints it.
+JUDGE_KEY_MISSING = "judge_key_missing"
 # Game and delivery
 GAME_NOT_FOUND = "game_not_found"
 GAME_AMBIGUOUS = "game_ambiguous"

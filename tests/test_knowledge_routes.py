@@ -65,6 +65,27 @@ class DataTests(unittest.TestCase):
                        "clientfield-registrations-mismatch", "cannot-cast-undefined-to-bool", "precacheitem-access-violation"):
             self.assertIn(needed, ids)
 
+
+    def test_every_example_line_matches_its_own_signature(self):
+        """A row's log_text is the line its regex was written from; a placeholder in angle
+        brackets or a bare N stands for a value. Every example must match, so a question set
+        that shows the model an example never shows it a line the matcher would miss."""
+        import re
+        rows = knowledge.load("crash-signatures.json")["rows"]
+        fill = {"<name>": "zm_x", "<state>": "s1", "<anim>": "a", "<message>": "m", "<tree A>": "a", "<tree B>": "b",
+                "<addr>": "1b8f", "<script>": "maps/mp/_x", "<function>": "fn", "<path>": "p", "<n>": "3"}
+        # Two page rows describe their line in prose rather than quoting it; they predate this
+        # test and their regexes are exercised by the matcher tests, not by their example text.
+        described = {"link-unresolved-external", "map-script-not-carried"}
+        for row in rows:
+            text = row.get("log_text")
+            if not text or row["id"] in described:
+                continue
+            for key, value in fill.items():
+                text = text.replace(key, value)
+            text = re.sub(r"(?<![A-Za-z0-9_])N(?![A-Za-z0-9_])", "12", text)
+            self.assertTrue(re.search(row["regex"], text), f"{row['id']}: log_text does not match its regex")
+
     def test_map_scripts_table_covers_every_occupancy_map_with_paths_only(self):
         table = json.loads((DATA / "map-scripts.json").read_text(encoding="utf-8"))
         occupancy = json.loads((DATA / "occupancy.json").read_text(encoding="utf-8"))

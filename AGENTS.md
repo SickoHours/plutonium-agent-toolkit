@@ -77,12 +77,15 @@ These are how the toolkit is built, so that you can extend it without breaking i
 - `error_code: delivery_uncertain` means inspect fresh state, not retry. Never replay an uncertain
   game command.
 - Setup, discovery, `dev`, `gsc`, `ff`, `project`, `module`, `model`, `audio`, `image`, `lua`,
-  `weapon`, `registry`, `agent` and `game mods`/`install-mod` touch no running game (`registry add`
+  `weapon`, `registry`, `knowledge`, `judge`, `agent` and `game mods`/`install-mod` touch no running game (`registry add`
   with a URL, `module fetch` and `dev builtin` read the network, one file or one exact-commit snapshot each;
   `agent dispatch`, `send` and `interrupt` write to a T3 Code server, never to the game;
   `docs/AGENT-HOSTS.md`; `plane serve` binds a loopback page and `mcp serve` speaks Model Context
   Protocol on stdin and stdout, both running these same routes as children, each with its own
-  effect and receipt, `docs/CONTROL-PLANE.md` and `docs/MCP.md`).
+  effect and receipt, `docs/CONTROL-PLANE.md` and `docs/MCP.md`;
+  `judge eval` is the one route that sends evidence off this machine: one request per case to a
+  hosted model, opt-in per invocation, never inside a build, install or game job, with the key
+  from the person's own `TYPESAFE_API_KEY` and the exact bytes kept, `docs/JUDGE.md`).
   `game launch/info/load-map/select-mod/reload-mod/fast-restart/map-restart/disconnect/check-load/quit`
   control the running client and need the user's go-ahead for that specific test.
 - The development (file) routes run on Windows and Linux; macOS is untested and not claimed. Game
@@ -99,10 +102,13 @@ These are how the toolkit is built, so that you can extend it without breaking i
 - Do not elevate privileges, read process memory, launcher arguments or logins, or change registry
   keys beyond a documented per-user PATH entry.
 - Never ask the user for a password, token, launcher credential or login database, and never read
-  one from their files. The one exception is the T3 Code bearer the user issued themselves and saved
-  with `pat configure --t3-bearer-token`: `agent` routes send it to the local server only, and never
-  print, log or forward it. If any other step seems to require a credential, that is a signal to
-  stop and report, not to request it.
+  one from their files. There are exactly two exceptions, both keys the user issued to themselves.
+  The T3 Code bearer, saved with `pat configure --t3-bearer-token`: `agent` routes send it to the
+  local server only, and never print, log or forward it. The `TYPESAFE_API_KEY` in the environment,
+  which the user exports in their own shell from their own file: `judge eval` puts it in one request
+  header and the toolkit never reads it from a file, stores, prints or logs it, and never asks for
+  it — a missing key is `judge_key_missing`, not a prompt. If any other step seems to require a
+  credential, that is a signal to stop and report, not to request it.
 - Keep the user's paths, receipts, recordings and logs on their machine. Sanitize before sharing.
 - There is no arbitrary console-string, memory-write or arbitrary-function route, and you should
   not add one. Adapting the toolkit means new typed, validated routes, not an escape hatch.
