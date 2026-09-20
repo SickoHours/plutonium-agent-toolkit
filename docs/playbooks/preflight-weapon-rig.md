@@ -39,7 +39,10 @@ conversion; the numbered list is the gate, not a suggestion.
    animation offsets; derive offsets from the standalone packaged weapon, subtract them before
    encoding, and never subtract hand bind positions or apply an offset twice. Evaluate idle,
    ADS, fire, equip and reload poses with the offsets applied; a floating cartridge or distorted
-   arm at idle is this item failing.
+   arm at idle is this item failing. Test the preview's skin transform at bind pose:
+   it must reproduce the unposed mesh in the chosen coordinate system. An inverse
+   bind matrix already includes its model-to-joint conversion; applying another
+   coordinate rotation after it can make the preview disagree with the game.
 4. Confirm animation-tree ownership (`docs/knowledge/weapon-dual-wield.md` for a pair): no weapon leaf keys `tag_view`, `tag_ads` or `tag_cambone`;
    the aim layer touches `tag_torso` only; a one-bone ADS donor is not expanded to a whole pose.
 5. Retime clips to the destination rate with
@@ -52,7 +55,14 @@ conversion; the numbered list is the gate, not a suggestion.
    first play (`crashes.md`, rumble row).
 8. Compare the weapon definition field by field with its native counterpart: inventory type per
    hand, shared ammo group and cap, impact type and projectile physics, animation and sound alias
-   names. Write the differences down; each is intentional or a bug.
+   names. Write the differences down; each is intentional or a bug. Enumerate
+   animation slots from the destination schema (`WFT_ANIM_NAME` in T6), not a
+   suffix heuristic: `dtp_in`, `dtp_loop`, `dtp_out` and their `dtp_empty_*`
+   counterparts do not end in `Anim`; neither do `fireAnimLeft` and
+   `meleeAnimEmpty`. For each normal and empty dive phase, verify the packaged
+   weapon points to the converted clip and measure its attachment relative to
+   the intended wrist. Checking only converted files can miss an unconverted
+   slot that still resolves successfully from the base.
 9. Check material inputs with the packaged geometry: lit triangles need nonzero UV
    area so tangent-space generation has valid directions. Sampling one palette point
    at all three corners makes every UV difference zero; use a small UV rectangle
