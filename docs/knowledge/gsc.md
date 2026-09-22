@@ -108,6 +108,8 @@ calling the game's own helpers needs their includes, and the *engine* must have 
 
 ## Writing scripts an engine will keep running
 
+Array mutation needs [explicit owner writeback](gsc-array-values.md); JavaScript aliasing can hide its absence.
+
 - Every thread, helper entity, HUD element, effect loop and cached collection has an owner and a
   cleanup path for completion, cancellation, replacement, down, death, respawn, disconnect and
   round or map transition. A stale worker from a previous life must not erase a newer worker's
@@ -135,9 +137,7 @@ to find.
 
 ## Iterating
 
-`map_restart` reruns the loaded scripts and is the fast loop for script logic. It does not reread
-the fastfile: after a rebuild, reinstall and `reload-mod`. A compile plus a clean startup is not a
-gameplay pass and must be reported as the cheaper thing.
+`map_restart` reruns loaded scripts, not the fastfile: after rebuilding, reinstall and `reload-mod`. A compile and clean startup are not a gameplay pass.
 
 ## Declared function replacements
 
