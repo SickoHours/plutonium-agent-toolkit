@@ -126,7 +126,8 @@ class Iw5DevTests(DevRouteFixture):
         self.assertEqual(code, 0, row)
         self.assertEqual(row["result"]["script_form"], "compiled")
         packed = (Path(row["result"]["output"]) / "readback" / "scripts" / "zm" / "t6_c.gsc").read_bytes()
-        self.assertTrue(packed.startswith(b"COMPILED:"))
+        self.assertEqual(packed[:8], bytes.fromhex("804753430d0a0006"))
+        self.assertTrue(packed[64:].startswith(b"COMPILED:"))
 
     def test_declare_writes_the_iw5_game_into_the_draft(self):
         code, row = invoke(["project", "init", "--name", "iw5_seed", "--game", "iw5", "--output", self.out()])

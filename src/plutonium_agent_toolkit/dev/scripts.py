@@ -19,6 +19,7 @@ from ..core.errors import BACKEND_FAILED, INPUT_INVALID, Failure
 from ..core.jobs import Job
 from . import titles
 from .backends import executable
+from .script_artifacts import check_t6_string_pool
 
 SYSTEMS = ("pc",)
 INSTANCES = ("server", "client")
@@ -73,6 +74,13 @@ def execute(args, job: Job) -> dict:
         raise Failure(BACKEND_FAILED, "gsc-tool produced no output", log=log.name)
     if any(p.stat().st_size == 0 for p in produced):
         raise Failure(BACKEND_FAILED, "gsc-tool produced an empty file", log=log.name)
+    checks = []
+    if args.action == "compile" and args.game == "t6":
+        for artifact in produced:
+            check = check_t6_string_pool(artifact)
+            check["artifact"] = artifact.relative_to(job.root).as_posix()
+            checks.append(check)
     return {"files": [p.relative_to(job.root).as_posix() for p in produced], "instance": instance,
+            "artifact_checks": checks,
             "game": args.game,
             "verification": "compiler exit and log checked; script behavior in game untested"}

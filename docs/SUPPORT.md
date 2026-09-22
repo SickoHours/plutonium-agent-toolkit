@@ -302,3 +302,18 @@ root stages each entry member's target source and admitted source tree so siblin
 `#include` directives resolve; and comments and quoted literals are masked before the replacement and
 `main`/`init` scans, which require a name boundary and a function body. These run against the fake
 compiler and pass on Linux; native Windows and gameplay behavior remain unverified.
+
+
+T6 compiled string-pool validation is covered offline by synthetic header-v1 boundary,
+malformed-output and wrap-collision tests (`tests/test_script_artifacts.py`). Both server
+and client `gsc compile` fail with retained job receipts before an overflowing artifact
+can be returned to a project/module build. Fake compiler fixtures now carry a structural
+header/pool; they are not executable game bytecode. Dry-run checking and IW5 retain their
+existing scope. This validates one artifact invariant, not loading or gameplay.
+
+A focused [native Linux compiler receipt](receipts/t6-string-pool/linux-compile.json)
+uses newly generated minimal scripts with 65, 66 and 67 distinct 1000-byte literals:
+the first two pass (including a final string extending beyond the address range), and
+the third is refused by the artifact check. It uses the step/redaction helpers in
+`tools/qualify.py`, not the complete backend tier. No Windows rerun, engine load or
+gameplay qualification is claimed for this guard.

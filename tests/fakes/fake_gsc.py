@@ -30,5 +30,15 @@ if "-y" in args:
     sys.exit(0)
 out = Path("compiled" if mode == "comp" else "decompiled") / src.name
 out.parent.mkdir(parents=True, exist_ok=True)
-out.write_bytes(b"COMPILED:" + hashlib.sha256(text.encode()).hexdigest().encode())
+payload = b"COMPILED:" + hashlib.sha256(text.encode()).hexdigest().encode()
+if mode == "comp" and args[args.index("-g") + 1] == "t6":
+    # Structural header/pool only, not executable game bytecode.
+    pool = payload + b"\0"
+    if "STRING_POOL_OVERFLOW" in text:
+        pool = b"a" * (65536 - 64 - 1) + b"\0overflow\0"
+    header = bytearray(64)
+    header[:8] = bytes.fromhex("804753430d0a0006")
+    header[12:16] = (64 + len(pool)).to_bytes(4, "little")
+    payload = bytes(header) + pool
+out.write_bytes(payload)
 print("compiled", src.name)
