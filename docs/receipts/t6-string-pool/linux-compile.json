@@ -1,0 +1,171 @@
+{
+  "schema_version": 1,
+  "tier": "t6-string-pool",
+  "environment": {
+    "toolkit_version": "0.1.0b1",
+    "python": "3.12.14",
+    "platform": "Linux-7.2.5-3-omarchy-x86_64-with-glibc2.44",
+    "machine": "x86_64",
+    "platform_token": "linux",
+    "os": "Arch Linux (Omarchy 4.0.4)",
+    "native_windows": false,
+    "native_linux": true,
+    "compatibility_layer": null,
+    "at": "2026-09-22T12:20:00+00:00",
+    "os_release": {
+      "pretty_name": "Omarchy",
+      "id": "omarchy",
+      "id_like": "arch",
+      "version_id": "4.0.4"
+    },
+    "git_head": "8e6e17b5e670d694a6a58d856add947fb69a24a8",
+    "git_dirty": true,
+    "pat_home_isolated": true
+  },
+  "steps": [
+    {
+      "argv": [
+        "gsc",
+        "compile",
+        "<work>/pool65.gsc",
+        "--output",
+        "<work>/build65",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.126,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "gsc compile",
+        "request_id": "<id>",
+        "at": "2026-09-22T12:20:00+00:00",
+        "result": {
+          "job_id": "<id>",
+          "output": "<work>/build65",
+          "receipt": "<work>/build65/receipt.json",
+          "artifact_count": 3,
+          "files": [
+            "compiled/t6/pool65.gsc"
+          ],
+          "instance": "server",
+          "artifact_checks": [
+            {
+              "check": "t6-string-pool",
+              "pool_start": 64,
+              "pool_end": 65143,
+              "string_count": 68,
+              "maximum_string_start": 64142,
+              "address_limit": 65535,
+              "artifact": "compiled/t6/pool65.gsc"
+            }
+          ],
+          "game": "t6",
+          "verification": "compiler exit and log checked; script behavior in game untested"
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "compile 65 distinct literals",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "gsc",
+        "compile",
+        "<work>/pool66.gsc",
+        "--output",
+        "<work>/build66",
+        "--json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.127,
+      "json": {
+        "ok": true,
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "gsc compile",
+        "request_id": "<id>",
+        "at": "2026-09-22T12:20:00+00:00",
+        "result": {
+          "job_id": "<id>",
+          "output": "<work>/build66",
+          "receipt": "<work>/build66/receipt.json",
+          "artifact_count": 3,
+          "files": [
+            "compiled/t6/pool66.gsc"
+          ],
+          "instance": "server",
+          "artifact_checks": [
+            {
+              "check": "t6-string-pool",
+              "pool_start": 64,
+              "pool_end": 66144,
+              "string_count": 69,
+              "maximum_string_start": 65143,
+              "address_limit": 65535,
+              "artifact": "compiled/t6/pool66.gsc"
+            }
+          ],
+          "game": "t6",
+          "verification": "compiler exit and log checked; script behavior in game untested"
+        }
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "compile 66 distinct literals",
+      "passed": true,
+      "expected": "success"
+    },
+    {
+      "argv": [
+        "gsc",
+        "compile",
+        "<work>/pool67.gsc",
+        "--output",
+        "<work>/build67",
+        "--json"
+      ],
+      "exit_code": 1,
+      "elapsed_seconds": 0.123,
+      "json": {
+        "ok": false,
+        "error_code": "backend_failed",
+        "message": "T6 string-pool address exceeds its 16-bit reference",
+        "hint": "Shorten or split script text and rebuild; successful compilation or disassembly alone is insufficient.",
+        "details": {
+          "string_start": 66144,
+          "address_limit": 65535,
+          "pool_end": 67145,
+          "check": "t6-string-pool",
+          "artifact": "pool67.gsc"
+        },
+        "schema_version": 1,
+        "toolkit_version": "0.1.0b1",
+        "command": "gsc compile",
+        "request_id": "<id>",
+        "at": "2026-09-22T12:20:00+00:00",
+        "receipt": "<work>/build67/receipt.json"
+      },
+      "stdout_head": null,
+      "stderr_head": "",
+      "name": "compile 67 distinct literals",
+      "passed": true,
+      "expected": "structured failure"
+    }
+  ],
+  "notes": [
+    "Focused native compiler qualification using tools/qualify.py receipt/step helpers; not the full backend tier.",
+    "Inputs are newly generated minimal one-function source, with distinct 1000-byte string literals. No game assets or project inputs.",
+    "Compiler SHA256: 4e3f0484339bbebd5d153e2b1a64c467c68e10fa00639104d5254cb6dbb0000d",
+    "No Windows, engine load or gameplay tested."
+  ],
+  "passed": true,
+  "summary": {
+    "steps": 3,
+    "passed": 3,
+    "failed": []
+  }
+}

@@ -58,7 +58,7 @@ line for `"soundNotify" in "clientscripts/mp/_dogs"`. The line is a reliable *ma
 
 `pat gsc compile <file>` runs gsc-tool in `comp` mode for `t6`, platform `pc`, with the
 instance for the file's side. `--includes <dir>` adds a directory searched for `#include` files
-and hashes it into the receipt. Decompiling a compiled script uses the same tool in `decomp` mode.
+and hashes it into the receipt. Decompiling uses `decomp`. T6 compilation checks [string-pool addresses](script-string-pool.md).
 
 gsc-tool compiles a script that only uses engine builtins with no include files at all. A script
 calling the game's own helpers needs their includes, and the *engine* must have those scripts loaded.

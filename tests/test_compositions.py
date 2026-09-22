@@ -462,7 +462,7 @@ class DecisionTests(CompositionFixture):
         # packed rawfile carries beta's source hash, not alpha's.
         import base64
         import hashlib
-        packed = base64.b64decode(package["rawfiles"]["scripts/zm/alpha.gsc"]).decode()
+        packed = base64.b64decode(package["rawfiles"]["scripts/zm/alpha.gsc"])[64:-1].decode()
         beta_source = (self.root / "modules" / "beta" / "scripts" / "beta.gsc").read_text()
         self.assertEqual(packed, "COMPILED:" + hashlib.sha256(beta_source.encode()).hexdigest())
         # A decision naming a module outside the collision is refused.
