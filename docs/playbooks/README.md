@@ -13,6 +13,7 @@ command, then run it. Read `docs/knowledge/` once for the facts behind the steps
 | [inspect-a-bo3-map.md](inspect-a-bo3-map.md) | A Black Ops III Workshop map should be understood from its own compiled data before a port is chosen; one read-only capture when a structured asset is needed |
 | [port-a-bo3-weapon.md](port-a-bo3-weapon.md) | A weapon from a BO3 Workshop map should reach a T6 map that loads first time: native templates from the target map's own zones, per-kind readback, refuse-on-gap build |
 | [preflight-weapon-rig.md](preflight-weapon-rig.md) | A weapon's first-person model or animations are about to be packaged for the first time |
+| [probe-player-collision.md](probe-player-collision.md) | A visible prop or platform needs collision, clearance and standing checks kept separate |
 | [preflight-hud-text.md](preflight-hud-text.md) | A mod draws text or icons on the HUD |
 | [preflight-scripts.md](preflight-scripts.md) | Any build with new or changed scripts is about to be installed for the first time |
 | [preflight-audio-memory.md](preflight-audio-memory.md) | A build adds sounds or large assets and is about to be installed for the first time |

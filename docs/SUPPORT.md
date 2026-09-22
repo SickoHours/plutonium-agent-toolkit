@@ -302,3 +302,10 @@ root stages each entry member's target source and admitted source tree so siblin
 `#include` directives resolve; and comments and quoted literals are masked before the replacement and
 `main`/`init` scans, which require a name boundary and a function body. These run against the fake
 compiler and pass on Linux; native Windows and gameplay behavior remain unverified.
+
+
+The [T6 collision-trace note](knowledge/t6-collision-traces.md) and
+[probe playbook](playbooks/probe-player-collision.md) document observed trace behavior
+and source-backed call forms. They add no live probe route and establish no standing,
+player-clearance, combat or AI-navigation qualification. No private source, trace logs,
+assets, coordinates or candidate identifiers are included.
