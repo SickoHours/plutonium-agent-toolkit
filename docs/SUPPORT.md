@@ -302,3 +302,9 @@ root stages each entry member's target source and admitted source tree so siblin
 `#include` directives resolve; and comments and quoted literals are masked before the replacement and
 `main`/`init` scans, which require a name boundary and a function body. These run against the fake
 compiler and pass on Linux; native Windows and gameplay behavior remain unverified.
+
+
+The [T6 array-assignment note](knowledge/gsc-array-values.md) records a narrow running
+server-VM behavior witness, not new route qualification. The change is documentation
+only; it includes no private script, log, asset or build identifier. Client-VM, other-title,
+spawnstruct/entity and nested-container semantics remain outside that witness's scope.

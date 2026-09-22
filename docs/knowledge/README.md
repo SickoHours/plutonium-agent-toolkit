@@ -12,6 +12,7 @@ uses are defined once in [`../../CONTEXT.md`](../../CONTEXT.md); read it before 
 | [plutonium-t6.md](plutonium-t6.md) | You touch the Plutonium client, its storage folder, a mod folder or the console |
 | [fastfiles-and-zones.md](fastfiles-and-zones.md) | You link, inspect or extract a `.ff`, or a build "succeeded" but the game disagrees |
 | [gsc.md](gsc.md) | You write, port or compile a script |
+| [gsc-array-values.md](gsc-array-values.md) | A local array changes but its owner stays empty, or a JavaScript fixture disagrees with T6 |
 | [zombies-contracts.md](zombies-contracts.md) | You add a weapon, perk, HUD element, boss or sound to a Zombies mod |
 | [foundations.md](foundations.md) | You choose what to build on, or name a test build |
 | [crashes.md](crashes.md) | The game dropped to the menu, closed, or the player said "crashed" |
