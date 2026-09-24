@@ -204,6 +204,17 @@ class GameControlTests(GameFixture):
         self.assertEqual(engine.console.sent[-1], "map zm_moon")
         self.assertIn("load_id", result)
 
+    def test_dlc5_accepts_beta2_usermaps_zone(self):
+        self.mod("dlc5")
+        before = dict(BASE, fs_game="mods/dlc5")
+        usermap = self.storage / "usermaps" / "zm_moon"
+        usermap.mkdir(parents=True)
+        (usermap / "zm_moon.ff").write_bytes(b"zone")
+        engine = FakeEngine([before, dict(before, mapname="zm_moon", g_gametype="zclassic")])
+        result = self.change(engine, "load-map", "moon")
+        self.assertEqual(engine.console.sent[-1], "map zm_moon")
+        self.assertIn("load_id", result)
+
     def test_restart_requires_local_match(self):
         engine = FakeEngine([dict(BASE, sv_running="0")])
         with self.assertRaises(Failure):

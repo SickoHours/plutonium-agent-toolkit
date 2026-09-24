@@ -225,9 +225,12 @@ def change(engine: Engine, action: str, argument: str | None, root: Path, proces
                 if not re.fullmatch(r"mods/[A-Za-z0-9_.-]{1,100}", before["fs_game"]):
                     raise Failure(INPUT_INVALID, "Select an installed DLC5 mod first; this map's zone is not in the base game")
                 row = mod_info(root, before["fs_game"][5:])
-                zone = _regular_child(root / "mods", f"{row['id']}/zone/{entry['map']}.ff")
-                if not row["available"] or not zone.is_file():
-                    raise Failure(INPUT_MISSING, f"Selected mod lacks zone/{entry['map']}.ff")
+                # Beta 2 installs each DLC5 map as usermaps/<map>/<map>.ff; Beta 1 kept it in the mod's zone/
+                zones = (_regular_child(root / "usermaps", f"{entry['map']}/{entry['map']}.ff"),
+                         _regular_child(root / "mods", f"{row['id']}/zone/{entry['map']}.ff"))
+                if not row["available"] or not any(zone.is_file() for zone in zones):
+                    raise Failure(INPUT_MISSING, f"DLC5 zone missing: usermaps/{entry['map']}/{entry['map']}.ff "
+                                  f"or the selected mod's zone/{entry['map']}.ff")
         else:
             command = {"fast-restart": "fast_restart", "map-restart": "map_restart", "disconnect": "disconnect"}.get(action)
             if not command:
