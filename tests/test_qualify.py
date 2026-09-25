@@ -194,6 +194,17 @@ class QualifyProjectTests(QualifyFixture):
         self.assertEqual(json.loads((directory / "module.json").read_text())["bases"], ["stock", "b2"])
         self.assertIn("## Build 01", (directory / "docs" / "TEST.md").read_text())
 
+    def test_qualifying_test_probe_stages_the_target_once(self):
+        self.foundation()
+        self.bindings("test_probe")
+        directory = self.module("test_probe", bases=["stock"], maps=["zm_transit"], tags=["test-only"])
+        code, row = self.qualify(str(directory))
+        self.assertEqual(code, 0, row)
+        entry = row["result"]["modules"][0]
+        self.assertEqual(entry["id"], "test_probe")
+        self.assertEqual(entry["outcome"], "qualified")
+        self.assertEqual(json.loads((directory / "module.json").read_text())["maps"], ["zm_transit", "zm_factory"])
+
 
 class QualifyAdapterTests(QualifyFixture):
     def test_an_adapter_module_gets_its_per_target_recipe_and_a_recipes_entry(self):

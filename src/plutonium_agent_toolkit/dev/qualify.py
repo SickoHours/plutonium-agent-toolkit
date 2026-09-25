@@ -642,10 +642,12 @@ def qualify_one(directory: Path, index: dict[str, tuple[Path, dict]], info: dict
     for member in members:
         stage(index[member][0], staged_root / index[member][0].name)
     probe = probe_directory(index, members)
-    if probe is not None:
+    if probe is not None and "test_probe" not in members:
         # ``prepare_probe`` looks for a sibling directory named ``test_probe``; staging it under
         # that name leaves exactly one candidate, so a contract that asks for the probe is
         # answered by this shelf's probe or refused for what it declares, never for being absent.
+        # When the subject is the probe itself the member loop already staged that exact directory;
+        # staging it again would copy hard-linked files onto themselves.
         stage(probe, staged_root / "test_probe")
     pack = home / "pack"
     pack.mkdir(parents=True, exist_ok=True)

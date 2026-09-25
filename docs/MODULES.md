@@ -669,6 +669,10 @@ jobs if you want it, each with its own `--output`.
 A qualified module is **offline verified** on that target and nothing else. Installed, launched,
 loaded, playable and accepted stay unknown, and the route never touches a game.
 
+The shelf's one `test_probe` is staged beside a subject whose contract asks for probe actions. If
+the subject being qualified is `test_probe` itself, the member copy is already that sibling and is
+staged exactly once; qualification does not try to copy the probe onto its own hard-linked files.
+
 ### The work orders a plan already knows: `adapt`
 
 `module plan` reports `result.adapt`, one row per member that is not declared for the
