@@ -7,6 +7,11 @@ Every entry states what shipped, on which platform it was verified, and what rem
 
 ## [Unreleased]
 
+- The release workflow names every outside action by its full commit hash instead of a tag, which can be moved to
+  other code: actions/checkout v7.0.1, setup-python v7.1.0, upload-artifact v7.0.2 and download-artifact v8.0.2, the
+  commits the `v7` and `v8` tags named on 2026-11-20, so a release runs the same code as before.
+  `tests/test_release_tooling.py` refuses an action named any other way. Verified on Linux: the suite's release
+  tooling tests and the workflow parsed as YAML. Not run: a tag push through the workflow itself.
 - `pat work start|step|ask|answer|status`: one piece of work from a person's ask to their verdict, as three files in one directory a surface can read (`docs/work-orders.md`). `start` writes the **work order** (what was asked in the person's words, the target key, the donor, and the door it came in by: `form`, where placement decides the module, or `shelf`, where `--subject` names the module or composition it starts from) into a new directory with a receipt. `step` appends one **spine** row (`placement`, `donor`, `build`, `verify`, `install`, `load`, `verdict`; `started`, `done`, `failed`, `skipped`) with an optional note and the receipt that proves it, hashed in; a row with none is recorded as narrated. `ask` appends one **decision request** (a question, two to four options with what each implies, a default) and refuses while an earlier one is unanswered; `answer` records the person's choice once, naming the surface it came from (`app`, `host`, `person`). `status` (protocol `pat.work-status/1`) reports whether a question waits on the person, the current and next step, and every spine row with its receipt re-hashed as `receipted`, `narrated`, `receipt-missing` or `receipt-drifted`. The record files are locked and replaced whole, the way the evidence ledger is. None of it builds, plans, installs or reads the game; a spine row is the agent's statement and only its receipt is the fact. Three words added to `CONTEXT.md`: work order, spine, decision request.
 - `pat agent hosts`, `status` and `dispatch` send `x-t3-orchestration-protocol` naming the protocol
   the client speaks. T3 Code 0.0.42 gates every orchestration read on that header
