@@ -112,6 +112,16 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("needs: [verify]", text)
         self.assertIn("needs: [build]", text)
 
+    def test_every_action_is_pinned_to_a_full_commit_hash(self):
+        # A tag can be moved to other code after the fact; a commit hash cannot. Each outside action is named by its
+        # full commit, with the release it was at as a comment (how plutonium-module-registry's workflows name them).
+        text = (ROOT / ".github/workflows/release.yml").read_text()
+        uses = re.findall(r"^\s*-?\s*uses:\s*(\S+)(.*)$", text, re.M)
+        self.assertTrue(uses)
+        for ref, rest in uses:
+            self.assertRegex(ref, r"^[\w.-]+/[\w.-]+@[0-9a-f]{40}$", ref)
+            self.assertRegex(rest, r"^\s+#\s*v\d+(\.\d+)*\s*$", ref)
+
 
 if __name__ == "__main__":
     unittest.main()
